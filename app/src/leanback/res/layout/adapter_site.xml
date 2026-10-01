@@ -24,7 +24,7 @@
         android:ellipsize="marquee"
         android:gravity="center"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="@color/site_item_text"
         android:textSize="18sp" />
 
     <com.google.android.material.checkbox.MaterialCheckBox
@@ -33,9 +33,8 @@
         android:layout_height="24dp"
         android:layout_marginStart="12dp"
         android:clickable="false"
-        android:enabled="false"
         android:focusable="false"
         android:focusableInTouchMode="false"
-        app:buttonTint="@color/white" />
+        app:buttonTint="@color/site_item_check" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

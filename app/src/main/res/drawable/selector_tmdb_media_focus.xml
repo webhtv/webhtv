@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    原生增强播放页剧照、海报、相关视频卡片的统一焦点环。
+    常态描边由 MaterialCardView 自身设置，焦点环由前景 selector 绘制，避免图片内容被覆盖。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/transparent" />
+            <stroke android:width="3dp" android:color="?attr/tvFocusRing" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item android:state_activated="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/transparent" />
+            <stroke android:width="2dp" android:color="?attr/tvCurrentRing" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/transparent" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</selector>

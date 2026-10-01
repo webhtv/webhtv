@@ -42,6 +42,7 @@ public class QuickSearchDialog extends BaseAlertDialog implements QuickAdapter.O
     private int progressCurrent;
     private int progressTotal;
     private boolean searchFinished;
+    private String currentSiteKey = "";
 
     public QuickSearchDialog() {
         pending = new ArrayList<>();
@@ -53,6 +54,12 @@ public class QuickSearchDialog extends BaseAlertDialog implements QuickAdapter.O
 
     public QuickSearchDialog listener(QuickAdapter.OnClickListener listener) {
         this.listener = listener;
+        return this;
+    }
+
+    public QuickSearchDialog currentSiteKey(String currentSiteKey) {
+        this.currentSiteKey = currentSiteKey == null ? "" : currentSiteKey;
+        if (adapter != null) adapter.setCurrentSiteKey(this.currentSiteKey);
         return this;
     }
 
@@ -101,6 +108,7 @@ public class QuickSearchDialog extends BaseAlertDialog implements QuickAdapter.O
         binding.recycler.setItemAnimator(null);
         binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 8));
         binding.recycler.setAdapter(adapter = new QuickAdapter(this));
+        adapter.setCurrentSiteKey(currentSiteKey);
         adapter.setWidth(panelWidth - ResUtil.dp2px(32));
         adapter.setNextFocus(0, 0);
         updateProgress();

@@ -3,11 +3,11 @@
 ## Recovery anchor
 
 - 用户需求：在观看历史的封面显示上次观看时间，方便确认看到第几分钟。手机观看历史页与电视首页历史卡片同时覆盖。
-- 本轮截图定位基线：`feature-menu` / `c4b042bc5441b9e168293f7cadae5798c4608da5`。guard `HISTORY-COVER-SWAP-REMARK`，`quick-fix`；保护既有 `app/.cxx/` 35个文件。初始实现及此前误解记录保留在下文。
-- 范围：仅两端`adapter_vod.xml`及本文。截图17:56:06红圈中的“[54.8GB][潘神…]”对应`remark`，不是底部“潘神的迷宫”对应的`name`。用户要求互换`remark`与`historyProgress`，底部`name`不动。
-- 完成条件：下部顺序为已看时间→圈出的文件名（remark）→底部片名（name）。只互换前两行，保留2dp行间距、现有样式和其他元素/逻辑；原子提交及本地恢复tag，不push。
-- 当前状态：两端已交换这两个子控件，行间距随时间标签从上边距转为下边距。XML解析及严格树比较两端PASS：还原两行顺序与间距边后，整棵布局树与基线完全一致。此次未重新打包、安装或进行真机视觉验收。
-- 唯一下一动作：紧接本记录由guard finish原子提交并创建本地恢复tag；之后等待用户的显示/实测反馈，不重复已通过的检查。
+- 本轮截图定位基线：`dev4` / `908774597a32eca30786fdd3c0c55ab002512ac4`。guard `ui-remove-duplicate-history-watched-mobile`，`quick-fix`；开始前工作区干净，保护面 0。
+- 2026-09-28 新需求：手机版历史记录卡片下部重复出现的“已看 mm:ss”行要去掉，进度只保留封面上原有的时间标签。电视端已在 `7605a7d589f` 做过同类清理，本轮只处理手机版。
+- 完成条件：手机版历史卡片下部只保留集数（remark）+片名（name），不再出现“已看 …”行；封面标签（playback）保留；收藏页 Goalkeeper/卡片尺寸/删除态/跑马灯契约不变。
+- 当前状态：已完成并已交付。手机版 `adapter_vod.xml` 删除 `historyProgress` 节点，`HistoryAdapter` 移除对应绑定与导入；复评后补删已无生产引用的 `HistoryProgressFormatter` 及其单测与三语言 `history_watched_time`；定向单测 3/3 通过；APK 已覆盖安装并在模拟器上确认视图树无 `historyProgress`、截图中已看行消失、封面标签仍在。
+- 唯一下一动作：无（已推送 `dev4` 并创建 PR `Silent1566/webhtv#384`，base `beta`，等待维护者评审；本任务不代为合并）。
 
 ## 展示设计与证据（2026-09-10）
 
@@ -51,3 +51,33 @@
 - 已查看用户图片，明确红圈是封面内的文件名`remark`，底部`name`是影片标题。此前把两者混为一谈，不符合用户要交换的控件。
 - 仅将同一底部LinearLayout的子项从`remark, historyProgress`换为`historyProgress, remark`；时间标签的2dp上边距换为2dp下边距，保留原行间距。没有移动底部标题或改Java/文字/样式。
 - 定向XML检查Mobile/Leanback均PASS：先断言实际顺序已互换与间距仍2dp，再在内存中还原这两个变化，验证整个树的标签、属性、内容与顺序和基线完全相同。证据`/tmp/history-cover-swap-remark-20260910-check.log`。未打包/安装，不声称实机已更新。
+
+### 2026-09-28 手机版移除下部重复进度行（本轮）
+
+- 需求来源：用户提供手机版历史页截图，要求去掉卡片下部重复的“已看 00:22”行，只保留封面上方标签里的进度。电视端等价清理已由 `7605a7d589f`（`fix(leanback): remove duplicate watched time on recent cards`）完成，本轮是手机版对齐，不是新能力。手机版无 `HistoryPresenter`，历史页与收藏页共用 `adapter_vod.xml`，因此只动历史绑定与共享布局。
+- 改动（3 个文件，最小面）：`app/src/mobile/res/layout/adapter_vod.xml` 删除 `@+id/historyProgress` 文本节点（17 行）；`app/src/mobile/java/com/fongmi/android/tv/ui/adapter/HistoryAdapter.java` 删除该视图的文本/可见性绑定及随之无用的 `HistoryProgressFormatter`、`R` 导入；`HistoryAdapterTest` 新增定向断言。保留 `playback` 封面标签、`progress` 进度条、`remark`/`name` 两行、`delete` 删除层、`setMarquee` 跑马灯与 `history_info`（`HistoryActivity.findMarqueeRange` 依赖该 id，未改）。
+- 静态证据：`grep -rn historyProgress app/src` 在非 build 路径下无任何残留；`git diff --check` 干净；lens 诊断对 `HistoryAdapter.java` 判为 clean（布局 XML 无 LSP 服务器，无法自动校验）。
+- 定向单测：`JAVA_HOME=<JDK21> bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.adapter.HistoryAdapterTest --console=plain` → `BUILD SUCCESSFUL in 2m 8s`；JUnit XML `tests="2" skipped="0" failures="0" errors="0"`，含既有 `historyCardsShowPlaybackProgressAndTime` 与新增 `mobileHistoryCardDoesNotRepeatWatchedTimeBelowThePoster`。
+- 负向对照（证明新断言有判别力，不是永真）：`git show HEAD:...HistoryAdapter.java | grep -c historyProgress` = 2，即基线代码确实会被新断言判失败。
+- 设备级视觉证据（覆盖安装，未卸载）：`assembleMobileArm64_v8aDebug` 产出 `app-mobile-arm64_v8a-debug.apk`（sha256 `693018067b25edfd7204d2441d131d9e4b884cefce624ef96f1c10c50fbb2f85`，构建于源码改动之后）。发现 `emulator-5558`/`5562`/`5554` 上的已装包使用另一套证书，直接 `install -r` 报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`；未采取卸载（遵守覆盖安装约束），改用证书一致（`PackageSignatures` hash `0x4dbe7298` = 本机 `~/.android/debug.keystore`）的 `emulator-5560`/`5556`，`adb -s emulator-5560 install -r` → `Success`。
+- 设备级断言：进入 `HistoryActivity` 后 `dumpsys activity top` 的视图树中 `historyProgress` 出现次数为 **0**；每张卡片 `app:id/history_info` 下恰有 `name`（11,7-276,36）与 `remark`（11,40-276,64）两个子节点；`@+id/playback` 在首卡为 `V`（0,339-139,382），即封面标签仍在且第二行仍可见。截图（`/tmp/hist-mobile.png`）与放大裁切（`/tmp/crop-card1-full.png`）显示底部只有“第01集”与片名，无“已看 …”行，封面右上仍为“00:22 / 24:12”。
+- 已知非本任务现象：`emulator-5560` 过程中出现过一次 `SystemJobService` 的 ANR 与启动缓慢；该现象与本次布局/绑定改动无关，且不影响上面的历史页证据，本任务不做处理。
+- 回滚：原子 revert 本任务提交即可恢复下部“已看 …”行；不涉及数据、依赖、ABI、资源字符串或网络变径。
+
+### 2026-09-28 复评修正：清除已被上游移除的遗留死代码（本轮）
+
+- 复评发现（自身提交文档断言不实）：上一轮记录写“`HistoryProgressFormatter` 仍被 TV 端使用”，实测为假。TV 端的同类清理 `7605a7d589f` 在合并基线中已删除 `HistoryPresenter` 对它的唯一调用，因此上一轮把它的最后一次生产调用也删掉后，`HistoryProgressFormatter`、其单测与 `history_watched_time`（三语言）已无任何生产引用，属死代码；同时“电视端仍使用”的说法把范围判断记录错了。这是上一轮提交内的问题，需在本任务内闭环。
+- 死代码证据：`grep -rn HistoryProgressFormatter app/src/{main,leanback,mobile}/java --include=*.java` 只命中该类自身；`grep -rn history_watched_time app/src/{main,leanback,mobile}/{java,res}` 无命中（仅 `values*/strings.xml` 定义处）。`HistoryProgressFormatterTest` 只测该类自身；无 proguard/lint 白名单、无反射/SDK 入口引用（无 lint baseline，`app/build.gradle` 的 `lint { }` 未启用 `UnusedResources` 阻断，但删除仍以源码引用为准）。
+- 修正（6 个文件）：删除 `app/src/main/java/com/fongmi/android/tv/utils/HistoryProgressFormatter.java` 与 `app/src/test/java/com/fongmi/android/tv/utils/HistoryProgressFormatterTest.java`；从 `values/strings.xml`、`values-zh-rCN/strings.xml`、`values-zh-rTW/strings.xml` 各删 1 行 `history_watched_time`；`HistoryAdapterTest` 把上一轮的单文件字符串断言升级为布局+双端适配器+三语言字符串的联合断言，并新增 `removedBelowPosterTimeHasNoLeftoverProductionReferences` 防止该死代码回流。
+- 断言升级点：`assertMobileHistoryDoesNotRenderBelowPosterTime` 解析手机布局，断言 `history_info` 恰好 2 个子控件且顺序为 `name`→`remark`、`playback` 仍挂在根布局并位于 `history_info` 之前（封面标签是唯一进度显示），把上一轮“改后是否真的只少一行”从字符串 grep 提升为结构断言。
+- 与合并约束的关系：不改动任何 beta 侧已回退/已移除的提交内容，不重新引入 `historyProgress`/`history_watched_time`；仅删除本任务在自身提交链中已证明无生产引用的残留。
+- 回滚：单独 revert 本次修正即可恢复该类与字符串；因它们已无生产调用，revert 不改变任何运行时行为。
+- 验证：见下方“2026-09-28 复评修正验证”。
+
+### 2026-09-28 复评修正验证
+
+- 正向定向单测（本轮复跑，工作区干净且已包含本轮修正）：`JAVA_HOME="C:\\Program Files\\Android\\Android Studio\\jbr" bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.adapter.HistoryAdapterTest --console=plain` → `BUILD SUCCESSFUL`；`app/build/test-results/testMobileArm64_v8aDebugUnitTest/TEST-com.fongmi.android.tv.ui.adapter.HistoryAdapterTest.xml` 为 `tests="3" skipped="0" failures="0" errors="0"`，含 `historyCardsShowPlaybackProgressAndTime`、`mobileHistoryCardDoesNotRepeatWatchedTimeBelowThePoster`、`removedBelowPosterTimeHasNoLeftoverProductionReferences`。
+- 判别力负向对照（结构断言，本轮新做）：用编辑器把 `@+id/historyProgress` 文本节点重新插回手机布局 `history_info` 容器，复跑同一命令 → `HistoryAdapterTest > historyCardsShowPlaybackProgressAndTime FAILED` 与 `mobileHistoryCardDoesNotRepeatWatchedTimeBelowThePoster FAILED`，`3 tests completed, 2 failed`，`BUILD FAILED`；随后按签名校验还原布局（`diff -q` 与改动前备份一致），复跑恢复 `BUILD SUCCESSFUL`。证明上一轮被本轮取代的“仅查自身文件”断言的盲区（只改布局不查 Java 即漏检）已被新结构断言堵住。
+- 编译面：同一次命令附带 `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` → `BUILD SUCCESSFUL`，确认删除该类/字符串未破坏 TV 端与数据绑定生成代码。
+- 遗留残留面：`grep -rn "HistoryProgressFormatter|history_watched_time" app/src/{main,leanback,mobile}` 在非 build 路径下无命中；`HistoryProgressFormatterTest` 已随之删除，不存在悬空测试。
+- 未做与原因：本轮不改 `adapter_vod.xml`、`HistoryAdapter.java`（已无改动）、不改 ABI/依赖/网络；不再重跑上一轮已记录的设备级截图证据（本轮不引入新的运行时行为，只删已无调用的代码）。

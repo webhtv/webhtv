@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.adapter;
 
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,6 +23,7 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
     private int width;
     private int nextFocusUp;
     private int nextFocusDown;
+    private String currentSiteKey = "";
 
     public QuickAdapter(OnClickListener listener) {
         mListener = listener;
@@ -51,6 +53,13 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
         if (this.nextFocusUp == nextFocusUp && this.nextFocusDown == nextFocusDown) return;
         this.nextFocusUp = nextFocusUp;
         this.nextFocusDown = nextFocusDown;
+        notifyDataSetChanged();
+    }
+
+    public void setCurrentSiteKey(String currentSiteKey) {
+        String value = currentSiteKey == null ? "" : currentSiteKey;
+        if (TextUtils.equals(this.currentSiteKey, value)) return;
+        this.currentSiteKey = value;
         notifyDataSetChanged();
     }
 
@@ -91,6 +100,7 @@ public class QuickAdapter extends RecyclerView.Adapter<QuickAdapter.ViewHolder> 
         holder.binding.name.setText(item.getName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.remark.setText(item.getRemarks());
+        holder.binding.getRoot().setActivated(TextUtils.equals(currentSiteKey, item.getSiteKey()));
         holder.binding.getRoot().setNextFocusUpId(nextFocusUp == 0 ? View.NO_ID : nextFocusUp);
         holder.binding.getRoot().setNextFocusDownId(nextFocusDown == 0 ? View.NO_ID : nextFocusDown);
         holder.binding.getRoot().setOnClickListener(v -> mListener.onItemClick(item));

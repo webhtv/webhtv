@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    原生增强「选集卡片」的统一焦点环（统一规范见 selector_video_item.xml）：
+    获得焦点 3dp #FFD166（= @color/tv_item_focus_ring），当前播放 2dp #2CC56F
+    （= @color/tv_item_current_ring），圆角 8dp；其余状态透明。
+    这里保留字面量是因为详情页与 TV 播放页共用该 selector，两处消费方都按此颜色断言。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+            <stroke android:width="3dp" android:color="?attr/tvFocusRing" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item android:state_activated="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+            <stroke android:width="2dp" android:color="?attr/tvCurrentRing" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+            <stroke android:width="2dp" android:color="?attr/tvCurrentRing" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</selector>

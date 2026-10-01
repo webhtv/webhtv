@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+        原生增强播放页的统一焦点语义属性。TV 的 colorPrimary 固定为白色，且同时驱动着
+        ~100 个布局的聚焦文字色，不能拿来表达“焦点环”，所以单独给出三个可被主题覆写的属性。
+        取值见 app/src/main/res/values/colors.xml 的 tv_item_*，leanback Theme.Base 负责绑定。
+    -->
+    <attr name="tvFocusRing" format="color" />
+    <attr name="tvCurrentRing" format="color" />
+    <attr name="tvNormalStroke" format="color" />
+
     <declare-styleable name="CustomRecyclerView">
         <attr name="android:minWidth" />
         <attr name="android:minHeight" />
