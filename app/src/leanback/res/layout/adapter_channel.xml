@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.fongmi.android.tv.ui.custom.CustomLeftRightLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/channel_item"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:background="@drawable/selector_live"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:gravity="center"
+    android:gravity="center_vertical"
     android:orientation="horizontal">
 
     <com.google.android.material.textview.MaterialTextView
@@ -27,15 +28,36 @@
         android:layout_marginEnd="12dp"
         android:visibility="gone" />
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/name"
-        android:layout_width="wrap_content"
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:duplicateParentState="true"
-        android:ellipsize="marquee"
-        android:singleLine="true"
-        android:textColor="@color/text"
-        android:textSize="16sp"
-        tools:text="CNN" />
-
+        android:layout_weight="1"
+        android:orientation="vertical">
+ 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:duplicateParentState="true"
+            android:ellipsize="end"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:singleLine="true"
+            android:textColor="@color/text"
+            android:textSize="16sp"
+            tools:text="CCTV1" />
+ 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/epg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:duplicateParentState="true"
+            android:ellipsize="end"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:singleLine="true"
+            android:textColor="@color/white_60"
+            android:textSize="13sp"
+            tools:text="朝闻天下" />
+ 
+    </androidx.appcompat.widget.LinearLayoutCompat>
+  
 </com.fongmi.android.tv.ui.custom.CustomLeftRightLayout>

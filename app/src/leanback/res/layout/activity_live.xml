@@ -62,6 +62,8 @@
             android:id="@+id/group"
             android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:minWidth="100dp"
+            android:maxWidth="220dp"
             android:clipChildren="false"
             android:clipToPadding="false"
             android:padding="12dp"
@@ -72,6 +74,8 @@
             android:id="@+id/channel"
             android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:minWidth="120dp"
+            android:maxWidth="260dp"
             android:clipChildren="false"
             android:translationX="-12dp"
             android:clipToPadding="false"
@@ -79,15 +83,49 @@
             tools:itemCount="5"
             tools:listitem="@layout/adapter_channel" />
 
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/program"
+            android:layout_width="44dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/selector_live"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center"
+            android:nextFocusLeft="@id/channel"
+            android:nextFocusRight="@id/epgData"
+            android:orientation="vertical"
+            android:visibility="gone">
+ 
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/live_program_vertical"
+                android:textColor="@color/text"
+                android:textSize="16sp" />
+ 
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="»"
+                android:textColor="@color/text"
+                android:textSize="18sp" />
+ 
+        </androidx.appcompat.widget.LinearLayoutCompat>
+ 
         <com.fongmi.android.tv.ui.custom.CustomLiveListView
             android:id="@+id/epgData"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:nextFocusLeft="@id/program"
             android:padding="12dp"
+            android:visibility="gone"
             tools:itemCount="5"
             tools:listitem="@layout/adapter_epg_data" />
-
+ 
     </androidx.appcompat.widget.LinearLayoutCompat>
 </FrameLayout>

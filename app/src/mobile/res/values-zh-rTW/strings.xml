@@ -17,6 +17,10 @@
     <string name="menu_reset">重設</string>
     <string name="menu_push_apk">推送apk</string>
     <string name="menu_push_play">推送播放</string>
+    <string name="menu_download_config">接口下載</string>
+    <string name="config_download_start">開始下載接口…</string>
+    <string name="config_download_success">接口已下載到 tvbox/api/%1$s/</string>
+    <string name="config_download_failed">接口下載失敗：%1$s</string>
     <string name="apk_push_preparing">正在準備APK…</string>
     <string name="apk_push_select_device">推送apk · 選擇接收裝置</string>
     <string name="apk_push_ready">推送apk · %1$s · %2$s</string>
@@ -94,13 +98,13 @@
     <string name="live_epg_empty">請輸入EPG地址，或直接選擇下方來源</string>
     <string name="live_program_title">節目預告</string>
     <string name="live_program_empty">暫無節目預告</string>
-    <string name="live_program_current">直播中</string>
     <string name="dialog_clear">清空</string>
 
     <!-- Dialog -->
     <string name="dialog_delete_record">刪除全部紀錄？</string>
     <string name="dialog_delete_keep">收藏紀錄將會全部刪除。</string>
     <string name="dialog_delete_history">觀看紀錄將會全部刪除。</string>
+    <string name="title_block_source">選擇要遮蔽的站源來源</string>
 
     <!-- Timer -->
     <string name="timer_5">5 分鐘</string>

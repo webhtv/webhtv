@@ -81,7 +81,9 @@ public class EpgParser {
 
     public static Epg getEpg(String xml, String key, ZoneId zoneId) {
         try {
-            Tv tv = new Persister().read(Tv.class, xml, false);
+            String content = sanitizeXml(xml);
+            if (content.isEmpty()) return new Epg();
+            Tv tv = new Persister().read(Tv.class, content, false);
             String rawDate = tv.getDate();
             String date = rawDate.isEmpty() ? LocalDate.now(zoneId).format(Formatters.DATE) : parseFull(rawDate, zoneId).atZoneSameInstant(zoneId).format(Formatters.DATE);
             Epg epg = Epg.create(key, date);
@@ -93,6 +95,38 @@ public class EpgParser {
         }
     }
 
+    private static String sanitizeXml(String xml) {
+        if (xml == null || xml.isEmpty()) return "";
+        String s = xml;
+        if (s.charAt(0) == '\uFEFF') s = s.substring(1);
+        String head = s.trim();
+        if (head.startsWith("<!DOCTYPE html") || head.startsWith("<html") || head.startsWith("<HTML")) {
+            Log.w(TAG, "sanitizeXml: content is HTML, not XMLTV, skipped");
+            return "";
+        }
+        return s;
+    }
+ 
+    private static String readFileContent(File file) throws IOException {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] bytes = new byte[(int) file.length()];
+            int offset = 0;
+            int read;
+            while (offset < bytes.length && (read = fis.read(bytes, offset, bytes.length - offset)) != -1) {
+                offset += read;
+            }
+            String content = new String(bytes, 0, offset, java.nio.charset.StandardCharsets.UTF_8);
+            if (content.isEmpty()) return "";
+            if (content.charAt(0) == '\uFEFF') content = content.substring(1);
+            String head = content.trim();
+            if (head.startsWith("<!DOCTYPE html") || head.startsWith("<html") || head.startsWith("<HTML")) {
+                Log.w(TAG, "readFileContent: file is HTML, not XMLTV, skipped: " + file.getName());
+                return "";
+            }
+            return content;
+        }
+    }
+ 
     private static String refreshReason(File file) {
         if (!Path.exists(file)) return "file-missing";
         if (!isToday(file.lastModified())) return "not-today";
@@ -139,7 +173,9 @@ public class EpgParser {
     }
 
     private static XmlData parseXmlData(File file) throws Exception {
-        Tv tv = new Persister().read(Tv.class, file, false);
+        String content = readFileContent(file);
+        if (content.isEmpty()) return new XmlData(new Tv(), new HashMap<>());
+        Tv tv = new Persister().read(Tv.class, content, false);
         Map<String, List<Tv.Channel>> map = tv.getChannel().stream().collect(Collectors.groupingBy(Tv.Channel::getId));
         return new XmlData(tv, map);
     }

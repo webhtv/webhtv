@@ -75,6 +75,7 @@ import com.fongmi.android.tv.ui.adapter.GroupAdapter;
 import com.fongmi.android.tv.ui.custom.CustomKeyDown;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
+import com.fongmi.android.tv.ui.custom.WebViewPlayer;
 import com.fongmi.android.tv.ui.dialog.CastDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.InfoDialog;
@@ -124,6 +125,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     private String mPendingReloadMsg;
     private Channel mChannel;
     private Group mGroup;
+    private WebViewPlayer mWebViewPlayer;
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mR3;
@@ -358,6 +360,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         mBinding.control.action.across.setSelected(LiveSetting.isAcross());
         mBinding.control.action.change.setSelected(LiveSetting.isChange());
         applyLiveListStyle();
+        mWebViewPlayer = new WebViewPlayer();
         mBinding.video.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> mPiP.update(this, view));
     }
 
@@ -496,7 +499,11 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         int logo = ResUtil.dp2px(56);
         int padding = ResUtil.dp2px(60);
         if (group.isKeep()) group.setWidth(0);
-        if (group.getWidth() == 0) for (Channel item : group.getChannel()) group.setWidth(Math.max(group.getWidth(), (item.getLogo().isEmpty() ? 0 : logo) + ResUtil.getTextWidth(item.getNumber() + item.getName(), 14)));
+        if (group.getWidth() == 0) for (Channel item : group.getChannel()) {
+            int nameWidth = (item.getLogo().isEmpty() ? 0 : logo) + ResUtil.getTextWidth(item.getNumber() + item.getName(), 14);
+            int epgWidth = ResUtil.getTextWidth(item.getData().getCurrent().getTitle(), 12);
+            group.setWidth(Math.max(group.getWidth(), Math.max(nameWidth, epgWidth)));
+        }
         int width = group.getWidth() == 0 ? 0 : Math.min(group.getWidth() + padding, ResUtil.getScreenWidth() / 2);
         setWidth(mBinding.channel, width);
     }
@@ -1175,6 +1182,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void setEpg(boolean success) {
+        if (success) mChannelAdapter.notifyDataSetChanged();
         if (mChannel != null && success)
             mViewModel.getEpg(mChannel);
     }
@@ -1183,6 +1191,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         if (mChannel == null) return;
         playbackCatchup = true;
         mViewModel.getUrl(mChannel, item);
+        mWebViewPlayer.detach();
         if (service() != null) {
             player().clear();
             player().stop();
@@ -1195,6 +1204,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         playbackCatchup = false;
         LiveConfig.get().setKeep(mChannel);
         mViewModel.getUrl(mChannel);
+        mWebViewPlayer.detach();
         if (service() != null) {
             player().clear();
             player().stop();
@@ -1217,10 +1227,40 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         clearPendingReload();
         mPlaybackKey = realUrl;
         updateNavigationKey();
+        if (isWebViewChannel()) {
+            startWebView(realUrl);
+            return;
+        }
+        mWebViewPlayer.detach();
         startPlayer(mPlaybackKey, result, false, getHome().getTimeout(), buildMetadata());
         mBinding.control.action.speed.setText(player().setSpeed(playbackCatchup ? PlayerSetting.getDefaultSpeed() : 1f));
     }
 
+    private boolean isWebViewChannel() {
+        return mChannel != null && mChannel.getCurrent().startsWith("webview://");
+    }
+ 
+    private void startWebView(String url) {
+        if (service() != null) {
+            player().stop();
+            player().clear();
+        }
+        hideProgress();
+        View.OnTouchListener webTouchListener = (v, e) -> {
+            mKeyDown.onTouchEvent(e);
+            return true;
+        };
+        mWebViewPlayer.attach(this, mBinding.video, url, webTouchListener);
+        bringOverlaysToFront();
+    }
+ 
+    private void bringOverlaysToFront() {
+        if (mBinding.widget != null) mBinding.widget.getRoot().bringToFront();
+        if (mBinding.control != null) mBinding.control.getRoot().bringToFront();
+        if (mBinding.progress != null) mBinding.progress.getRoot().bringToFront();
+        if (mBinding.osd != null) mBinding.osd.getRoot().bringToFront();
+    }
+ 
     private boolean isSameReloadUrl(String realUrl) {
         return !TextUtils.isEmpty(mPendingReloadUrl) && TextUtils.equals(mPendingReloadUrl, realUrl);
     }
@@ -1477,6 +1517,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     public void setLive(Live item) {
         if (item.isSelected()) item.getGroups().clear();
         LiveConfig.get().setHome(item);
+        if (mWebViewPlayer != null) mWebViewPlayer.detach();
         player().reset();
         player().clear();
         player().stop();
@@ -2050,6 +2091,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             mOsd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics());
             mOsd.start();
         }
+        if (mWebViewPlayer != null) mWebViewPlayer.onResume();
         setPlayParamsState();
         setAudioOnly(false);
         setStop(false);
@@ -2059,6 +2101,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     protected void onStop() {
         super.onStop();
         if (mOsd != null) mOsd.stop();
+        if (mWebViewPlayer != null) mWebViewPlayer.onPause();
         if (!isAudioOnly()) setStop(true);
     }
 
@@ -2074,6 +2117,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     protected void onDestroy() {
         clearArtworkTarget();
+        if (mWebViewPlayer != null) mWebViewPlayer.detach();
         Source.get().exit();
         App.removeCallbacks(mR1, mR2, mR3);
         if (mOsd != null) mOsd.release();

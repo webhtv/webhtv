@@ -6,7 +6,8 @@
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:gravity="center"
-    android:orientation="horizontal">
+    android:orientation="horizontal"
+    android:nextFocusRight="@id/channel">
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/name"

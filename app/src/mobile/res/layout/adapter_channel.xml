@@ -27,16 +27,34 @@
         android:layout_marginEnd="12dp"
         android:visibility="gone" />
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/name"
+    <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:duplicateParentState="true"
-        android:ellipsize="marquee"
-        android:singleLine="true"
-        android:textColor="@color/selector_live_text"
-        android:textSize="14sp"
-        tools:text="CNN" />
-
+        android:orientation="vertical">
+ 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:duplicateParentState="true"
+            android:ellipsize="marquee"
+            android:singleLine="true"
+            android:textColor="@color/selector_live_text"
+            android:textSize="14sp"
+            tools:text="CNN" />
+ 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/epg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:duplicateParentState="true"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/white_60"
+            android:textSize="12sp"
+            tools:text="朝闻天下" />
+ 
+    </androidx.appcompat.widget.LinearLayoutCompat>
+ 
 </androidx.appcompat.widget.LinearLayoutCompat>

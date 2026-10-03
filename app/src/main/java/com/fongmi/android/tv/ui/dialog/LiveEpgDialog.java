@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.dialog;
 import android.app.Dialog;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -17,13 +18,21 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.databinding.DialogLiveEpgBinding;
+import com.fongmi.android.tv.event.ServerEvent;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.LiveEpgSetting;
 import com.fongmi.android.tv.ui.adapter.LiveEpgAdapter;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.QRCode;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-
+ 
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
+ 
 public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapter.OnClickListener {
 
     private DialogLiveEpgBinding binding;
@@ -52,8 +61,23 @@ public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapt
     public void onStart() {
         super.onStart();
         configureWindow(getDialog());
+        if (Util.isLeanback()) EventBus.getDefault().register(this);
     }
-
+ 
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (Util.isLeanback()) EventBus.getDefault().unregister(this);
+    }
+ 
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onServerEvent(ServerEvent event) {
+        if (event.type() != ServerEvent.Type.SETTING) return;
+        binding.input.setText(event.text());
+        binding.input.setSelection(binding.input.length());
+        addInput();
+    }
+ 
     @Override
     protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
         return binding = DialogLiveEpgBinding.inflate(inflater, container, false);
@@ -65,6 +89,12 @@ public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapt
         binding.recycler.setHasFixedSize(false);
         binding.recycler.setItemAnimator(null);
         binding.recycler.setAdapter(adapter = new LiveEpgAdapter(this));
+        if (Util.isLeanback()) {
+            binding.qrSection.setVisibility(View.VISIBLE);
+            binding.code.setImageBitmap(QRCode.getBitmap(Server.get().getAddress(4), 200, 0));
+            binding.info.setText(ResUtil.getString(com.fongmi.android.tv.R.string.push_info, Server.get().getAddress()).replace("\uff0c", "\n"));
+        }
+        binding.input.requestFocus();
     }
 
     @Override

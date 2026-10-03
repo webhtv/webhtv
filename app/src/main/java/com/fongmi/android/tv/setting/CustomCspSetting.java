@@ -230,6 +230,7 @@ public class CustomCspSetting {
         if (TextUtils.isEmpty(api)) return false;
         try {
             String value = api.trim();
+            value = value.replace("clan://", "file://tvbox/");
             String path;
             if (value.startsWith("file://")) path = value.substring("file://".length());
             else {
@@ -1164,7 +1165,8 @@ public class CustomCspSetting {
             site.setPlayUrl(webHomeOnly ? "" : getPlayUrl());
             site.setHide(getHide());
             site.setSearchable(getSearchable());
-            site.setChangeable(getChangeable());
+            // searchable=0 且未显式配置 changeable 时，默认禁止参与自动换源(2)，可在界面改
+            site.setChangeable(getSearchable() == 0 && this.changeable == null ? 2 : getChangeable());
             site.setQuickSearch(getQuickSearch());
             if (webHomeOnly && getExtensions() != null) site.setExtensions(getExtensions().deepCopy());
             site.setStyle(Style.rect());
