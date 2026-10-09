@@ -31,6 +31,10 @@ public class PyLoader {
         this.recent = recent;
     }
 
+    public java.util.Set<String> activeKeys() {
+        return java.util.Set.copyOf(spiders.keySet());
+    }
+
     public Spider getSpider(String key, String api, String ext) {
         return spiders.computeIfAbsent(key, k -> {
             try {

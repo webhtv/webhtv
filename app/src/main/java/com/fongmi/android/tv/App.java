@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 import androidx.core.os.HandlerCompat;
 
 import com.fongmi.android.tv.server.Server;
+import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.playback.PlaybackRemoteSyncer;
 import com.fongmi.android.tv.player.PlaybackMemoryMonitor;
 import com.fongmi.android.tv.player.PlaybackSystemConditionMonitor;
@@ -109,6 +110,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
         ProxySetting.apply();
         DanmakuSearchListFocusFixer.start();
         registerActivityLifecycleCallbacks(this);
+        post(() -> CacheScheduler.get().start(), 30_000L);
         post(this::startBackgroundServices, 1200);
     }
 

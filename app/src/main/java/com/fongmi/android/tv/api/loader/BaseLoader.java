@@ -94,6 +94,14 @@ public class BaseLoader {
         return jarLoader.dex(jar);
     }
 
+    public java.util.Set<String> activePluginKeys() {
+        java.util.HashSet<String> keys = new java.util.HashSet<>();
+        keys.addAll(jarLoader.activeKeys());
+        keys.addAll(jsLoader.activeKeys());
+        keys.addAll(pyLoader.activeKeys());
+        return java.util.Set.copyOf(keys);
+    }
+
     public JSONObject jsonExt(String key, LinkedHashMap<String, String> jxs, String url) throws Throwable {
         return jarLoader.jsonExt(key, jxs, url);
     }

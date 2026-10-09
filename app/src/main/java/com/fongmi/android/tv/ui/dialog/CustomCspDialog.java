@@ -215,6 +215,13 @@ public class CustomCspDialog extends BaseAlertDialog {
             if (checkedId == R.id.uiMode && !showTextMode(false)) binding.modeGroup.check(R.id.textMode);
         });
         setupScrollableText(binding.jsonText);
+        binding.siteSearch.addTextChangedListener(new CustomTextListener() {
+            @Override
+            public void afterTextChanged(Editable editable) {
+                adapter.setSearchQuery(editable == null ? "" : editable.toString());
+                updateModeVisibility();
+            }
+        });
         binding.add.setOnClickListener(view -> addItem());
         binding.recognize.setOnClickListener(view -> showRecognizePanel());
         binding.sort.setOnClickListener(view -> setSortMode(!sortMode));
@@ -308,8 +315,11 @@ public class CustomCspDialog extends BaseAlertDialog {
 
     private void updateModeVisibility() {
         boolean listMode = !textMode && !editMode;
-        boolean mobileSort = Util.isMobile() && listMode;
+        boolean searchMode = listMode && !sortMode;
+        boolean mobileSort = Util.isMobile() && listMode && !adapter.hasSearchQuery();
         binding.recycler.setVisibility(listMode ? View.VISIBLE : View.GONE);
+        binding.searchLayout.setVisibility(searchMode ? View.VISIBLE : View.GONE);
+        binding.searchEmpty.setVisibility(searchMode && adapter.hasSearchQuery() && adapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
         binding.jsonLayout.setVisibility(textMode && !editMode ? View.VISIBLE : View.GONE);
         binding.editPanel.setVisibility(editMode ? View.VISIBLE : View.GONE);
         binding.add.setVisibility(listMode && !sortMode ? View.VISIBLE : View.GONE);
@@ -324,7 +334,7 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     private void setSortMode(boolean sort) {
-        if (sort && (!Util.isMobile() || textMode || editMode)) return;
+        if (sort && (!Util.isMobile() || textMode || editMode || adapter.hasSearchQuery())) return;
         if (sortMode == sort) {
             updateModeVisibility();
             return;
@@ -1328,36 +1338,60 @@ public class CustomCspDialog extends BaseAlertDialog {
     private class CspAdapter extends RecyclerView.Adapter<CspAdapter.ViewHolder> {
 
         private final List<CustomCspSetting.Item> items;
+        private final List<Integer> visibleIndices = new ArrayList<>();
         private boolean reverseOrder;
         private boolean sortMode;
+        private String searchQuery = "";
 
         CspAdapter(List<CustomCspSetting.Item> items) {
             this.items = items;
+            refreshVisibleIndices();
         }
 
         List<CustomCspSetting.Item> getItems() {
             return items;
         }
 
+        boolean hasSearchQuery() {
+            return !TextUtils.isEmpty(searchQuery.trim());
+        }
+
+        void setSearchQuery(String query) {
+            String value = query == null ? "" : query;
+            if (TextUtils.equals(searchQuery, value)) return;
+            searchQuery = value;
+            refreshVisibleIndices();
+            notifyDataSetChanged();
+        }
+
+        private void refreshVisibleIndices() {
+            visibleIndices.clear();
+            for (int i = 0; i < items.size(); i++) {
+                if (!hasSearchQuery() || CustomCspSetting.matchesSearch(items.get(i), searchQuery)) visibleIndices.add(i);
+            }
+        }
+
         int add(CustomCspSetting.Item item) {
             items.add(item);
+            refreshVisibleIndices();
             markJsonDirty();
-            int position = displayPosition(items.size() - 1);
-            notifyItemInserted(position);
-            return position;
+            notifyDataSetChanged();
+            return displayPosition(items.size() - 1);
         }
 
         void replace(int position, CustomCspSetting.Item item) {
             if (position < 0 || position >= items.size()) return;
             CustomCspSetting.Item old = items.set(position, item);
             if (!old.isLive() && old.site().getKey().equals(registry.getHomeKey())) registry.setHomeKey(item.isLive() ? "" : item.site().getKey());
+            refreshVisibleIndices();
             markJsonDirty();
-            notifyItemChanged(displayPosition(position));
+            notifyDataSetChanged();
         }
 
         void setItems(List<CustomCspSetting.Item> items) {
             this.items.clear();
             this.items.addAll(items);
+            refreshVisibleIndices();
             markJsonDirty();
             notifyDataSetChanged();
         }
@@ -1384,17 +1418,18 @@ public class CustomCspDialog extends BaseAlertDialog {
         }
 
         int moveDisplay(int fromPosition, int toPosition) {
-            if (fromPosition < 0 || toPosition < 0 || fromPosition >= items.size() || toPosition >= items.size()) return -1;
+            if (hasSearchQuery() || fromPosition < 0 || toPosition < 0 || fromPosition >= getItemCount() || toPosition >= getItemCount()) return -1;
             return moveItemToIndex(itemIndex(fromPosition), itemIndex(toPosition));
         }
 
         int moveItemToIndex(int fromIndex, int toIndex) {
-            if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.size() || toIndex >= items.size()) return -1;
+            if (hasSearchQuery() || fromIndex < 0 || toIndex < 0 || fromIndex >= items.size() || toIndex >= items.size()) return -1;
             if (fromIndex == toIndex) return displayPosition(toIndex);
             int fromPosition = displayPosition(fromIndex);
             int toPosition = displayPosition(toIndex);
             CustomCspSetting.Item item = items.remove(fromIndex);
             items.add(toIndex, item);
+            refreshVisibleIndices();
             markJsonDirty();
             notifyItemMoved(fromPosition, toPosition);
             notifyItemRangeChanged(Math.min(fromPosition, toPosition), Math.abs(fromPosition - toPosition) + 1);
@@ -1402,23 +1437,30 @@ public class CustomCspDialog extends BaseAlertDialog {
         }
 
         void remove(int position, View removed) {
-            if (position < 0 || position >= items.size()) return;
+            if (position < 0 || position >= getItemCount()) return;
             int index = itemIndex(position);
+            if (index < 0 || index >= items.size()) return;
             focusBeforeRemove(removed);
             CustomCspSetting.Item item = items.remove(index);
             if (!item.isLive() && item.site().getKey().equals(registry.getHomeKey())) registry.setHomeKey("");
             if (!TextUtils.isEmpty(item.getId())) pendingDeleteIds.add(item.getId());
+            refreshVisibleIndices();
             markJsonDirty();
             notifyDataSetChanged();
+            updateModeVisibility();
         }
 
         int itemIndex(int position) {
-            return reverseOrder ? items.size() - 1 - position : position;
+            if (position < 0 || position >= visibleIndices.size()) return -1;
+            int visiblePosition = reverseOrder ? visibleIndices.size() - 1 - position : position;
+            return visibleIndices.get(visiblePosition);
         }
 
         int displayPosition(int index) {
             if (index < 0 || index >= items.size()) return -1;
-            return reverseOrder ? items.size() - 1 - index : index;
+            int visiblePosition = visibleIndices.indexOf(index);
+            if (visiblePosition < 0) return -1;
+            return reverseOrder ? visibleIndices.size() - 1 - visiblePosition : visiblePosition;
         }
 
         void setHome(CustomCspSetting.Item item) {
@@ -1431,7 +1473,7 @@ public class CustomCspDialog extends BaseAlertDialog {
 
         @Override
         public int getItemCount() {
-            return items.size();
+            return visibleIndices.size();
         }
 
         @NonNull
@@ -1449,6 +1491,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             int index = itemIndex(position);
+            if (index < 0 || index >= items.size()) return;
             holder.bind(items.get(index), index);
         }
 
@@ -1498,6 +1541,11 @@ public class CustomCspDialog extends BaseAlertDialog {
                 } else {
                     AppCompatImageButton up = iconButton(R.drawable.ic_subtitle_up, R.string.setting_custom_csp_up, view -> move(getBindingAdapterPosition(), getBindingAdapterPosition() - 1));
                     AppCompatImageButton down = iconButton(R.drawable.ic_subtitle_down, R.string.setting_custom_csp_down, view -> move(getBindingAdapterPosition(), getBindingAdapterPosition() + 1));
+                    boolean canMove = !hasSearchQuery();
+                    up.setEnabled(canMove);
+                    down.setEnabled(canMove);
+                    up.setAlpha(canMove ? 1.0f : 0.45f);
+                    down.setAlpha(canMove ? 1.0f : 0.45f);
                     linkCardFocus(root, up);
                     linkCardFocus(root, down);
                     header.addView(up, iconLayout(8));

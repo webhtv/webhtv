@@ -172,6 +172,33 @@
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/searchLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/setting_custom_csp_search_hint"
+        app:boxBackgroundColor="@color/white"
+        app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+        app:endIconMode="clear_text"
+        app:hintTextColor="#5F6368"
+        app:startIconDrawable="@drawable/ic_search">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/siteSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/setting_custom_csp_search_hint"
+            android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
+            android:inputType="textNoSuggestions"
+            android:singleLine="true"
+            android:textColor="@color/black"
+            android:textColorHint="#666666"
+            android:nextFocusDown="@id/recycler" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/modeGroup"
         android:layout_width="match_parent"
@@ -224,6 +251,15 @@
                 android:layout_height="wrap_content"
                 android:clipToPadding="false"
                 android:overScrollMode="never" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/searchEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:gravity="center"
+                android:text="@string/setting_custom_csp_search_empty"
+                android:textColor="#5F6368"
+                android:visibility="gone" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/jsonLayout"

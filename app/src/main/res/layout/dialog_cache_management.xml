@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:fillViewport="true"
+    android:focusable="false"
+    android:scrollbars="vertical">
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="28dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="28dp"
+        android:paddingBottom="24dp">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="@string/cache_management_title"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="14sp" />
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/modules"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="start"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/autoCleanup"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:minHeight="52dp"
+                android:nextFocusDown="@id/cleanupLight"
+                android:text="@string/cache_auto_button" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/retention"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:layout_marginStart="14dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:minHeight="52dp"
+                android:nextFocusDown="@id/cleanupStandard"
+                android:text="@string/cache_retention_button" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/totalLimit"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:layout_marginStart="14dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:minHeight="52dp"
+                android:nextFocusDown="@id/cleanupDeep"
+                android:text="@string/cache_total_limit_button" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="start"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cleanupLight"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:minHeight="52dp"
+                android:nextFocusDown="@id/refresh"
+                android:nextFocusUp="@id/autoCleanup"
+                android:text="@string/cache_cleanup_light" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cleanupStandard"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:layout_marginStart="14dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:minHeight="52dp"
+                android:nextFocusDown="@id/refresh"
+                android:nextFocusUp="@id/retention"
+                android:text="@string/cache_cleanup_standard" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cleanupDeep"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:layout_marginStart="14dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:minHeight="52dp"
+                android:nextFocusDown="@id/close"
+                android:nextFocusUp="@id/totalLimit"
+                android:text="@string/cache_cleanup_deep" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="end"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cancel"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="56dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:nextFocusRight="@id/refresh"
+                android:nextFocusUp="@id/cleanupStandard"
+                android:text="@string/cache_cleanup_cancel"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/refresh"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="56dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:nextFocusLeft="@id/cancel"
+                android:nextFocusRight="@id/close"
+                android:nextFocusUp="@id/cleanupStandard"
+                android:text="@string/cache_management_refresh" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/close"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="56dp"
+                android:layout_marginStart="14dp"
+                android:foreground="@drawable/selector_cache_button_focus"
+                android:nextFocusLeft="@id/refresh"
+                android:nextFocusUp="@id/cleanupDeep"
+                android:text="@string/dialog_positive" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+    </androidx.appcompat.widget.LinearLayoutCompat>
+</androidx.core.widget.NestedScrollView>

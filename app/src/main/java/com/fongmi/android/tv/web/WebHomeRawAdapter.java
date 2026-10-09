@@ -258,6 +258,26 @@ public class WebHomeRawAdapter {
         }
     }
 
+    public static boolean clearCache() {
+        synchronized (WebHomeRawAdapter.class) {
+            try {
+                File dir = Path.cache("webhome_raw");
+                if (!dir.exists()) return true;
+                if (client != null && client.cache() != null) {
+                    client.cache().evictAll();
+                    return true;
+                }
+                try (Cache reopened = new Cache(dir, CACHE_BYTES)) {
+                    reopened.evictAll();
+                }
+                return true;
+            } catch (Throwable error) {
+                SpiderDebug.log("webhome-raw", "cache clear failed error=%s", error.getMessage());
+                return false;
+            }
+        }
+    }
+
     private static boolean hasInternalReload(Uri uri) {
         try {
             return !TextUtils.isEmpty(uri.getQueryParameter("_fm_reload"));

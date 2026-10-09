@@ -32,6 +32,10 @@ public class JsLoader {
         this.recent = recent;
     }
 
+    public java.util.Set<String> activeKeys() {
+        return java.util.Set.copyOf(spiders.keySet());
+    }
+
     public Spider getSpider(String key, String api, String ext, String jar) {
         return spiders.computeIfAbsent(key, k -> {
             try {

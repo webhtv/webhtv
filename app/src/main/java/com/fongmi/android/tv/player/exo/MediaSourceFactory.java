@@ -113,6 +113,21 @@ public class MediaSourceFactory implements MediaSource.Factory {
         if (isReliable(decision) && CACHE_CAPACITY_STATE.canReleasePending()) rebuildCacheLocked("last-player-release");
     }
 
+    public static synchronized boolean clearCacheIfIdle() {
+        if (CACHE_CAPACITY_STATE.activeSessions() > 0) return false;
+        if (!releaseCacheLocked("manual-cache-clear")) {
+            if (cache != null) return false;
+        }
+        Path.clear(Path.exoCache());
+        try {
+            getCache();
+            return true;
+        } catch (RuntimeException error) {
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-cache", "manual-clear-rebuild-failed error=%s", error.getClass().getSimpleName());
+            return false;
+        }
+    }
+
     private static StandaloneDatabaseProvider getDatabaseProvider() {
         if (databaseProvider == null) databaseProvider = new StandaloneDatabaseProvider(App.get());
         return databaseProvider;

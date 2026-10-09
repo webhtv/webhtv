@@ -20,6 +20,7 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.FragmentSettingBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ConfigEvent;
+import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.LiveListener;
@@ -37,6 +38,9 @@ import com.fongmi.android.tv.ui.dialog.RestoreDialog;
 import com.fongmi.android.tv.ui.dialog.BackupProgressDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.utils.AppVersion;
+import com.fongmi.android.tv.cache.CacheCenter;
+import com.fongmi.android.tv.cache.CachePolicyStore;
+import com.fongmi.android.tv.ui.dialog.CacheManagementDialog;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
@@ -98,10 +102,23 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     }
 
     private void setCacheText() {
-        FileUtil.getCacheSize(new Callback() {
-            @Override
-            public void success(String result) {
-                mBinding.cacheText.setText(result);
+        if (!CachePolicyStore.isManagementEnabled()) {
+            FileUtil.getCacheSize(new Callback() {
+                @Override
+                public void success(String result) {
+                    if (mBinding != null && isAdded()) mBinding.cacheText.setText(result);
+                }
+            });
+            return;
+        }
+        mBinding.cacheText.setText(R.string.cache_management_scanning);
+        CacheCenter.get().requestSnapshot(false, snapshot -> {
+            if (mBinding != null && isAdded()) {
+                String total = FileUtil.byteCountToDisplaySize(snapshot.totalBytes());
+                long quota = snapshot.systemQuotaBytes();
+                mBinding.cacheText.setText(quota > 0
+                        ? getString(R.string.cache_management_inline, total, FileUtil.byteCountToDisplaySize(quota))
+                        : total);
             }
         });
     }
@@ -114,6 +131,9 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.appearance.setOnClickListener(this::onAppearance);
         mBinding.cache.setOnClickListener(this::onCache);
+        // Design §15.2: the long press is a shortcut, never the only entry - a plain click still
+        // opens the panel.
+        mBinding.cache.setOnLongClickListener(this::onCacheLongClick);
         mBinding.backup.setOnClickListener(this::onBackup);
         mBinding.enhance.setOnClickListener(this::onEnhance);
         mBinding.player.setOnClickListener(this::onPlayer);
@@ -289,12 +309,34 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     }
 
     private void onCache(View view) {
-        FileUtil.clearCache(new Callback() {
-            @Override
-            public void success() {
-                setCacheText();
-            }
-        });
+        if (!CachePolicyStore.isManagementEnabled()) {
+            FileUtil.clearCache(new Callback() {
+                @Override
+                public void success() {
+                    setCacheText();
+                }
+            });
+            return;
+        }
+        CacheManagementDialog.show(this);
+    }
+
+    /**
+     * The settings row's long-press shortcut: clear every cache at once, the way this row behaved
+     * before it opened the cache management panel.
+     *
+     * <p>With cache management switched off the plain click already is that full clear, so the
+     * shortcut reuses it instead of keeping a second copy of the same call. With it switched on the
+     * cleanup runs in the background and reports itself through a notification; the row re-reads
+     * itself when the cleanup publishes its change.</p>
+     */
+    private boolean onCacheLongClick(View view) {
+        if (!CachePolicyStore.isManagementEnabled()) {
+            onCache(view);
+            return true;
+        }
+        CacheManagementDialog.cleanEverything();
+        return true;
     }
 
     private void onBackup(View view) {
@@ -349,6 +391,19 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         setWallText();
     }
 
+    /**
+     * Re-reads the cache inventory the moment a cleanup (or any other cache mutation) finishes.
+     *
+     * <p>The settings row used to keep showing the pre-cleanup value until the user switched to
+     * another page and back, because nothing told it the cache had changed.</p>
+     */
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onRefreshEvent(RefreshEvent event) {
+        if (event.getType() != RefreshEvent.Type.CACHE) return;
+        if (mBinding == null || !isAdded()) return;
+        setCacheText();
+    }
+
     private void setWallText() {
         mBinding.wallUrl.setText(Setting.getWallDesc(WallConfig.getDesc()));
     }
@@ -363,5 +418,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     public void onDestroyView() {
         super.onDestroyView();
         EventBus.getDefault().unregister(this);
+        mBinding = null;
     }
 }

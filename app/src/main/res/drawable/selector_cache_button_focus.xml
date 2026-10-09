@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Focused: ring only. A tinted fill would be painted above the label (foreground draws over
+         content) and would dim the text, which made the focused button look disabled. -->
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="28dp" />
+            <solid android:color="@android:color/transparent" />
+            <stroke
+                android:width="3dp"
+                android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="28dp" />
+            <solid android:color="#33FFFFFF" />
+            <stroke
+                android:width="3dp"
+                android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="28dp" />
+            <solid android:color="@android:color/transparent" />
+            <stroke
+                android:width="3dp"
+                android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>
