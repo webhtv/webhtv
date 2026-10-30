@@ -458,4 +458,66 @@ public interface PluginRuntime {
 
 ### 10.6 下一步
 
-P2：插件清单解析 + 能力注册表 + `PluginRuntimeFactory`(`js`) + `floating` 槽位 + 审计日志。
+P2 拆为 P2a / P2b 两个可独立回滚的切片（见 §11）。
+
+---
+
+## 11. P2a 实施记录：策略层（2026-10-30）
+
+**为什么先拆。** 原 P2 同时包含「清单解析 + 注册表 + 审计日志」和「js 运行时 + floating 槽位」。前者零脚本执行、纯策略判定、可完全单测；后者第一次引入真实代码执行。两者风险性质不同，混在一个提交里会让回滚粒度失真——一旦运行时出事，已经验证过的策略层会被迫一起回退。故先交付策略层。
+
+### 11.1 交付
+
+| 文件 | 内容 |
+| --- | --- |
+| `plugin/PluginCapabilityRegistry.java` | 7 个能力常量；能力→权限→事件映射；`filterPermissions`/`allows`/`allowsEvent`/`eventsFor` |
+| `plugin/PluginManifest.java` | 清单解析：`protocol`/`version`/`id`/`sdk`/`runtime`/`events[]`/`ui[]`/`permissions[]`；失败整体返回 `null` |
+| `plugin/PluginAuditLog.java` | 环形缓冲 500 条；`recordRequest`/`recordFailure`/`entriesFor`；URL 脱敏 |
+| 测试 ×3 | `PluginManifestTest`(15) + `PluginCapabilityRegistryTest`(7) + `PluginAuditLogTest`(8) |
+
+### 11.2 测试抓到的真实缺陷（重要）
+
+首轮 37 个测试，1 个失败：
+
+```
+PluginCapabilityRegistryTest > unknownPermissionIsRejected FAILED
+java.lang.AssertionError at PluginCapabilityRegistryTest.java:23
+```
+
+原实现：
+
+```java
+return grantedPermissions != null && permission != null && grantedPermissions.contains(permission);
+```
+
+**只查集合包含，不查注册表。** 后果是任意自造能力名只要写进清单 `permissions[]` 就能通过门禁——例如 `"net.unlimited"`，一个本宿主根本不认识的能力。这不是理论问题：D2 已放弃域名白名单，若能力门禁本身也能被自造名绕过，则两层防线同时失守。
+
+**修复**：`allows()` 与 `allowsEvent()` 都以 `isKnownPermission` 为硬前置，注册表之外恒为拒绝。测试未改动——失败的是实现，不是断言。
+
+这件事验证了 P2a 拆分的价值：纯策略层能在不接运行时的情况下，用一行断言暴露一个会随运行时上线而扩散的漏洞。
+
+### 11.3 关键设计决定
+
+1. **清单失败即整体拒绝**：任一字段越界返回 `null`，不做"能读多少读多少"。半加载的插件产生无法解释的行为，比不加载更糟。
+2. **未知权限静默丢弃，但全未知则拒绝**：写了一个将来才有的权限不影响安装（向前兼容）；写进去的全是本宿主不认识的，说明清单不兼容，拒绝而非降级成"无权限插件"。
+3. **事件按权限反查过滤**：清单声明了事件但缺对应权限时，丢弃该事件而非拒绝整个清单——允许插件在清单里预留"将来想要"的事件名。
+4. **UI 槽位独立门禁**：`floating`/`toolbar`/`panel`/`page` 四种槽位分别需要 `ui.floating`/`ui.toolbar`/`ui.panel`/`ui.page`。一个槽位缺权限只丢该槽位，不影响其他。
+5. **审计 URL 不用 `java.net.URI`**：畸形 URL 会抛异常，而审计路径恰恰最不能因为一条脏 URL 就丢记录。改为手工切分，永不抛异常，且**丢弃 query 与 fragment**（query 常带 token/签名）。
+6. **审计只做内存，不做 IO**：P2a 不引入文件系统副作用，落盘是后续切片的事。
+
+### 11.4 验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*"` | **BUILD SUCCESSFUL**，37/37（修复后 16s） |
+| `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+
+### 11.5 P2a 边界内明确未做
+
+- 无 `PluginRuntimeFactory`、无 js/py 执行、无 UI 槽位渲染
+- 审计日志不落盘、无设置页入口
+- 清单不含 `leanback` 覆盖块（已在 §4.2 草案中，但 P2a 只解析扁平 `ui[]`；双端覆盖留到 P2b 与实际渲染一起做）
+
+### 11.6 下一步
+
+P2b：`PluginRuntimeFactory`(`js` → QuickJS) + `floating` 槽位渲染 + 审计日志接入真实请求。
