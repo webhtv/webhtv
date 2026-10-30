@@ -684,4 +684,84 @@ P2c：QuickJS 适配器 + 槽位渲染（见 §13）。
 
 ### 13.9 下一步
 
-**P2d**：槽位渲染（`floating` → `ProgressLayout.addOverlayView`）+ `PluginHost` 接入 `App` 生命周期 + **仪器化测试验证 QuickJS 真跑通**。
+P2d：槽位渲染 + 装配层（见 §14）。
+
+---
+
+## 14. P2d 实施记录：槽位渲染与装配层（2026-10-30）
+
+### 14.1 QuickJS 真机验证（关闭 P2c 缺口）
+
+P2c 交付时明确声明「QuickJS 未在设备上真跑过」。本切片先补这一项，**在 emulator-5560（x86_64 / SDK 28）上 `OK (7 tests)`**：
+
+| 测试 | 验证的真实行为 |
+| --- | --- |
+| `loadsAndDispatchesFromAssets` | `QuickJSLoader.init()` → `QuickJSContext.create()` → 从 assets 读脚本 → 事件派发 |
+| `directRuntimeApiWorks` | init/onEvent/action 三方法真实求值 + 上下文释放归零 |
+| `actionRoundTripsThroughQuickJs` | 脚本返回值 `'ok'` 真实回传 |
+| `brokenScriptIsQuarantinedNotCrashed` | 坏脚本被拒绝、记账、不崩应用 |
+| `missingHandlerReturnsNullNotError` | 未注册处理器返回 null 而非故障 |
+| `unknownPluginIdIsRejected` / `destroyIsIdempotent` | 边界与重复释放安全 |
+
+### 14.2 交付
+
+| 文件 | 内容 |
+| --- | --- |
+| `plugin/PluginUiPresenter.java` | `floating` 槽位渲染；挂 decorView；detach 精确移除 |
+| `plugin/PluginController.java` | 装配层：工厂 + 宿主 + 渲染器；跟随 Activity 切换；进程级单例 |
+| `App.java` | `onActivityResumed`/`onActivityDestroyed` 各加一行 |
+| 测试 ×4 | `PluginControllerTest`(8) + `PluginUiPresenterTest`(4) + 两个仪器化测试 |
+
+### 14.3 关键设计决定
+
+1. **`floating` 挂 decorView 而非 `ProgressLayout`。** `ProgressLayout.addOverlayView`（`:224`）语义更贴切，但它只存在于部分页面；插件要覆盖任意页面只能挂 decorView。代价是必须自己处理页面切换清理，由 `detach()` 承担。
+2. **电视端 floating 默认不可聚焦。** 悬浮控件不在焦点链里，强行 `focusable` 会在原有导航路径上凭空多一个停靠点，破坏 `PlayerControlFocusHelper` 的方向推断。测试 `leanbackFloatingIsNotFocusable` 钉住这条。电视正式入口留给 `toolbar`（§8.2）。
+3. **描边色走 `ThemeController.focusRingColor`，不用 XML drawable。** 描边色来自运行时主题，静态资源拿不到；这与 `docs/THEME-CUSTOMIZATION-LAYERS` 的结论一致——跟随主题的控件必须走代码路径。
+4. **装配层独立于 `App`。** `App` 已 30KB+，插件装配（谁订总线、何时渲染、何时清理）是独立关注点；`App` 只保留三行调用。
+5. **默认不加载任何插件。** P2d 没有插件来源（订阅解析在 P6），`reload()` 必须由外部显式触发。测试 `emptyReloadMeansNoPluginsAndNoSubscription` 钉住「没有来源 = 完全静默」。
+
+### 14.4 测试抓到的真实缺陷
+
+| 缺陷 | 性质 | 修复 |
+| --- | --- | --- |
+| `safeOnResumed`/`safeOnDestroyed` 声明为包私有，而 `App` 在父包 | **产品缺陷**，编译失败 | 改为 `public`，注释说明调用方在父包 |
+| `setTextColor(cond ? WHITE : WHITE)` 两个分支相同 | **产品缺陷**，无意义代码 | 删掉，改为 `ringBackground()` 提供主题描边 |
+| `rootOf` 对非 ViewGroup 父节点强转 | **产品缺陷**，会 `ClassCastException` | 改为 `findViewById(android.R.id.content)` 兜底 |
+
+### 14.5 测试侧纠错
+
+| 失败 | 性质 |
+| --- | --- |
+| `String.formatted()` → `NoSuchMethodError` | API 30+ 方法，模拟器 SDK 28 没有；改 `String.format` |
+| `getDecorView()` 赋给 `ViewGroup` 编译失败 | 返回值是 `View`，需显式强转 |
+| `FollowingActivity` 的 `onActivity` 全部 NPE | 该 Activity 缺 Intent 参数时在 `onCreate` 直接 `finish()`（`FollowingActivity.java:114`），改宿主为 `AppBrandingActivity` |
+
+### 14.6 环境障碍与绕过（重要工程记录）
+
+Gradle 的 `connectedAndroidTest` 在本机**不可用**，三条独立原因：
+
+1. **构建缓存锁冲突**：多个 Gradle daemon 并行，`G:\GradleCache\caches\build-cache-1` 被占用 → 用 `--no-build-cache` 绕过。
+2. **设备 serial 带尾随空格**：`cmd /c set ANDROID_SERIAL=...` 引入空格，Gradle 报 `Connected device with serial 'emulator-5560 ' not found!`。
+3. **多设备编排串扰**：`-Pandroid.injected.deviceSerial` 未生效，测试被派发到全部 5 台模拟器，且结果文件名含空格（`TEST-emulator-5558 - 9-_*.xml`）导致解析失败。
+
+**最终采用的验证路径**：`assembleMobileArm64_v8aDebugAndroidTest` 构建 APK → `adb install` 两个包 → `adb shell am instrument -w -r -e class <FQN> <pkg>/<runner>`。这条路绕开 Gradle 的多设备编排，结果直接可读，且可精确指定单台设备。
+
+### 14.7 验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*"` | **BUILD SUCCESSFUL**，10 suites / **86 tests** / 0 failures |
+| 仪器化 `QuickJsRuntimeDeviceTest`（emulator-5560） | **OK (7 tests)** |
+| 仪器化 `PluginUiPresenterDeviceTest`（emulator-5560） | **OK (4 tests)** |
+| `:app:assembleMobileArm64_v8aDebugAndroidTest` | **BUILD SUCCESSFUL** |
+
+### 14.8 P2d 边界内明确未做
+
+- **`toolbar` 槽位未实现**：需要插进 mobile/leanback 两份不同布局（§8.2 已给方案，但工作量大）
+- **点击无动作**：`floating` 控件可点击，但点击尚未路由到 `PluginHost.action()`——接线属 P2e
+- `assets://` 路径在 JVM 单测仍不可覆盖（需仪器化）
+- 审计日志不落盘；无设置页入口；无订阅解析
+
+### 14.9 下一步
+
+**P2e**：`floating` 点击 → `PluginHost.action()` 接线 + `toolbar` 槽位（电视入口）+ 设置页插件开关。
