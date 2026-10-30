@@ -591,4 +591,97 @@ P2b：运行时抽象 + 宿主路由（见 §12）。
 
 ### 12.7 下一步
 
-P2c：QuickJS 适配器（**新写 JS 运行时，不复用 `quickjs.crawler.Spider`**，因为它继承爬虫语义）+ `floating` 槽位渲染 + 审计接入真实请求。这一步起必须有真机/模拟器验证。
+P2c：QuickJS 适配器 + 槽位渲染（见 §13）。
+
+---
+
+## 13. P2c 实施记录：QuickJS 适配器（2026-10-30）
+
+### 13.1 实施中撞到的两个真实约束
+
+**约束一：quickjs 模块不传递 wrapper 依赖。**
+`quickjs/build.gradle:25-26` 用 `implementation` 引入 `libs.quickjs.android`/`libs.quickjs.java`，而 `app` 只 `implementation project(':quickjs')`。于是 `app` 编译期看不到 `com.whl.quickjs.*`，首次编译直接报 7 个"程序包不存在"。
+
+三条候选路线：
+
+| 方案 | 代价 |
+| --- | --- |
+| 适配器放进 quickjs 模块 | `PluginRuntime` 在 app，形成循环依赖 |
+| quickjs 改 `api` | 扩大该模块公开面，影响所有未来消费者 |
+| **app 显式声明 wrapper**（采纳） | 两行依赖 + 注释说明原因 |
+
+采纳第三种：改动最小、局部、可解释。
+
+**约束二：`QuickJSLoader.init()` 必须显式调用。**
+`QuickJSContext.create()` 之前未加载 .so 会 `UnsatisfiedLinkError`。既有 `quickjs.crawler.Loader` 把它放在构造函数（`Loader.java:9-11`）；本实现改为**懒加载 + 幂等**（`ensureNativeLoaded`），让"装了插件功能但从不使用"的用户不白付一次 .so 加载成本。
+
+### 13.2 API 核实（避免凭印象写）
+
+用 `javap` 核对 `quickjs 3.2.3` 真实签名后才落笔，修正了初稿的四处错误：
+
+| 项 | 初稿（错） | 实际 |
+| --- | --- | --- |
+| 取子对象 | `getJSObject(name)` 猜存在 | **确实存在**，返回 `JSObject` |
+| `getGlobalObject` | 以为返回 `Object` | 返回 `JSObject` |
+| Promise 处理 | 以为 wrapper 有 then 轮询 | **没有事件循环**，只能同步 |
+| Console | 猜四个方法 | `log/info/warn/error(String)`，确认一致 |
+
+另外确认 `wrapper-android-3.2.3.aar` 的 `jni/` 含 **arm64-v8a / armeabi-v7a / x86 / x86_64**，即模拟器可跑。
+
+### 13.3 交付
+
+| 文件 | 内容 |
+| --- | --- |
+| `plugin/QuickJsPluginRuntime.java` | 每插件一上下文；单线程执行器绑定上下文；5s 调用超时；超时即作废会话 |
+| `plugin/PluginScriptSource.java` | 入口解析（`assets://` / `file://` / `/` 开头）；512 KiB 上限；**拒绝远程 URL** |
+| `assets/plugin/README.md` | 插件作者契约：同步处理器约束、事件表、清单示例、安全边界 |
+| `assets/plugin/example/{manifest.json,hello.js}` | 最小可用示例 |
+| `app/build.gradle` | 显式声明 quickjs wrapper（含原因注释） |
+| 测试 ×2 | `PluginScriptSourceTest`(10) + `ExamplePluginManifestTest`(4) |
+
+### 13.4 测试抓到的真实缺陷
+
+**缺陷：`Path.read(File)` 对不存在的文件返回 `""`，不是 `null`。**
+
+`catvod/utils/Path.java:135-141` 的实现是 `catch (Exception e) { return ""; }`。而 `PluginScriptSource.read` 初稿只判 `text == null`，于是"文件不存在"被当成"脚本为空"继续往下走，最终在 `init` 阶段才报错——**错误归因会指向插件脚本，而不是入口路径写错了**。
+
+修复：同时拒绝 null 与空串，并在注释里点名 `Path.java:135-141` 这个坑，防止后人"优化"回只判 null。
+
+测试 `rejectsNonExistentFile` + `neverThrowsOnGarbageInput` 钉住了这一点。
+
+### 13.5 两次测试侧纠错（产品代码未改）
+
+| 失败 | 性质 | 处理 |
+| --- | --- | --- |
+| `readsAssetScript` | `Asset.read` 走 `AssetManager`，JVM 单测无法工作 | 改为临时文件覆盖同一段读逻辑；示例内容由 `ExamplePluginManifestTest` 从文件系统校验 |
+| `readsAbsoluteFileScript` | 相同——我用 `C:\...` 盘符路径测"绝对路径"，而 Android 上不存在盘符 | 改为断言**盘符路径必须被拒绝**，因为放宽会削弱反路径穿越 |
+
+第二条值得记录：这不是"为了过测试而改测试"，而是测试写错了平台契约。裸路径只认 `/` 开头是 Android 语义，放宽到"任意非空路径"会让 `../escape.js` 蒙混过关。
+
+### 13.6 诚实的能力边界
+
+**QuickJS wrapper 没有 Promise 事件循环。** 因此引导脚本把返回 Promise 的处理器替换成 `__PROMISE_UNSUPPORTED__` 标记串，README 里明确要求处理器必须同步。
+
+这是能力边界，不是疏漏。异步网络能力（`net.request`）本来就没在 SDK 1 开放，两者一致。等后续切片引入受控异步时，需要自己实现微任务泵，届时再放开 Promise。
+
+### 13.7 验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `:app:compileMobileArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*"` | **BUILD SUCCESSFUL**，8 suites / **74 tests** / 0 failures |
+| `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+| 模拟器可用性 | 5 台 x86_64 在线（`emulator-5554/5556/5558/5560/5562`），含 native bridge，装好的 arm64 包能启动、无崩溃 |
+
+**未做的运行验证（明确声明）**：QuickJS 适配器**尚未在设备上真跑过**。它通过了编译与单元测试，但 `QuickJSLoader.init()` + 真实脚本求值这条链路需要仪器化测试或手动验证才能确认。这是 P2c 的已知缺口，不应被"测试全绿"掩盖。
+
+### 13.8 P2c 边界内明确未做
+
+- **槽位渲染未做**：`uiSlots()` 仍只收集声明，不画任何控件（原计划在本切片，因依赖链修复与 API 核实耗时，留至 P2d）
+- `assets://` 路径在 JVM 单测不可覆盖（需仪器化）
+- 审计日志未接真实请求（因为没有真实网络能力）
+- 无设置页入口、无订阅解析
+
+### 13.9 下一步
+
+**P2d**：槽位渲染（`floating` → `ProgressLayout.addOverlayView`）+ `PluginHost` 接入 `App` 生命周期 + **仪器化测试验证 QuickJS 真跑通**。
