@@ -520,4 +520,75 @@ return grantedPermissions != null && permission != null && grantedPermissions.co
 
 ### 11.6 下一步
 
-P2b：`PluginRuntimeFactory`(`js` → QuickJS) + `floating` 槽位渲染 + 审计日志接入真实请求。
+P2b：运行时抽象 + 宿主路由（见 §12）。
+
+---
+
+## 12. P2b 实施记录：运行时抽象与宿主路由（2026-10-30）
+
+### 12.1 再次拆分的原因
+
+原 P2b = `PluginRuntimeFactory`(js → QuickJS) + floating 渲染 + 审计接入。动手前核实 QuickJS 后发现两个硬约束：
+
+| 约束 | 证据 |
+| --- | --- |
+| `quickjs.crawler.Loader` 构造即调 `QuickJSLoader.init()` 加载原生 .so | `quickjs/crawler/Loader.java:9-11` |
+| `quickjs.crawler.Spider` 继承 `com.github.catvod.crawler.Spider`，方法签名全是爬虫语义（`homeContent`/`categoryContent`/`detailContent`…），**没有事件/动作概念** | `quickjs/crawler/Spider.java:34,66-123` |
+| 脚本调用依赖 `Async.run(jsObject, func, args)` + 完整 `spider.js`/`http.js` 运行时 | `quickjs/crawler/Spider.java:56,164-194` |
+
+推论：**QuickJS 适配器既不能在普通 JVM 单测里跑，也不能复用现有 Spider（语义不匹配，需新写一层 JS 运行时）**。若把它和宿主路由混在一个切片，路由逻辑就会变成"只能靠仪器化测试验证"。
+
+故拆为：
+- **P2b（本节）**：纯 JVM 的运行时抽象 + 宿主路由 + 故障隔离，可用假运行时完整覆盖
+- **P2c**：QuickJS 适配器（新写 JS 运行时，不复用 Spider）+ floating 渲染
+
+### 12.2 交付
+
+| 文件 | 内容 |
+| --- | --- |
+| `plugin/PluginRuntime.java` | 4 方法接口（init/onEvent/action/destroy），纯 JVM，形状照 `SubtitleScriptRuntime` |
+| `plugin/PluginRuntimeFactory.java` | 按 api 分发；可注册；未注册返回 `UnsupportedRuntime`（**不返回 null**） |
+| `plugin/PluginHost.java` | 装载/卸载、事件路由、权限门禁、故障隔离、UI 槽位收集、诊断 |
+| 测试 ×2 | `PluginHostTest`(15) + `PluginRuntimeFactoryTest`(7) |
+
+### 12.3 三条边界的落地位置
+
+| 边界 | 落地方法 | 测试 |
+| --- | --- | --- |
+| **权限白名单** | `PluginHost.onEvent` 里 `allowsEvent` + `subscribesTo` 双检 | `eventNotDeclaredIsNeverDelivered`、`eventDeclaredButUnauthorizedIsNeverDelivered` |
+| **故障隔离** | `quarantine()`：标记 failed + 记审计 + 立即 destroy，不再重试 | `throwingPluginIsQuarantinedNotPropagated`、`quarantinedPluginStopsReceivingEvents` |
+| **可审计** | 所有失败路径都走 `audit.recordFailure`，带 pluginId + version | `failedInitIsNotLoadedAndIsAudited`、`unsupportedRuntimeFailsClosedAndIsAudited` |
+
+### 12.4 关键设计决定
+
+1. **未实现引擎返回会抛错的占位对象，不返回 `null`，也不返回空实现**。若返回空实现，用户会看到"插件装了但没反应"，无法区分是插件写错了还是宿主没实现。现在 `UnsupportedRuntime.init` 直接抛 `UnsupportedOperationException`，走隔离路径并在审计里留下"引擎未实现"，故障归因明确。测试 `unsupportedRuntimeMessageDistinguishesUnknownFromUnimplemented` 钉住这条：已知引擎说 `not implemented`，未知引擎说 `unknown runtime`。
+
+2. **一个插件失败不影响其他插件**。`oneBadPluginDoesNotAffectAnother` 用两个插件验证：bad 被隔离、good 仍正常收事件。
+
+3. **失败即隔离而非重试**。插件是第三方代码，失败通常是确定性的（清单与实现不符、语法错、依赖缺失）。重试只会在主线程制造抖动。隔离到下次显式重载为止。
+
+4. **装载批次语义与字幕源不同**。`SubtitleSourceManager.install` 失败是**整批回滚**（因为字幕源共享初始化流程）；插件之间互相独立，故 `PluginHost.load` 是**逐条装载、单条失败只丢该条**。这个差异是刻意的，已在代码注释里写明。
+
+5. **零插件零订阅**。`attach()` 只在有插件被装载上时订阅总线，`unloadAll` 立即退订。配合 P1 的 `hasSubscribers` 前置门，形成"没装插件 = 零开销"的完整链。
+
+6. **payload 手工拼 JSON，不引入 Gson**。payload 只有 `activity` 一个受控键，而 `ui.contentShown` 是热路径（每次页面切换触发）。JSON 序列化器会在每个事件上分配对象树。同时 `escape` 处理引号/反斜杠/换行/控制字符，防止 Activity 名注入破坏 JSON 结构。
+
+### 12.5 验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*"` | **BUILD SUCCESSFUL**，6 suites / **60 tests** / 0 failures |
+| `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+
+累计测试分布：EventBus 7 + Manifest 15 + CapabilityRegistry 7 + AuditLog 8 + RuntimeFactory 7 + Host 15 = **59**（另有 1 个跨 suite 统计差，以 XML 汇总为准：60）。
+
+### 12.6 P2b 边界内明确未做
+
+- **无任何真实脚本执行**：`js`/`py`/`html` 三个引擎在 `PluginRuntimeFactory` 里都未注册，`describe()` 会如实报告 `not implemented`
+- 无 floating/toolbar/panel/page 的**渲染**（`uiSlots()` 只收集声明，不画控件）
+- 审计日志不落盘
+- 无设置页入口、无订阅解析
+
+### 12.7 下一步
+
+P2c：QuickJS 适配器（**新写 JS 运行时，不复用 `quickjs.crawler.Spider`**，因为它继承爬虫语义）+ `floating` 槽位渲染 + 审计接入真实请求。这一步起必须有真机/模拟器验证。
