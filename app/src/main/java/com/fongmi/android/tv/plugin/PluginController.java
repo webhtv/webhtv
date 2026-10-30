@@ -1,6 +1,9 @@
 package com.fongmi.android.tv.plugin;
 
 import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 
@@ -8,6 +11,8 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.utils.Util;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 插件系统的进程级入口：装配 {@link PluginHost} 与 {@link PluginUiPresenter}，并跟随 Activity 切换。
@@ -25,9 +30,14 @@ import java.util.List;
  */
 public final class PluginController {
 
+    /** 点击回调结果预览的最大长度；再长就不是提示而是日志了。 */
+    private static final int MAX_PREVIEW_LENGTH = 160;
+
     private final PluginRuntimeFactory factory;
     private final PluginHost host;
     private final PluginUiPresenter presenter;
+    private final ExecutorService actions;
+    private volatile Handler main;
 
     private volatile Activity current;
 
@@ -35,6 +45,70 @@ public final class PluginController {
         this.factory = new PluginRuntimeFactory();
         this.host = new PluginHost(factory, PluginEventBus.get(), PluginAuditLog.get());
         this.presenter = new PluginUiPresenter();
+        this.actions = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "plugin-action");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.presenter.setOnSlotAction(this::onSlotAction);
+    }
+
+    /**
+     * 槽位点击 → 插件动作。
+     *
+     * <p><b>必须离开主线程。</b>插件动作会走 JS 运行时，那是一个带 5 秒超时的阻塞调用
+     * （{@code QuickJsPluginRuntime.CALL_TIMEOUT_MS}）。直接在主线程调，最长会把界面冻住 5 秒，
+     * 这与"插件不能拖累宿主"的前提直接冲突。
+     *
+     * <p>结果以 Toast 预览：P4 之前没有豆瓣面板可开，若点击毫无可见反馈，
+     * 这条链路（槽位→点击→运行时→回填）就无法手工验证。Toast 零布局、零资源，
+     * 是让插件作者与验收者确认接线成立的最小代价。
+     */
+    private void onSlotAction(String pluginId, String action) {
+        Activity activity = current;
+        String payload = "{\"activity\":\"" + (activity == null ? "" : activity.getClass().getSimpleName()) + "\"}";
+        actions.execute(() -> {
+            String result = host.action(pluginId, action, payload);
+            showPreview(result);
+        });
+    }
+
+    private void showPreview(@Nullable String result) {
+        if (result == null || result.isEmpty()) return;
+        Handler handler = mainHandler();
+        if (handler == null) return;
+        String text = result.length() > MAX_PREVIEW_LENGTH ? result.substring(0, MAX_PREVIEW_LENGTH) + "…" : result;
+        handler.post(() -> {
+            try {
+                Toast.makeText(App.get(), text, Toast.LENGTH_SHORT).show();
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    /**
+     * 主线程 Handler，**惰性创建**。
+     *
+     * <p>不能在构造器里建：JVM 单元测试下 {@code Looper.getMainLooper()} 是 android.jar
+     * 的桩，直接抛 {@code Stub!}，会让整个装配层无法在单测里实例化。惰性 + 兜底既能
+     * 保住单测，又能在真机上正常投递。
+     */
+    @Nullable
+    private Handler mainHandler() {
+        Handler local = main;
+        if (local != null) return local;
+        synchronized (this) {
+            local = main;
+            if (local == null) {
+                try {
+                    local = new Handler(Looper.getMainLooper());
+                } catch (Throwable error) {
+                    return null;
+                }
+                main = local;
+            }
+        }
+        return local;
     }
 
     /** 注册一个运行时实现。由后续切片（或测试）注入 `js`/`py`/`html`。 */
@@ -135,9 +209,15 @@ public final class PluginController {
             if (instance != null) {
                 instance.host.unloadAll();
                 instance.presenter.detach();
+                instance.actions.shutdownNow();
                 instance = null;
             }
         }
+    }
+
+    /** 供测试注入点击，避免依赖真实点击事件。包内可见，不扩大公开面。 */
+    void dispatchSlotAction(String pluginId, String action) {
+        onSlotAction(pluginId, action);
     }
 
     /** 供 `App` 使用：避免在生命周期回调里写 try/catch。必须 public——调用方在父包。 */

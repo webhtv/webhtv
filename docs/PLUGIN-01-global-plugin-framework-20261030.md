@@ -765,3 +765,116 @@ Gradle 的 `connectedAndroidTest` 在本机**不可用**，三条独立原因：
 ### 14.9 下一步
 
 **P2e**：`floating` 点击 → `PluginHost.action()` 接线 + `toolbar` 槽位（电视入口）+ 设置页插件开关。
+
+
+## 15. P2e 实施记录：点击接线与 toolbar 槽位（2026-10-30）
+
+### 15.1 目标
+
+P2d 结束时插件按钮看得见、点得着，但**点击是个死胡同**：`PluginUiPresenter` 的 onClick 只更新内部计数，从不触达运行时。P2e 打通「槽位点击 → `PluginHost.action()` → 脚本」，并把槽位从仅 `floating` 扩到 `toolbar`——后者才是电视遥控够得到的入口。
+
+### 15.2 一个必须先解决的类型缺口
+
+宿主的动作 API 是 `PluginHost.action(String pluginId, String action, String payload)`（`PluginHost.java:135`）——它要靠 `pluginId` 找到对应运行时。但 P2d 的 `uiSlots()` 返回 `List<PluginManifest.UiSlot>`，**槽位本身不知道自己属于哪个插件**。点击时宿主手里只有 `action` 字符串，无法反查。
+
+修复：`PluginHost.uiSlots()` 返回类型改为 `List<PluginHost.PluginSlot>`（`:217-222`），新增
+
+```java
+public record PluginSlot(String pluginId, PluginManifest.UiSlot slot) {}   // PluginHost.java:314
+```
+
+渲染层随之改为携带 `PluginSlot`，tag 编码为 `webhtv-plugin-host:<pluginId>:<action>`，点击时两个字段一起回传。
+
+### 15.3 挂载点：为什么靠 findViewById + 主题包装
+
+三份 `@style/Control` 的内容**并不相同**，这是本阶段最大的坑：
+
+| 源集 | 行号 | 内容差异 |
+| --- | --- | --- |
+| `app/src/main/res/values/styles.xml` | :117 | 只有 clickable / focusable / textColor，**无背景、无尺寸** |
+| `app/src/leanback/res/values/styles.xml` | :80 | wrap_content、`background=@drawable/selector_chip`、`nextFocusDown=@id/timeBar`、textSize 14sp |
+| `app/src/mobile/res/values/styles.xml` | :32 | wrap_content、`background=?attr/selectableItemBackgroundBorderless`、padding 8dp |
+
+而 `@drawable/selector_chip` **只存在于 leanback 源集**。
+
+第一次实现直接在代码里写 `chip.setBackgroundResource(R.drawable.selector_chip)`（PluginUiPresenter.java:177），编译即失败：
+
+```
+错误: 找不到符号
+  符号:   变量 selector_chip
+  位置: 类 drawable
+```
+
+**根因不是漏 import，而是把「两端同构」当成了事实。** 修复为用主题包装让各 flavor 取自己那份：
+
+```java
+TextView chip = toolbar
+        ? new TextView(new ContextThemeWrapper(context, R.style.Control))
+        : new TextView(context);
+```
+
+这样 leanback 自动拿到 `selector_chip` 焦点背景与 `nextFocusDown`，mobile 拿到 `selectableItemBackgroundBorderless`，不需要在代码里点名任何 drawable。挂载路径 `R.id.control` → `R.id.action` → `R.id.container` 在两份 `activity_video.xml` 与 `view_control_vod_action.xml` 中都成立（mobile :66-67 / leanback :560-561），因此**零布局改动**即可在两端落位。
+
+### 15.4 点击必须离开主线程
+
+插件动作走 JS 运行时，`QuickJsPluginRuntime.CALL_TIMEOUT_MS = 5000` 是**阻塞**调用。跑在主线程最长冻界面 5 秒，与「插件不能拖累宿主」的前提直接冲突。
+
+`PluginController` 因此持有单线程执行器（线程名 `plugin-action`，daemon）：
+
+```java
+private void onSlotAction(String pluginId, String action) {   // PluginController.java:67
+    Activity activity = current;
+    String payload = "{\"activity\":\"" + ... + "\"}";
+    actions.execute(() -> { ... host.action(pluginId, action, payload) ... showPreview(...); });
+}
+```
+
+结果以 Toast 预览（超 160 字符截断）：P4 之前没有豆瓣面板可开，若点击毫无可见反馈，这条链路就无法手工验证。Toast 零布局零资源，是最小代价的接线证据。
+
+mainHandler() 惰性创建并 try/catch 返回 null——JVM 单测下 `Looper.getMainLooper()` 是 android.jar 桩，直接调会抛 `Stub!`。
+
+### 15.5 测试又抓到一个真实缺陷
+
+首轮 90 tests / 1 failed：
+
+```
+PluginControllerTest > slotActionForUnknownPluginIsAuditedNotThrown FAILED
+    java.lang.AssertionError at PluginControllerTest.java:207
+```
+
+断言是「点击一个不存在的插件必须留审计痕迹」。当时 `PluginHost.action()` 对 `plugin == null` 直接 `return null`（原 `:137`），**悄无声息**。
+
+这不是测试苛刻：按钮在界面上还亮着（例如插件刚被卸载），用户点了没反应，日志里也查不到——这是整条链路里唯一完全不可见的失败路径。修复为：
+
+```java
+if (plugin == null) {
+    audit.recordFailure(pluginId, null, null, action, "blocked", "unknown plugin");
+    return null;
+}
+if (plugin.failed) return null;   // 隔离时已记过审计，不重复刷
+```
+
+已隔离的插件不在此列，避免每次点击重复刷同一条审计。
+
+### 15.6 验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*"` | **BUILD SUCCESSFUL**，10 suites / **90 tests** / 0 failures |
+| 仪器化 `PluginUiPresenterDeviceTest`（emulator-5560） | **OK (7 tests)** |
+| 仪器化 `QuickJsRuntimeDeviceTest`（emulator-5560，回归） | **OK (7 tests)** |
+| `:app:assembleMobileArm64_v8aDebug` + `assembleMobileArm64_v8aDebugAndroidTest` | **BUILD SUCCESSFUL** |
+
+设备链路仍走 P2d 定下的路径：`assemble → adb install 两包 → am instrument -w -r -e class <FQN>`；Gradle 的 `connectedAndroidTest` 在本机不可用（原因见 §14.6）。
+
+### 15.7 P2e 边界内明确未做
+
+- **设置页插件开关未开始**：`SubtitleSettingsDialog.java` 是字幕源设置页的可对照样板（`input.setText(Setting.getSubtitleSourceEnvironment(...))`），但插件清单的增删改查 + 开关 UI 是一个独立单元，未纳入本阶段提交。
+- **插件无来源**：仍然 `reload()` 由外部显式触发，进程启动零自动装载；订阅解析属 P6。
+- **审计不落盘**：`PluginAuditLog` 仍是 500 条内存环形。
+- **panel / page 槽位未渲染**：`countRenderable()` 只计 floating 与 toolbar。
+- **动作返回值只是 Toast**：真正的豆瓣面板要等 P4。
+
+### 15.8 下一步
+
+**P4**：豆瓣评论本体（面板 + 数据源）。在此之前若要先补「能装上第一个插件」的闭环，应先做设置页开关 + 清单导入，即 P2e 的遗留项。

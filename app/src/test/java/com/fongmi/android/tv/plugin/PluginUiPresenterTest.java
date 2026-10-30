@@ -1,6 +1,8 @@
 package com.fongmi.android.tv.plugin;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -8,35 +10,47 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 槽位计数的纯逻辑测试。真正把 View 加上屏幕的逻辑需要 Android 运行时，
- * 由仪器化测试覆盖；这里只锁住"哪些槽位会被渲染"这条判定。
+ * 槽位选择逻辑的纯 JVM 测试。真正把 View 加上屏幕需要 Android 运行时，
+ * 由 {@code PluginUiPresenterDeviceTest} 覆盖；这里只锁住"哪些槽位会被渲染"这条判定。
  */
 public class PluginUiPresenterTest {
 
-    private static PluginManifest.UiSlot slot(String type, String action) {
-        return new PluginManifest.UiSlot(type, "标签", action, null, null);
+    private static PluginHost.PluginSlot slot(String pluginId, String type, String action) {
+        return new PluginHost.PluginSlot(pluginId, new PluginManifest.UiSlot(type, "标签", action, null, null));
     }
 
     @Test
-    public void countsOnlyFloatingSlots() {
-        List<PluginManifest.UiSlot> slots = List.of(
-                slot("floating", "a"),
-                slot("toolbar", "b"),
-                slot("panel", "c"),
-                slot("floating", "d"));
+    public void countsFloatingAndToolbarButNotPanelOrPage() {
+        List<PluginHost.PluginSlot> slots = List.of(
+                slot("p", "floating", "a"),
+                slot("p", "toolbar", "b"),
+                slot("p", "panel", "c"),
+                slot("p", "page", "d"),
+                slot("q", "floating", "e"));
 
-        assertEquals(2, PluginUiPresenter.countFloating(slots));
+        assertEquals(3, PluginUiPresenter.countRenderable(slots));
     }
 
     @Test
     public void nullAndEmptyAreSafe() {
-        assertEquals(0, PluginUiPresenter.countFloating(null));
-        assertEquals(0, PluginUiPresenter.countFloating(new ArrayList<>()));
+        assertEquals(0, PluginUiPresenter.countRenderable(null));
+        assertEquals(0, PluginUiPresenter.countRenderable(new ArrayList<>()));
     }
 
     @Test
-    public void tagIsStableAndActionScoped() {
-        assertEquals("webhtv-plugin-host:open", PluginUiPresenter.tagOf(slot("floating", "open")));
+    public void nullEntriesInsideListAreSkipped() {
+        List<PluginHost.PluginSlot> slots = new ArrayList<>();
+        slots.add(null);
+        slots.add(slot("p", "floating", "a"));
+        assertEquals(1, PluginUiPresenter.countRenderable(slots));
+    }
+
+    @Test
+    public void tagCarriesPluginIdSoClicksCanBeRouted() {
+        // pluginId 必须在 tag 里：点击时宿主只有 action 字符串，
+        // 而 PluginHost.action(pluginId, action, payload) 需要 pluginId 才能定位运行时。
+        assertEquals("webhtv-plugin-host:douban.comments:open",
+                PluginUiPresenter.tagOf(slot("douban.comments", "floating", "open")));
     }
 
     @Test
@@ -45,5 +59,15 @@ public class PluginUiPresenterTest {
         presenter.detach();
         presenter.detach();
         assertEquals(0, presenter.attachedCount());
+        assertTrue(presenter.lastFallbacks().isEmpty());
+    }
+
+    @Test
+    public void clickBeforeAttachIsHarmless() {
+        PluginUiPresenter presenter = new PluginUiPresenter();
+        presenter.setOnSlotAction((pluginId, action) -> {
+            throw new AssertionError("must not be invoked without a rendered view");
+        });
+        assertFalse(presenter.attachedCount() > 0);
     }
 }

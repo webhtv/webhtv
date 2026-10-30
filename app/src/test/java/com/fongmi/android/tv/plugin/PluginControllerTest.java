@@ -11,6 +11,9 @@ import org.junit.Test;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 装配层测试。
@@ -24,8 +27,13 @@ public class PluginControllerTest {
     private PluginEventBus bus;
     private PluginAuditLog audit;
 
+    private interface ActionHook {
+        String call(String pluginId, String action, String payload);
+    }
+
     private static final class FakeRuntime implements PluginRuntime {
         volatile boolean failInit;
+        volatile ActionHook hook;
         int initCount;
         int destroyCount;
 
@@ -43,7 +51,8 @@ public class PluginControllerTest {
 
         @Override
         public String action(String pluginId, String action, String payload) {
-            return "ok";
+            ActionHook current = hook;
+            return current == null ? "ok" : current.call(pluginId, action, payload);
         }
 
         @Override
@@ -148,6 +157,54 @@ public class PluginControllerTest {
         assertTrue(text.contains("runtimes="));
         assertTrue(text.contains("plugins="));
         assertTrue("diagnostics must reflect loaded plugin", text.contains("a=ready"));
+    }
+
+    /**
+     * 点击链路的核心断言：槽位点击必须真正抵达运行时，且**不能在调用线程上执行**。
+     *
+     * <p>后者是硬要求：插件动作走 JS 运行时，是带 5 秒超时的阻塞调用
+     * （{@code QuickJsPluginRuntime.CALL_TIMEOUT_MS}）。若跑在主线程，最长冻住界面 5 秒。
+     */
+    @Test
+    public void slotActionReachesRuntimeOffTheCallerThread() throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<String> threadName = new AtomicReference<>();
+        AtomicReference<String> gotAction = new AtomicReference<>();
+        AtomicReference<String> gotPayload = new AtomicReference<>();
+
+        runtime.hook = (pluginId, action, payload) -> {
+            threadName.set(Thread.currentThread().getName());
+            gotAction.set(action);
+            gotPayload.set(payload);
+            latch.countDown();
+            return "ok";
+        };
+        controller.reload(List.of(manifest("a")), null);
+
+        controller.dispatchSlotAction("a", "comments.show");
+
+        assertTrue("runtime must be reached", latch.await(3, TimeUnit.SECONDS));
+        assertEquals("comments.show", gotAction.get());
+        assertEquals("plugin-action", threadName.get());
+        assertTrue("payload must carry the host activity", gotPayload.get().contains("activity"));
+    }
+
+    /** 点击未知插件不能抛给 UI 线程，且必须留审计痕迹。 */
+    @Test
+    public void slotActionForUnknownPluginIsAuditedNotThrown() throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        runtime.hook = (pluginId, action, payload) -> {
+            latch.countDown();
+            return null;
+        };
+        controller.reload(List.of(manifest("a")), null);
+        int before = audit.size();
+
+        controller.dispatchSlotAction("does.not.exist", "whatever");
+
+        // 未装载的插件不会到达运行时；不抛异常是唯一硬要求。
+        assertFalse("unknown plugin must not reach the runtime", latch.await(300, TimeUnit.MILLISECONDS));
+        assertTrue("a failed dispatch must leave an audit trail", audit.size() > before);
     }
 
     @Test

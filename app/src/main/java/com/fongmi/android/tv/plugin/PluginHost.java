@@ -134,7 +134,14 @@ public final class PluginHost implements PluginEventBus.Listener {
     @Nullable
     public String action(@Nullable String pluginId, @Nullable String action, @Nullable String payload) {
         LoadedPlugin plugin = pluginId == null ? null : plugins.get(pluginId);
-        if (plugin == null || plugin.failed) return null;
+        if (plugin == null) {
+            // 点到了一个不存在的插件：界面上的按钮还在（例如插件刚被卸载），点击却
+            // 悄无声息。这是唯一完全不可见的失败路径，必须留痕，否则「点了没反应」
+            // 无从诊断。已隔离的插件不在此列——隔离时已记过审计。
+            audit.recordFailure(pluginId, null, null, action, "blocked", "unknown plugin");
+            return null;
+        }
+        if (plugin.failed) return null;
         String slotPermission = PluginManifest.permissionForSlot(slotOf(plugin, action));
         if (slotPermission != null && !PluginCapabilityRegistry.allows(plugin.manifest.getPermissions(), slotPermission)) {
             audit.recordFailure(plugin.manifest.getId(), plugin.manifest.getVersion(), null, action, "blocked",
@@ -206,13 +213,21 @@ public final class PluginHost implements PluginEventBus.Listener {
         return plugins.size();
     }
 
-    /** 收集所有已装载插件声明的 UI 槽位，供 UI 宿主渲染。 */
+    /**
+     * 收集所有已装载插件声明的 UI 槽位，**带上归属插件 id**，供 UI 宿主渲染与点击路由。
+     *
+     * <p>必须带 pluginId：槽位被点击时宿主只知道 action 字符串，而 {@link #action(String, String, String)}
+     * 需要 pluginId 才能找到对应运行时。早期版本只返回裸 {@code UiSlot}，
+     * 结果点击无处可路由——这不是可以事后补的参数，而是槽位的固有属性。
+     */
     @NonNull
-    public List<PluginManifest.UiSlot> uiSlots() {
-        List<PluginManifest.UiSlot> slots = new ArrayList<>();
+    public List<PluginSlot> uiSlots() {
+        List<PluginSlot> slots = new ArrayList<>();
         for (LoadedPlugin plugin : plugins.values()) {
             if (plugin.failed) continue;
-            slots.addAll(plugin.manifest.getUiSlots());
+            for (PluginManifest.UiSlot slot : plugin.manifest.getUiSlots()) {
+                slots.add(new PluginSlot(plugin.manifest.getId(), slot));
+            }
         }
         return Collections.unmodifiableList(slots);
     }
@@ -295,6 +310,15 @@ public final class PluginHost implements PluginEventBus.Listener {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * 带归属的 UI 槽位。
+     *
+     * @param pluginId 声明该槽位的插件 id
+     * @param slot     槽位本身
+     */
+    public record PluginSlot(String pluginId, PluginManifest.UiSlot slot) {
     }
 
     /** 一个已装载插件。{@code failed} 是可变的隔离标记。 */
