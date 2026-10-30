@@ -23,6 +23,7 @@ import com.fongmi.android.tv.player.MediaBadgeCatalog;
 import com.fongmi.android.tv.player.PlaybackMemoryMonitor;
 import com.fongmi.android.tv.player.PlaybackSystemConditionMonitor;
 import com.fongmi.android.tv.player.mpv.PlaybackRecoveryMonitor;
+import com.fongmi.android.tv.plugin.PluginHostEvents;
 import com.fongmi.android.tv.remote.RemoteAgent;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -344,19 +345,23 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     public void onActivityResumed(@NonNull Activity activity) {
         if (activity != activity()) this.activity = activity;
+        PluginHostEvents.appForeground();
     }
 
     @Override
     public void onActivityPaused(@NonNull Activity activity) {
         if (activity == activity()) this.activity = null;
+        PluginHostEvents.appBackground();
     }
 
     @Override
     public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {
+        PluginHostEvents.activityCreated(activity);
     }
 
     @Override
     public void onActivityDestroyed(@NonNull Activity activity) {
+        PluginHostEvents.activityDestroyed(activity);
     }
 
     @Override
