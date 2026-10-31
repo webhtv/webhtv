@@ -20,7 +20,9 @@ public class PluginUiPresenterTest {
     }
 
     @Test
-    public void countsFloatingAndToolbarButNotPanelOrPage() {
+    public void countsFloatingToolbarAndPanelButNotPage() {
+        // panel 有自己的入口控件（与 floating 同形），因此计入可渲染数量；
+        // page 是整页接管，不由本渲染器挂控件，仍排除。
         List<PluginHost.PluginSlot> slots = List.of(
                 slot("p", "floating", "a"),
                 slot("p", "toolbar", "b"),
@@ -28,7 +30,7 @@ public class PluginUiPresenterTest {
                 slot("p", "page", "d"),
                 slot("q", "floating", "e"));
 
-        assertEquals(3, PluginUiPresenter.countRenderable(slots));
+        assertEquals(4, PluginUiPresenter.countRenderable(slots));
     }
 
     @Test

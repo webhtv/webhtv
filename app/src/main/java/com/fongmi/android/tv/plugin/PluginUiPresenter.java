@@ -90,8 +90,9 @@ public final class PluginUiPresenter {
             boolean isToolbar = "toolbar".equalsIgnoreCase(type);
             if (isToolbar && toolbar != null) {
                 addToolbarChip(toolbar, entry);
-            } else if (isToolbar || "floating".equalsIgnoreCase(type)) {
-                // toolbar 在无控制条的页面上降级为 floating；floating 本身照常挂 decorView。
+            } else if (isToolbar || "floating".equalsIgnoreCase(type) || "panel".equalsIgnoreCase(type)) {
+                // toolbar 在无控制条的页面上降级为 floating；floating 与 panel 的入口按钮照常挂 decorView。
+                // panel 只是"点击后开面板"，它的入口控件与 floating 同形，差别在点击后的路由。
                 addFloating(decor, activity, entry, leanback);
                 if (isToolbar) fallbacks.add(entry);
             }
@@ -227,14 +228,14 @@ public final class PluginUiPresenter {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
-    /** 给定槽位列表里有多少个需要挂载（floating + toolbar），供调用方预判。 */
+    /** 给定槽位列表里有多少个需要挂载（floating + toolbar + panel），供调用方预判。 */
     public static int countRenderable(@Nullable List<PluginHost.PluginSlot> slots) {
         if (slots == null) return 0;
         int count = 0;
         for (PluginHost.PluginSlot entry : slots) {
             if (entry == null || entry.slot() == null) continue;
             String type = entry.slot().slot();
-            if ("floating".equalsIgnoreCase(type) || "toolbar".equalsIgnoreCase(type)) count++;
+            if ("floating".equalsIgnoreCase(type) || "toolbar".equalsIgnoreCase(type) || "panel".equalsIgnoreCase(type)) count++;
         }
         return count;
     }

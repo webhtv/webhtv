@@ -2997,4 +2997,5 @@
     <string name="plugin_manager_params_hint">JSON 物件，例如 {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
     <string name="plugin_manager_params_invalid">參數必須是 JSON 物件</string>
     <string name="plugin_manager_params_too_large">參數量超出儲存上限</string>
+    <string name="plugin_panel_title">外掛面板</string>
 </resources>

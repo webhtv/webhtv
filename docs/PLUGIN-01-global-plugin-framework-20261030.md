@@ -1097,3 +1097,117 @@ root.add(sourceKey, JsonParser.parseString(value).getAsJsonObject());
 ### 17.10 下一步
 
 **豆瓣评论本体**：episode 数据注入（`TmdbItem` → payload）+ `panel` 槽位渲染（`BaseSideSheetDialog`）+ 电视端控制条 chip + 手机端 floating + `douban.js`。地基已经在位：脚本能读配置、能发请求、请求有审计。
+
+## 18. P5：豆瓣评论本体（episode 注入 + panel 渲染）
+
+### 18.1 范围裁定
+
+用户在 P4 收尾后给了三项裁定（Q5/Q6/Q7），全部选 A：
+
+- **D5（panel）= A**：插件返回 HTML，宿主用 `BaseSideSheetDialog` + 原生 WebView 套壳，标题栏与关闭按钮由宿主提供。理由：插件完全掌握呈现，最贴合「插件是外部文件」的原始需求。已知代价：电视端 WebView 里的滚动与焦点需要宿主转发上下键。
+- **D6（doubanId）= A**：插件自己搜。宿主只注入 `title` / `year` / `mediaType` 等**通用**字段，`douban.js` 用 `webhtv.request` 打豆瓣搜索接口拿到 subject id 再拉短评。宿主零豆瓣知识，豆瓣改版只影响插件文件——与 §17.1 的 Q2=A「宿主不预设任何第三方字段」是同一条原则。
+- **D7（episodeScope）= A**：详情页与播放页都注入。
+
+### 18.2 交付物
+
+| 文件 | 角色 |
+| --- | --- |
+| `plugin/PluginEpisodeContext.java`（新增，85 行） | 剧集上下文的**单槽**通道：`publish(activityName, context)` / `clear(activityName)` / `current(activityName)` |
+| `plugin/PluginEpisodePayload.java`（新增，83 行） | `TmdbItem` + `Vod` + `Episode` → 只读 JSON 的归一化，8 KB 硬上限，零值省略 |
+| `ui/dialog/PluginPanelDialog.java`（新增，104 行） | panel 槽位的宿主外壳，继承 `BaseSideSheetDialog` |
+| `res/layout/dialog_plugin_panel.xml`（新增，46 行） | 标题 + 关闭 + WebView |
+| `plugin/PluginController.java` | `buildActionPayload`（activity + 条件性 context）、`routeSlotResult`（按槽位分流）、`showPanel`、`renderCurrent`/`renderNow` 线程守卫 |
+| `plugin/PluginHost.java` | 新增 `grants(pluginId, permission)` 与 `slotOfAction(pluginId, action)` |
+| `plugin/PluginUiPresenter.java` | panel 槽位也挂入口控件（与 floating 同形），`countRenderable` 计入 panel |
+| `ui/activity/TmdbDetailActivity.java` | `applyTmdbBundle` 末尾发布、`onResume` 回归发布、`resetDetailState` 撤回 |
+| `mobile/…/VideoActivity.java`、`leanback/…/VideoActivity.java` | 起播唯一收口发布、`onResume`/`onStart` 回归发布 |
+| `assets/plugin/douban/`（新增：manifest.json 19 行 / douban.js 185 行） | 示例插件本体，ES5 写法，自带豆瓣搜索与短评抓取 |
+| `assets/plugin/README.md`（153 行） | 新增 §5「槽位与面板渲染」含 5.1 action payload 契约 |
+| `res/values*/strings.xml` | `plugin_panel_title`（en / zh-rCN / zh-rTW 三份） |
+| 单测 | `PluginEpisodeContextTest`（178 行 / 15 用例）、`PluginEpisodePayloadTest`（184 行 / 13 用例）、`PluginUiPresenterTest` 改断言 |
+| 真机装置 | `PluginPanelAndContextDeviceTest`（385 行 / 3 用例） |
+
+### 18.3 关键设计决定
+
+**（1）payload 是"每次点击现算"，不是"事件下发"。**
+
+`PluginEpisodeContext` 只存一份 {`activityName`, json}，`PluginController.buildActionPayload` 在**点击那一刻**用当前 `activity` 的简名去取，名字不匹配就返回 null。这样页面切换不需要任何派发、不需要清缓存、也不可能把 A 页的数据给到 B 页的 chip。
+
+**（2）上下文与槽位权限是两件事。**
+
+`ui.panel` 给的是"能在这一页开面板"，`plugin.data.episode` 给的是"能读剧集数据"。`buildActionPayload` 里 `context` 的附加条件是 `context != null && host.grants(pluginId, PERMISSION_EPISODE_DATA)`，两个条件都必须成立——一个有入口的插件不自动拥有数据。真机用例 `actionPayloadOmitsEpisodeContextWithoutPermission` 钉的就是这条。
+
+**（3）结果怎么呈现由槽位声明决定，不由返回值猜。**
+
+插件只返回一个字符串。`routeSlotResult` 查 `host.slotOfAction(pluginId, action)`：`panel` → `showPanel`，其余 → `showPreview`。同一段 HTML 在 floating 上是提示、在 panel 上是面板，这是**可配置行为**，不是运行时猜测。
+
+**（4）面板只开在"发起点击的那一页"。**
+
+`showPanel` 投递回主线程后重新校验 `origin == current && !origin.isFinishing() && origin instanceof FragmentActivity`。JS 回来最长已过 5 秒，用户完全可能已翻页；把上一页的评论盖到新页面上，正是本项目反复要避免的串台。
+
+**（5）注入点选"起播唯一收口"，不逐点击点。**
+
+全仓 `mViewModel.playerContent(` 的生产调用只有 3 处——`mobile/…/VideoActivity.java`（`getPlayer` 内）、`leanback/…/VideoActivity.java`（`getPlayer` 内）、`leanback/…/VideoActivity.java`（`startPendingFastTmdbPlayback` 内，快播路径**不**经过 `getPlayer`）。在这 3 处之前各发一次，初次进入、点集、自动连播、切线路全部覆盖。
+
+### 18.4 四个被修掉的真实缺陷
+
+**（1）全局单槽 + 返回不重发 = 永久空窗（不是竞态）。**
+
+`PluginEpisodeContext` 是进程级单槽（一个 volatile `Snapshot`，`publish` 整体替换）。详情页发布 → 点集进播放页覆盖 → 按返回回详情页。详情页拉起播放页时**不 finish**（`VideoActivity.startDirect(...)` 三处调用只有 `startDirectResolved` 那条后面紧跟 finish），所以返回时详情页从未销毁、`onCreate`/`applyTmdbBundle` 都不会再跑，而 `current("TmdbDetailActivity")` 因名字不匹配恒为 null。
+
+修复：三个页面各自补"回归发布"——`TmdbDetailActivity.onResume`、`mobile VideoActivity.onResume`、`leanback VideoActivity.onStart`（该类**确实没有 onResume**，全类只有 onStart/onStop）。每处都带"没有数据就返回、不发布"的守卫：`publish(name, null)` 的语义是**清除**，一次无数据的回归发布会擦掉原本正确的快照，比不发布更糟。
+
+**（2）`episode.context` 是死事件。**
+
+`PluginEventBus` 定义了这个常量、`PluginCapabilityRegistry` 把它挂进 `plugin.data.episode` 的事件集、README 写着"宿主切到新剧集条目时派发"——但全仓没有任何 `emit` 调用，插件订阅它永远收不到。
+
+为什么不补接线：真接上会在每次页面切换时**同步阻塞主线程**执行插件 JS（`PluginHost.onEvent` → `QuickJsPluginRuntime` → `session.withLock` → `future.get(5000)`）。本切片不该新增主线程派发点。处置 = 删掉死事件 + 修正文档（现在 README 明确写"业务数据不通过事件下发，只在 `action` 被调用时随 payload 的 `context` 字段提供"）。删干净后 `PluginEventBus.java` 与 `PluginCapabilityRegistry.java` 相对 HEAD byte-identical，不进 commit。
+
+**（3）panel 槽位在后台线程 `addView`（本切片自己引入的回归）。**
+
+HEAD 上 `PluginUiPresenter.attach` 的分支是 `else if (isToolbar || "floating".equalsIgnoreCase(type))` —— panel 被**静默忽略，不碰任何视图**。本切片把 panel 加进这条分支后，它开始走 `addFloating` → `decorView.addView`。而 `PluginController.reload` → `renderCurrent` → `attach` 整段跑在**调用方线程**，生产调用点全在后台线程：`App.java:152` 的 `Task.execute(PluginBootstrap::installAndReloadQuietly)`、`PluginManagerActivity.java:151/:254/:295` 的 `mWorker`。豆瓣插件恰好只声明 panel 一个槽位，于是"用户启用豆瓣"就会在 worker 线程 `addView`，抛出的 `CalledFromWrongThreadException` 被 `reload` 的 `catch (Throwable)` 吞成一条**假的 reload 失败**审计。
+
+**（4）detach 也在后台线程（第 3 项修完之后才现形）。**
+
+第 3 项的第一版只把 `attach` 投递回主线程，`host.size() == 0` 那条 `presenter.detach()` 早退分支仍留在守卫之外。这条分支同样真实可达：用户在插件管理页关掉**最后一个**插件 → `setEnabled` → `scheduleReload` → `mWorker` → `reload` 返回空清单 → `renderCurrent` 里 `current` 非空、`host.size()==0` → `detach()` → `parent.removeView(view)` 在 worker 线程抛异常 → 同样被吞成假 reload 失败。用户看到的是"关掉插件后 chip 还在、开关像没生效"。
+
+修复：守卫提到方法最外层，`attach` 与 `detach` 一起收进只在主线程执行的 `renderNow()`；`renderNow` 内部**重读** `current` 与 `host.size()`（投递到执行之间用户可能已翻页、也可能又把插件启用了）。主线程仍然同步执行——`onActivityResumed` 与真机测试的 `runOnMainSync` 都依赖"调用返回时控件已在"。
+
+**两个被记录但未处理的边界**（都已核实为当前不可达，不是已知缺陷在放行）：
+
+- `onActivityDestroyed` 里的 `presenter.detach()` 同样在调用方线程触碰视图。全仓 `safeOnDestroyed` 只有一个调用方 `App.java:370`，而 `Application.ActivityLifecycleCallbacks` 的回调本身就在主线程，所以当前安全。若将来有人从后台线程调它，会以和（4）完全相同的方式炸在 `removeView` 上。
+- `PluginControllerTest` 的 12 处 `reload(...)` 全部在 `current == null` 下跑，从未触达 `attach` 的视图分支——这正是 193 个单测没能提前抓到（3）（4）的原因。补这条覆盖需要真机装置，已由 `PluginPanelAndContextDeviceTest` 承担。
+
+### 18.5 验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `:app:compileMobileArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+| `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*"` | **20 suites / 193 tests / 0 failures / 0 errors** |
+| 仪器化（emulator-5560 / SDK 28）全量 plugin 包 | **23 / 23 通过**（0 skipped / 0 failed） |
+
+165 → 193 的差额正好是新增的 `PluginEpisodeContextTest` 15 + `PluginEpisodePayloadTest` 13。真机 20 → 23 的差额是新增的 `PluginPanelAndContextDeviceTest` 3 条。
+
+真机 23 条逐类：`PluginEndToEndDeviceTest` 2 / `PluginPanelAndContextDeviceTest` 3 / `PluginParamsNetDeviceTest` 4 / `PluginUiPresenterDeviceTest` 7 / `QuickJsRuntimeDeviceTest` 7。
+
+`PluginPanelAndContextDeviceTest` 的三条**不**断言 `PluginController` 的返回值（动作结果在内部被路由掉了，测试拿不到），而是用 `evaluateJavascript` 读 WebView 的 DOM：`panelSlotOpensSheetWithPluginHtml` 断言 `findFragmentByTag("plugin-panel")` 非空 + 标题等于槽位标签 + DOM 里的 `probe-title` 等于脚本写入的 `PANELMARK`；`actionPayloadCarriesEpisodeContextWhenPermissionGranted` 断言 `probe-title`/`probe-year`/`probe-activity` 三值；`actionPayloadOmitsEpisodeContextWithoutPermission` **先**验 `probe-activity` 等于宿主页名（证明脚本确实跑通、payload 确实到了），**再**验 `probe-title` 为 `NO_CONTEXT`。
+
+装置侧有两条撞出来的真约束，值得记：
+
+1. **`reload` 必须回主线程。** `PluginBootstrap.reloadAll()` 从测试线程调，会走 `attach` → `addView` 被 `catch (Throwable)` 吞成"reload 返回空"。解法是 `runOnMainSync`。既有 `PluginEndToEndDeviceTest` 从未撞到，因为它不声明 `ui` 槽位，`attach` 在触碰视图前就返回了——这恰好是（3）那条缺陷的另一面。
+2. **`payload` 到脚本手里是 JSON 字符串，不是对象。** `QuickJsPluginRuntime.dispatch` 以序列化字符串调 `fn.call(key, payload)`，解析是插件自己的责任（与 README §5.1、`example/hello.js` 的既有约定一致）。示例插件开头一律 `try { payload = JSON.parse(raw || '{}'); } catch (e) {}`。
+
+### 18.6 P5 边界内明确未做
+
+- **`py` / `html` 运行时**：`PluginBootstrap` 仍只注册 `js`。
+- **审计不落盘**：`PluginAuditLog` 仍是 500 条内存环形，活不过进程重启。而 D2 裁定「审计是 `net.request` 唯一的安全观测面」——这个缺口在设计上成立、在时间上不成立，**已作为交付风险路由给用户**，未在本切片擅自扩容。
+- **`net.request` 仍无域名白名单**：插件拿到即能请求任意 host。这是 D2 的既有裁定（"不做白名单，靠审计"），本切片没有改变。
+- **电视端 WebView 的上下键转发**：`WebViewUtil.configureHome` 已把 WebView 设为 `focusable`，但面板内的滚动/焦点是否顺手，未在真机上验过遥控器。
+- **`mediaType` 不归一化**：`PluginEpisodePayload.mediaType()` 原样透传 `item.getMediaType()`，大写 `"TV"` 或 `"anime"` 之类的非规范值不纠正；缺失时按约定兜底 `"movie"`（`TmdbItem.isTv()` 的定义是 `"tv".equals(mediaType)`，那个值已在上一行按"已声明"返回，所以兜底只可能是 movie）。
+- **`page` 槽位仍然静默忽略**：`PluginUiPresenter.attach` 至今没有 page 分支。
+- **`onActivityDestroyed` 的 `detach` 未加线程守卫**：理由见 18.4 末尾。
+
+### 18.7 下一步
+
+**插件生态可用性**：`PluginAuditLog` 落盘（D2 的观测面前提）、`net.request` 域名白名单的重新评估、`py`/`html` 运行时、`page` 槽位、电视端面板的遥控器可达性。这些都不是豆瓣专属，属于"插件框架作为长期能力"的欠账。

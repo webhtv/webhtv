@@ -255,6 +255,38 @@ public final class PluginHost implements PluginEventBus.Listener {
         return Collections.unmodifiableList(slots);
     }
 
+    /**
+     * 该插件此刻是否真的持有某项能力。
+     *
+     * <p>点击路径需要它：宿主准备把剧集上下文塞进动作 payload 之前，必须先确认
+     * 这个插件被授予了 {@code plugin.data.episode}。不能因为"槽位存在"就认为"数据可用"——
+     * 槽位权限（ui.panel）与数据权限（plugin.data.episode）是两件独立的事。
+     */
+    public boolean grants(@Nullable String pluginId, @Nullable String permission) {
+        if (pluginId == null || permission == null) return false;
+        LoadedPlugin plugin = plugins.get(pluginId);
+        if (plugin == null) return false;
+        return PluginCapabilityRegistry.allows(plugin.manifest.getPermissions(), permission);
+    }
+
+    /**
+     * 定位某个动作所属的槽位，**带上归属插件 id**。
+     *
+     * <p>{@link #action(String, String, String)} 已经在权限校验时用私有 {@code slotOf} 找过一遍，
+     * 但点击路径需要在动作返回之后知道"这个动作是 panel 还是 floating"，以便决定结果是开面板
+     * 还是弹提示。返回 {@code null} 表示没有对应槽位（例如插件直接调 action）。
+     */
+    @Nullable
+    public PluginSlot slotOfAction(@Nullable String pluginId, @Nullable String action) {
+        if (pluginId == null) return null;
+        LoadedPlugin plugin = plugins.get(pluginId);
+        if (plugin == null) return null;
+        for (PluginManifest.UiSlot slot : plugin.manifest.getUiSlots()) {
+            if (action != null && action.equals(slot.action())) return new PluginSlot(pluginId, slot);
+        }
+        return null;
+    }
+
     /** 收集对某事件感兴趣且仍有权限的插件 id，供诊断与 UI 决策。 */
     @NonNull
     public List<String> subscribersOf(@Nullable String event) {

@@ -6,7 +6,6 @@
   "sdk": 1,
   "runtime": { "api": "js", "entry": "assets://plugin/example/hello.js", "timeout": 15 },
   "params": { "greeting": "${GREETING}", "limit": 20 },
-  "params": { "greeting": "${GREETING}", "limit": 20 },
   "events": ["ui.contentShown"],
   "ui": [
     {

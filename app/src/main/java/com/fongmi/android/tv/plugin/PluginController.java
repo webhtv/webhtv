@@ -6,9 +6,12 @@ import android.os.Looper;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.ui.dialog.PluginPanelDialog;
 import com.fongmi.android.tv.utils.Util;
+import com.google.gson.JsonObject;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -60,16 +63,73 @@ public final class PluginController {
      * （{@code QuickJsPluginRuntime.CALL_TIMEOUT_MS}）。直接在主线程调，最长会把界面冻住 5 秒，
      * 这与"插件不能拖累宿主"的前提直接冲突。
      *
-     * <p>结果以 Toast 预览：P4 之前没有豆瓣面板可开，若点击毫无可见反馈，
-     * 这条链路（槽位→点击→运行时→回填）就无法手工验证。Toast 零布局、零资源，
-     * 是让插件作者与验收者确认接线成立的最小代价。
+     * <p><b>结果怎么呈现由槽位声明决定</b>（见 {@link #routeSlotResult}）：{@code panel} 槽位
+     * 打开侧滑面板，其余槽位以 Toast 预览。插件只返回一个字符串，宿主不猜它是 html 还是文本。
      */
     private void onSlotAction(String pluginId, String action) {
         Activity activity = current;
-        String payload = "{\"activity\":\"" + (activity == null ? "" : activity.getClass().getSimpleName()) + "\"}";
+        String activityName = activity == null ? "" : activity.getClass().getSimpleName();
+        String payload = buildActionPayload(pluginId, activityName);
         actions.execute(() -> {
             String result = host.action(pluginId, action, payload);
-            showPreview(result);
+            routeSlotResult(activity, pluginId, action, result);
+        });
+    }
+
+    /**
+     * 构造动作 payload：{@code activity} 恒在，{@code context} 仅在"有上下文 + 插件有数据权限"时附加。
+     *
+     * <p>{@code activity} 必须在：插件用它判断"我现在在哪个页面"，也是既有约定的键。
+     * {@code context} 之所以要额外查一次权限，是因为槽位权限（ui.panel）与数据权限
+     * （plugin.data.episode）互相独立——一个插件可以只要入口不要剧集数据。
+     */
+    private String buildActionPayload(String pluginId, String activityName) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty(PluginEventBus.KEY_ACTIVITY, activityName);
+        JsonObject context = PluginEpisodeContext.current(activityName);
+        if (context != null && host.grants(pluginId, PluginCapabilityRegistry.PERMISSION_EPISODE_DATA)) {
+            payload.add("context", context);
+        }
+        return payload.toString();
+    }
+
+    /**
+     * 动作返回后按槽位类型分流：panel 打开面板，其余一律走提示预览。
+     *
+     * <p>为什么不问插件"你要返回 html 还是文本"：插件返回的就是一个字符串，
+     * 它属于面板还是提示由**槽位声明**决定——同一段 html 在 floating 上弹提示、
+     * 在 panel 上开面板，是有意的可配置行为，不是运行时猜测。
+     */
+    private void routeSlotResult(@Nullable Activity origin, String pluginId, String action, @Nullable String result) {
+        PluginHost.PluginSlot slot = host.slotOfAction(pluginId, action);
+        if (slot != null && "panel".equalsIgnoreCase(slot.slot().slot())) {
+            showPanel(origin, slot.slot().label(), result);
+            return;
+        }
+        showPreview(result);
+    }
+
+    /**
+     * 打开插件面板。
+     *
+     * <p>结果为空时**什么都不做**：一个面板槽位返回空串，通常意味着插件抓取失败，
+     * 此时弹一个空白侧滑面板比没有任何反应更让人困惑。失败应当由插件自己
+     * 返回 html 里的错误文案来表达。
+     */
+    private void showPanel(@Nullable Activity origin, @Nullable String title, @Nullable String html) {
+        if (html == null || html.isEmpty()) return;
+        Handler handler = mainHandler();
+        if (handler == null) return;
+        handler.post(() -> {
+            // 只开在"发起点击的那一页"上：JS 回来时最长已过 5 秒，用户完全可能已经翻到下一页，
+            // 把上一页的评论面板盖到新页面上，正是本项目反复要避免的"串台"。
+            if (origin == null || origin != current || origin.isFinishing()) return;
+            if (!(origin instanceof FragmentActivity fragment)) return;
+            try {
+                PluginPanelDialog.show(fragment, title, html);
+            } catch (Throwable ignored) {
+                // 面板是可选增强：开不出来也不能影响宿主页面。
+            }
         });
     }
 
@@ -157,17 +217,60 @@ public final class PluginController {
     public void onActivityDestroyed(Activity activity) {
         if (activity == null || activity != current) return;
         presenter.detach();
+        PluginEpisodeContext.clear(activity.getClass().getSimpleName());
         current = null;
     }
 
+    /**
+     * 把插件槽位渲染到当前页面。
+     *
+     * <p><b>为什么整段渲染都必须回到主线程。</b>渲染的两个动作都碰视图：{@code attach} 走
+     * {@code decorView.addView}，{@code detach} 走 {@code parent.removeView}——二者都只能在建树
+     * 线程上执行。要把它们一起挡住，守卫就必须落在方法最外层；只挡 attach 会留下一条真实可达的
+     * 故障路径：用户在插件管理页关掉最后一个插件时，装载在后台 worker 上返回空清单，
+     * {@code host.size() == 0} 那一支随即在后台线程 removeView，抛出的
+     * {@code CalledFromWrongThreadException} 被 {@link #reload} 的 {@code catch (Throwable)}
+     * 吞成一条"reload 失败"审计。用户看到的是"关掉插件后 chip 还在、开关像没生效"，
+     * 日志里却指向一个根本没坏的装载过程——这是最难排查的组合。
+     *
+     * <p><b>为什么主线程仍然同步执行。</b>{@code onActivityResumed} 与会话内 reload 都在主线程，
+     * 它们依赖"调用返回时控件已在"（真机测试同样经 {@code runOnMainSync} 落在这条路径上）。
+     * 投递只作为跨线程的补救，不是常态。
+     */
     private void renderCurrent() {
-        Activity activity = current;
-        if (activity == null) return;
+        if (current == null) return;
+        if (isMainThread()) {
+            renderNow();
+            return;
+        }
+        Handler handler = mainHandler();
+        if (handler == null) return;
+        handler.post(this::renderNow);
+    }
+
+    /**
+     * 真正触碰视图的那一段，**只允许在主线程调用**。
+     *
+     * <p>自己重读 {@code current} 与 {@code host.size()} 而不接受入参：从投递到执行之间，
+     * 用户可能已经翻到别的页面，也可能又把插件启用了——沿用投递前的快照会把控件挂到错误的页面上。
+     */
+    private void renderNow() {
+        Activity target = current;
+        if (target == null) return;
         if (host.size() == 0) {
             presenter.detach();
             return;
         }
-        presenter.attach(activity, host.uiSlots(), isLeanback());
+        presenter.attach(target, host.uiSlots(), isLeanback());
+    }
+
+    /** 当前是否在主线程；{@code Looper} 在 JVM 单测下是桩，必须兜住。 */
+    private static boolean isMainThread() {
+        try {
+            return Looper.myLooper() == Looper.getMainLooper();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean isLeanback() {

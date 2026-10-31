@@ -3064,4 +3064,5 @@
     <string name="plugin_manager_params_hint">JSON object, e.g. {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
     <string name="plugin_manager_params_invalid">Parameters must be a JSON object</string>
     <string name="plugin_manager_params_too_large">Parameters are too large to save</string>
+    <string name="plugin_panel_title">Plugin panel</string>
 </resources>
