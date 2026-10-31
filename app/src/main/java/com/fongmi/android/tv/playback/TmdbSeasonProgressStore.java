@@ -33,7 +33,9 @@ public final class TmdbSeasonProgressStore {
         progress.sourceEpisodeUrl = history.getEpisodeUrl();
         progress.sourceBindingKey = TextUtils.isEmpty(history.getSourceBindingKey())
                 ? sourceBindingKey(history) : history.getSourceBindingKey();
-        progress.updatedAt = history.getCreateTime() > 0 ? history.getCreateTime() : System.currentTimeMillis();
+        // createTime 是持久字段，updateTime 才是真实新旧，取二者最大值作为快照新旧依据。
+        long updatedAt = Math.max(history.getCreateTime(), history.getUpdateTime());
+        progress.updatedAt = updatedAt > 0 ? updatedAt : System.currentTimeMillis();
         return progress;
     }
 

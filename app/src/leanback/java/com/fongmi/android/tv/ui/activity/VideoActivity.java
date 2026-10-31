@@ -963,8 +963,7 @@ private boolean runtimeSourceOnly;
     public static void startDirectTmdb(Activity activity, String key, String id, String name, String pic, String mark, ArrayList<String> episodeTitles, TmdbItem item, Vod tmdbVod, Vod detailVod, String tmdbDetailCacheKey, String playFlag, String playEpisodeName, String playEpisodeUrl, int playSeasonNumber, int playEpisodeNumber, History resumeHistory) {
         startDirectTmdb(activity, key, id, name, pic, mark, episodeTitles, item, tmdbVod, detailVod,
                 tmdbDetailCacheKey, playFlag,
-                resumeHistory == null ? "" : resumeHistory.getSourceBindingKey(),
-                playEpisodeName, playEpisodeUrl, playSeasonNumber, playEpisodeNumber, resumeHistory);
+                "", playEpisodeName, playEpisodeUrl, playSeasonNumber, playEpisodeNumber, resumeHistory);
     }
 
     public static void startDirectTmdb(Activity activity, String key, String id, String name, String pic, String mark, ArrayList<String> episodeTitles, TmdbItem item, Vod tmdbVod, Vod detailVod, String tmdbDetailCacheKey, String playFlag, String playFlagKey, String playEpisodeName, String playEpisodeUrl, int playSeasonNumber, int playEpisodeNumber, History resumeHistory) {
@@ -2661,16 +2660,14 @@ private boolean runtimeSourceOnly;
 
     private Flag findFastTmdbPlaybackFlag(Vod item) {
         if (item == null) return null;
-        Flag flag = findIntentPlaybackFlag(item.getFlags(), getIntentPlaybackFlagKey(),
+        // 不再退回第一条线路：intent 选集失配时交给正常链路按历史身份重新定位，而不是静默播列表第一条。
+        return findIntentPlaybackFlag(item.getFlags(), getIntentPlaybackFlagKey(),
                 getIntentPlaybackFlag(), getIntentPlaybackEpisodeUrl());
-        if (flag != null) return flag;
-        return item.getFlags().isEmpty() ? null : item.getFlags().get(0);
     }
 
     private Episode findFastTmdbPlaybackEpisode(Flag flag) {
-        Episode episode = findIntentPlaybackEpisode(flag, getIntentPlaybackEpisodeName(), getIntentPlaybackEpisodeUrl());
-        if (episode != null) return episode;
-        return flag == null || flag.getEpisodes().isEmpty() ? null : flag.getEpisodes().get(0);
+        // 同上：定位不到就返回 null，由 startPendingFastTmdbPlayback 回落正常链路，绝不取第一集。
+        return findIntentPlaybackEpisode(flag, getIntentPlaybackEpisodeName(), getIntentPlaybackEpisodeUrl());
     }
 
     private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode) {
@@ -3998,7 +3995,10 @@ private boolean runtimeSourceOnly;
     }
 
     private boolean seamless(Flag flag) {
-        Episode episode = getMark().isEmpty() ? flag.find(mHistory.getEpisode(), true) : flag.find(mHistory.getVodRemarks(), false);
+        // 选集定位以历史身份（URL 优先、集号容错）为主，刮削标题（mark）只作兜底：
+        // 只有走 find(Episode) 才命中 Flag.find 的 URL 优先分支，否则同集多版本会被集名打分选成第一版本。
+        Episode episode = mHistory == null ? null : flag.find(mHistory.getEpisode(), true);
+        if (episode == null && !getMark().isEmpty()) episode = flag.find(getMark(), false);
         setQualityVisible(episode != null && episode.isSelected() && mQualityAdapter.getItemCount() > 1);
         if (episode == null || (isPlaybackFlag(flag) && episode.isSelected())) return false;
         selectEpisode(episode, false);
@@ -6118,7 +6118,12 @@ private boolean runtimeSourceOnly;
         if (!TextUtils.isEmpty(playUrl)) {
             for (Episode episode : flag.getEpisodes()) if (TextUtils.equals(playUrl, episode.getUrl())) return episode;
         }
-        return TextUtils.isEmpty(playName) ? null : flag.find(playName, true);
+        if (!TextUtils.isEmpty(playName)) {
+            Episode episode = flag.find(playName, true);
+            if (episode != null) return episode;
+        }
+        // 集名在换源/刮削后常失真，最后用历史集身份（URL 优先 + 集号容错）兜底。
+        return mHistory == null ? null : flag.find(mHistory.getEpisode(), true);
     }
 
     private void saveHistory() {
