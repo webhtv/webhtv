@@ -977,4 +977,123 @@ P2f 之前所有证据都是**分段**的：导入器单测用临时根目录接
 
 ### 16.9 下一步
 
-**P4 豆瓣评论本体**（面板 + 数据源）仍是原定目标；P2f 之后「能装上第一个插件」的闭环已经闭合，小说与字幕那种「外部文件 → App 内管理」的路径在插件侧首次成立。
+**P4** 原定是豆瓣评论本体（面板 + 数据源）；P2f 之后「能装上第一个插件」的闭环已经闭合，小说与字幕那种「外部文件 → App 内管理」的路径在插件侧首次成立。
+
+> 后续调整：用户裁定 Q1=A，把 P4 切成两片——**P4（本篇 §17）= 插件参数配置 + net.request 地基**，豆瓣本体顺延为下一片。原因是「插件能带自己的密钥发请求」是豆瓣插件的前置条件，先做本体会在宿主侧卡住。
+
+## 17. P4：插件参数配置 + net.request 网络桥
+
+### 17.1 范围裁定
+
+用户在 P2f 收尾后给了一个二选一（Q1/Q2），裁定是 **Q1=A、Q2=A**：
+
+- **Q1=A**：本切片只补「插件参数配置 + net.request」两块**地基**；豆瓣插件本体（episode 注入 + panel 渲染 + douban.js）留到下一片。
+- **Q2=A**：通用 JSON 参数透传，宿主**不预设任何第三方字段**；账号 / Token / Cookie 都只是用户自己写的键，宿主只负责替换占位符后注入脚本。
+
+理由：豆瓣评论要跑起来，先得有「插件能带自己的密钥去发请求」这件事；否则写 douban.js 的第一行就卡住，而卡住的地方在宿主而不在豆瓣。反过来先做地基，豆瓣本体就退化成「写一个 js 文件」。
+
+### 17.2 交付物
+
+| 文件 | 职责 |
+| --- | --- |
+| `plugin/PluginEnvironment.java` | 占位符替换：把 `params` 里的 ${KEY} 换成用户填的值 |
+| `plugin/PluginEnvironmentStore.java` | 用户填写的参数文本按插件 id 存取（可注入 Store，便于 JVM 单测） |
+| `plugin/PluginConfig.java` | 配置信封：把 {id, params, timeout, permissions} 打包成 init 的 config 字符串 |
+| `plugin/PluginNetBridge.java` | 受控 HTTP：`OkHttp.client(timeout)` 手工 execute，拿 status，每次请求落审计 |
+| `plugin/PluginManifest.java` | 新增 `params` 字段（`getParams()` 返回深拷贝） |
+| `plugin/PluginHost.java` | 新增 `load(manifests, config, resolver)` 三参重载 + `ConfigResolver` 接口 |
+| `plugin/PluginController.java` | 新增 `reload(manifests, config, resolver)` 三参重载 |
+| `plugin/PluginBootstrap.java` | `reloadAll()` 改为逐插件拼 config（`configOf`） |
+| `plugin/QuickJsPluginRuntime.java` | 注入 `webhtv.config` 与 `webhtv.request`（JSCallFunction） |
+| `ui/activity/PluginManagerActivity.java` | 列表行新增「参数」按钮 + JSON 编辑对话框 |
+| `res/layout/adapter_plugin_entry.xml` | 追加 `@+id/entryParams` 图标按钮 |
+| `res/values*/strings.xml` | 参数编辑文案（en / zh-rCN / zh-rTW 各 5 条） |
+| `assets/plugin/README.md` | 2718 → 4603 B：新增 §5 参数配置、§6 网络请求，重写 net.request 安全边界条目 |
+| `assets/plugin/example/manifest.json` / `hello.js` | 示例带上 params 并读 `webhtv.config` |
+
+新增单测 4 个文件 / 35 用例，真机装置 1 个文件 / 4 用例。
+
+### 17.3 三个被修掉的真实缺陷
+
+**（1）删插件不删参数 → 同名重装会静默继承旧 token。**
+`deletePlugin` 原来只做 `config.remove + save + removePackageDir`。用户删掉插件后重装一个同名 id 的插件，`PluginEnvironmentStore` 里那份旧 JSON 还在，新插件第一次 `init` 就拿到了别人的密钥。这不会报错、不会崩，只会在某个请求里带着错凭据——是最难发现的一类。修复：在同一个 try 块里 `config.save()` 之后补 `PluginEnvironmentStore.get().remove(entry.id());`，并在注释里写清「为什么必须跟着删」。
+
+**（2）把「缺权限」当成「运行时故障」会让整个插件下线。**
+`PluginNetBridge` 第一版只有一个私有 `failure(...)`，所有失败（含 `net.request` 权限缺失）走同一条路。但回调一旦抛异常，`PluginHost.dispatch` 会把它判为运行时故障并 `quarantine` 整个插件——「插件用了没申请的能力」就这样升级成「插件被禁用」。修复：拆成 `public static String blocked(...)`（记 `blocked` 审计后返回 `{status:0,error:"missing permission net.request"}`）与私有 `error(...)`（只拼 JSON）。能力缺失必须以「这次调用失败」出现，不是「这个插件坏了」。
+
+**（3）真机断言用 `contains` 会在 config 为空串时假绿。**
+第一版装置断言 `config.contains("abc123")` 与 `!config.contains("TOKEN")`。如果 `inject` 整段没执行、`config` 是空串，两个断言**都成立**——这正是要抓的那个 bug，却恰好能过。改成 `JsonParser` 逐字段断言（`assertEquals("abc123", parsed.get("token").getAsString())`、`assertEquals(20, parsed.get("limit").getAsInt())`）之后，空串会让 `get("token")` 返回 null 直接崩。**否定式断言在取值可能为空时没有诊断力，必须配一条肯定式断言。**
+
+### 17.4 为什么参数只能整串替换
+
+`SubtitleSourceEnvironment`（`app/src/main/java/com/fongmi/android/tv/subtitle/source/SubtitleSourceEnvironment.java`）只替换**顶层**字符串值，且只在整串就是 ${KEY} 时替换。插件侧 `PluginEnvironment` 保留「整串才替换」这条，但把遍历改成递归进对象与数组——因为插件参数天然是嵌套的：
+
+```json
+"params": { "headers": { "Referer": "https://movie.douban.com/" }, "token": "${DOUBAN_TOKEN}" }
+```
+
+「整串才替换」这条不能松。若允许半截替换，`"Bearer ${TOKEN}"` 在 TOKEN 漏填时会变成 `"Bearer "` —— 一个语法合法、语义为空的头，请求照发，返回 403，然后人要跑去豆瓣那边找一个不存在的问题。保持原样则漏填的占位符会在日志里明晃晃地露出来，**漏填是看得见的**。
+
+漏填的键替换成空串而不是删掉键：脚本里 `webhtv.config.token` 恒存在（可能是空串），不用写 `in` 判断。
+
+### 17.5 参数存哪里，为什么不放 Setting
+
+字幕源参数放在 `Setting`（`Setting.java:1501-1546`，键 `subtitle_source_environment`）。插件这边**刻意没有沿用**，理由是 `Setting.putSubtitleSourceEnvironment(String sourceKey, String environment)` 这一行：
+
+```java
+root.add(sourceKey, JsonParser.parseString(value).getAsJsonObject());
+```
+
+它没有判 `isJsonObject()`。用户在字幕源设置里手打一个 `[1,2]` 或半截 JSON，异常会从 `Setting` 里抛出来，一路穿到设置页。字幕源那边能接受（入口是我们自己给的固定 JSON），插件这边不能接受（用户手工编辑，且插件是第三方写的）。
+
+`PluginEnvironmentStore` 因此自己判：非法 JSON / 非对象 / 超 `MAX_ENVIRONMENT_BYTES = 32 * 1024` 一律返回 `false` 且**保留旧值**，编辑框把 `false` 翻成 `plugin_manager_params_too_large` 的错误提示，不打字也崩不了。它同时沿用 `PluginSourceConfig` 的 `interface Store { read; write; }` 可注入形态——单测里没有 `Context`，`Prefers` 不可用，这条形态是这批类能被 JVM 直接测的原因。
+
+### 17.6 为什么 config 是信封而不是裸参数
+
+`PluginRuntime.init(pluginId, entry, config)` 只有一个字符串入口（P2b 定的，接口未改）。但运行时同时需要三样东西：参数、权限集、超时。所以 `PluginConfig.create` 产出：
+
+```json
+{ "id": "...", "params": { }, "timeout": 15, "permissions": ["plugin.events", "net.request"] }
+```
+
+脚本侧只看得到 `webhtv.config = params`，权限与超时由宿主消费——**脚本无法通过读 config 把自己的权限改大**。
+
+`PluginHost.load(manifests, config, resolver)` 用三参重载而不是改签名：两参签名有 27 处测试调用点（`PluginHostTest` 17 处 / `PluginControllerTest` 10 处），改签名只会换来一堆 `null` 字面量，而语义上「整批共用一份 config」仍然是合法用法（测试就是这么用的）。`resolver` 优先于 `config`，两者都可为 null。
+
+### 17.7 webhtv.request 的三条硬约束
+
+1. **方法白名单**：`GET / POST / PUT / PATCH / DELETE / HEAD`。`TRACE` 之类返回 `{status:0,error:...}` 并记 `blocked` 审计。
+2. **必须用 `execute()` 而不是 `OkHttp.string()`**。`OkHttp.string(url, headers)`（`catvod/src/main/java/com/github/catvod/net/OkHttp.java:130-158`）拿不到状态码，而审计的价值就在状态码；它还在失败时 `printStackTrace` 后返回 `""`，把「请求失败」和「响应体是空」压成同一个值。`PluginNetBridge` 用 `OkHttp.client(timeout).newCall(request).execute()` 拿到 `Response`。
+3. **永不抛异常**。成功 `{status:<code>, body:"..."}`，失败 `{status:0, error:"..."}`。桥是 `JSCallFunction`，异常会穿过 QuickJS 边界变成脚本侧的 `Error`，而脚本作者写的第一行不该是 `try/catch`。
+
+上限：响应体截断到 512 KiB，请求体 256 KiB，头部最多 32 条 / 每条 1024 字符，超时取清单 `runtime.timeout`（1..60 秒，缺省 15）。审计走 `PluginAuditLog.recordRequest`，只记 host + path —— `target(url)` 本来就把 query 与 fragment 丢掉，因为 query 常带 token 与签名。
+
+### 17.8 验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*"` | **BUILD SUCCESSFUL**，18 suites / **165 tests** / 0 failures / 0 errors |
+| `:app:compileMobileArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+| `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+| 仪器化 `PluginParamsNetDeviceTest`（emulator-5560 / SDK 28） | **OK (4 tests)** |
+| 仪器化 `QuickJsRuntimeDeviceTest`（回归） | **OK (7 tests)** |
+| 仪器化 `PluginUiPresenterDeviceTest`（回归） | **OK (7 tests)** |
+| 仪器化 `PluginEndToEndDeviceTest`（回归） | **OK (2 tests)** |
+
+165 tests 分布（P2f 为 126，本切片 +39）：ExamplePluginManifestTest 4 / PluginAuditLogTest 8 / PluginBootstrapTest 4 / PluginCapabilityRegistryTest 7 / **PluginConfigTest 6** / PluginControllerTest 10 / **PluginEnvironmentStoreTest 10** / **PluginEnvironmentTest 8** / PluginPackageImporterTest 14 / PluginEventBusTest 7 / PluginHostTest 16 / PluginManifestVersionAndRootTest 8 / PluginRuntimeFactoryTest 7 / PluginScriptSourceTest 10 / **PluginManifestTest 19**（原 15） / **PluginNetBridgeTest 11** / PluginSourceConfigTest 10 / PluginUiPresenterTest 6。
+
+`PluginNetBridgeTest` 用真实 `MockWebServer`（`mockwebserver3` 包，照 `UpstreamRangeClientFetchTest` 的写法）而不是 mock `OkHttp`：要验的正是「拦截器链 + DNS + 超时」这一整条在 JVM 上跑得通，mock 掉就等于不验。
+
+真机装置 `PluginParamsNetDeviceTest` 不引新依赖：用裸 `ServerSocket(0, 127.0.0.1)` 手工拼一次 `HTTP/1.1 200` 应答。四条用例覆盖：占位符被真实替换进脚本、漏填落成空串而非字面量、`webhtv.request` 打到真实 socket、缺 `net.request` 权限时返回错误对象且插件不被禁用。
+
+### 17.9 P4 边界内明确未做
+
+- **豆瓣插件本体**：`episode` 数据注入与 `panel` 槽位渲染都还是空的——`PluginUiPresenter.countRenderable` 仍只计 floating + toolbar，panel/page 拿到手也不渲染。下一片做。
+- **`py` / `html` 运行时**：`PluginBootstrap` 只注册 `js`。
+- **审计不落盘**：`PluginAuditLog` 仍是 500 条内存环形。D2 裁定「审计是 net.request 唯一的安全观测面」，但它现在还活不过进程重启。
+- **参数编辑没有逐键表单**：整块 JSON 文本框，用户得自己写 `{"token":"..."}`。给定 Q2=A 的通用透传裁定，逐键表单要宿主知道字段语义，与「宿主不预设第三方字段」冲突，故不做。
+- **管理页不回显替换结果**：用户填完看不到「实际注入到脚本里的 params 长什么样」。
+
+### 17.10 下一步
+
+**豆瓣评论本体**：episode 数据注入（`TmdbItem` → payload）+ `panel` 槽位渲染（`BaseSideSheetDialog`）+ 电视端控制条 chip + 手机端 floating + `douban.js`。地基已经在位：脚本能读配置、能发请求、请求有审计。

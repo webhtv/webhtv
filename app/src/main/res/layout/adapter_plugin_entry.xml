@@ -48,6 +48,19 @@
         tools:ignore="UseSwitchCompatOrMaterialXml" />
 
     <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/entryParams"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center_vertical"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/selector_dialog_switch"
+        android:contentDescription="@string/plugin_manager_params"
+        android:focusable="true"
+        android:padding="8dp"
+        android:src="@drawable/ic_action_setting"
+        app:tint="?attr/colorOnSurfaceVariant" />
+
+    <androidx.appcompat.widget.AppCompatImageButton
         android:id="@+id/entryDelete"
         android:layout_width="40dp"
         android:layout_height="40dp"

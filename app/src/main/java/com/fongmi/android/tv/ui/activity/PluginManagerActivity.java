@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
 
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
@@ -22,14 +23,21 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivityPluginManagerBinding;
 import com.fongmi.android.tv.databinding.AdapterPluginEntryBinding;
 import com.fongmi.android.tv.plugin.PluginBootstrap;
+import com.fongmi.android.tv.plugin.PluginEnvironmentStore;
 import com.fongmi.android.tv.plugin.PluginPackageImporter;
 import com.fongmi.android.tv.plugin.PluginSourceConfig;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 import com.github.catvod.utils.Path;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -77,6 +85,11 @@ public class PluginManagerActivity extends BaseActivity {
             @Override
             public void onToggle(PluginSourceConfig.Entry entry, boolean enabled) {
                 setEnabled(entry, enabled);
+            }
+
+            @Override
+            public void onParams(PluginSourceConfig.Entry entry) {
+                editParams(entry);
             }
 
             @Override
@@ -147,6 +160,72 @@ public class PluginManagerActivity extends BaseActivity {
         });
     }
 
+    /**
+     * 编辑某个插件的参数（用户自填的键值 JSON）。
+     *
+     * <p>形状照 {@code SubtitleSettingsDialog.showSourceEnvironment}：多行输入 + 外框 + 就地校验，
+     * 因为用户填的是手打 JSON，错误必须在对话框里当场指出，而不是保存后在别处才炸。
+     *
+     * <p>页面本身不重建布局：WebHtvAlertDialogBuilder 里 setView 一个临时容器即可。
+     */
+    private void editParams(PluginSourceConfig.Entry entry) {
+        String name = entry.name() == null || entry.name().isEmpty() ? entry.id() : entry.name();
+        TextInputEditText input = new TextInputEditText(this);
+        input.setSingleLine(false);
+        input.setMinLines(4);
+        input.setText(PluginEnvironmentStore.get().get(entry.id()));
+
+        TextInputLayout layout = new TextInputLayout(this);
+        layout.setHint(getString(R.string.plugin_manager_params_hint));
+        layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        layout.addView(input, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int horizontal = dp(20);
+        container.setPadding(horizontal, dp(8), horizontal, 0);
+        container.addView(layout);
+
+        androidx.appcompat.app.AlertDialog dialog = new WebHtvAlertDialogBuilder(this, R.style.Theme_WebHTV_Dialog)
+                .setTitle(getString(R.string.plugin_manager_params_title, name))
+                .setView(container)
+                .setNegativeButton(R.string.dialog_cancel, null)
+                .setPositiveButton(R.string.dialog_confirm, null)
+                .create();
+        dialog.setOnShowListener(shown -> dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(view -> {
+                    String value = input.getText() == null ? "" : input.getText().toString().trim();
+                    if (!value.isEmpty() && !isJsonObject(value)) {
+                        layout.setError(getString(R.string.plugin_manager_params_invalid));
+                        return;
+                    }
+                    PluginEnvironmentStore store = PluginEnvironmentStore.get();
+                    if (!store.put(entry.id(), value)) {
+                        layout.setError(getString(R.string.plugin_manager_params_too_large));
+                        return;
+                    }
+                    dialog.dismiss();
+                    // 参数改了要重装插件：脚本在 init 阶段就把 config 读走了，不重装等于没改。
+                    scheduleReload();
+                }));
+        dialog.show();
+        LightDialog.apply(dialog);
+    }
+
+    private static boolean isJsonObject(String value) {
+        try {
+            JsonElement element = JsonParser.parseString(value);
+            return element != null && element.isJsonObject();
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
+
+    private int dp(int value) {
+        return Math.round(getResources().getDisplayMetrics().density * value);
+    }
+
     private void confirmDelete(PluginSourceConfig.Entry entry) {
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.plugin_manager_delete_title)
@@ -165,6 +244,8 @@ public class PluginManagerActivity extends BaseActivity {
                 PluginSourceConfig config = PluginSourceConfig.get();
                 config.remove(entry.id());
                 config.save();
+                // 参数必须跟着插件一起删：留着的话，用户日后重新装同名 id 的插件会静默继承旧 token。
+                PluginEnvironmentStore.get().remove(entry.id());
             } catch (Throwable error) {
                 saveError[0] = error.toString();
             }
@@ -328,6 +409,7 @@ public class PluginManagerActivity extends BaseActivity {
             holder.binding.entryEnabled.setOnCheckedChangeListener(null);
             holder.binding.entryEnabled.setChecked(entry.enabled());
             holder.binding.entryEnabled.setOnCheckedChangeListener((button, checked) -> listener.onToggle(entry, checked));
+            holder.binding.entryParams.setOnClickListener(view -> listener.onParams(entry));
             holder.binding.entryDelete.setOnClickListener(view -> listener.onDelete(entry));
         }
 
@@ -339,6 +421,8 @@ public class PluginManagerActivity extends BaseActivity {
         private interface Listener {
 
             void onToggle(PluginSourceConfig.Entry entry, boolean enabled);
+
+            void onParams(PluginSourceConfig.Entry entry);
 
             void onDelete(PluginSourceConfig.Entry entry);
         }

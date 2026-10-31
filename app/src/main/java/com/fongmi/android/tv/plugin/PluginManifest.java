@@ -61,10 +61,12 @@ public final class PluginManifest {
     private final Set<String> permissions;
     private final Set<String> events;
     private final List<UiSlot> uiSlots;
+    /** 参数模板：值里可含 ``${KEY}`` 占位符，由用户填写的环境变量替换后交给运行时。 */
+    private final JsonObject params;
 
     private PluginManifest(String id, String name, String version, int sdk, String runtimeApi,
             String runtimeEntry, int timeoutSeconds, Set<String> permissions, Set<String> events,
-            List<UiSlot> uiSlots) {
+            List<UiSlot> uiSlots, JsonObject params) {
         this.id = id;
         this.name = name;
         this.version = version;
@@ -75,6 +77,7 @@ public final class PluginManifest {
         this.permissions = permissions;
         this.events = events;
         this.uiSlots = uiSlots;
+        this.params = params;
     }
 
     /**
@@ -134,8 +137,13 @@ public final class PluginManifest {
         List<UiSlot> slots = uiSlots(root, permissions);
         if (slots == null) return null;
 
+        // 参数模板是插件自己定义的任意 JSON 对象，宿主不认识也不校验其中的键；
+        // 深拷贝一份，避免调用方拿到解析树后原地改动。
+        JsonObject template = object(root, "params");
+        JsonObject params = template == null ? new JsonObject() : template.deepCopy();
+
         return new PluginManifest(id, name, version == null ? "" : version, sdk, api, entry, timeout,
-                permissions, events, slots);
+                permissions, events, slots, params);
     }
 
     /**
@@ -251,6 +259,15 @@ public final class PluginManifest {
 
     public List<UiSlot> getUiSlots() {
         return uiSlots;
+    }
+
+    /**
+     * 参数模板（清单 {@code params} 的深拷贝）。
+     *
+     * <p>返回拷贝而不是内部引用：调用方会在占位符替换后就地改写树，不能污染清单。
+     */
+    public JsonObject getParams() {
+        return params.deepCopy();
     }
 
     /** 该插件是否有权接收指定事件（清单已按权限过滤过，这里再兜一层）。 */

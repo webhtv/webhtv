@@ -1,5 +1,9 @@
 package com.fongmi.android.tv.plugin;
 
+import androidx.annotation.Nullable;
+
+import com.google.gson.JsonObject;
+
 import java.util.List;
 
 /**
@@ -53,7 +57,7 @@ public final class PluginBootstrap {
         try {
             install();
             List<PluginHost.LoadedPlugin> loaded = PluginController.get()
-                    .reload(PluginSourceConfig.get().toManifests(), null);
+                    .reload(PluginSourceConfig.get().toManifests(), null, PluginBootstrap::configOf);
             return loaded != null && !loaded.isEmpty();
         } catch (Throwable ignored) {
             return false;
@@ -63,5 +67,24 @@ public final class PluginBootstrap {
     /** {@link #reloadAll()} 的安全封装：供 {@code App.onCreate} 与后台线程直接引用为 Runnable。 */
     public static void installAndReloadQuietly() {
         reloadAll();
+    }
+
+    /**
+     * 构造单个插件的配置信封：参数模板经用户填写的环境变量替换后交给运行时。
+     *
+     * <p>与字幕源 {@code T3SubtitleProvider} 同一形状——模板来自插件包（清单 {@code params}），
+     * 值来自用户（设置页 {@code plugin_environment}），两者在装载时才合并。合并放这里而不是
+     * {@code PluginHost}：宿主不该知道"参数模板"和"用户环境"是两份数据。
+     */
+    @Nullable
+    private static String configOf(PluginManifest manifest) {
+        try {
+            JsonObject environment = PluginEnvironmentStore.get().getJson(manifest.getId());
+            JsonObject params = PluginEnvironment.resolve(manifest.getParams(), environment);
+            return PluginConfig.create(manifest, params);
+        } catch (Throwable error) {
+            // 单个插件的配置拼装失败不能拖垮整批装载：回落成空配置，让它在 init 阶段明确报错。
+            return null;
+        }
     }
 }

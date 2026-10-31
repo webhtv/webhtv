@@ -157,4 +157,43 @@ public class PluginManifestTest {
         assertNotNull(manifest);
         assertEquals(15, manifest.getTimeoutSeconds());
     }
+
+    @Test
+    public void absentParamsYieldEmptyObject() {
+        PluginManifest manifest = PluginManifest.parse(valid());
+        assertNotNull(manifest);
+        assertNotNull(manifest.getParams());
+        assertEquals(0, manifest.getParams().size());
+    }
+
+    @Test
+    public void paramsArePreservedVerbatimForLaterSubstitution() {
+        String json = valid().replace("\"events\":",
+                "\"params\": { \"token\": \"${DOUBAN_TOKEN}\", \"limit\": 20, \"headers\": { \"Referer\": \"https://movie.douban.com/\" } },\n  \"events\":");
+        PluginManifest manifest = PluginManifest.parse(json);
+        assertNotNull(manifest);
+        assertEquals("${DOUBAN_TOKEN}", manifest.getParams().get("token").getAsString());
+        assertEquals(20, manifest.getParams().get("limit").getAsInt());
+        assertEquals("https://movie.douban.com/",
+                manifest.getParams().getAsJsonObject("headers").get("Referer").getAsString());
+    }
+
+    @Test
+    public void paramsAreNotSharedBetweenReads() {
+        // getParams() 每次返回深拷贝：调用方会就地替换占位符，共享会让第二次解析读到已污染的值。
+        String json = valid().replace("\"events\":", "\"params\": { \"token\": \"x\" },\n  \"events\":");
+        PluginManifest manifest = PluginManifest.parse(json);
+        assertNotNull(manifest);
+        manifest.getParams().addProperty("token", "polluted");
+        assertEquals("x", manifest.getParams().get("token").getAsString());
+    }
+
+    @Test
+    public void nonObjectParamsAreIgnoredNotRejected() {
+        // params 是可选字段：写成数组说明作者写错了，但整个插件不该因此装不上。
+        String json = valid().replace("\"events\":", "\"params\": [1, 2],\n  \"events\":");
+        PluginManifest manifest = PluginManifest.parse(json);
+        assertNotNull(manifest);
+        assertEquals(0, manifest.getParams().size());
+    }
 }

@@ -9,6 +9,9 @@ webhtv.on('ui.contentShown', function (payload) {
 });
 
 webhtv.action('hello.show', function (payload) {
-  webhtv.log('hello.show invoked with', payload);
+  // webhtv.config 是清单 params 经用户填写的值替换后的对象；
+  // greeting 没填时会落成空串（不会保留占位符字面量）。
+  var greeting = (webhtv.config && webhtv.config.greeting) || 'hello';
+  webhtv.log(greeting, 'invoked with', payload);
   return 'ok';
 });

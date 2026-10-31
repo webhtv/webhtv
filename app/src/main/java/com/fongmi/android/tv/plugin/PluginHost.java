@@ -55,12 +55,28 @@ public final class PluginHost implements PluginEventBus.Listener {
      */
     @NonNull
     public List<LoadedPlugin> load(@Nullable List<PluginManifest> manifests, @Nullable String config) {
+        return load(manifests, config, null);
+    }
+
+    /**
+     * 装载一批清单，并允许**按插件**决定配置。
+     *
+     * <p>三参数重载而不是改两参数的签名：两参数版本已被 27 处测试调用点使用，
+     * 改签名只会换来一堆 {@code null} 字面量。这里保留它，新入口按需覆盖。
+     *
+     * <p>优先级：{@code resolver} 返回非 {@code null} 就用它的结果，否则回落到 {@code config}。
+     * 回落而不是"二者取并"：共享配置与按插件配置混在一起时，谁覆盖谁必须唯一确定。
+     */
+    @NonNull
+    public List<LoadedPlugin> load(@Nullable List<PluginManifest> manifests, @Nullable String config,
+            @Nullable ConfigResolver resolver) {
         unloadAll();
         List<LoadedPlugin> loaded = new ArrayList<>();
         if (manifests == null || manifests.isEmpty()) return loaded;
         for (PluginManifest manifest : manifests) {
             if (manifest == null) continue;
-            LoadedPlugin plugin = loadOne(manifest, config);
+            String resolved = resolver == null ? null : resolver.resolve(manifest);
+            LoadedPlugin plugin = loadOne(manifest, resolved != null ? resolved : config);
             if (plugin != null) {
                 plugins.put(manifest.getId(), plugin);
                 loaded.add(plugin);
@@ -68,6 +84,13 @@ public final class PluginHost implements PluginEventBus.Listener {
         }
         attach();
         return Collections.unmodifiableList(loaded);
+    }
+
+    /** 按插件构造配置；返回 {@code null} 表示"用共享配置"。 */
+    @FunctionalInterface
+    public interface ConfigResolver {
+        @Nullable
+        String resolve(PluginManifest manifest);
     }
 
     @Nullable

@@ -123,8 +123,19 @@ public final class PluginController {
      * <p>传空列表等于"卸载全部插件"，这是禁用插件功能的唯一入口。
      */
     public List<PluginHost.LoadedPlugin> reload(@Nullable List<PluginManifest> manifests, @Nullable String config) {
+        return reload(manifests, config, null);
+    }
+
+    /**
+     * 装载插件并按插件注入配置；{@code resolver} 为 {@code null} 时行为等同两参数版本。
+     *
+     * <p>之所以多这一层而不是让调用方自己拼 config：配置里的参数需要先做占位符替换，
+     * 而替换要读用户填的环境变量——那是宿主知识，不该泄漏到每个 reload 调用点。
+     */
+    public List<PluginHost.LoadedPlugin> reload(@Nullable List<PluginManifest> manifests, @Nullable String config,
+            @Nullable PluginHost.ConfigResolver resolver) {
         try {
-            List<PluginHost.LoadedPlugin> loaded = host.load(manifests, config);
+            List<PluginHost.LoadedPlugin> loaded = host.load(manifests, config, resolver);
             renderCurrent();
             return loaded;
         } catch (Throwable error) {
