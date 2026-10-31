@@ -22,11 +22,20 @@ import java.util.List;
 /**
  * 插件 UI 槽位渲染器：把清单声明的槽位变成真实控件，并把点击路由回插件。
  *
- * <p><b>两种槽位的落位方式（对应设计文档 §8.2 的裁定）。</b>
+ * <p><b>三种槽位的落位方式（对应设计文档 §8.2 的裁定）。</b>
  * <ul>
  *   <li>{@code floating}：挂在 decorView 右下角，手机主入口。</li>
  *   <li>{@code toolbar}：追加进播放页控制条的 chip 容器，电视主入口，<b>可聚焦</b>。</li>
+ *   <li>{@code panel}：入口形态随端走——电视端优先进控制条（与 toolbar 同形），
+ *       没有控制条时才挂一颗<b>可聚焦</b>浮标；手机端与 floating 完全一致。</li>
  * </ul>
+ *
+ * <p><b>为什么 panel 在电视端不能沿用 floating 的"不可聚焦"。</b>floating 在 leanback 上
+ * 刻意不进焦点链（见下条），因为悬浮球强行 focusable 会破坏方向键推断；但 panel 的整条
+ * 交互（点击 → 开面板 → 关闭 → 焦点归还）都建立在"用户能选中它"之上。电视没有触摸屏，
+ * 靠焦点环表达"我现在在哪"，不可聚焦等于遥控器根本够不到——那不是一个弱化的入口，
+ * 而是一个不存在的入口。所以 panel 在电视端必须先争取进控制条；控制条缺失时才退到一颗
+ * 带焦点环切换的浮标，且这是唯一一处我们主动往焦点链里加停靠点的地方。
  *
  * <p><b>为什么 toolbar 靠 findViewById + 主题包装而不是改两份布局。</b>
  * {@code R.id.control} 与 {@code R.id.container} 在 mobile 与 leanback 的
@@ -60,6 +69,9 @@ public final class PluginUiPresenter {
     private final List<View> attached;
     private final List<PluginHost.PluginSlot> fallbacks;
     private OnSlotAction onSlotAction;
+    /** 最近一次被点击的入口控件，供面板关闭后归还焦点。 */
+    @Nullable
+    private View lastClicked;
 
     public PluginUiPresenter() {
         this.attached = new ArrayList<>();
@@ -88,12 +100,17 @@ public final class PluginUiPresenter {
             if (entry == null || entry.slot() == null) continue;
             String type = entry.slot().slot();
             boolean isToolbar = "toolbar".equalsIgnoreCase(type);
+            boolean isPanel = "panel".equalsIgnoreCase(type);
             if (isToolbar && toolbar != null) {
                 addToolbarChip(toolbar, entry);
-            } else if (isToolbar || "floating".equalsIgnoreCase(type) || "panel".equalsIgnoreCase(type)) {
-                // toolbar 在无控制条的页面上降级为 floating；floating 与 panel 的入口按钮照常挂 decorView。
-                // panel 只是"点击后开面板"，它的入口控件与 floating 同形，差别在点击后的路由。
+            } else if (isPanel) {
+                // panel 单独一路：它的入口必须"够得到"，而 floating 在电视端刻意不可聚焦。
+                addPanelEntry(decor, activity, entry, leanback, toolbar);
+            } else if (isToolbar || "floating".equalsIgnoreCase(type)) {
+                // toolbar 在无控制条的页面上降级为 floating，floating 本身照常挂 decorView。
                 addFloating(decor, activity, entry, leanback);
+                // panel 不记进 fallbacks：降级记录专门表示"toolbar 想进控制条却没容器"，
+                // panel 进不了控制条是正常的端差异，不是降级。
                 if (isToolbar) fallbacks.add(entry);
             }
         }
@@ -107,6 +124,29 @@ public final class PluginUiPresenter {
         }
         attached.clear();
         fallbacks.clear();
+        // 控件已经被摘下来了，再留着引用只会在归还焦点时 requestFocus 到一个孤儿视图上。
+        lastClicked = null;
+    }
+
+    /**
+     * 把焦点还给最近被点击的入口控件。
+     *
+     * <p>面板是独立窗口，关闭后系统会把焦点交给宿主自己挑的落点；电视端如果不管，
+     * 用户的焦点会留在页面顶部或直接消失，得重新按一遍方向键才能回到控制条。
+     *
+     * <p>返回 {@code false} 而不是抛异常：控件可能已经被 {@link #detach} 摘掉、所在的页面
+     * 可能已经不可见、也可能压根没人点过。这些都是正常情况，收尾动作不该制造崩溃。
+     */
+    public boolean focusLastClicked() {
+        View view = lastClicked;
+        if (view == null) return false;
+        if (view.getParent() == null) return false;
+        if (!view.isShown()) return false;
+        try {
+            return view.requestFocus();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     /** 当前已挂载的控件数（floating + toolbar），供诊断与测试。 */
@@ -160,6 +200,51 @@ public final class PluginUiPresenter {
     }
 
     /**
+     * 挂 panel 的入口。三种落位，按"能不能被选中"排序。
+     *
+     * <p>电视端先争取进控制条：控制条既有的 {@code @style/Control} 已经带焦点环与方向键通路，
+     * 放进去即可被遥控到，且不会在原有导航路径上凭空多一个停靠点。只有当前页面没有控制条
+     * （首页、设置页、插件管理页等）时，才退到一颗自己管焦点环的浮标——此时页面本来也没有
+     * 播放控制，加一个停靠点不会和方向键推断冲突。
+     *
+     * <p>手机端与 {@link #addFloating} 完全一致：那里本来就靠触摸，不需要焦点语义。
+     */
+    private void addPanelEntry(ViewGroup decor, Activity activity, PluginHost.PluginSlot entry, boolean leanback,
+            @Nullable LinearLayout toolbar) {
+        if (leanback && toolbar != null) {
+            addToolbarChip(toolbar, entry);
+            return;
+        }
+        if (!leanback) {
+            addFloating(decor, activity, entry, false);
+            return;
+        }
+        addFocusableFloating(decor, activity, entry);
+    }
+
+    /**
+     * 挂一颗**可聚焦**的浮标，给电视端"没有控制条"的页面用。
+     *
+     * <p>与 {@link #addFloating} 的唯一差别是焦点：这里 {@code setFocusable(true)} 并自己切换
+     * 焦点环。电视上焦点环是"我在哪"的唯一表达，普通浮标的半透明底在选中与未选中时一模一样，
+     * 用户按方向键选中它之后看不出变化，反而会怀疑遥控器坏了。
+     */
+    private void addFocusableFloating(ViewGroup decor, Activity activity, PluginHost.PluginSlot entry) {
+        TextView button = createChip(activity, entry, false);
+        button.setFocusable(true);
+        button.setFocusableInTouchMode(true);
+        button.setBackground(ringBackground(activity, false));
+        button.setOnFocusChangeListener((view, focused) -> view.setBackground(ringBackground(activity, focused)));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.gravity = Gravity.END | Gravity.BOTTOM;
+        params.setMarginEnd(dp(activity, 16));
+        params.bottomMargin = dp(activity, 96);
+        decor.addView(button, params);
+        attached.add(button);
+    }
+
+    /**
      * 创建控件。
      *
      * <p>toolbar 与 floating 的背景来源刻意不同：toolbar 用静态资源
@@ -191,12 +276,18 @@ public final class PluginUiPresenter {
             chip.setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10));
             chip.setBackground(ringBackground(context));
         }
-        chip.setOnClickListener(view -> dispatch(entry));
+        chip.setOnClickListener(view -> dispatch(entry, view));
         return chip;
     }
 
-    /** 点击 → 回调。一次点击失败不该影响宿主页面，因此异常在此吞掉。 */
-    private void dispatch(PluginHost.PluginSlot entry) {
+    /**
+     * 点击 → 回调。一次点击失败不该影响宿主页面，因此异常在此吞掉。
+     *
+     * <p>顺手记下被点的控件：面板关闭后要把焦点还给它，否则电视用户关掉面板就"丢了"自己
+     * 刚才站的位置，只能从头再按一遍方向键。
+     */
+    private void dispatch(PluginHost.PluginSlot entry, @Nullable View view) {
+        lastClicked = view;
         OnSlotAction listener = onSlotAction;
         if (listener == null) return;
         try {
@@ -207,10 +298,20 @@ public final class PluginUiPresenter {
 
     /** 半透明底 + 主题焦点环描边，自动跟随深浅色主题。 */
     private static GradientDrawable ringBackground(Context context) {
+        return ringBackground(context, false);
+    }
+
+    /**
+     * 同上，但可指定焦点态。
+     *
+     * <p>未聚焦时与旧实现逐像素相同（{@code 0xCC000000} 底 + 1dp 描边），保证手机端观感不变；
+     * 聚焦时加深底色并加粗到 2dp，让电视端"选中了"这件事一眼可见。
+     */
+    private static GradientDrawable ringBackground(Context context, boolean focused) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(0xCC000000);
+        drawable.setColor(focused ? 0xF0000000 : 0xCC000000);
         drawable.setCornerRadius(dp(context, 20));
-        drawable.setStroke(dp(context, 1), ThemeController.focusRingColor(context));
+        drawable.setStroke(dp(context, focused ? 2 : 1), ThemeController.focusRingColor(context));
         return drawable;
     }
 

@@ -376,7 +376,7 @@ public interface PluginRuntime {
 | chip 顺序 | 追加在 `container` **末尾**，不插中间 | 不改变既有方向键路径的肌肉记忆 |
 | 打开面板 | 复用 `BaseSideSheetDialog`（`ui/dialog/`），不是 BottomSheet | 电视端侧滑面板不遮挡画面中心，且是大屏既有模式 |
 | 播放态处理 | 打开面板前调 `pauseForOverlayPlayback()`，关闭后 `resumeAfterOverlayPlayback()` | **已有现成 API**（`PlaybackActivity.java:255`/`:269`），语义正是"覆盖层播放期间暂停"，不要自己写暂停逻辑 |
-| 焦点返回 | 面板关闭后 `requestFocus()` 回原 chip | 沿用 `FocusRestorer`（`ui/helper/`）既有模式 |
+| 焦点返回 | 面板关闭后 `requestFocus()` 回原 chip | 仓库里**没有** `FocusRestorer`（本文早期版本的误记）。实际由 `PluginUiPresenter.focusLastClicked()` 自己实现，`PluginPanelDialog.onDismiss` 触发——见 §19 |
 | 空态 | 复用 `ProgressLayout` 的空态或 `AudioCommentDialog` 的空态文案 | 两者都已存在，不新造 |
 | 加载态 | 面板内骨架/进度，**不阻塞**控制条 | 抓取慢（豆瓣 750ms 限速）时不能卡住遥控 |
 
@@ -1211,3 +1211,81 @@ HEAD 上 `PluginUiPresenter.attach` 的分支是 `else if (isToolbar || "floatin
 ### 18.7 下一步
 
 **插件生态可用性**：`PluginAuditLog` 落盘（D2 的观测面前提）、`net.request` 域名白名单的重新评估、`py`/`html` 运行时、`page` 槽位、电视端面板的遥控器可达性。这些都不是豆瓣专属，属于"插件框架作为长期能力"的欠账。
+
+---
+
+## 19. P6 · 电视端 panel 面板的遥控器可达性
+
+### 19.1 起因：一个只在电视端致命、在手机端永远正确的缺陷
+
+`PluginUiPresenter.attach` 原本把 `panel` 与 `floating` 送进同一条 `addFloating`，而那条路径写的是 `button.setFocusable(!leanback)`。于是：
+
+- 手机端：panel 入口可点、面板可开，一切正常——**所以手机回归永远发现不了**。
+- 电视端：入口不在任何焦点链里，遥控器够不到，插件等于不存在。
+
+P5 的真机测试也没抓到，因为它们都走 `PluginController.dispatchSlotAction(...)` 直接注入点击，**绕过了 chip 本身**。「chip 能否被选中」此前无任何测试覆盖。
+
+用户裁定（`leanback-panel-anchor`）：**A —— 有控制条就进 chip，没有控制条才挂可聚焦浮标。** 播放页沿用 `style/Control` 既有焦点语义；详情页 `headerBar` 在电视端是 `View.GONE`（`TmdbDetailActivity.java:901`），没有控制条，只能退到可聚焦浮标——那是唯一够得到的落法。
+
+### 19.2 实现（3 文件、新建 0）
+
+| 文件 | 变更 | 要点 |
+| --- | --- | --- |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginUiPresenter.java` | +110/−9 | attach 三分支；新增 `addPanelEntry`(:201-224)/`addFocusableFloating`(:226-244)；`focusLastClicked()`(:131-150)；`ringBackground(Context,boolean)`(:304-317) |
+| `app/src/main/java/com/fongmi/android/tv/ui/dialog/PluginPanelDialog.java` | +41/−3 | 四参 `show(...,Runnable onClosed)`（两参重载保留）；`onDismiss` 执行收尾(:70-87)；leanback 上 close↔web 显式 `nextFocus`(:113-119) |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginController.java` | +2/−1 | `showPanel` 传 `() -> presenter().focusLastClicked()` |
+
+三态落位（`addPanelEntry`，按「能不能被选中」排序）：
+
+1. `leanback && toolbar != null` → `addToolbarChip`：进控制条，`style/Control` 自带 `focusable=true`、焦点环与 `nextFocusDown` 通路，**不在原有方向键路径上新增停靠点**。
+2. `!leanback` → `addFloating(...,false)`：手机端与改前逐字节一致。
+3. 其余（leanback 且无控制条）→ `addFocusableFloating`：`setFocusable(true)` + `setFocusableInTouchMode(true)` + `OnFocusChangeListener` 切换焦点环。这是**唯一一处我们主动往电视焦点链里加停靠点**，理由写在方法 javadoc：电视没有触摸，焦点环是「我在哪」的唯一表达，不可聚焦等于入口不存在。
+
+焦点归还链路：`dispatch` 记 `lastClicked`(:279/:290) → `detach` 清空(:127-128) → `focusLastClicked()` → `PluginPanelDialog.onDismiss`。选 `onDismiss` 而非 `onDestroyView`：返回键、关闭按钮、点外侧三条路径最终都走它。`focusLastClicked` 在控件为 null / `getParent()==null` / `!isShown()` 时返回 false 而非抛异常——收尾动作不该制造崩溃。
+
+`ringBackground` 未聚焦分支参数与旧实现完全相同（`0xCC000000` 底 + 1dp 描边 + 20dp 圆角），**手机端观感逐像素不变**；聚焦态加深底色到 `0xF0000000` 并加粗到 2dp。
+
+`floating` 在 leanback 仍不可聚焦的既有行为**一字未动**——真机用例里专门留了一条对照断言守着它。
+
+### 19.3 验证（全部本切片实跑真值）
+
+| 项 | 结果 |
+| --- | --- |
+| `compileMobileArm64_v8aDebugJavaWithJavac` + `compileLeanbackArm64_v8aDebugJavaWithJavac` | EXIT=0 |
+| 两变体 `compile*DebugAndroidTestJavaWithJavac` | EXIT=0 |
+| plugin JVM 单测 | **SUITES=20 TESTS=193 FAILURES=0 ERRORS=0**（与 P5 一致，无回归） |
+| leanback 真机（emulator-5556） | **26 tests / 0 failed / 0 skipped**；新增 `PluginPanelLeanbackFocusDeviceTest` **3 条全部真跑** |
+| mobile 真机（emulator-5560） | 26 tests / 0 failed / **3 skipped**——正好是那 3 条电视专属用例被 `Assume` 跳过，证明门控真实生效 |
+
+真机逐类（leanback）：PluginEndToEnd 2 / PluginPanelAndContext 3 / **PluginPanelLeanbackFocus 3** / PluginParamsNet 4 / PluginUiPresenter 7 / QuickJsRuntime 7 = 26。P5 基线 23 + 新增 3 自洽。
+
+新增用例 `app/src/androidTest/java/com/fongmi/android/tv/plugin/PluginPanelLeanbackFocusDeviceTest.java`（423 行）三条：
+1. `panelEntryIsFocusableOnLeanback`(:133)——panel 可聚焦 + `requestFocus` 成功 + 持焦；**并对照断言 floating 在 leanback 仍不可聚焦**。
+2. `panelSlotGoesIntoControlBarOnLeanback`(:164)——断言落在**父节点身份**（`parent == R.id.container`）而非「它可聚焦」：控制条里的 chip 与浮标都不可聚焦不行、都可聚焦也不行，差别只在会不会凭空多一个停靠点。
+3. `closingPanelReturnsFocusToEntryOnLeanback`(:192)——走 `chip.performClick()` 真实入口（只有真实点击才记 `lastClicked`），等面板出现、宿主窗口失焦、关闭、断言焦点回到 chip。
+
+真实控制条 id 链已核对：`activity_video.xml:560 @+id/control` → `view_control_vod.xml:25 include @+id/action` → `view_control_vod_action.xml:10 @+id/container`（`LinearLayout`），与 `toolbarContainer()` 的 `instanceof LinearLayout` 判定吻合。
+
+### 19.4 本切片修掉的测试侧缺陷（都出在测试自身，未动生产代码）
+
+- `getDecorView()` 静态类型是 `View`，直接调 `addView` 编译失败；先取 `View` 再 `instanceof ViewGroup`。
+- 两处时序竞态：对话框事务提交与窗口真正拿到/失去焦点是两步。改 `awaitWindowFocusLost` / `awaitFocused` 有上限轮询（3s / 50ms）。
+- `tearDown` 的 `presenter.detach()` 挪到 `runOnMainSync`——`detach` 内部是 `removeView`，与 P5 记录的「reload 必须回主线程」同一类根因。
+- 刻意不断言「面板弹出时 `chip.isFocused()==false`」：窗口失焦时焦点视图内部的 focused 标志不清除，那条断言会去证明一件不成立的事。改断言 `activity.hasWindowFocus()==false`。
+
+### 19.5 文档更正
+
+§8.2 交互细节表原写「焦点返回：沿用 `FocusRestorer`（`ui/helper/`）既有模式」——**该文件在仓库中不存在**（`glob app/src/**/ui/helper/*.java` 无此项）。已改为指向本切片的 `PluginUiPresenter.focusLastClicked()` + `PluginPanelDialog.onDismiss`。
+
+### 19.6 P6 边界内明确未做
+
+- **播放态处理未接线。** §8.2:378 承诺「打开面板前 `pauseForOverlayPlayback()`，关闭后 `resumeAfterOverlayPlayback()`」，`PlaybackActivity.java:255` / `:269` 两个 API 确实存在（注意 `resume` 收一个 `boolean` 参数，§8.2 原文写成 `()` 也不准确），但目前**只有 `TmdbVideoPlayerDialog` 在用**（`:91` / `:97` / `:393`），`PluginPanelDialog` 一句都没调。→ 播放中打开豆瓣面板，视频会在面板背后继续播。**已作为范围问题路由给用户决定是否并入下一片**，不在本切片擅自扩容。
+- **真电视盒子未验**：只在 arm64/x86_64 模拟器上跑过；焦点环在真实 TV 上的可辨识度无法用断言表达，属人工验收范围。
+- **真实播放页控制条里的落位未端到端验**：用例 2 用同构假控制条（`AppBrandingActivity` 没有控制条，而 `FollowingActivity` 缺 Intent 参数会在 `onCreate` 直接 finish）。id 链已静态核对吻合，但不是真宿主。
+- **`py`/`html` 运行时、`page` 槽位、审计不落盘**：同 §18.6，本切片未触及。
+
+### 19.7 下一步
+
+1. **（用户已裁定优先）** `PluginAuditLog` 落盘——D2「审计是 `net.request` 唯一安全观测面」的前提。
+2. 面板播放态接线（`pauseForOverlayPlayback` / `resumeAfterOverlayPlayback`），待用户裁定是否并入。
+3. `net.request` 域名白名单重新评估、`py`/`html` 运行时、`page` 槽位。

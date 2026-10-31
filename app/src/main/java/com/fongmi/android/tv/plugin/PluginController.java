@@ -126,7 +126,8 @@ public final class PluginController {
             if (origin == null || origin != current || origin.isFinishing()) return;
             if (!(origin instanceof FragmentActivity fragment)) return;
             try {
-                PluginPanelDialog.show(fragment, title, html);
+                // 关闭时把焦点还给刚才那颗入口 chip：电视端不然会丢焦点，用户得重新按方向键回来。
+                PluginPanelDialog.show(fragment, title, html, () -> presenter().focusLastClicked());
             } catch (Throwable ignored) {
                 // 面板是可选增强：开不出来也不能影响宿主页面。
             }
