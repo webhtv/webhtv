@@ -209,6 +209,15 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
     protected abstract String getPlaybackKey();
 
+    /**
+     * Last known total duration for the current item. Engines that never publish
+     * a duration (EXO on some HLS/TS sources) leave the timeline at 0, so the
+     * seek view uses this while the engine still reports an unknown duration.
+     */
+    protected long getDurationFallbackMs() {
+        return C.TIME_UNSET;
+    }
+
     protected boolean deferPlaybackServiceBinding() {
         return false;
     }
@@ -721,6 +730,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             mController = mControllerFuture.get();
             getSeekView().setPlayer(mController);
             getSeekView().setSeekListener(this::onSeekStarted);
+            getSeekView().setDurationFallback(this::getDurationFallbackMs);
             onControllerReady(mController);
             mController.addListener(this);
             reconcileControllerReadyState();

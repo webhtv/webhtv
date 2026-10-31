@@ -1488,6 +1488,17 @@ private boolean runtimeSourceOnly;
     }
 
     @Override
+    protected long getDurationFallbackMs() {
+        return mHistory == null ? C.TIME_UNSET : mHistory.getDuration();
+    }
+
+    private String getTimelineDurationTime() {
+        long duration = player().getDuration();
+        if (duration <= 0) duration = getDurationFallbackMs();
+        return Util.timeMs(Math.max(0, duration));
+    }
+
+    @Override
     protected void onServiceConnected() {
         SpiderDebug.log("video-flow", "service ready sinceLaunch=%dms key=%s id=%s", getLaunchCost(System.currentTimeMillis()), getKey(), getId());
         player().setDanmakuController(mBinding.exo.getDanmakuController());
@@ -5693,7 +5704,7 @@ private boolean runtimeSourceOnly;
     private void showInfo() {
         showTopInfo();
         mBinding.widget.center.setVisibility(View.VISIBLE);
-        mBinding.widget.duration.setText(player().getDurationTime());
+        mBinding.widget.duration.setText(getTimelineDurationTime());
         mBinding.widget.position.setText(player().getPositionTime(0));
     }
 
@@ -8985,7 +8996,7 @@ private boolean runtimeSourceOnly;
     @Override
     public void onSeeking(long time) {
         mBinding.widget.center.setVisibility(View.VISIBLE);
-        mBinding.widget.duration.setText(player().getDurationTime());
+        mBinding.widget.duration.setText(getTimelineDurationTime());
         mBinding.widget.position.setText(player().getPositionTime(time));
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         hideProgress();
