@@ -3037,4 +3037,19 @@
         <item>五</item>
         <item>六</item>
     </string-array>
+    <string name="setting_plugin_manager">插件管理</string>
+    <string name="plugin_manager_entry_count">%1$d 个插件</string>
+    <string name="plugin_manager_import">导入插件包</string>
+    <string name="plugin_manager_reload">重新加载</string>
+    <string name="plugin_manager_empty">还没有插件。请导入包含 manifest.json 的插件包目录。</string>
+    <string name="plugin_manager_permission_required">需要存储权限才能选择插件目录</string>
+    <string name="plugin_manager_invalid_path">所选目录路径无法识别</string>
+    <string name="plugin_manager_import_ok">插件已导入并启用：%1$s</string>
+    <string name="plugin_manager_import_failed">导入失败：%1$s</string>
+    <string name="plugin_manager_delete_title">删除插件</string>
+    <string name="plugin_manager_delete_message">将“%1$s”从列表移除，并删除设备上的插件文件，是否继续？</string>
+    <string name="plugin_manager_save_failed">插件设置保存失败：%1$s</string>
+    <string name="plugin_manager_delete_failed">已从列表移除，但插件文件删除失败：%1$s</string>
+    <string name="plugin_manager_load_failed">读取插件列表失败：%1$s</string>
+    <string name="plugin_manager_entry_meta">版本 %1$s · 运行时 %2$s · %3$s</string>
 </resources>

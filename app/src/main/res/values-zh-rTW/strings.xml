@@ -2977,4 +2977,19 @@
         <item>五</item>
         <item>六</item>
     </string-array>
+    <string name="setting_plugin_manager">外掛管理</string>
+    <string name="plugin_manager_entry_count">%1$d 個外掛</string>
+    <string name="plugin_manager_import">匯入外掛包</string>
+    <string name="plugin_manager_reload">重新載入</string>
+    <string name="plugin_manager_empty">還沒有外掛。請匯入包含 manifest.json 的外掛包目錄。</string>
+    <string name="plugin_manager_permission_required">需要儲存權限才能選擇外掛目錄</string>
+    <string name="plugin_manager_invalid_path">所選目錄路徑無法辨識</string>
+    <string name="plugin_manager_import_ok">外掛已匯入並啟用：%1$s</string>
+    <string name="plugin_manager_import_failed">匯入失敗：%1$s</string>
+    <string name="plugin_manager_delete_title">刪除外掛</string>
+    <string name="plugin_manager_delete_message">將「%1$s」從清單移除，並刪除裝置上的外掛檔案，是否繼續？</string>
+    <string name="plugin_manager_save_failed">外掛設定儲存失敗：%1$s</string>
+    <string name="plugin_manager_delete_failed">已從清單移除，但外掛檔案刪除失敗：%1$s</string>
+    <string name="plugin_manager_load_failed">讀取外掛清單失敗：%1$s</string>
+    <string name="plugin_manager_entry_meta">版本 %1$s · 執行環境 %2$s · %3$s</string>
 </resources>

@@ -878,3 +878,103 @@ if (plugin.failed) return null;   // 隔离时已记过审计，不重复刷
 ### 15.8 下一步
 
 **P4**：豆瓣评论本体（面板 + 数据源）。在此之前若要先补「能装上第一个插件」的闭环，应先做设置页开关 + 清单导入，即 P2e 的遗留项。
+
+
+## 16. P2f：插件管理页（清单导入 + 开关）
+
+### 16.1 范围裁定
+
+用户对两个开放点的裁定（原话「Q1=A, Q2=A」）：
+
+- **Q1 = A 骨架**：列表 / 开关 / 整包导入 / 删除 / 重新加载。不含详情页、事件订阅可视化、槽位预览、审计页。理由：审计页与槽位预览此刻没有真实用户数据可看，先落骨架才能当场证实最大的未知——「插件装上来能不能跑」。
+- **Q2 = A 导入后默认启用**：插件来源是用户自己手动选的本地文件，再加一道开关的收益低于摩擦成本；风险已由 5 秒调用超时 + quarantine 隔离 + 审计兜底。**注意**：若将来「订阅带入」复用同一导入器，陌生源自动生效应改为默认停用，否则等于让外部源静默获得执行权。
+
+另有两个前置裁定：导入粒度为**整包导入**（选目录 → 复制进私有目录 → 改写 entry 为复制后的绝对路径），管理页形态为**独立整页**（新增 Activity，两 flavor 各一处入口）。
+
+### 16.2 交付物
+
+| 文件 | 行数 | 职责 |
+| --- | --- | --- |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginSourceConfig.java` | 324 | 插件来源持久化（Prefers 单键 JSON，仿 `NovelSourceConfig`） |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginPackageImporter.java` | 446 | 整包导入：校验 → 限流 → 复制 → 改写 → 回滚 |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginBootstrap.java` | 67 | 唯一启动接线点：注册运行时 + 按配置装载，永不抛 |
+| `app/src/main/java/com/fongmi/android/tv/ui/activity/PluginManagerActivity.java` | 356 | 管理页：列表 / 开关 / 导入 / 删除 / 重载 |
+| `app/src/main/res/layout/activity_plugin_manager.xml` | 85 | 页面骨架 |
+| `app/src/main/res/layout/adapter_plugin_entry.xml` | 62 | 单条插件行 |
+| `app/src/main/java/com/fongmi/android/tv/App.java` | +3 | `Task.execute(PluginBootstrap::installAndReloadQuietly)` |
+
+外加两端设置入口（`SettingEnhanceFragment` / `SettingEnhanceActivity` 各 +7/-1、两处布局各 +26/+28、两处 `AndroidManifest.xml` 各 +5）与 `strings.xml` 三份各 +15。
+
+### 16.3 为什么重载必须离开主线程
+
+`PluginBootstrap.reloadAll()` 会同步执行脚本初始化，`QuickJsPluginRuntime.CALL_TIMEOUT_MS = 5000`，在主线程最长冻界面 5 秒。管理页因此用一条名为 `plugin-manager` 的单线程执行器串行化「重装 / 导入 / 删除」，并用 `synchronized` + `mReloadQueued` 把连点开关合并成一次重装——每次重装都要把所有启用插件的脚本重跑一遍，合并掉的是实打实的重复代价。`App.onCreate` 侧同理，插在 `warmMediaBadgePatterns()` 之后走 `Task.execute`。
+
+### 16.4 三个被修掉的真实缺陷
+
+**（1）`PluginManifest` 用同一个 JSON 键既判协议版本又当插件版本**
+
+`PluginManifest.java:103` 用 `integer(root,"version",-1) != SCHEMA_VERSION` 做协议判定，`:109` 又用 `string(root,"version",...)` 取插件版本，导致 `getVersion()` 恒等于 `"1"`，管理页「版本」列对所有插件显示同一个值。首次单测唯一失败 `reimportSameIdReplacesDirectory` 断言 `version=="v2"` 即此根因。
+
+修法：`version` 只做协议版本判定（原样保留）；新增可选键 `pluginVersion` 承载插件自身版本；`getVersion()` 有合法 `pluginVersion` 用它，否则回退协议版本字符串。注释写明两键不得复用。`assets/plugin/example/manifest.json` **故意不加** `pluginVersion`，留作「旧清单回退」的真实样本。
+
+**（2）`InputStream.readNBytes` 在 Android 13 以下直接崩（本轮最重要）**
+
+`PluginPackageImporter.readText` 原用 `input.readNBytes(MAX_MANIFEST_BYTES + 1)`。真机（emulator-5560，Android 9 / SDK 28）一按导入就崩：
+
+```text
+java.lang.NoSuchMethodError: No virtual method readNBytes(I)[B in class Ljava/io/InputStream;
+    at ...PluginPackageImporter.readText(PluginPackageImporter.java:376)
+    at ...PluginPackageImporter.importFrom(PluginPackageImporter.java:136)
+```
+
+`readNBytes(int)` 是 Java 9 API，Android 上要到 **API 33** 才有；`coreLibraryDesugaringEnabled`（`app/build.gradle:137`）补的是 `java.time` / `java.nio.file` 那一批，**不补 `java.io`**。本项目 `minSdk = 24`，所以这不是模拟器怪癖，而是任何 API < 33 的真机都会崩。
+
+**为什么四轮单测全绿都没抓到**：JVM 的 `InputStream` 理所当然有这个办法，JVM 单测永远不会走到这条分支。这是「分段全绿不等于整体绿」的一次具体兑现。
+
+修法：`ByteArrayOutputStream` + `read(byte[8192])` 手写计数循环。**保留超限语义**——读超 `MAX_MANIFEST_BYTES` 立即 `return null`（判为超限失败），而不是留下已读部分静默截断：截断的清单只会变成一个难查的 JSON 解析错误。
+
+**（3）删插件时硬编码根目录名**
+
+`removePackageDir` 原用 `new File(Path.files(), "plugins")` 前缀比对，「插件根目录名」在导入器与管理页各有一份字面量，改名后管理页的越界判断会静默失效（表现为删不掉，而不是删错——但不能靠这个侥幸）。修法：导入器暴露 `public static File pluginsRoot()` 与 `public static boolean isOwnedDirectory(@Nullable String directory)`（`PluginPackageImporter.java:83/:97`，canonical 前缀比较），管理页改为 `if (!PluginPackageImporter.isOwnedDirectory(directory)) return false;`。根目录名此后只有一处定义。
+
+### 16.5 明确保留不动的两个风险
+
+- **设置页新行落在列表最末**（`order` 数组末尾追加），不是紧邻 lab。末尾是「新功能默认落点」，属审美偏好；挪位置会扰动既有用户的肌肉记忆。
+- **开关切换仍在主线程写 SharedPreferences**。单键小 JSON 写入是毫秒级；为它加线程切换会把「点开关 → 立刻重装」的顺序关系搞复杂，换不来可感知收益。
+
+### 16.6 端到端验收（本阶段新增的装置）
+
+P2f 之前所有证据都是**分段**的：导入器单测用临时根目录接缝、配置单测用假 Store、QuickJS 仪器化测试直插 factory/host 绕过导入与配置。分段全绿不能证明「用户选一个目录 → 装上来 → 脚本真跑起来」这条链条通——缺陷（2）正是这样活到现在的。
+
+因此新增 `app/src/androidTest/java/com/fongmi/android/tv/plugin/PluginEndToEndDeviceTest.java`（142 行，2 用例），串起全部四段真实链路，不 mock 任何一层：
+
+| 用例 | 覆盖 |
+| --- | --- |
+| `importedPluginRunsRealScriptEndToEnd` | 真实 `Path.files()` → 真实 `importFrom` → 真实 SharedPreferences 落盘 → `PluginBootstrap.reloadAll()` → 真实 QuickJS → `host.action()` 返回 `pong:{"x":1}`；并断言 `version == "e2e-1"`，把缺陷（1）钉成回归 |
+| `disablingPluginDropsItFromTheNextReload` | 关闭开关 → 重装 → `isLoaded` 转 false 且动作返回 `null` |
+
+它同时是 `List.copyOf` / `Files.isSymbolicLink` 走 desugar 通道这一判断的**唯一真机证据**——这两个调用在 SDK 28 上不崩，说明 desugar 覆盖成立。
+
+### 16.7 验证
+
+| 验证 | 结果 |
+| --- | --- |
+| `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*"` | **BUILD SUCCESSFUL**，14 suites / **126 tests** / 0 failures / 0 errors |
+| `:app:compileMobileArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+| `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` | **BUILD SUCCESSFUL** |
+| 仪器化 `PluginEndToEndDeviceTest`（emulator-5560） | **OK (2 tests)** |
+| 仪器化 `QuickJsRuntimeDeviceTest`（回归） | **OK (7 tests)** |
+| 仪器化 `PluginUiPresenterDeviceTest`（回归） | **OK (7 tests)** |
+
+126 tests 分布：ExamplePluginManifestTest 4 / PluginAuditLogTest 8 / PluginBootstrapTest 4 / PluginCapabilityRegistryTest 7 / PluginControllerTest 10 / PluginEventBusTest 7 / PluginHostTest 16 / PluginManifestTest 15 / PluginManifestVersionAndRootTest 8 / PluginPackageImporterTest 14 / PluginRuntimeFactoryTest 7 / PluginScriptSourceTest 10 / PluginSourceConfigTest 10 / PluginUiPresenterTest 6。
+
+### 16.8 P2f 边界内明确未做
+
+- **py / html 运行时**：`PluginBootstrap` 只注册 `js`。装 py/html 包会在导入阶段被 `isSupportedApi` 拦下并给出「运行时不支持」的明确文案，不崩。
+- **订阅带入通道（D4 的另一半）**：未开始，`PluginPackageImporter` 已可被复用，但默认启用策略需按 §16.1 的提醒改。
+- **管理页详情视图**：只有列表行，事件订阅 / 槽位 / 最近审计均未展示。
+- **审计不落盘**：`PluginAuditLog` 仍是 500 条内存环形。
+
+### 16.9 下一步
+
+**P4 豆瓣评论本体**（面板 + 数据源）仍是原定目标；P2f 之后「能装上第一个插件」的闭环已经闭合，小说与字幕那种「外部文件 → App 内管理」的路径在插件侧首次成立。

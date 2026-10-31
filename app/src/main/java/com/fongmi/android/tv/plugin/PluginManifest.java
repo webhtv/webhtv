@@ -106,7 +106,12 @@ public final class PluginManifest {
         if (id == null || !id.matches(ID_PATTERN)) return null;
         String name = string(root, "name", MAX_NAME_LENGTH);
         if (name == null) name = id;
-        String version = string(root, "version", MAX_VERSION_LENGTH);
+        // version 是协议版本（上面已按整数校验），pluginVersion 才是插件自身的版本；
+        // 两者不得复用同一个键——复用会让插件版本恒等于协议版本号，升级与重导入无从区分。
+        String protocolVersion = string(root, "version", MAX_VERSION_LENGTH);
+        String pluginVersion = string(root, "pluginVersion", MAX_VERSION_LENGTH);
+        // 旧清单不写 pluginVersion：回退成协议版本字符串，避免界面出现空版本列。
+        String version = pluginVersion != null ? pluginVersion : protocolVersion;
 
         int sdk = integer(root, "sdk", -1);
         if (sdk < 1 || sdk > HOST_SDK_VERSION) return null;
@@ -211,6 +216,11 @@ public final class PluginManifest {
         return name;
     }
 
+    /**
+     * 插件自身版本：清单写了合法的 {@code pluginVersion} 就返回它，否则回退成协议版本字符串。
+     *
+     * <p>回退是有意的：旧清单把 {@code version} 当插件版本用，界面依赖"版本列永不为空"。
+     */
     public String getVersion() {
         return version;
     }
