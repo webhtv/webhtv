@@ -5044,15 +5044,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             if (selectedEpisode == null) selectedEpisode = episodes.get(0);
         }
         List<Integer> availableSeasons = availableSeasonNumbers(episodes);
-        if (availableSeasons.isEmpty()) {
-            selectedSeasonNumber = -1;
-        } else if (selectedEpisode != null) {
-            int episodeSeason = seasonForEpisode(selectedEpisode, episodes);
-            // 该集季号不在可选季内时不动选中集，绝不拿别的季第一集顶替用户手选。
-            if (availableSeasons.contains(episodeSeason)) selectedSeasonNumber = episodeSeason;
-        } else if (selectedSeasonNumber < 0 || !availableSeasons.contains(selectedSeasonNumber)) {
-            selectedSeasonNumber = seasonForEpisode(selectedEpisode, episodes);
-        }
+        // seasonForEpisode 在可选季非空时必返回其中之一（其唯一返回 -1 的路径是可选季为空），
+        // 因此这里不需要再判断季号是否落在可选季内，也不存在"选不到集"的分支：
+        // selectedEpisode 已由上一段四通道兜到首集，恒非空。
+        selectedSeasonNumber = availableSeasons.isEmpty() ? -1 : seasonForEpisode(selectedEpisode, episodes);
         refreshSeasonContext();
         List<Episode> visibleEpisodes = visibleEpisodes(episodes);
         renderSeasonSelection();

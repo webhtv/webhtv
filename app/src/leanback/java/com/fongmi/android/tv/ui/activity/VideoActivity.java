@@ -2461,6 +2461,8 @@ private boolean runtimeSourceOnly;
         Episode episode = findFastTmdbPlaybackEpisode(flag);
         if (flag == null || episode == null || TextUtils.isEmpty(episode.getUrl())) {
             mFastTmdbPlaybackStarted = false;
+            // 快速起播失败回落时从未起播，状态收圈路径全都到不了，这里必须显式收起加载圈，否则转圈永久残留。
+            hideProgress();
             SpiderDebug.log("video-flow", "fast tmdb playback missing playable episode key=%s id=%s", getKey(), getId());
             applyCachedTmdbDetailNextFrame(item);
             return;
@@ -6120,9 +6122,12 @@ private boolean runtimeSourceOnly;
         }
         if (!TextUtils.isEmpty(playName)) {
             Episode episode = flag.find(playName, true);
-            if (episode != null) return episode;
+            // 名称通道只采纳真实命中：Flag.find 在打分全为 0 时可能用 position 槽位兜底，返回与该集名无关的条目；
+            // strict 只挡首集兜底，不挡位置兜底。命中不了就继续走历史集身份兜底。
+            if (episode != null && (flag.getEpisodes().size() == 1
+                    || episode.getScore(playName, Util.getEpisodeNumber(playName)) > 0)) return episode;
         }
-        // 集名在换源/刮削后常失真，最后用历史集身份（URL 优先 + 集号容错）兜底。
+        // 集名在换源/刮削后常失真，名称通道又可能被 position 兜底伪命中，最后用历史集身份（URL 优先 + 集号容错）兜底。
         return mHistory == null ? null : flag.find(mHistory.getEpisode(), true);
     }
 

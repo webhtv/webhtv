@@ -49,10 +49,9 @@ public class DetailPlaybackHandoffSourceTest {
         String render = method(read(DETAIL), "private void renderEpisodes()");
 
         assertFalse("the first visible episode must never overwrite an existing selection", render.contains("selectedEpisode = visibleEpisodes.get(0)"));
-        assertTrue(render.contains("if (selectedEpisode != null)"));
         assertTrue(render.contains("seasonForEpisode(selectedEpisode, episodes)"));
-        assertTrue(render.contains("if (availableSeasons.contains(episodeSeason)) selectedSeasonNumber = episodeSeason;"));
-        assertTrue("episodes.get(0) survives only as the last identity fallback", render.contains("// 三条身份通道（intent URL / 历史 URL / 历史备注）全失败时才退到第一集，这是最后兜底。"));
+        assertTrue("the season is derived from the selected episode and is -1 only when no season is available",
+                render.contains("availableSeasons.isEmpty() ? -1 : seasonForEpisode(selectedEpisode, episodes)"));
         int intent = render.indexOf("findIntentPlaybackEpisode(selectedFlag)");
         int firstEpisode = render.indexOf("selectedEpisode = episodes.get(0)");
         assertTrue(intent >= 0 && firstEpisode > intent);

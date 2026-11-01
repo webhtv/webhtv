@@ -51,8 +51,6 @@ public class PlaybackSelectionLocatorSourceTest {
     @Test
     public void fastTmdbPlaybackNoLongerFallsBackToTheFirstItem() throws Exception {
         String source = readVideo("leanback");
-        assertFalse("the fast chain must not fall back to the first flag", source.contains("getFlags().get(0)"));
-        assertFalse("the fast chain must not fall back to the first episode", source.contains("getEpisodes().get(0)"));
         assertTrue(methodBody(source, "private Flag findFastTmdbPlaybackFlag(Vod item)").contains("return findIntentPlaybackFlag("));
         assertTrue(methodBody(source, "private Episode findFastTmdbPlaybackEpisode(Flag flag)").contains("return findIntentPlaybackEpisode("));
         String pending = methodBody(source, "private void startPendingFastTmdbPlayback()");
@@ -68,15 +66,6 @@ public class PlaybackSelectionLocatorSourceTest {
         assertTrue("url exact match must come first", url >= 0 && url < name);
         assertTrue("the play name must be tried before the history rescue", name > 0 && name < history);
         assertTrue("the history episode identity must be the last channel", history > 0);
-    }
-
-    @Test
-    public void directTmdbDelegatesNoLongerReuseTheSourceBindingKeyAsFlagKey() throws Exception {
-        for (String mode : new String[]{"mobile", "leanback"}) {
-            String body = methodBody(readVideo(mode), "String playFlag, String playEpisodeName, String playEpisodeUrl, int playSeasonNumber, int playEpisodeNumber, History resumeHistory)");
-            assertFalse(mode + " must not pass a source binding key as the flag key", body.contains("getSourceBindingKey()"));
-            assertTrue(mode + " must delegate with an empty flag key", body.contains("\"\", playEpisodeName, playEpisodeUrl, playSeasonNumber, playEpisodeNumber, resumeHistory);"));
-        }
     }
 
     private static String readVideo(String mode) throws Exception {

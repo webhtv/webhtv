@@ -3637,9 +3637,14 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (episode == null && !getMark().isEmpty()) episode = flag.find(getMark(), false);
         setQualityVisible(episode != null && episode.isSelected() && mQualityAdapter.getItemCount() > 1);
         if (episode == null || (isPlaybackFlag(flag) && episode.isSelected())) return false;
+        // 防御性守卫：mHistory 在历史创建/恢复之后恒非空（:1379 定位结果、:6010 resumeHistory、:6013 createHistory 兜底），
+        // 此处仅防止早期回调路径在历史尚未建立时解引用；返回 false 表示未处理。
+        if (mHistory == null) return false;
         // 只有定位到的集与历史身份一致（或历史尚无 URL）时才回写，避免把错版本固化成下次续播目标。
         boolean sameHistoryIdentity = TextUtils.isEmpty(mHistory.getEpisodeUrl()) || episode.matchesPlayback(mHistory.getEpisode(), flag.containsEpisodeUrl(mHistory.getEpisode()));
-        mHistory.setVodRemarks(getHistoryEpisodeName(episode));
+        // 集名与 URL 同为身份键（Flag.find 按 remarks 打分、History.matchesEpisode 严格比对），必须同进同退，
+        // 否则会落库 (remarks=兜底集标题, url=旧URL) 的矛盾身份。
+        if (sameHistoryIdentity) mHistory.setVodRemarks(getHistoryEpisodeName(episode));
         if (sameHistoryIdentity) mHistory.setEpisodeUrl(episode.getUrl());
         onItemClick(episode);
         return true;

@@ -139,3 +139,50 @@
 - `docs/fix-episode-version-identity-20261002.md`：同集多版本消歧的季号置信度分层契约（本次在其上补齐播放页定位层）。
 - `docs/tmdb-playable-episode-availability-design.md`：`Flag.getEpisodes()` 是可播放内容的唯一事实源。
 - `DETAIL_PAGE_MODES.md`：TV 详情页五种模式的路由说明。
+
+## 8. 第二轮双轴评审（Standards / Spec）与修复
+
+评审对象：提交 `2a0cc43fc7` "fix(playback): keep detail/history episode selection in the player"。
+双轴（Standards / Spec）逐条结论与本轮落点如下。
+
+### 8.1 已修复
+
+| 编号 | 问题 | 结论 | 落点 |
+| --- | --- | --- | --- |
+| M2 | mobile `seamless` 无条件写 `vodRemarks`、有条件写 `episodeUrl`，会落库 (remarks=新集名, url=旧URL) 的矛盾身份 | 修复：`setVodRemarks` 移入 `sameHistoryIdentity` 分支，与 `setEpisodeUrl` 同进同退 | app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java:3644-3648 |
+| M3 | `TmdbSeasonProgressStore` 里 `fromHistory` 用 `max(createTime,updateTime)`、`reconcile` 只比 `createTime`，两套"最新"定义并存 | 修复：抽出 `freshness(History) = max(createTime, updateTime)`，两处共用 | app/src/main/java/com/fongmi/android/tv/playback/TmdbSeasonProgressStore.java:37、:66、:115 |
+| M4 | 两个源码断言测试里三条无约束力的断言（整份源文件全否定、断言 17 参死重载、断言注释文本） | 修复：`fastTmdbPlaybackNoLongerFallsBackToTheFirstItem`（现 :51-58）内删除 2 条整文件全否定断言；整段删除 `directTmdbDelegatesNoLongerReuseTheSourceBindingKeyAsFlagKey`（原 :73-80，断言的是 17 参死重载）；`renderEpisodesNeverReplacesTheSelectedEpisodeWithTheFirstVisibleOne`（现 :47-58）内删除 1 条注释文本断言。C1 收敛后该测试另有 2 条断言对象消失（`if (selectedEpisode != null)`、`if (availableSeasons.contains(episodeSeason)) selectedSeasonNumber = episodeSeason;`），已删除并补 1 条正向锁形断言，用例数仍为 4 | app/src/test/java/com/fongmi/android/tv/bean/PlaybackSelectionLocatorSourceTest.java:51-58（用例数 6→5）；app/src/test/java/com/fongmi/android/tv/ui/activity/DetailPlaybackHandoffSourceTest.java:47-58 |
+| N2 | `renderEpisodes` 末尾 `else if (selectedSeasonNumber < 0 \|\| !availableSeasons.contains(...))` 在"四通道解析后必非空"之后不可达 | 修复：先改为纯 `else`；第二轮清理时进一步收敛为单行三元式，删掉"`selectedEpisode != null` 恒真""`availableSeasons.contains(episodeSeason)` 恒真""`else` 恒不可达"三条死判据（`seasonForEpisode` 在可选季非空时六条返回路径全部落在可选季内，仅可选季为空时返回 -1） | app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java:5046-5050 |
+| N3 | mobile `seamless` 在 `mHistory==null` 且 mark 命中路径上会解引用空历史（既有 NPE，非本轮引入） | 修复：补 `if (mHistory == null) return false;`（返回 false 表示未处理，保持既有对外行为） | app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java:3640-3642 |
+| S3 | leanback 快速起播失败回落分支没有收起 `showProgress()` 的加载圈；唯一收圈路径要求已起播（`STATE_READY`），失败时永不到达，转圈永久残留 | 修复：失败分支补 `hideProgress()` | app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java:2463-2465 |
+
+### 8.2 不改（含理由）
+
+| 编号 | 问题 | 结论 | 理由与落点 |
+| --- | --- | --- | --- |
+| M1 | `History.findPlaybackCandidate`（History.java:491-499）第 4 轮"同 key 放宽"循环 | **不修，保留** | 用户已明确裁决保留。若删掉，用户上报的"历史已第 198 集 → 重新进入跳回第 1 集"会退化复发。该循环是跨源/换季绑定漂移场景下续播的关键兜底，属数据层（C4）既定设计。落点：app/src/main/java/com/fongmi/android/tv/bean/History.java:491-499（本轮未改动） |
+| N1 | leanback `startDirectTmdb` 17 参重载（VideoActivity.java:963-967）无生产调用方（唯一生产调用点 TmdbDetailActivity.java:6789 走 18 参重载） | 不修 | 删除公开重载属 API 变更，超出本轮"修播放页选集定位"的窄范围；保留既有形状、仅删除断言它的死测试（见 M4），并在本文件登记为已知死代码。补充：此前把 `playFlagKey` 改为 `""` 的两个 16/17 参重载在生产代码中同样没有调用方（唯一生产调用走 18 参重载），故那处改动零覆盖、仅属形状修正，不构成行为变更。 |
+
+### 8.3 残余风险
+
+- 页面季号 2 与历史记录季号 1 不一致时，仍可能以"旧季标签 + 同一集号"续播同一集号内容（季绑定漂移场景下的语义错配，非崩溃）。这是 M1 放宽策略的已知代价，本轮不做进一步收敛。
+
+### 8.4 已知不对称（本次不改）
+
+- mobile `findIntentPlaybackEpisode`（app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java:6187-6193）只有"URL + 集名"两条通道，没有 leanback 那样的历史集身份通道。属既有形状，本轮按用户裁决不改动；如需对齐可另开任务。
+- 双端判据漂移（Standards 轴指出）：mobile 的同名方法末行仍是裸 `flag.find(playName, true)`（:6192），而 leanback 已在名称通道加 `flag.getEpisodes().size() == 1 || episode.getScore(playName, Util.getEpisodeNumber(playName)) > 0` 挡 position 槽位伪命中（:6127-6128）。也就是说 `Flag.find` 的位置兜底仍可能在 mobile 侧造成集名伪命中。用户已裁决本轮不动，留待下一个任务对齐两端判据。
+
+### 8.5 本轮修复的补充说明
+
+- F1（leanback 集名通道）在名称通道加了"真实命中"判据（`size()==1` 或 `getScore(playName, Util.getEpisodeNumber(playName)) > 0`），避免 `Flag.find(String,true)` 在打分全 0 时用 position 槽位兜底、伪命中与该集名无关的条目，使历史集身份通道真正可达（VideoActivity.java:6123-6131）。
+- F2 的 N3 空守卫放在 `sameHistoryIdentity` 计算之前（即 `getEpisodeUrl()` 解引用之前），因为 `mHistory` 在后续两处写回都会被解引用；返回 `false` 与 3639 行既有"未处理"语义一致。
+
+### 8.6 第二轮清理批次（代码等价 + 注释与行号纠偏）
+
+| 项 | 内容 | 落点 | 等价性 |
+| --- | --- | --- | --- |
+| C1 | `renderEpisodes` 挑选季号的三条恒真/恒假判据收敛为一行三元式；原注释"绝不拿别的季第一集顶替用户手选"是假的（`seasonForEpisode` 的兜底正是 `availableSeasons.get(0)`），已一并删除 | app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java:5046-5050 | 等价：`selectedEpisode` 由 :5038-5044 保证非空；`seasonForEpisode` 在可选季非空时六条返回路径（:6476/:6481/:6486/:6487/:6494/:6495）全部落在 `availableSeasons` 内，故旧代码的 `contains` 判断恒真、赋值必然发生；仅可选季为空时返回 -1，与旧行为一致 |
+| C2 | 只改注释：说明"换线路失配时只清 `episodeUrl`、刻意不清 `vodRemarks`"的理由（URL 是线路内身份，remarks 是跨线路集号来源，`matchesEpisode` 会退化到 `matchesNumber` 用它） | app/src/main/java/com/fongmi/android/tv/bean/History.java:562-564（:561 与 :565 代码文本未变） | 等价：纯注释，零逻辑改动；History.java:491-499 的"同 key 放宽"循环未触碰 |
+| C3 | 只改注释：`mHistory` 守卫的表述由"可能为空"改为"防御性守卫" | app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java:3640-3642 | 等价：纯注释；`mHistory` 的赋值点仅 :1379/:6010/:6013，历史建立后恒非空，守卫保留不删 |
+| T1-T3 | C1 收敛导致 `DetailPlaybackHandoffSourceTest#renderEpisodesNeverReplacesTheSelectedEpisodeWithTheFirstVisibleOne` 两条字符串存在性断言失去对象，删除并按新形状补一条正向断言：`render.contains("availableSeasons.isEmpty() ? -1 : seasonForEpisode(selectedEpisode, episodes)")` | app/src/test/java/com/fongmi/android/tv/ui/activity/DetailPlaybackHandoffSourceTest.java:51-57（用例数 4 不变；:51 的 `visibleEpisodes.get(0)` 否定断言、:52 的 `seasonForEpisode` 断言、:55-57 的 intent 早于 `episodes.get(0)` 顺序断言全部保留） | 断言口径等价于原意：`renderEpisodes` 的季号只由 `selectedEpisode` 推导，且仅在无可选季时为 -1；新断言锁定的是正向存在的表达式，不是整文件否定 |
+

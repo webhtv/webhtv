@@ -559,7 +559,9 @@ public class History implements Diffable<History> {
         if (resolved != null) playback.setVodFlag(resolved.getFlag());
         playback.setSourceBindingKey(stableFlagKey(flags, resolved));
         if (episode != null) playback.setEpisodeUrl(episode.getUrl());
-        // 换线路且新线路找不到该集时清空旧 URL，避免落库成「新线路 + 旧 URL」的矛盾态。
+        // 换线路且新线路找不到该集时只清空旧 URL，避免落库成「新线路 + 旧 URL」的矛盾态。
+        // 这里刻意不清 vodRemarks：URL 是线路内身份，remarks 是跨线路的集号来源，
+        // matchesEpisode 在 URL 失配后会退化到 matchesNumber 用它比对，清掉反而丢掉唯一的集号线索。
         else if (routeChanged) playback.setEpisodeUrl("");
     }
 
