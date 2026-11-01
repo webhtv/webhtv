@@ -2181,6 +2181,10 @@ private boolean runtimeSourceOnly;
         }
         mPendingPlayerKernel = PlayerSetting.NONE;
         player().preparePlayer(kernel, forcePrepare);
+        // preparePlayer() 可能在 PlaySpec 建立前就重建引擎，此窗口内归属判假，
+        // PlaybackActivity.onPlayerRebuild() 整段跳过（其中含 setProgressPlayer），
+        // 进度条会继续读已释放的旧引擎、不再刷新进度，故这里显式跟上新引擎。
+        getSeekView().setProgressPlayer(player().getPlayer());
         setPlayerKernel();
         setDecode();
         return kernel;
@@ -2200,6 +2204,8 @@ private boolean runtimeSourceOnly;
         mPendingPlayerKernel = PlayerSetting.NONE;
         if (!PlayerSetting.isPlayer(kernel)) return;
         player().preparePlayer(kernel);
+        // 同上：服务就绪时补的内核重建同样早于 PlaySpec，重建回调被跳过。
+        getSeekView().setProgressPlayer(player().getPlayer());
     }
 
     /**
