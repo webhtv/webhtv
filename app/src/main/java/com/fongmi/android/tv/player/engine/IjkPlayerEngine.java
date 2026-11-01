@@ -155,12 +155,12 @@ public class IjkPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean isLive() {
-        return player.getStreamSceneDecision().live();
+        return TimelineStreamKindPolicy.isLive(player.getDuration(), player.getStreamSceneDecision().live());
     }
 
     @Override
     public boolean isVod() {
-        return player.getStreamSceneDecision().vod();
+        return TimelineStreamKindPolicy.isVod(player.getDuration(), player.getStreamSceneDecision().live());
     }
 
     @Override

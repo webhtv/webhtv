@@ -243,6 +243,7 @@ public class PlayerManager implements ParseCallback {
     private PlaySpec spec;
     private ProxyStreamRegistration multiThreadProxyRegistration;
     private Player player;
+    private DurationFallback durationFallback;
     private TrackSelectionParameters realtimeSubtitleTrackSelection;
     private String currentDanmakuUrl;
     private String currentDanmakuKey;
@@ -1231,7 +1232,10 @@ public class PlayerManager implements ParseCallback {
     }
 
     public String getPositionTime(long delta) {
-        long time = Math.max(0, Math.min(getPosition() + delta, Math.max(0, getDuration())));
+        // 时长未知时不能把它当成上界 0，否则相对拖动的时间文本会被夹成 00:00；
+        // 未知就只受 0 下限约束。
+        long duration = resolveDuration();
+        long time = Math.max(0, Math.min(getPosition() + delta, duration > 0 ? duration : Long.MAX_VALUE));
         return Util.timeMs(time);
     }
 
@@ -1239,8 +1243,28 @@ public class PlayerManager implements ParseCallback {
         return player.getDuration();
     }
 
+    /**
+     * 引擎还没吐出总时长时的兜底。时长未知期间引擎返回 {@code C.TIME_UNSET}，
+     * 展示层直接使用它只能得到 00:00；宿主知道这一集的历史时长，可以让它先顶上。
+     */
+    public void setDurationFallback(@Nullable DurationFallback durationFallback) {
+        this.durationFallback = durationFallback;
+    }
+
+    private long resolveDuration() {
+        long duration = getDuration();
+        if (duration > 0) return duration;
+        DurationFallback fallback = durationFallback;
+        if (fallback == null) return 0;
+        try {
+            return Math.max(0, fallback.getDurationMs());
+        } catch (Throwable e) {
+            return 0;
+        }
+    }
+
     public String getDurationTime() {
-        return Util.timeMs(Math.max(0, getDuration()));
+        return Util.timeMs(resolveDuration());
     }
 
     public void setSub(Sub sub) {
@@ -8498,6 +8522,12 @@ public void resetTrack(int type) {
             current = current.getCause();
         }
         return builder.toString();
+    }
+
+    /** 引擎时长未知时展示层可用的兜底时长；返回值 {@code <= 0} 视作没有兜底。 */
+    public interface DurationFallback {
+
+        long getDurationMs();
     }
 
     public interface Callback {
