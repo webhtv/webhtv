@@ -17,12 +17,15 @@ EXO 内核对部分 HLS/TS 片源返回 `C.TIME_UNSET`（负数）。负数被�
 
 ## 方案（最小改动，引擎时长始终优先）
 
-1. `CustomSeekView` 新增 `public interface DurationFallback { long getDurationMs(); }` 与
-   `setDurationFallback(@Nullable DurationFallback)`，把三处直接读 `progress.getDuration()` 统一收敛到
-   新增的 `private long resolveDuration(Player progress)`：
+1. `CustomSeekView` 复用 `java.util.function.LongSupplier`（不新增自定义接口）与
+   `setDurationFallback(@Nullable LongSupplier)`，把 `updateTimeline()`、`updateProgress()`、
+   `effectiveBufferedPosition()` 三处（`CustomSeekView.java:166/:181/:213`）直接读
+   `progress.getDuration()` 统一收敛到新增的 `private long resolveDuration(Player progress)`：
    - 引擎返回 `> 0` → 直接用引擎值（引擎一旦拿到真实时长就立刻覆盖兜底，不需要额外失效逻辑）；
    - 否则调用兜底回调，回退值 `<= 0` 时仍返回 0，行为与改动前完全一致；
    - 使用兜底时按 5 秒限流打一条 `playback-progress action=duration-fallback` 日志。
+   - 拖动预览与提交（`previewSeekPosition` / `commitSeekPreview`，`CustomSeekView.java:291/:302`）
+     走 `currentDuration` 优先、有意不复用兜底，因为预览期间需要与 timeBar 已显示的时长保持一致。
 2. `PlaybackActivity` 新增 `protected long getDurationFallbackMs() { return C.TIME_UNSET; }` 钩子，
    在 `handleControllerConnected()` 中于 `setSeekListener(...)` 之后、`onControllerReady` 之前调用
    `getSeekView().setDurationFallback(this::getDurationFallbackMs)`。

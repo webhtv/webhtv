@@ -5,12 +5,8 @@ import androidx.media3.common.C;
 import com.fongmi.android.tv.player.PlaybackAutoContext;
 import com.fongmi.android.tv.player.PlaybackResourceClassifier;
 
-import java.util.concurrent.TimeUnit;
-
 /** Pure, conservative mapping from observed resource facts to IJK timeline semantics. */
 public final class IjkStreamScenePolicy {
-
-    static final long LEGACY_LIVE_DURATION_THRESHOLD_MS = TimeUnit.MINUTES.toMillis(1);
 
     private IjkStreamScenePolicy() {
     }
@@ -63,17 +59,50 @@ public final class IjkStreamScenePolicy {
                     C.TIME_UNSET, timeline, Reason.MANIFEST_UNKNOWN);
         }
 
-        boolean live = duration < LEGACY_LIVE_DURATION_THRESHOLD_MS;
-        boolean vod = duration > LEGACY_LIVE_DURATION_THRESHOLD_MS;
-        Reason reason = live ? Reason.LEGACY_DURATION_LIVE
-                : vod ? Reason.LEGACY_DURATION_VOD
-                : Reason.LEGACY_DURATION_AMBIGUOUS;
+        // Unknown duration is negative (C.TIME_UNSET), so the legacy "< 1 minute is live"
+        // rule turned every not-yet-reported VOD into a live stream. Unknown is not live
+        // evidence: without live-manifest evidence, an unknown duration is treated as VOD.
+        // RTSP/RTMP are the one exception, because the resource classifier already reports
+        // them as live protocol endpoints (PlaybackResourceClassifier protocolFromRequest).
+        // LOW_LATENCY_LIVE is deliberately absent: it needs a parsed manifest, so it is segmented.
+        boolean protocolLive = classification != null
+                && classification.streamKind() == PlaybackAutoContext.StreamKind.LIVE;
+        boolean unknown = duration == C.TIME_UNSET;
+        boolean live = protocolLive
+                || (!unknown && duration < TimelineStreamKindPolicy.LEGACY_LIVE_DURATION_THRESHOLD_MS);
+        boolean vod = !live
+                && (unknown || duration >= TimelineStreamKindPolicy.LEGACY_LIVE_DURATION_THRESHOLD_MS);
+        Reason reason = protocolLive ? Reason.PROTOCOL_LIVE
+                : live ? Reason.LEGACY_DURATION_LIVE
+                : Reason.LEGACY_DURATION_VOD;
         return new Decision(protocol,
                 live ? PlaybackAutoContext.StreamKind.LIVE
                         : vod ? PlaybackAutoContext.StreamKind.VOD
+                        // Unreachable on the non-segmented path: vod is the complement of live.
                         : PlaybackAutoContext.StreamKind.UNKNOWN,
-                false, false, live, vod, duration == C.TIME_UNSET,
+                false, false, live, vod,
+                // Non-segmented resources have no timeline to follow; only an unknown
+                // duration makes the scene dynamic.
+                unknown,
                 seekable, C.TIME_UNSET, null, reason);
+    }
+
+    /**
+     * Manifest evidence decides when it is decisive. A rejected or stale manifest is no
+     * evidence at all, so those decisions fall through to the duration heuristic, where an
+     * unknown duration means VOD. Live and VOD stay complementary on purpose: the
+     * "neither" state silently disabled subtitles, speed and resume everywhere.
+     */
+    public static boolean isLive(Decision decision, long durationMs) {
+        if (decision != null && decision.authoritative()) {
+            if (decision.live()) return true;
+            if (decision.vod()) return false;
+        }
+        return TimelineStreamKindPolicy.isLive(durationMs, decision != null && decision.live());
+    }
+
+    public static boolean isVod(Decision decision, long durationMs) {
+        return !isLive(decision, durationMs);
     }
 
     private static Reason manifestRejection(
@@ -136,6 +165,13 @@ public final class IjkStreamScenePolicy {
                 ? Long.MAX_VALUE : value * multiplier;
     }
 
+    /**
+     * {@code live()} and {@code vod()} are the evidence collected by this layer. Both are
+     * false only on a segmented resource whose manifest is not authoritative
+     * ({@code MANIFEST_NOT_MEDIA}, {@code MANIFEST_UNKNOWN} or {@code MANIFEST_STALE}); on a
+     * non-segmented resource {@code vod = !live}, so the two are always complementary. The
+     * externally visible verdict is always complementary because {@code isVod = !isLive}.
+     */
     public record Decision(
             PlaybackAutoContext.Protocol protocol,
             PlaybackAutoContext.StreamKind streamKind,
@@ -205,9 +241,9 @@ public final class IjkStreamScenePolicy {
         MANIFEST_UNKNOWN("manifest-unknown"),
         MANIFEST_NOT_MEDIA("manifest-not-media"),
         MANIFEST_STALE("manifest-stale"),
+        PROTOCOL_LIVE("protocol-live"),
         LEGACY_DURATION_LIVE("legacy-duration-live"),
-        LEGACY_DURATION_VOD("legacy-duration-vod"),
-        LEGACY_DURATION_AMBIGUOUS("legacy-duration-ambiguous");
+        LEGACY_DURATION_VOD("legacy-duration-vod");
 
         private final String label;
 

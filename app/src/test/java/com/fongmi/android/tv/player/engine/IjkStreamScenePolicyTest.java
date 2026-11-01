@@ -126,6 +126,8 @@ public class IjkStreamScenePolicyTest {
         assertFalse(decision.dynamic());
         assertEquals(IjkStreamScenePolicy.Reason.MANIFEST_NOT_MEDIA,
                 decision.reason());
+        assertFalse(IjkStreamScenePolicy.isLive(decision, 120_000));
+        assertTrue(IjkStreamScenePolicy.isVod(decision, 120_000));
     }
 
     @Test
@@ -161,6 +163,8 @@ public class IjkStreamScenePolicyTest {
         assertFalse(stale.live());
         assertFalse(stale.vod());
         assertEquals(IjkStreamScenePolicy.Reason.MANIFEST_STALE, stale.reason());
+        assertFalse(IjkStreamScenePolicy.isLive(stale, 120_000));
+        assertTrue(IjkStreamScenePolicy.isVod(stale, 120_000));
     }
 
     @Test
@@ -178,14 +182,50 @@ public class IjkStreamScenePolicyTest {
         IjkStreamScenePolicy.Decision longDuration =
                 IjkStreamScenePolicy.resolve(progressive, 120_000, 100);
 
-        assertTrue(unknownDuration.live());
+        assertFalse(unknownDuration.live());
+        assertTrue(unknownDuration.vod());
         assertTrue(unknownDuration.dynamic());
+        assertEquals(IjkStreamScenePolicy.Reason.LEGACY_DURATION_VOD, unknownDuration.reason());
         assertTrue(shortDuration.live());
         assertFalse(shortDuration.dynamic());
         assertFalse(exactBoundary.live());
-        assertFalse(exactBoundary.vod());
+        assertTrue(exactBoundary.vod());
         assertTrue(longDuration.vod());
         assertFalse(longDuration.live());
+    }
+
+    @Test
+    public void authoritativeManifestBeatsTheDurationHeuristic() {
+        IjkStreamScenePolicy.Decision vod = IjkStreamScenePolicy.resolve(
+                hls("#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\na.ts\n#EXT-X-ENDLIST\n", 100),
+                30_000,
+                Long.MAX_VALUE);
+
+        assertFalse(IjkStreamScenePolicy.isLive(vod, 30_000));
+        assertTrue(IjkStreamScenePolicy.isVod(vod, 30_000));
+    }
+
+    @Test
+    public void unknownDurationIsVodOnceTheManifestGivesNoLiveEvidence() {
+        PlaybackResourceClassifier.Classification progressive =
+                PlaybackResourceClassifier.classifyRequest(
+                        "https://origin.invalid/movie.mp4", "video/mp4", null);
+        IjkStreamScenePolicy.Decision decision =
+                IjkStreamScenePolicy.resolve(progressive, C.TIME_UNSET, 100);
+
+        assertFalse(IjkStreamScenePolicy.isLive(decision, C.TIME_UNSET));
+        assertTrue(IjkStreamScenePolicy.isVod(decision, C.TIME_UNSET));
+    }
+
+    @Test
+    public void liveManifestStillWinsWhileTheDurationIsUnknown() {
+        IjkStreamScenePolicy.Decision decision = IjkStreamScenePolicy.resolve(
+                hls("#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\na.ts\n", 100),
+                C.TIME_UNSET,
+                200);
+
+        assertTrue(IjkStreamScenePolicy.isLive(decision, C.TIME_UNSET));
+        assertFalse(IjkStreamScenePolicy.isVod(decision, C.TIME_UNSET));
     }
 
     @Test
@@ -216,6 +256,34 @@ public class IjkStreamScenePolicyTest {
                 100);
 
         assertNull(decision.timelineSnapshot());
+    }
+
+    @Test
+    public void thresholdDurationIsVodOnceItIsNotShorterThanTheLegacyBoundary() {
+        long threshold = TimelineStreamKindPolicy.LEGACY_LIVE_DURATION_THRESHOLD_MS;
+        IjkStreamScenePolicy.Decision decision = IjkStreamScenePolicy.resolve(
+                PlaybackResourceClassifier.classifyRequest(
+                        "https://origin.invalid/movie.mp4", "video/mp4", null),
+                threshold,
+                100);
+
+        assertFalse(decision.live());
+        assertTrue(decision.vod());
+        assertFalse(IjkStreamScenePolicy.isLive(decision, threshold));
+        assertTrue(IjkStreamScenePolicy.isVod(decision, threshold));
+    }
+
+    @Test
+    public void liveProtocolStaysLiveWithoutManifestOrDuration() {
+        PlaybackResourceClassifier.Classification rtmp =
+                PlaybackResourceClassifier.classifyRequest("rtmp://origin.invalid/live/stream", null, null);
+        IjkStreamScenePolicy.Decision decision = IjkStreamScenePolicy.resolve(rtmp, C.TIME_UNSET);
+
+        assertTrue(decision.live());
+        assertFalse(decision.vod());
+        assertEquals(IjkStreamScenePolicy.Reason.PROTOCOL_LIVE, decision.reason());
+        assertTrue(IjkStreamScenePolicy.isLive(decision, C.TIME_UNSET));
+        assertFalse(IjkStreamScenePolicy.isVod(decision, C.TIME_UNSET));
     }
 
     private static PlaybackResourceClassifier.Classification hls(

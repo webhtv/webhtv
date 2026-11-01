@@ -25,15 +25,12 @@ import com.github.catvod.crawler.SpiderDebug;
 import java.util.Formatter;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
 
 public class CustomSeekView extends FrameLayout implements Player.Listener, TimeBar.OnScrubListener {
 
     public interface SeekListener {
         void onSeekStarted();
-    }
-
-    public interface DurationFallback {
-        long getDurationMs();
     }
 
     private static final String TAG = "CustomSeekView";
@@ -59,7 +56,7 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
     private Player player;
     private SeekListener seekListener;
     private Player progressPlayer;
-    private DurationFallback durationFallback;
+    private LongSupplier durationFallback;
     private long lastDurationFallbackLogAtMs;
     private long lastPausedBufferLogAtMs;
     private long lastPausedBufferedPosition;
@@ -107,8 +104,9 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
     /**
      * Supplies the last known total duration while the engine has not published
      * one yet. A positive engine duration always wins over this fallback.
+     * A {@code null} supplier or a returned value {@code <= 0} means no fallback.
      */
-    public void setDurationFallback(@Nullable DurationFallback durationFallback) {
+    public void setDurationFallback(@Nullable LongSupplier durationFallback) {
         this.durationFallback = durationFallback;
         lastDurationFallbackLogAtMs = 0;
         if (attached) updateTimeline();
@@ -144,8 +142,14 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
     private long resolveDuration(Player progress) {
         long duration = progress.getDuration();
         if (duration > 0) return duration;
-        if (durationFallback == null) return 0;
-        long fallback = durationFallback.getDurationMs();
+        LongSupplier fallbackSource = durationFallback;
+        if (fallbackSource == null) return 0;
+        long fallback;
+        try {
+            fallback = fallbackSource.getAsLong();
+        } catch (Throwable ignored) {
+            return 0;
+        }
         if (fallback <= 0) return 0;
         long now = SystemClock.elapsedRealtime();
         if (SpiderDebug.isEnabled() && now - lastDurationFallbackLogAtMs >= DURATION_FALLBACK_LOG_INTERVAL_MS) {

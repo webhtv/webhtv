@@ -34,11 +34,11 @@ public class TimelineStreamKindPolicyTest {
     }
 
     @Test
-    public void thresholdItselfIsNeitherLiveNorVod() {
+    public void thresholdItselfIsVodAlthoughItIsNotLive() {
         long threshold = TimelineStreamKindPolicy.LEGACY_LIVE_DURATION_THRESHOLD_MS;
 
         assertFalse(TimelineStreamKindPolicy.isLive(threshold, false));
-        assertFalse(TimelineStreamKindPolicy.isVod(threshold, false));
+        assertTrue(TimelineStreamKindPolicy.isVod(threshold, false));
     }
 
     @Test

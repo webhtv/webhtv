@@ -1493,9 +1493,8 @@ private boolean runtimeSourceOnly;
     }
 
     private String getTimelineDurationTime() {
-        long duration = player().getDuration();
-        if (duration <= 0) duration = getDurationFallbackMs();
-        return Util.timeMs(Math.max(0, duration));
+        // 复用 PlayerManager 的兜底，避免同屏出现第二个兜底来源。
+        return player().getDurationTime();
     }
 
     @Override

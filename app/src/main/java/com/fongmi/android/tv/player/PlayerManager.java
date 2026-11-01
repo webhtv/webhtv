@@ -141,6 +141,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -243,7 +244,7 @@ public class PlayerManager implements ParseCallback {
     private PlaySpec spec;
     private ProxyStreamRegistration multiThreadProxyRegistration;
     private Player player;
-    private DurationFallback durationFallback;
+    private LongSupplier durationFallback;
     private TrackSelectionParameters realtimeSubtitleTrackSelection;
     private String currentDanmakuUrl;
     private String currentDanmakuKey;
@@ -715,10 +716,15 @@ public class PlayerManager implements ParseCallback {
         return getVideoWidth() > getVideoHeight();
     }
 
+    /**
+     * 引擎尚未就绪（{@code engine == null}）时本方法与 {@code isVod()} 同为 {@code false}，
+     * 是这个门面上唯一残留的第三态窗口；本轮只记录，不改其语义。
+     */
     public boolean isLive() {
         return engine != null && engine.isLive();
     }
 
+    /** 与 {@code isLive()} 互补；引擎尚未就绪时两者同为 {@code false}，详见 {@code isLive()}。 */
     public boolean isVod() {
         return engine != null && engine.isVod();
     }
@@ -1246,19 +1252,20 @@ public class PlayerManager implements ParseCallback {
     /**
      * 引擎还没吐出总时长时的兜底。时长未知期间引擎返回 {@code C.TIME_UNSET}，
      * 展示层直接使用它只能得到 00:00；宿主知道这一集的历史时长，可以让它先顶上。
+     * 传 {@code null} 取消兜底；返回值 {@code <= 0} 或抛异常都视作没有兜底。
      */
-    public void setDurationFallback(@Nullable DurationFallback durationFallback) {
+    public void setDurationFallback(@Nullable LongSupplier durationFallback) {
         this.durationFallback = durationFallback;
     }
 
     private long resolveDuration() {
         long duration = getDuration();
         if (duration > 0) return duration;
-        DurationFallback fallback = durationFallback;
+        LongSupplier fallback = durationFallback;
         if (fallback == null) return 0;
         try {
-            return Math.max(0, fallback.getDurationMs());
-        } catch (Throwable e) {
+            return Math.max(0, fallback.getAsLong());
+        } catch (Throwable ignored) {
             return 0;
         }
     }
@@ -8522,12 +8529,6 @@ public void resetTrack(int type) {
             current = current.getCause();
         }
         return builder.toString();
-    }
-
-    /** 引擎时长未知时展示层可用的兜底时长；返回值 {@code <= 0} 视作没有兜底。 */
-    public interface DurationFallback {
-
-        long getDurationMs();
     }
 
     public interface Callback {
