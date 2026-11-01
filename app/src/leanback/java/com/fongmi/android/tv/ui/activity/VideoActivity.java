@@ -8795,6 +8795,27 @@ private boolean runtimeSourceOnly;
         return false;
     }
 
+    /**
+     * 「倍速」按钮的上下微调。
+     *
+     * <p>控制栏样式只给了 DOWN 方向的邻居（{@code Control.nextFocusDown=timeBar}），UP 方向在
+     * 控制栏内没有可聚焦目标，{@link PlayerControlFocusHelper#handleKey} 因此会把 UP 判成
+     * 「会把焦点甩出控制栏」并吞掉，事件根本到不了 {@code speed.setUpListener()}。
+     * 这里在焦点恰为倍速按钮时先接管，与片头/片尾的写法保持一致。
+     */
+    private boolean dispatchSpeedAdjust(KeyEvent event) {
+        if (!KeyUtil.isActionDown(event) || !isVisible(mBinding.control.getRoot())) return false;
+        if (getCurrentFocus() != mBinding.control.action.speed) return false;
+        if (KeyUtil.isUpKey(event)) {
+            onSpeedAdd();
+            return true;
+        } else if (KeyUtil.isDownKey(event)) {
+            onSpeedSub();
+            return true;
+        }
+        return false;
+    }
+
     @Override
     protected boolean dispatchDiscMenuKey(KeyEvent event) {
         // Let TV controls own DPAD/ENTER while visible, including the shared
@@ -8807,9 +8828,10 @@ private boolean runtimeSourceOnly;
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (dispatchDiscMenuKey(event)) return true;
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event) && mBinding.lutQuick.hideIfVisible()) return true;
-        if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event)) {
+        if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {
             mKeyDown.releaseSpeed();
             if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
+            return true;
         }
         if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
         if (isFullscreen() && KeyUtil.isMenuKey(event)) {
@@ -8821,6 +8843,7 @@ private boolean runtimeSourceOnly;
         if (isVisible(mBinding.control.getRoot())) {
             setR1Callback();
             if (dispatchOpeningEndingAdjust(event)) return true;
+            if (dispatchSpeedAdjust(event)) return true;
             if (PlayerControlFocusHelper.handleKey(mBinding.control.getRoot(), getFocus2(), event)) return true;
             if (PlayerControlFocusHelper.containsFocus(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
         }
