@@ -66,6 +66,16 @@ public class PluginPanelAndContextDeviceTest {
     private static final long WAIT_MS = 3_000L;
     /** WebView 首次创建要起渲染进程，冷启动那一次比后续几次慢得多，单给 DOM 一个更宽的窗口。 */
     private static final long DOM_WAIT_MS = 20_000L;
+    /** 等 {@code document.readyState} 变成 complete 的上限：加载本身可能比读一次 DOM 慢得多。 */
+    private static final long READY_WAIT_MS = 20_000L;
+    /**
+     * 读 DOM 的轮询间隔，**只给 {@code awaitWebText} 用**。
+     *
+     * <p>不能沿用 {@link #sleep()} 的 50ms：那个间隔是查「视图出现没有」，代价近乎零；
+     * 而这里每一轮都要往 WebView 里发一次 {@code evaluateJavascript}，50ms 一轮意味着
+     * 20 秒窗口能堆四百次 eval，页面还没就绪时足以把渲染进程压住。
+     */
+    private static final long TEXT_POLL_MS = 250L;
 
     private static final String MANIFEST = """
             {
@@ -276,20 +286,82 @@ public class PluginPanelAndContextDeviceTest {
         return host.getSupportFragmentManager().findFragmentByTag(PANEL_TAG);
     }
 
-    /** 读 DOM 文本：元素还不存在时 JS 抛错、回传 "null"，于是继续轮询直到页面加载完。 */
+    /**
+     * 读 DOM 文本；一次读不到就重开面板再读一次，仍读不到才返回诊断串。
+     *
+     * <p><b>为什么要重开一次。</b>这条链路偶发过一次性失败：{@code evaluateJavascript} 的回调
+     * 再也不回来（{@code latch.await} 直接超时，诊断串里 html=null），随后单独重跑同一批用例又全过。
+     * 那是 WebView 渲染进程被压住，而不是插件或 payload 出错——此时断言失败会把「渲染进程卡了一次」
+     * 说成「context 没送到脚本」，指向完全错误的方向。用户遇到同样情形会关掉面板再点一次，
+     * 重开一次正是更高保真的复现路径。
+     */
     private String awaitWebText(WebView web, String elementId) {
-        String expression = "document.getElementById('" + elementId + "').textContent";
-        long deadline = SystemClock.uptimeMillis() + DOM_WAIT_MS;
-        while (SystemClock.uptimeMillis() < deadline) {
-            String value = evaluate(web, expression);
+        String value = readWebText(liveWeb(web), elementId);
+        if (value != null) return value;
+        WebView reopened = retryDispatch();
+        if (reopened != null) {
+            web = reopened;
+            value = readWebText(web, elementId);
             if (value != null) return value;
-            sleep();
         }
         // 超时不能只报 null：那既可能是"页面没加载"，也可能是"元素 id 不对"，
         // 两种原因的修法完全不同，所以把页面真实内容一起带进断言消息。
         return "TIMEOUT html=" + evaluate(web, "document.documentElement.outerHTML")
                 + " audit=" + PluginAuditLog.get().entriesFor(ID)
                 + " url=" + evaluate(web, "document.URL");
+    }
+
+    /**
+     * 取当前面板里**活着的**那个 WebView。
+     *
+     * <p>重开面板后调用方手里那个 {@code web} 已经随旧面板销毁，再往上发
+     * {@code evaluateJavascript} 只会一直等到超时——那正是本次要消除的慢路径。
+     * 所以每一轮都先按面板当前实例重新取一次，取不到才退回入参。
+     */
+    private WebView liveWeb(WebView fallback) {
+        WebView current = awaitWebView();
+        return current != null ? current : fallback;
+    }
+
+    /** 等到页面 {@code readyState=complete} 之后再逐次读文本；没就绪就返回 null，交给上层重开。 */
+    private String readWebText(WebView web, String elementId) {
+        if (!awaitDocumentReady(web)) return null;
+        String expression = "document.getElementById('" + elementId + "').textContent";
+        long deadline = SystemClock.uptimeMillis() + DOM_WAIT_MS;
+        while (SystemClock.uptimeMillis() < deadline) {
+            String value = evaluate(web, expression);
+            if (value != null) return value;
+            sleepTextPoll();
+        }
+        return null;
+    }
+
+    /**
+     * 等 {@code document.readyState} 变成 complete。
+     *
+     * <p>加载中就往 WebView 里灌 {@code evaluateJavascript} 会挤住渲染进程——这一条是本次加固的
+     * 核心：先确认页面就绪，再把轮询压到 {@link #TEXT_POLL_MS} 一次。
+     */
+    private static boolean awaitDocumentReady(WebView web) {
+        long deadline = SystemClock.uptimeMillis() + READY_WAIT_MS;
+        while (SystemClock.uptimeMillis() < deadline) {
+            if ("complete".equals(evaluate(web, "document.readyState"))) return true;
+            sleepTextPoll();
+        }
+        return false;
+    }
+
+    /**
+     * 关掉卡住的面板再重新触发一次点击，返回新面板的 WebView。
+     *
+     * <p>必须先 dismiss 再重开：{@code PluginPanelDialog.show} 用固定 TAG 提交事务，旧实例还在时
+     * 再 add 同一个 tag 会撞在 FragmentManager 上。等旧 fragment 真的消失，新面板才拿得到 tag。
+     */
+    private WebView retryDispatch() {
+        dismissPanelQuietly();
+        poll(() -> awaitPanelNow() == null ? Boolean.TRUE : null, WAIT_MS);
+        PluginController.get().dispatchSlotAction(ID, ACTION);
+        return awaitWebView();
     }
 
     private static String evaluate(WebView web, String expression) {
@@ -342,9 +414,19 @@ public class PluginPanelAndContextDeviceTest {
         return null;
     }
 
+    /** 查视图是否出现的轮询间隔：不碰 WebView，50ms 就够。 */
     private static void sleep() {
         try {
             Thread.sleep(50L);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** 读 DOM 的轮询间隔：每一轮都要发一次 JS eval，必须比 {@link #sleep()} 更宽。 */
+    private static void sleepTextPoll() {
+        try {
+            Thread.sleep(TEXT_POLL_MS);
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
         }

@@ -699,6 +699,7 @@ public class CacheManagementDialog extends DialogFragment {
             case EPG -> R.string.cache_module_epg;
             case GLIDE -> R.string.cache_module_glide;
             case PLUGIN_SCRIPTS -> R.string.cache_module_plugin_scripts;
+            case PLUGIN_AUDIT -> R.string.cache_module_plugin_audit;
             case TEMP_FILES -> R.string.cache_module_temp_files;
             case DIAGNOSTIC_LOGS -> R.string.cache_module_diagnostic_logs;
             case LEGACY_FILES -> R.string.cache_module_legacy_files;

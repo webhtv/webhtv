@@ -29,7 +29,7 @@ public class CachePolicyEngineTest {
     @Test
     public void deepPlanCoversPlaybackAndMediaExactlyOnce() {
         List<CacheModuleId> modules = CachePolicyEngine.plan(CacheCleanupMode.DEEP).modules();
-        assertEquals(CacheModuleId.values().length - 2, modules.size());
+        assertEquals(CacheModuleId.values().length - 3, modules.size());
         assertEquals(modules.size(), modules.stream().distinct().count());
         // L3 = L2 + playback caches. The report-only modules are excluded by design.
         assertTrue(modules.contains(CacheModuleId.EXO));
@@ -69,6 +69,28 @@ public class CachePolicyEngineTest {
                 .contains(CacheModuleId.DIAGNOSTIC_LOGS));
         assertEquals(List.of(CacheModuleId.DIAGNOSTIC_LOGS),
                 CachePolicyEngine.module(CacheModuleId.DIAGNOSTIC_LOGS).modules());
+    }
+
+    /**
+     * The plugin audit trail is the only evidence surface for {@code net.request} (no domain
+     * allowlist exists by decision), so no tiered or automatic run may erase it. It stays reachable
+     * through its own module row, exactly like the diagnostic logs.
+     */
+    @Test
+    public void pluginAuditLogIsManualOnly() {
+        assertFalse(CachePolicyEngine.allowsAutomatic(CacheModuleId.PLUGIN_AUDIT));
+        assertFalse(CachePolicyEngine.plan(CacheCleanupMode.LIGHT).modules()
+                .contains(CacheModuleId.PLUGIN_AUDIT));
+        assertFalse(CachePolicyEngine.plan(CacheCleanupMode.STANDARD).modules()
+                .contains(CacheModuleId.PLUGIN_AUDIT));
+        assertFalse(CachePolicyEngine.plan(CacheCleanupMode.DEEP).modules()
+                .contains(CacheModuleId.PLUGIN_AUDIT));
+        assertEquals(List.of(CacheModuleId.PLUGIN_AUDIT),
+                CachePolicyEngine.module(CacheModuleId.PLUGIN_AUDIT).modules());
+        assertEquals(CacheCleanupStatus.COMPLETED,
+                CachePolicyEngine.directCleanupStatus(CacheModuleId.PLUGIN_AUDIT, false));
+        assertTrue(CachePolicyEngine.manualCleanupAllowed(CacheModuleId.PLUGIN_AUDIT,
+                new File(System.getProperty("java.io.tmpdir"))));
     }
 
     /** Unclassified cache is report-only: it must never be offered as cleanable. */

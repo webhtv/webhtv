@@ -1074,6 +1074,7 @@
     <string name="cache_module_epg">EPG 节目单</string>
     <string name="cache_module_glide">图片与封面</string>
     <string name="cache_module_plugin_scripts">JS/Python/Jar 资源</string>
+    <string name="cache_module_plugin_audit">插件审计日志</string>
     <string name="cache_module_temp_files">临时文件</string>
     <string name="cache_module_diagnostic_logs">诊断日志</string>
     <string name="cache_module_legacy_files">遗留路径</string>

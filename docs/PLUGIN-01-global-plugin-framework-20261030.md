@@ -1289,3 +1289,112 @@ P5 的真机测试也没抓到，因为它们都走 `PluginController.dispatchSl
 1. **（用户已裁定优先）** `PluginAuditLog` 落盘——D2「审计是 `net.request` 唯一安全观测面」的前提。
 2. 面板播放态接线（`pauseForOverlayPlayback` / `resumeAfterOverlayPlayback`），待用户裁定是否并入。
 3. `net.request` 域名白名单重新评估、`py`/`html` 运行时、`page` 槽位。
+
+## 20. P7：审计落盘与面板播放态接线
+
+本切片兑现 §19.7 的两条：`PluginAuditLog` 落盘（D2「审计是 `net.request` 唯一安全观测面」的前提），以及 §19.6 第一条挂起的「播放态处理未接线」。两件事由两路子代理并行交付，我逐行复核全部 diff 并独立重跑全部验证。
+
+### 20.1 交付物
+
+| 文件 | 行数 | 作用 |
+| --- | --- | --- |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginAuditStore.java` | 210（新建） | 审计文件后端：`Sink` 接口 + 文件实现 + 512 KiB / 1000 行轮转 |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginAuditLog.java` | 542（+394/−4） | 懒装载、按行恢复、非主线程写盘（版本号顺序保证） |
+| `app/src/main/java/com/fongmi/android/tv/cache/CacheModuleId.java` | `PLUGIN_AUDIT("plugin.audit")`（:15） | 新增缓存模块 |
+| `app/src/main/java/com/fongmi/android/tv/cache/CacheModuleRegistry.java` | +18/−2 | 注册模块 + 两处排除前缀 |
+| `app/src/main/java/com/fongmi/android/tv/cache/CachePolicyEngine.java` | +6（:44） | 自动清理永不含审计 |
+| `app/src/main/java/com/fongmi/android/tv/cache/CacheCleanupManager.java` | +18（:374 / :450-464） | 手动清理走 `PluginAuditLog.clear()` |
+| `app/src/main/java/com/fongmi/android/tv/ui/dialog/CacheManagementDialog.java` | +1（:702） | 模块名称映射 |
+| 三份 `strings.xml` | 各 +1 | `cache_module_plugin_audit`：Plugin audit log / 插件审计日志 / 外掛審計日誌 |
+| `app/src/main/java/com/fongmi/android/tv/ui/dialog/PluginPanelDialog.java` | 188（+50/−4） | 面板播放态接线 |
+| `app/src/test/java/com/fongmi/android/tv/plugin/PluginAuditStoreTest.java` | 111（新建，6 用例） | store 的轮转/裁剪/坏行 |
+| `app/src/test/java/com/fongmi/android/tv/plugin/PluginAuditLogTest.java` | 461（+344，15 用例） | 落盘恢复 + 异步写盘顺序 |
+| `app/src/test/java/com/fongmi/android/tv/plugin/PluginPanelPlaybackWiringTest.java` | 124（新建，5 用例） | 源码级接线断言 |
+| 缓存侧测试三件 | +4 / +26 / +23−1 | 模块数量、家族边界、自动清理排除 |
+
+### 20.2 审计落盘：谁拥有数据
+
+`PluginAuditStore` 只做一件事——把一段文本安全地读回来、写下去，并保证文件不无限长：
+
+- `FILE_NAME = "webhtv-plugin-audit.log"`（:32），`MAX_FILE_BYTES = 512 * 1024`（:40），`MAX_FILE_LINES = PluginAuditLog.MAX_ENTRIES * 2`（:48，即 1000）。
+- `interface Sink { String read(); void write(String text); }`（:51-55）——测试注入点，生产实现 `FILE_SINK`（:57-100）。
+- 读要**合并两段**：`.1`（轮转出的较旧一段）在前、主文件（较新一段）在后，再按 `tail()` 裁到 `MAX_ENTRIES` 条。
+- `write()` 三条路径：空串 → 删两个文件；未超限 → **先删 `.1` 再写主文件**（:89 注释：残留的 `.1` 会在下次读取时把已经裁掉的旧记录复活）；超限 → 先轮转再写主文件。
+- `tail(text, maxBytes, maxLines)`（:149-171）**按整行裁**，:146 javadoc 说明理由：从中间截断会把那段 JSON 变成坏行。
+
+`PluginAuditLog` 侧的关键决定是「装载只发生一次，之后内存就是权威副本」：`loadOnce()`（:159-175）先把 `loaded = true` 再读，坏行 `continue`，超限 `removeFirst`。:156 注释写明为什么先置位：读失败时不再重试，否则一条坏文件会让每次 `entries()` / `size()` 都重读一遍磁盘。
+
+落盘后端本身是 `private static volatile PluginAuditStore store`（:75）**惰性**获取（`store()` :404），不在静态初始化里直取 —— :72-73 注明理由：JVM 单测没有 `Init.context()`，`static` 初始化抛异常会变成 `ExceptionInInitializerError` 把整个测试类打死。
+
+### 20.3 主线程不许碰文件（首轮交付被我打回）
+
+首轮实现是「每次 `append` 都在调用线程同步重写整份文件」。审计写入点全集 5 处：`PluginHost.java:105` quarantine、`:164` 未知插件、`:170` 缺槽位权限、`:201` dispatch catch，`PluginController.java:204` reload catch。其中 `PluginHost.onEvent`（:131-142）由 `PluginEventBus` 驱动，而事件派发全在主线程 —— 也就是说**主线程会做一次 ≤512 KiB 的文件同步重写**，正是 StrictMode 磁盘违规与掉帧的典型形态。
+
+返工后的形状（`PluginAuditLog.java`）：
+
+- `persist()`（:232-245）：序列化 + 取版本号，然后 `if (isMainThread()) enqueue(version, text); else writeIfNewer(version, text);`。序列化是纯内存操作，写文件才是磁盘违规，两者拆开后主线程那条路立刻返回。
+- 版本号（`nextVersion` :90）**必须与内容在同一个 `lock` 临界区里取**（:236 注释）——否则两个线程可能拿到同一个号，全序就断了。
+- 主线程只把**最终快照**放进单槽位（`enqueue` :259-274：`if (version <= writtenVersion) return;` / `if (queuedText != null && queuedVersion > version) return;`）。槽位是覆盖式而不是队列（:262-263）：审计要的是「收敛到内存最新快照」，中间态没有保存价值，排队反而在频繁事件时积压成写放大。
+- 写入器是 `Executors.newSingleThreadExecutor` 的守护线程 `plugin-audit-writer`（:358-370，`setDaemon(true)`，进程退出不被一条待写记录拖住），`drain()`（:292-316）一直写到手头没有待写内容才放开 `drainScheduled`。
+- **唯一的落盘入口** `writeIfNewer(version, text)`（:318-339）把「版本比对」与 `store().write(text)` 包进同一个 `ioLock` 临界区（:96）——比对通过到写完之间没有别的线程能插进来写一个更旧的版本。加锁顺序固定 `ioLock → writeLock`，无反向嵌套。
+- 主线程判定 `isMainThread()`（:341-356）整体 `try/catch(Throwable)` 返回 `false`：JVM 单测里 `android.os.Looper` 是桩，抛 `RuntimeException("Stub!")` 或 `NoClassDefFoundError` 必须被当作「非主线程（同步写）」，而不是被误判成主线程把落盘丢掉。
+
+为什么必须有版本号（:83-86）：主线程把快照交给写入器就返回，网络线程（`PluginNetBridge` 的两次 `recordRequest`，:93 成功 / :102 异常）却仍同步写盘；两者并发时「谁先发起」和「谁先写完」不再同序，没有版本号就可能让一条更旧的快照最后落盘，磁盘上永久留下少了最后几条的日志 —— 而那几条往往正是刚发生的失败。`clear()` 同样拿到更大的版本号，所以「清空之后旧快照被写回来」也被堵住。
+
+新增的测试入口全是包内可见（不扩大对外 API）：`forceAsyncWriterForTest(Boolean)`（:372-380，绕过真实主线程判定，JVM 单测里 `isMainThread()` 恒为假、没有它就测不到异步分支）、`flushForTest()`（:387-402，阻塞到待写内容真正落盘）、以及既有的 `storeForTest` / `reloadForTest`。
+
+### 20.4 缓存集成：可手动清理，绝不自动清
+
+审计文件是 `.log` 后缀，会被 `CacheModuleRegistry.java:34` 的 `TEMP_SUFFIXES = Set.of(".apk", ".zip", ".tmp", ".log")` 当成临时文件删掉 —— 所以它必须**同时**出现在两个排除集合里：`UNCLASSIFIED_EXCLUDED_PREFIXES`（:63）与 `DIAGNOSTIC_LOG_NAMES`（:80）。:73-76 注释写明了这个理由。
+
+模块本体（:115-119）用 `CacheRoot.prefixedFiles(cache, Set.of(PluginAuditStore.FILE_NAME), Set.of())` 做前缀匹配 —— `CacheRoot.java:29-35` 的 javadoc 说明该 API 正是为 `webhtv-debug-log.txt.1` 这类轮转名而设，于是主文件与 `.1` 一起被覆盖。`Cleanability = SAFE_NOW`、`allowAutomaticCleanup = false`、`allowManualCleanup = true`，:115-116 注释给出裁定理由：丢掉审计会静默抹掉 D2 用域名白名单换来的证据链。
+
+`CacheCleanupManager.clearPluginAudit()`（:450-464）调 `PluginAuditLog.get().clear()` 而不是删文件，:453-455 注释说明：只删文件不够，内存副本会被下一次 `append` 写回，用户刚清掉的记录会重新出现。既有 `case PLUGIN_SCRIPTS` 那行一个字未改，`CacheFullCleanupTest.java:206` 的源码断言仍然成立。
+
+### 20.5 面板播放态接线（兑现 §19.6 第一条）
+
+`PluginPanelDialog.java` 现有 188 行，改动后行为：打开面板前 `pauseForOverlayPlayback()`，关闭后 `resumeAfterOverlayPlayback(resumeParent)`，与 `TmdbVideoPlayerDialog.java:91` / `:97` / `:393` 的既有范式一致。
+
+首轮实现把 `PlaybackActivity playback` 与 `resumeParent` 都做成字段，被我打回：`DialogFragment` 在配置变更（旋屏）时由 `FragmentManager` 用无参构造器重建，字段不会重放，新实例此时该做的是用重建后的宿主恢复播放**而不是** `null` 判空跳过；`onDismiss` 里那行 `!activity.isChangingConfigurations()` 本身就是在为旋屏写的，说明这条路径是被认真考虑过的。附带问题：字段持有 Activity 是泄漏。
+
+第二轮的形状：
+
+- `private static final String ARG_RESUME_PARENT = "resumeParent";`（:35）。
+- `show()`（:71-88）：`isFinishing()` / `isStateSaved()` 早退（:73-74）→ 局部变量取 `PlaybackActivity playback`（:75，**只给 catch 用**）→ `boolean resumeParent = playback != null && playback.pauseForOverlayPlayback();`（:76）→ `Bundle args` 写入 `ARG_RESUME_PARENT` 后 `setArguments`（:78-80）→ `try { dialog.show(fm, TAG) } catch (RuntimeException e) { if (playback != null) playback.resumeAfterOverlayPlayback(resumeParent); }`（:83-87）。事务提交失败等于面板从未出现，已按下的暂停必须还回去。
+- `initView()` 首段回读：`Bundle args = getArguments(); resumeParent = args != null && args.getBoolean(ARG_RESUME_PARENT, false);`（:150-151）。
+- `onDismiss()`（:114-123）：`if (!parentResumed) { parentResumed = true; FragmentActivity activity = getActivity(); if (activity != null && !activity.isChangingConfigurations() && activity instanceof PlaybackActivity) { ((PlaybackActivity) activity).resumeAfterOverlayPlayback(resumeParent); } }` —— **用 `getActivity()` 现取**，不在对象上留 Activity 引用（:111 javadoc）。
+
+`PluginPanelPlaybackWiringTest.java`（124 行 5 用例）是源码级断言：读文件、按花括号配平切出方法体，断言 `show`/`initView`/`onDismiss` 三个方法体各自含必须的调用；第 5 条 `resumeIntentSurvivesFragmentRecreation` 直接断言文件里**不再出现** `private PlaybackActivity playback`，并保留 `ARG_RESUME_PARENT` / `setArguments(` / `getArguments()` / `getBoolean(ARG_RESUME_PARENT, false)` / `getActivity()`。旋屏后 `resumeParent` 仍为 true 这件事只能靠代码推理 —— 真机旋屏重建属 androidTest 范围，本切片未做，明确记录在此。
+
+### 20.6 验证
+
+| 项 | 命令/装置 | 结果 |
+| --- | --- | --- |
+| 两变体编译 | `compileMobileArm64_v8aDebugJavaWithJavac` + `compileLeanbackArm64_v8aDebugJavaWithJavac` | EXITCODE=0 |
+| JVM 单测 | `:app:testMobileArm64_v8aDebugUnitTest --tests 'com.fongmi.android.tv.plugin.*' --tests 'com.fongmi.android.tv.cache.*'` | **36 suites / 285 tests / 0 failures / 0 errors / 1 skipped** |
+| mobile 真机 | `connectedMobileArm64_v8aDebugAndroidTest`（emulator-5560） | **26 tests / 0 failed / 3 skipped**，BUILD SUCCESSFUL 1m31s |
+| leanback 真机 | `connectedLeanbackArm64_v8aDebugAndroidTest`（emulator-5556） | **26 tests / 0 failed / 0 skipped**，BUILD SUCCESSFUL 1m42s |
+
+逐类真机分布（两端一致）：`PluginEndToEndDeviceTest` 2 / `PluginPanelAndContextDeviceTest` 3 / `PluginPanelLeanbackFocusDeviceTest` 3 / `PluginParamsNetDeviceTest` 4 / `PluginUiPresenterDeviceTest` 7 / `QuickJsRuntimeDeviceTest` 7。mobile 那 3 条 skip 全是 `PluginPanelLeanbackFocusDeviceTest` 的 `Assume.assumeTrue(Util.isLeanback())` 门控。唯一 JVM skip 是既有 `CachePathSafetyTest.finalComponentSymlinkIsStillDetected`（Windows 无符号链接权限）。
+
+与 P6 基线的差额自洽：单测从 193 增至 285（`PluginAuditLogTest` 12→15、新建 `PluginAuditStoreTest` 6、新建 `PluginPanelPlaybackWiringTest` 5、缓存侧 `CachePolicyEngineTest` 12 / `CacheModuleRegistryTest` 8 / `CacheAutoPlanAndTempFamilyTest` 6 各扩容）；真机两端口径不变 —— 本切片未新增 device 测试。
+
+### 20.7 本切片修掉的测试侧缺陷
+
+- **`PluginPanelAndContextDeviceTest.actionPayloadCarriesEpisodeContextWhenPermissionGranted` 偶发超时一次**（首跑 115.4s，诊断串 `TIMEOUT html=null audit=[] url=about:blank`；随后单跑该类 3/3 绿、全量 26 条又全绿）。定性为**测试自身的轮询过密**：`awaitWebText` 每 50ms 灌一次 `evaluateJavascript`，20 秒窗口最多 400 次 eval，页面还在 `loadDataWithBaseURL` 加载时足以压住渲染进程让回调不再回来。加固三处（只改测试文件，+76/−6）：等 `document.readyState == "complete"` 再读（`READY_WAIT_MS = 20_000L`）、DOM 轮询单独降到 `TEXT_POLL_MS = 250L`（查视图的 `sleep()` 仍 50ms，它不碰 WebView）、超时先 `retryDispatch()`（必须**先 dismiss 再重开**：`PluginPanelDialog.show` 用固定 TAG 提交事务，旧实例还在时再 add 同 tag 会撞在 FragmentManager 上）再读一次。断言一条没放宽。
+- `retryDispatch()` 的重开路径还顺带给了这条链路一个高保真复现：用户遇到同样情形就是关掉面板再点一次。
+
+### 20.8 明确未做 / 已知风险
+
+- **进程被杀时队列里最后一版可能来不及落盘**（主线程那一路是「记账返回 ≠ 已落盘」）。非主线程（网络请求、JS 执行器）仍同步写，不丢。写入器是 daemon，不会拖住进程退出。
+- **512 KiB 轮转未在真机文件系统上验证**，只在 JVM 单测用 `Sink` 验证了裁剪/轮转/坏行恢复。真进程重启后的恢复只走了 `reloadForTest()` 的等价路径。
+- **面板不检查 FragmentManager 里是否已有 `TAG = "plugin-panel"` 实例**（`TmdbVideoPlayerDialog.show` 有 `findFragmentByTag` 复用分支）→ chip 连点两次会叠两块面板。播放态不受影响（第二次 `pauseForOverlayPlayback()` 因已暂停返回 `false`，其 `resumeParent = false`）。这是 P5 起就存在的既有缺陷，非本切片引入。
+- **面板不订阅宿主生命周期**：`PlaybackActivity` 以非配置变更方式销毁时恢复会被跳过，依赖播放服务自身策略。
+- 未做：`py`/`html` 运行时、`page` 槽位（仍静默忽略）、`net.request` 域名白名单（D2 既有裁定）、真电视盒子焦点环人工验收、面板内上下键的实际滚动验收。
+
+### 20.9 下一步
+
+1. `net.request` 域名白名单重新评估 —— 审计已落盘，D2 当初的取舍前提（「没有观测面」）已经改变，值得重新算一次账。
+2. `py` / `html` 运行时（`PluginRuntimeFactory` 目前只造 JS）与 `page` 槽位。
+3. 面板 chip 连点叠窗口的复用一个（`findFragmentByTag` 分支）。
+4. 电视端面板遥控器可达性的**人工**验收：焦点环可辨识度、WebView 内滚动。

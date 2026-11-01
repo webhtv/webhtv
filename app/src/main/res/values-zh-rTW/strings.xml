@@ -1029,6 +1029,7 @@
     <string name="cache_module_epg">EPG 節目表</string>
     <string name="cache_module_glide">圖片與封面</string>
     <string name="cache_module_plugin_scripts">JS/Python/Jar 資源</string>
+    <string name="cache_module_plugin_audit">外掛審計日誌</string>
     <string name="cache_module_temp_files">暫存檔</string>
     <string name="cache_module_legacy_files">遺留路徑</string>
     <string name="cache_module_diagnostic_logs">診斷日誌</string>
