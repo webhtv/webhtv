@@ -113,6 +113,30 @@ public class TmdbSeasonProgressStoreTest {
         assertEquals(List.of(fromA), filtered);
     }
 
+    @Test
+    public void fromHistoryUsesTheRealNewestOfCreateTimeAndUpdateTime() throws Exception {
+        History touched = history("tv", 88, 2, 5);
+        touched.setKey("site-a@@@vod-a");
+        touched.setCreateTime(100);
+        setUpdateTime(touched, 900);
+        History stale = history("tv", 88, 2, 5);
+        stale.setKey("site-a@@@vod-a");
+        stale.setCreateTime(900);
+        setUpdateTime(stale, 100);
+        History untouched = history("tv", 88, 2, 5);
+        untouched.setKey("site-a@@@vod-a");
+
+        assertEquals(900, TmdbSeasonProgressStore.fromHistory(touched).updatedAt);
+        assertEquals(900, TmdbSeasonProgressStore.fromHistory(stale).updatedAt);
+        assertTrue(TmdbSeasonProgressStore.fromHistory(untouched).updatedAt > 0);
+    }
+
+    private static void setUpdateTime(History history, long value) throws Exception {
+        java.lang.reflect.Field field = History.class.getDeclaredField("updateTime");
+        field.setAccessible(true);
+        field.setLong(history, value);
+    }
+
     private static History history(String mediaType, int tmdbId, int season, int episode) {
         History history = new History();
         history.setMediaType(mediaType);

@@ -5040,19 +5040,16 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             String remarks = history != null ? history.getVodRemarks() : "";
             if (selectedEpisode == null) selectedEpisode = findEpisodeByUrl(history == null ? "" : history.getEpisodeUrl(), selectedFlag.getEpisodes());
             if (selectedEpisode == null) selectedEpisode = selectedFlag.find(remarks, getMarkText().isEmpty());
+            // 三条身份通道（intent URL / 历史 URL / 历史备注）全失败时才退到第一集，这是最后兜底。
             if (selectedEpisode == null) selectedEpisode = episodes.get(0);
         }
         List<Integer> availableSeasons = availableSeasonNumbers(episodes);
-        if (availableSeasons.isEmpty()) {
-            selectedSeasonNumber = -1;
-        } else if (selectedSeasonNumber < 0 || !availableSeasons.contains(selectedSeasonNumber)) {
-            selectedSeasonNumber = seasonForEpisode(selectedEpisode, episodes);
-        }
+        // seasonForEpisode 在可选季非空时必返回其中之一（其唯一返回 -1 的路径是可选季为空），
+        // 因此这里不需要再判断季号是否落在可选季内，也不存在"选不到集"的分支：
+        // selectedEpisode 已由上一段四通道兜到首集，恒非空。
+        selectedSeasonNumber = availableSeasons.isEmpty() ? -1 : seasonForEpisode(selectedEpisode, episodes);
         refreshSeasonContext();
         List<Episode> visibleEpisodes = visibleEpisodes(episodes);
-        if (!visibleEpisodes.isEmpty() && !visibleEpisodes.contains(selectedEpisode)) {
-            selectedEpisode = visibleEpisodes.get(0);
-        }
         renderSeasonSelection();
         bindSeasonEpisodes(episodes);
         refreshCurrentHistoryEpisodeTitle();
@@ -6752,6 +6749,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         selectedSeasonNumber = getIntentPlaybackSeasonNumber();
         resetEpisodeRange();
         renderFlagSelection();
+        renderEpisodes();
     }
 
     private float getInlinePlaybackSpeed() {
@@ -6785,15 +6783,26 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             long start = System.currentTimeMillis();
             logTmdbMatch("原生增强播放标题：raw=%s，缓存标题=%s，详情标题=%s，播放标题=%s", getTmdbRawTitle(), matchedTmdbItem == null ? "" : matchedTmdbItem.getTitle(), tmdbDetailTitle(matchedTmdbItem, matchedTmdbDetail), playbackHistoryName());
             TmdbItem item = playbackTmdbItem();
-            EpisodePosition position = historyEpisodePosition(selectedEpisode);
+            EpisodePosition position = historyEpisodePosition(playbackEpisode());
             String tmdbDetailCacheKey = TmdbDetailCache.put(item, matchedTmdbDetail, detailCastItems, TmdbLanguagePolicy.requestLanguage(tmdbConfig, Setting.getLanguage()), tmdbSeasonEpisodes);
             SpiderDebug.log("tmdb-tv", "play launch prep cost=%dms title=%s", System.currentTimeMillis() - start, playbackHistoryName());
             VideoActivity.startDirectTmdb(this, getKeyText(), getIdText(), playbackHistoryName(), playbackHistoryPic(), playbackMark(), fastPlaybackEpisodeTitles(), item, playbackTmdbVod(), vod, tmdbDetailCacheKey, playbackFlag(), selectedSeasonFlagKey(), playbackEpisodeName(), playbackEpisodeUrl(), position.season(), position.number(), isResumeFromHistory() ? getIntentResumeHistory() : null);
         });
     }
 
+    private Episode playbackEpisode() {
+        if (selectedEpisode != null) return selectedEpisode;
+        List<Episode> episodes = selectedFlag == null ? null : selectedFlag.getEpisodes();
+        Episode requested = findEpisodeByUrl(getIntentPlaybackEpisodeUrl(), episodes);
+        if (requested != null) return requested;
+        Episode saved = history == null ? null : history.getEpisode();
+        if (saved == null || episodes == null || episodes.isEmpty()) return null;
+        return selectedFlag.find(saved, true);
+    }
+
     private String playbackMark() {
-        if (selectedEpisode != null && !TextUtils.isEmpty(selectedEpisode.getName())) return selectedEpisode.getName();
+        Episode episode = playbackEpisode();
+        if (episode != null && !TextUtils.isEmpty(episode.getName())) return episode.getName();
         return getMarkText();
     }
 
@@ -6802,17 +6811,20 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private String playbackEpisodeName() {
-        return selectedEpisode == null ? playbackMark() : selectedEpisode.getName();
+        Episode episode = playbackEpisode();
+        return episode == null ? "" : Objects.toString(episode.getName(), "");
     }
 
     private String playbackEpisodeUrl() {
-        return selectedEpisode == null ? "" : selectedEpisode.getUrl();
+        Episode episode = playbackEpisode();
+        return episode == null ? "" : Objects.toString(episode.getUrl(), "");
     }
 
     private ArrayList<String> fastPlaybackEpisodeTitles() {
         ArrayList<String> result = new ArrayList<>(1);
-        if (selectedEpisode == null) return result;
-        int number = episodeNumberForHistory(selectedEpisode);
+        Episode episode = playbackEpisode();
+        if (episode == null) return result;
+        int number = episodeNumberForHistory(episode);
         String title = tmdbEpisodeTitle(number);
         if (number > 0 && !TextUtils.isEmpty(title)) result.add(number + "\t" + title);
         return result;
@@ -11425,7 +11437,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void refreshSelectionAfterExternalPlayback() {
-        if (vod == null || vod.getFlags() == null || vod.getFlags().isEmpty()) return;
+        if (playbackSelectionTouched || vod == null || vod.getFlags() == null || vod.getFlags().isEmpty()) return;
         try {
             history = History.findPlayback(getHistoryKey(), List.of(vod.getName(), getNameText()),
                     vod.getFlags(), null, sourceTitleSeasonNumber());

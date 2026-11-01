@@ -33,7 +33,9 @@ public final class TmdbSeasonProgressStore {
         progress.sourceEpisodeUrl = history.getEpisodeUrl();
         progress.sourceBindingKey = TextUtils.isEmpty(history.getSourceBindingKey())
                 ? sourceBindingKey(history) : history.getSourceBindingKey();
-        progress.updatedAt = history.getCreateTime() > 0 ? history.getCreateTime() : System.currentTimeMillis();
+        // createTime 是持久字段，updateTime 才是真实新旧，取二者最大值作为快照新旧依据。
+        long updatedAt = freshness(history);
+        progress.updatedAt = updatedAt > 0 ? updatedAt : System.currentTimeMillis();
         return progress;
     }
 
@@ -61,7 +63,7 @@ public final class TmdbSeasonProgressStore {
         History latest = null;
         for (History history : histories) {
             if (!isEligible(history) || history.getTmdbSeasonNumber() != seasonNumber) continue;
-            if (latest == null || history.getCreateTime() > latest.getCreateTime()) latest = history;
+            if (latest == null || freshness(history) > freshness(latest)) latest = history;
         }
         if (latest == null) {
             AppDatabase.get().getTmdbSeasonProgressDao().delete(cid, normalizedType, tmdbId, seasonNumber);
@@ -104,6 +106,14 @@ public final class TmdbSeasonProgressStore {
 
     public static synchronized <T> T runInTransaction(Callable<T> action) {
         return AppDatabase.get().runInTransaction(action);
+    }
+
+    /**
+     * 快照新旧的唯一口径：createTime 是持久字段，updateTime 是真实改动时间（transient，未加载时为 0）。
+     * 写入（fromHistory）与重建（reconcile）必须共用这一处，避免同一个类里两套“最新”定义互相覆盖。
+     */
+    private static long freshness(History history) {
+        return Math.max(history.getCreateTime(), history.getUpdateTime());
     }
 
     private static String sourceBindingKey(History history) {

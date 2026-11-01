@@ -258,7 +258,10 @@ public class History implements Diffable<History> {
         History aggregated = findPlaybackByTmdb(key, vodNames, flags, explicitTmdbId, explicitMediaType, expectedSeason);
         if (aggregated != null) return aggregated;
         History history = find(key);
-        if (isSeasonEligible(history, key, expectedSeason)) return copyForPlaybackKey(history, key, flags, history);
+        if (history != null) {
+            History own = findPlaybackCandidate(key, Collections.singletonList(history), flags, expectedSeason);
+            if (own != null) return own;
+        }
         if (vodNames != null) {
             for (String vodName : vodNames) {
                 if (vodName == null || vodName.isEmpty()) continue;
@@ -485,6 +488,15 @@ public class History implements Diffable<History> {
                 }
             }
         }
+        if (selected == null) {
+            // 同 key 放宽：季绑定漂移后仍按线路可绑定的同集续播，避免整条记录被丢弃后退化成第 1 集。
+            for (History item : items) {
+                if (canResume(item) && TextUtils.equals(key, item.getKey()) && matchesAnyEpisode(item, flags)) {
+                    selected = item;
+                    break;
+                }
+            }
+        }
         return selected == null ? null : copyForPlaybackKey(selected, key, flags, local);
     }
 
@@ -543,9 +555,14 @@ public class History implements Diffable<History> {
             }
         }
         if (resolved == null) resolved = preferred != null ? preferred : firstFlag(flags);
+        boolean routeChanged = !TextUtils.isEmpty(playback.getVodFlag()) && resolved != null && !TextUtils.equals(resolved.getFlag(), playback.getVodFlag());
         if (resolved != null) playback.setVodFlag(resolved.getFlag());
         playback.setSourceBindingKey(stableFlagKey(flags, resolved));
         if (episode != null) playback.setEpisodeUrl(episode.getUrl());
+        // 换线路且新线路找不到该集时只清空旧 URL，避免落库成「新线路 + 旧 URL」的矛盾态。
+        // 这里刻意不清 vodRemarks：URL 是线路内身份，remarks 是跨线路的集号来源，
+        // matchesEpisode 在 URL 失配后会退化到 matchesNumber 用它比对，清掉反而丢掉唯一的集号线索。
+        else if (routeChanged) playback.setEpisodeUrl("");
     }
 
     private static String stableFlagKey(List<Flag> flags, Flag target) {

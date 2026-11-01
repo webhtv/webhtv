@@ -318,7 +318,7 @@ public class GlobalHistoryResumeSourceTest {
         int end = source.indexOf("private static History findPlaybackByTmdb", start);
         String method = source.substring(start, end);
 
-        assertTrue(method.contains("return copyForPlaybackKey(history, key, flags, history);"));
+        assertTrue(method.contains("History own = findPlaybackCandidate(key, Collections.singletonList(history), flags, expectedSeason);"));
         assertFalse(method.contains("if (isSeasonEligible(history, key, expectedSeason)) return history;"));
     }
 
