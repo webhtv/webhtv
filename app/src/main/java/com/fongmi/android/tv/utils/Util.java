@@ -253,7 +253,7 @@ public class Util {
         // 移除常见的画质、编码信息
         processed = processed
                 .replaceAll("(?i)(?<![a-z0-9])(?:2160|1080|720|480)p(?![a-z0-9])", " ")
-                .replaceAll("(?i)(?<![a-z0-9])(?:4K|2K|HD|SD|FHD|UHD)(?![a-z0-9])", " ")
+                .replaceAll("(?i)(?<![a-z0-9])(?:4K|8K|2K|UHD|FHD|HDR|SDR|HD|HQ|SD|DV)(?:[\\s._-]?(?:4K|8K|2K|UHD|FHD|HDR|SDR|HD|HQ|SD|DV))*(?![a-z0-9])", " ")
                 .replaceAll("\\b(?:x264|x265|H264|H265|AVC|HEVC)\\b", " ")
                 .replaceAll("\\b(?:AAC|AC3|DTS|FLAC)\\b", " ")
                 .replaceAll("\\b(?:WEB[-._\\s]*DL|BluRay|BDRip|REMUX|HDTV)\\b", " ");

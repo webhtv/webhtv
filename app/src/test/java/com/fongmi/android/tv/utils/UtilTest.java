@@ -133,6 +133,19 @@ public class UtilTest {
     }
 
     @Test
+    public void getNumber_stripsGluedQualityTokens() {
+        // 粘连的画质标记（如 4KHQHDR）应被整体剥离，前置集号不能被吞掉
+        assertEquals(1, Util.getEpisodeNumber("01 4KHQHDR(4.5 GB)"));
+        assertEquals(2, Util.getEpisodeNumber("02 4KHQHDR(4.73 GB)"));
+        assertEquals(3, Util.getEpisodeNumber("03 4KHQHDR(4.53 GB)"));
+        assertEquals(4, Util.getEpisodeNumber("04 4KHQHDR(4.8 GB)"));
+        assertEquals(1, Util.getEpisodeNumber("01 4K HDR(4.5 GB)"));
+        assertEquals(12, Util.getEpisodeNumber("12 8KHQHDR(1.2 GB)"));
+        assertEquals(5, Util.getEpisodeNumber("05 HQHDR"));
+        assertEquals(7, Util.getEpisodeNumber("07 4KHQHDR"));
+    }
+
+    @Test
     public void getNumber_parsesSeasonEpisodeSuffixWithoutConcatenating() {
         assertEquals(1, Util.getEpisodeNumber("一人之下6_01"));
         assertEquals(20, Util.getEpisodeNumber("一人之下6_20.mp4"));
