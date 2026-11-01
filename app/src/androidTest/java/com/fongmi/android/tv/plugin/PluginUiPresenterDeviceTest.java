@@ -11,6 +11,7 @@ import android.widget.TextView;
 
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.fongmi.android.tv.ui.activity.AppBrandingActivity;
 
@@ -38,6 +39,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @RunWith(AndroidJUnit4.class)
 public class PluginUiPresenterDeviceTest {
 
+    private static final String PROBE_PLUGIN_ID = "probe.plugin";
+
     private ActivityScenario<AppBrandingActivity> scenario;
     private PluginUiPresenter presenter;
 
@@ -47,14 +50,24 @@ public class PluginUiPresenterDeviceTest {
         presenter = new PluginUiPresenter();
     }
 
+    /**
+     * 摘控件必须回到主线程。
+     *
+     * <p>{@code detach} 走的是 {@code ViewGroup.removeView}，错误线程调用时 {@code ViewRootImpl}
+     * 的 {@code checkThread} 会抛 {@code CalledFromWrongThreadException}；而此前这一行能过只是
+     * 因为摘除发生在 {@code ViewRootImpl} 已挂上窗口的时机之外，是竞态而非安全。本类每个用例都
+     * 会 attach 一个真实控件，不能靠时机赌。
+     */
     @After
     public void tearDown() {
-        if (presenter != null) presenter.detach();
+        if (presenter != null) {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> presenter.detach());
+        }
         if (scenario != null) scenario.close();
     }
 
     private static PluginHost.PluginSlot slot(String type, String action) {
-        return new PluginHost.PluginSlot("probe.plugin",
+        return new PluginHost.PluginSlot(PROBE_PLUGIN_ID,
                 new PluginManifest.UiSlot(type, "探测", action, null, null));
     }
 
@@ -157,11 +170,20 @@ public class PluginUiPresenterDeviceTest {
         });
     }
 
+    /**
+     * 只找本用例自己挂的那一个控件。
+     *
+     * <p>不能按 {@code TAG_PREFIX} 前缀匹配：宿主 resume 时 {@code PluginController} 会用它
+     * 自己的 {@link PluginUiPresenter} 把已装载插件的槽位也挂到同一个 decorView 上（内置的
+     * {@code douban.comments} 就是这样），前缀匹配会先命中别人的「豆瓣」控件，让断言
+     * {@code expected:<探测> but was:<豆瓣>} 变成一条与本节逻辑无关的红。
+     */
     private static View findTagged(ViewGroup root) {
+        String prefix = PluginUiPresenter.TAG_PREFIX + PROBE_PLUGIN_ID + ":";
         for (int i = 0; i < root.getChildCount(); i++) {
             View child = root.getChildAt(i);
             Object tag = child.getTag();
-            if (tag instanceof String text && text.startsWith(PluginUiPresenter.TAG_PREFIX)) return child;
+            if (tag instanceof String text && text.startsWith(prefix)) return child;
             if (child instanceof ViewGroup group) {
                 View nested = findTagged(group);
                 if (nested != null) return nested;

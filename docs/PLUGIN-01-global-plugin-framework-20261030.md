@@ -1398,3 +1398,102 @@ P5 的真机测试也没抓到，因为它们都走 `PluginController.dispatchSl
 2. `py` / `html` 运行时（`PluginRuntimeFactory` 目前只造 JS）与 `page` 槽位。
 3. 面板 chip 连点叠窗口的复用一个（`findFragmentByTag` 分支）。
 4. 电视端面板遥控器可达性的**人工**验收：焦点环可辨识度、WebView 内滚动。
+## 21. P8：内置样本自动登记
+
+§17.9 起一直挂着一条没有人问出口的缺口：仓库里有两个示例插件（`assets/plugin/example`、`assets/plugin/douban`），但它们**从未出现在任何设备的插件列表里**。用户装上 APK、进详情页，看不到「豆瓣」入口，只能自己去插件管理页手动导入一个目录。本切片的完成句是：全新安装后不做任何操作，详情页就能看到「豆瓣」入口并且能用。
+
+### 21.1 为什么必须新写一个类，而不是让导入器接受 `assets://`
+
+最省事的想法是放宽 `PluginPackageImporter`，让它认识资产路径。取证否掉了这条路：
+
+- `PluginPackageImporter.resolveEntry`（`app/src/main/java/com/fongmi/android/tv/plugin/PluginPackageImporter.java:252-268`）里 `:257` 是 `if (entry.contains("://")) throw new IllegalArgumentException("入口不支持协议前缀：" + rawEntry);`。这不是疏漏而是边界：导入器把用户选的目录**复制进** `files/plugins/<id>`，清单里的入口必须是包内相对路径，写成 `assets://` 的设备上永远读不到。两个示例清单的 `runtime.entry` 恰恰都是 `assets://plugin/douban/douban.js` 这种形态（`app/src/main/assets/plugin/douban/manifest.json:7`）。
+- 换个方向（内置登记只写配置、不复制文件）也不行：`PluginSourceConfig.toManifests()`（`:201-216`）是 `Path.read(new File(entry.directory(), MANIFEST_NAME))`，直接把 `assets://` 当目录拼路径。
+- 于是唯一自洽的形状是：**复制一次 + 改写入口**，与导入器落盘后的结果保持同一形态。这正是 `PluginSampleInstaller` 做的事（250 行），而导入器一行未改。
+
+### 21.2 交付物
+
+| 文件 | 行数 | 作用 |
+| --- | --- | --- |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginSampleInstaller.java` | 250（新建） | 首次启动把内置样本复制进 `files/plugins/<id>`、改写入口、登记 |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginBootstrap.java` | +9/−1 | `installAndReloadQuietly()` 首行接 `seedOnce()` |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginController.java` | +34/−2 | `detachOnMainThread()`：`reset()` / `onActivityDestroyed()` 的视图摘除回主线程（§21.5） |
+| `app/src/test/java/com/fongmi/android/tv/plugin/PluginSampleInstallerTest.java` | 227（新建，6 用例） | 首次登记 / 二次跳过 / 用户删除不复活 / 已登记不覆盖 / 空资产 / 坏清单 |
+| `app/src/androidTest/java/com/fongmi/android/tv/plugin/PluginSampleInstallerDeviceTest.java` | 127（新建，2 用例） | 真机：真资产能读、能改写成绝对路径、能被装载成 host 里的槽位 |
+| `app/src/androidTest/java/com/fongmi/android/tv/plugin/PluginUiPresenterDeviceTest.java` | +25/−3 | `tearDown` 的 `detach` 回主线程（§21.5） |
+
+### 21.3 记账存修订号，不存布尔值
+
+`KEY_SEEDED = "plugin_sample_seed_revision"`（`PluginSampleInstaller.java:42`），`SEED_REVISION = 1`（:51）。存 `int` 而不是 `boolean` 的理由写在同一行 javadoc：将来换样本／加样本时把常量 +1，老设备会**再走一次**登记；布尔值一旦写死，已经装过的设备永远拿不到新样本，而这类设备无法通过「重装」修复。
+
+`seedOnce()`（:116-142）的形状是「全成或全不成」：`revision >= SEED_REVISION` 直接返 0；否则逐条 `seed()`，只要有一条返回 −1 就把 `settled` 置假，**不记账**。代价是下次启动会把成功的那些再算一遍——这没有害处，因为 `seed()` 的第二道闸是 `config.find(id) != null` 就返回 0，重复执行天然幂等。
+
+### 21.4 两条失败语义的分界（首跑 1 红，裁定是改测试不改实现）
+
+`seed()`（:149-190）返回三态：`1` 本次新登记 / `0` 无需处理 / `−1` 失败。分界线不是「有没有出错」，而是**下次启动重试有没有意义**：
+
+- 清单读成空串 → `0`。`Asset.read`（`catvod/src/main/java/com/github/catvod/utils/Asset.java:17-23`）对缺失文件返回空串，资产内容又随版本固定，重试永远是同一个空串。这里记 `0` 而不是 `−1`，否则样本一旦被裁掉，每次启动都要白读一遍资产并永远不记账。
+- 清单非法、id 不安全、脚本空或超过 `PluginScriptSource.MAX_SCRIPT_BYTES`（512 KiB）、`mkdirs` / 写文件 / 改写失败 → `−1`，不记账，下次还有机会。整体再套 `catch (Throwable)` 返 `−1`（:187-189）。
+- 已登记（`config.find(id) != null`）→ `0`，**一行都不覆盖**（:162）。这一条覆盖两种真实情形：用户自己导入过同 id 的插件，或者上一条样本刚种下。
+
+首跑真的红过一次，而且红得有信息量：`missingAssetKeepsTheRevisionUnadvanced` 断言 `assertEquals(0, store.revision())` 但拿到 `1`。**裁定是改测试、不改实现**——把用例改名为 `missingAssetIsSettledInsteadOfRetriedForever`、断言改成 `assertEquals(PluginSampleInstaller.SEED_REVISION, store.revision())`，并用同一口径重写 :152-154 的注释。理由是上面那条：资产读空分不出「样本不在本包里（永久）」与「读失败（瞬时）」，而前者是唯一会发生的形态。
+
+### 21.5 一个被样本照出来的既有缺陷：`reset()` 在后台线程摘视图
+
+本切片没有改任何渲染代码，但 leanback 真机全量跑出了一个**稳定崩溃**，把它连带修了。故障形态很迷惑：`PluginPanelLeanbackFocusDeviceTest#closingPanelReturnsFocusToEntryOnLeanback` 单跑绿、整类跑必红、单选这一个方法又绿；失败节点是空的（进程被 instrumentation 中断），`logcat -b crash` 里只有两条与插件无关的 `DecorView` NPE（`ViewParent.getLayoutDirection()` on null / `View.getVisibility()` on null）。真凶藏在测试 XML 的 failure 里：
+
+```
+android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thread that created a view hierarchy can touch its views.
+  at android.view.ViewGroup.removeView(ViewGroup.java:5294)
+  at com.fongmi.android.tv.plugin.PluginUiPresenter.detach(PluginUiPresenter.java:123)
+  at com.fongmi.android.tv.plugin.PluginController.reset(PluginController.java:326)
+  at com.fongmi.android.tv.plugin.PluginPanelLeanbackFocusDeviceTest.tearDown(PluginPanelLeanbackFocusDeviceTest.java:121)
+```
+
+崩在 `tearDown`，所以只跑完 7 条就中断；单跑那个方法绿，是因为前面用例没留下已 attach 的 chip 时 `detach` 里的 `removeView` 一次都没真执行。两条 `DecorView` NPE 是它的**真机表现**而不是原因：错误线程 `removeView` 先改了 `ViewGroup.mChildren`，随后在 `requestLayout` 被 `ViewRootImpl.checkThread` 拦下，半成品留在树里，主线程下一次 measure/layout 就踩到 `null`。
+
+「attach 与 detach 都必须回主线程」这条不变量本来就写在 `PluginController.java` 的 javadoc 里，`renderCurrent()` 也守住了，但 `reset()` 与 `onActivityDestroyed()` 两处漏了。修法是新增 `detachOnMainThread()`（`PluginController.java:268-298`）：主线程直接调，否则 `handler.post(target::detach)`；**取不到 Handler 时宁可放弃**（控件留在将销毁的页面上）也不退化到错误线程（把半成品写进存活树）。投递捕获的是 `final` 局部 `target` 而不是字段或 `this`，因为 `reset()` 随后就把单例置空了。
+
+这也是纯 JVM 单测抓不到它的原因：单测里 `Looper` 是桩、`mainHandler()` 必返 `null`，走的正是那条「放弃」分支。同类缺陷在测试侧还有一处——`PluginUiPresenterDeviceTest.tearDown` 也直接调 `presenter.detach()`，本轮一并改成 `runOnMainSync`（此前能过只是时机凑巧，是竞态不是安全）。
+
+### 21.6 验证（全部本切片实跑真值）
+
+| 项 | 命令/装置 | 结果 |
+| --- | --- | --- |
+| 两变体编译 | `:app:compileMobileArm64_v8aDebugJavaWithJavac` + `compileLeanbackArm64_v8aDebugJavaWithJavac` | EXIT=0 |
+| JVM 单测 | `:app:testMobileArm64_v8aDebugUnitTest --tests 'com.fongmi.android.tv.plugin.*'` | 23 suites / **217 tests** / 0 failures / 0 errors / 0 skipped（含本切片新增 `PluginSampleInstallerTest` n=6） |
+| 真机 leanback | emulator-5556，`:app:connectedLeanbackArm64_v8aDebugAndroidTest`，package 过滤 | **28 tests / 0 failures / 0 errors / 0 skipped** |
+| 真机 mobile | emulator-5560，同命令 mobile 变体 | **28 tests / 0 failures / 0 errors / 3 skipped**（3 个 skip 全是 `PluginPanelLeanbackFocusDeviceTest` 的 `Assume.assumeTrue(Util.isLeanback())` 门控） |
+| 真机端到端 | `adb install` 后首启，`run-as` 查看落盘 | `files/plugins/douban.comments/{manifest.json, douban.js}`；`shared_prefs` 里 `plugin_sample_seed_revision = 1`，`plugin_source_config` 含 `douban.comments`、`enabled=true`；首页右下出现「豆瓣」浮标 |
+
+真机落盘的清单实际内容（`run-as cat` 原文，入口已被改写成绝对路径）：
+
+```json
+{"protocol":"webhtv-plugin","version":1,"id":"douban.comments","name":"豆瓣短评","sdk":1,
+"runtime":{"api":"js","entry":"/data/user/0/com.silent.android.webhtv/files/plugins/douban.comments/douban.js","timeout":20},
+"params":{"count":20},"events":["ui.contentShown"],
+"ui":[{"slot":"panel","label":"豆瓣","action":"douban.comments","event":"ui.contentShown"}],
+"permissions":["plugin.events","plugin.data.episode","net.request","ui.panel"]}
+```
+
+逐类分布（两端一致）：`PluginEndToEndDeviceTest` 2 / `PluginPanelAndContextDeviceTest` 3 / `PluginPanelLeanbackFocusDeviceTest` 3（mobile 上 skip 3）/ `PluginParamsNetDeviceTest` 4 / `PluginSampleInstallerDeviceTest` 2 / `PluginUiPresenterDeviceTest` 7 / `QuickJsRuntimeDeviceTest` 7。
+
+### 21.7 三处后端抽象都为「JVM 单测能不能跑」而存在
+
+`Store`（:61-66）与 `Source`（:74-77）都是包内可见接口，真机实现分别是 `Prefers.getInt/put`（:79-99，读写各套 `catch (Throwable)`）与 `Asset::read`（:109）。理由与 P7 的 `PluginAuditStore.Sink` 同源：`Prefers` 与 `Asset` 都依赖 `Init.context()`，JVM 单测里没有 `Context`。第三处是既有的 `PluginPackageImporter.overrideRootForTest`，测试把 `pluginsRoot` 指到 tempdir。`useBackendsForTest(Store, Source)`（:246-249）传 `null` 恢复真机实现，不扩大公开面。
+
+### 21.8 接线点为什么在 `PluginBootstrap` 而不在 `App`
+
+`PluginBootstrap.installAndReloadQuietly()` 有四条调用路径：`App.java:152`（`Task.execute`，后台线程）与 `PluginManagerActivity.java:151/:254/:295`（`mWorker` 单线程执行器）。放在 `App` 里会漏掉后三条——用户在管理页点「重新加载」时样本不会被补种。放进 `installAndReloadQuietly` 首行则四处一致，多出的代价只是两次调用之间一次 `Prefers.getInt`。
+
+### 21.9 已知边界
+
+- **升级不覆盖用户改动**：`config.find(id) != null` 就返回 0，包括用户改过的样本。想让老设备换新样本，把 `SEED_REVISION` 加一并接受「已存在就不动」这个更强的前置条件。
+- **只登记 `douban`，不登记 `example`**（`SAMPLES` :53）。`example` 是 `floating` 槽的最小样本，会给每个用户多挂一个没有用途的浮标。
+- **样本落在 `files/plugins/<id>`，与手动导入同位置**：用户手动删除目录并移除登记后不会被复活（`sampleDeletedByTheUserIsNotResurrected` 用例锁住了这条），但**只有删目录不删登记**时，下次启动会因为 `find(id) != null` 而跳过，插件表现为「列表里有、加载不出」。
+- **`panel` 槽位在所有页面都渲染**是既有规则（P8 未改），所以「豆瓣」浮标在首页也出现，而不只在详情页/播放页。这一点在手机端是显眼的，见 §21.10 第 1 条。
+- 真机端到端只做了「装得上、落得盘、挂得出控件」，**没有**在真机上点开豆瓣面板验内容（面板内容的真机验证在 §18.5 已做过，用的是探针插件）。
+
+### 21.10 下一步
+
+1. `panel` 槽位的显示条件：目前凡声明 `panel` 的插件在每个页面都渲染入口，而真正有意义的只有详情页与播放页（`plugin.data.episode` 的上下文也只在这两处存在）。要么按页面类型过滤，要么让清单声明适用页面。
+2. §20.9 遗留四条仍然有效：`net.request` 域名白名单重新评估、`py`/`html` 运行时与 `page` 槽位、面板 chip 连点叠窗口的复用（`findFragmentByTag` 分支）、电视端面板遥控器可达性人工验收。

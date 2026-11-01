@@ -64,8 +64,16 @@ public final class PluginBootstrap {
         }
     }
 
-    /** {@link #reloadAll()} 的安全封装：供 {@code App.onCreate} 与后台线程直接引用为 Runnable。 */
+    /**
+     * {@link #reloadAll()} 的安全封装：供 {@code App.onCreate} 与后台线程直接引用为 Runnable。
+     *
+     * <p>装载前先跑一次内置样本登记（{@link PluginSampleInstaller#seedOnce()}）：它自己
+     * 记修订号、任何失败都不抛，唯一的效果是"首次启动之后列表里就有内置样本"。
+     * 放在这里而不是 {@code App} 里，是因为导入插件包之后也走这条路径——用户刚导完包，
+     * 正好是补种样本最不会打扰他的时机，而两次调用之间只有一次 {@code Prefers.getInt}。
+     */
     public static void installAndReloadQuietly() {
+        PluginSampleInstaller.seedOnce();
         reloadAll();
     }
 

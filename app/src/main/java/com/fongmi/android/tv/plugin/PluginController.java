@@ -217,7 +217,7 @@ public final class PluginController {
     /** Activity 销毁：精确匹配本控制器持有的页面时清理控件并清空引用。 */
     public void onActivityDestroyed(Activity activity) {
         if (activity == null || activity != current) return;
-        presenter.detach();
+        detachOnMainThread();
         PluginEpisodeContext.clear(activity.getClass().getSimpleName());
         current = null;
     }
@@ -263,6 +263,38 @@ public final class PluginController {
             return;
         }
         presenter.attach(target, host.uiSlots(), isLeanback());
+    }
+
+    /**
+     * 把 {@code detach()} 收口到主线程：主线程同步执行，其余线程只投递，投递不出去就放弃。
+     *
+     * <p><b>为什么这不是「顺手加个守卫」，而是一条崩溃防线。</b>{@code detach()} 内部是
+     * {@code parent.removeView(view)}。在错误线程上调它并不是「抛一次异常、状态不变」：
+     * {@link android.view.ViewGroup} 会先改动自己的子视图数组、再走到
+     * {@code requestLayout()} 才被 {@code ViewRootImpl} 拦下，也就是说那次删除在异常抛出之前
+     * 已经把一个半成品状态留在了视图树里。真机上用户看到的不是这条异常，而是**主线程下一次
+     * measure/layout 时 DecorView 抛 {@code NullPointerException}**——栈里全是 framework 帧，
+     * 看不到任何插件代码，归因成本极高。
+     *
+     * <p><b>为什么取不到 Handler 时直接放弃而不退化成后台 removeView。</b>放弃的代价是控件留在
+     * 已经要销毁的页面上（页面本身随 Activity 一起消失）；退化的代价是把上面的半成品状态写进
+     * 仍存活的视图树。前者可接受，后者不可接受。JVM 单测下 {@code Looper} 是桩、
+     * {@link #mainHandler()} 必然返回 {@code null}，走的正是这条放弃分支——这也解释了为什么
+     * 纯 JVM 单测永远抓不到这个缺陷。
+     *
+     * <p>投递时捕获的是<b>投递那一刻的 final 局部引用</b>，不是字段、也不是 {@code this}：
+     * {@link #reset()} 在投递之后立刻把静态单例置空，捕获字段的 lambda 会在主线程上读到
+     * {@code null} 或读到另一个实例。
+     */
+    private void detachOnMainThread() {
+        PluginUiPresenter target = presenter;
+        if (isMainThread()) {
+            target.detach();
+            return;
+        }
+        Handler handler = mainHandler();
+        if (handler == null) return;
+        handler.post(target::detach);
     }
 
     /** 当前是否在主线程；{@code Looper} 在 JVM 单测下是桩，必须兜住。 */
@@ -323,7 +355,7 @@ public final class PluginController {
         synchronized (PluginController.class) {
             if (instance != null) {
                 instance.host.unloadAll();
-                instance.presenter.detach();
+                instance.detachOnMainThread();
                 instance.actions.shutdownNow();
                 instance = null;
             }
