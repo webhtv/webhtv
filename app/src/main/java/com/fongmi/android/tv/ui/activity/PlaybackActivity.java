@@ -209,6 +209,15 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
     protected abstract String getPlaybackKey();
 
+    /**
+     * Last known total duration for the current item. Engines that never publish
+     * a duration (EXO on some HLS/TS sources) leave the timeline at 0, so the
+     * seek view uses this while the engine still reports an unknown duration.
+     */
+    protected long getDurationFallbackMs() {
+        return C.TIME_UNSET;
+    }
+
     protected boolean deferPlaybackServiceBinding() {
         return false;
     }
@@ -721,6 +730,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             mController = mControllerFuture.get();
             getSeekView().setPlayer(mController);
             getSeekView().setSeekListener(this::onSeekStarted);
+            getSeekView().setDurationFallback(this::getDurationFallbackMs);
             onControllerReady(mController);
             mController.addListener(this);
             reconcileControllerReadyState();
@@ -1009,6 +1019,9 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         bound = false;
         if (mService != null) mService.removePlayerCallback(mPlayerCallback);
         getSeekView().setProgressPlayer(null);
+        // 页面解绑后引擎可能被别的页面接管，兜底必须跟着本页面一起撤掉，
+        // 否则别的播放会读到上一集的时长。
+        if (player() != null) player().setDurationFallback(null);
         unbindService(this);
         mService = null;
     }
@@ -1323,6 +1336,8 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
         mService.setNavigationCallback(getNavigationCallback(), activePlaybackKey());
         mService.addPlayerCallback(mPlayerCallback);
         getSeekView().setProgressPlayer(player().getPlayer());
+        // 引擎可能还没吐出总时长，展示层要能用本页记住的这一集时长先顶上。
+        player().setDurationFallback(this::getDurationFallbackMs);
         player().setLutAllowed(isLutAllowed());
         syncKeepScreenOn();
         player().setDanmakuForeground(true);
@@ -1338,6 +1353,7 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "service disconnected name=%s %s", name, lifecycleState());
         releaseController();
         getSeekView().setProgressPlayer(null);
+        if (player() != null) player().setDurationFallback(null);
         mService = null;
         preparedPlaybackKey = null;
     }

@@ -1487,6 +1487,16 @@ private boolean runtimeSourceOnly;
     }
 
     @Override
+    protected long getDurationFallbackMs() {
+        return mHistory == null ? C.TIME_UNSET : mHistory.getDuration();
+    }
+
+    private String getTimelineDurationTime() {
+        // 复用 PlayerManager 的兜底，避免同屏出现第二个兜底来源。
+        return player().getDurationTime();
+    }
+
+    @Override
     protected void onServiceConnected() {
         SpiderDebug.log("video-flow", "service ready sinceLaunch=%dms key=%s id=%s", getLaunchCost(System.currentTimeMillis()), getKey(), getId());
         player().setDanmakuController(mBinding.exo.getDanmakuController());
@@ -2169,6 +2179,10 @@ private boolean runtimeSourceOnly;
         }
         mPendingPlayerKernel = PlayerSetting.NONE;
         player().preparePlayer(kernel, forcePrepare);
+        // preparePlayer() 可能在 PlaySpec 建立前就重建引擎，此窗口内归属判假，
+        // PlaybackActivity.onPlayerRebuild() 整段跳过（其中含 setProgressPlayer），
+        // 进度条会继续读已释放的旧引擎、不再刷新进度，故这里显式跟上新引擎。
+        getSeekView().setProgressPlayer(player().getPlayer());
         setPlayerKernel();
         setDecode();
         return kernel;
@@ -2188,6 +2202,8 @@ private boolean runtimeSourceOnly;
         mPendingPlayerKernel = PlayerSetting.NONE;
         if (!PlayerSetting.isPlayer(kernel)) return;
         player().preparePlayer(kernel);
+        // 同上：服务就绪时补的内核重建同样早于 PlaySpec，重建回调被跳过。
+        getSeekView().setProgressPlayer(player().getPlayer());
     }
 
     /**
@@ -5695,7 +5711,7 @@ private boolean runtimeSourceOnly;
     private void showInfo() {
         showTopInfo();
         mBinding.widget.center.setVisibility(View.VISIBLE);
-        mBinding.widget.duration.setText(player().getDurationTime());
+        mBinding.widget.duration.setText(getTimelineDurationTime());
         mBinding.widget.position.setText(player().getPositionTime(0));
     }
 
@@ -8995,7 +9011,7 @@ private boolean runtimeSourceOnly;
     @Override
     public void onSeeking(long time) {
         mBinding.widget.center.setVisibility(View.VISIBLE);
-        mBinding.widget.duration.setText(player().getDurationTime());
+        mBinding.widget.duration.setText(getTimelineDurationTime());
         mBinding.widget.position.setText(player().getPositionTime(time));
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         hideProgress();
