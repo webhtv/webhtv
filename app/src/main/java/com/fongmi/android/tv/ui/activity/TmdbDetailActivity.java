@@ -11792,7 +11792,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     .setNegativeButton(android.R.string.cancel, (dialog, which) -> introSkipPlayback.declineConfirmation(segment))
                     .show();
             introSkipConfirmDialog.setOnDismissListener(dialog -> {
-                introSkipPlayback.cancelConfirmation(segment);
+                // 任何关闭（取消按钮、返回键、点击外部、换集收框）都要让本段本集内不再询问。
+                // 否则非主动拒绝的关闭只释放了租约却没写 skipped，下一帧进度回调会再次弹出同一个框。
+                if (!introSkipPlayback.isSegmentHandled(segment)) {
+                    introSkipPlayback.declineConfirmation(segment);
+                }
                 if (introSkipConfirmDialog == dialog) introSkipConfirmDialog = null;
             });
             return true;

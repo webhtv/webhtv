@@ -1665,7 +1665,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 .setNegativeButton(android.R.string.cancel, (dialog, which) -> mIntroSkipPlayback.declineConfirmation(segment))
                 .show();
             mIntroSkipConfirmDialog.setOnDismissListener(dialog -> {
-                mIntroSkipPlayback.cancelConfirmation(segment);
+                // 任何关闭（取消按钮、返回键、点击外部、换集收框）都要让本段本集内不再询问。
+                // 否则非主动拒绝的关闭只释放了租约却没写 skipped，下一帧进度回调会再次弹出同一个框。
+                if (!mIntroSkipPlayback.isSegmentHandled(segment)) {
+                    mIntroSkipPlayback.declineConfirmation(segment);
+                }
                 if (mIntroSkipConfirmDialog == dialog) mIntroSkipConfirmDialog = null;
             });
             return true;
