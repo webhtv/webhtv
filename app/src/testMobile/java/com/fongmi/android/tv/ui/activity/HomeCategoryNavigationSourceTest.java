@@ -262,7 +262,17 @@ public class HomeCategoryNavigationSourceTest {
         assertTrue("entering an inline category must re-evaluate the toolbar band", showCategory.contains("mFolder = target;\n        mCurrentType = item;\n        applyToolbarVisibility();"));
         assertTrue("returning to the home content must restore the requested toolbar band", showHome.contains("applyToolbarVisibility();"));
         assertTrue("clearing category content must restore the requested toolbar band", clearCategory.contains("applyToolbarVisibility();"));
-        assertTrue("a hidden toolbar must leave the category row its own top inset", inset.contains("webhtv_space_6"));
+        assertTrue(
+                "a scroll-driven hide inside a category page must not survive the trip back home",
+                showHome.indexOf("toolbarRequestedVisible = true;") >= 0
+                        && showHome.indexOf("toolbarRequestedVisible = true;") < showHome.indexOf("applyToolbarVisibility();"));
+        assertTrue(
+                "clearing category content must drop a scroll-driven hide as well",
+                clearCategory.indexOf("toolbarRequestedVisible = true;") >= 0
+                        && clearCategory.indexOf("toolbarRequestedVisible = true;") < clearCategory.indexOf("applyToolbarVisibility();"));
+        assertTrue(
+                "a hidden toolbar must leave the category row its own top inset, in pixels: setPadding takes pixels, so a dp value would shrink on higher densities",
+                inset.contains("getDimensionPixelSize(R.dimen.webhtv_space_6)") && !inset.contains("dpOf(R.dimen.webhtv_space_6)"));
     }
 
     private static String homeActivity() throws Exception {
