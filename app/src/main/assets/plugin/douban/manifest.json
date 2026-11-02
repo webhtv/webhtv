@@ -12,7 +12,8 @@
       "slot": "panel",
       "label": "豆瓣",
       "action": "douban.comments",
-      "event": "ui.contentShown"
+      "event": "ui.contentShown",
+      "surfaces": ["detail", "playback"]
     }
   ],
   "permissions": ["plugin.events", "plugin.data.episode", "net.request", "ui.panel"]

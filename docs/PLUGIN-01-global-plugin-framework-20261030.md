@@ -1497,3 +1497,127 @@ android.view.ViewRootImpl$CalledFromWrongThreadException: Only the original thre
 
 1. `panel` 槽位的显示条件：目前凡声明 `panel` 的插件在每个页面都渲染入口，而真正有意义的只有详情页与播放页（`plugin.data.episode` 的上下文也只在这两处存在）。要么按页面类型过滤，要么让清单声明适用页面。
 2. §20.9 遗留四条仍然有效：`net.request` 域名白名单重新评估、`py`/`html` 运行时与 `page` 槽位、面板 chip 连点叠窗口的复用（`findFragmentByTag` 分支）、电视端面板遥控器可达性人工验收。
+
+## 22. P9：槽位按页面绑定 + chip 拖动记忆
+
+### 22.1 需求与三条裁定
+
+用户原话（m05093）：
+
+> 能否支持拖动未知，还有插件的显示最好是能绑定页面比如这个豆瓣插件只有详情页和播放页生效那么默认应该就只在详情页和播放页才显示首页等地方不应该出来
+
+这是两件事：**(A)** chip 可以被拖动；**(B)** 槽位能声明它只在哪些页面生效。三个决策点按 G3 提问、用户全部选了推荐项：
+
+| 编号 | 决策 | 裁定 | 理由与已知代价 |
+| --- | --- | --- | --- |
+| R1 | surfaces 怎么声明 | **清单新增 `surfaces` 字段，不写＝全页显示** | 值域 `home` / `detail` / `playback` / `other`，由宿主按 Activity 类型推导；douban 显式写 `["detail","playback"]`。代价：插件作者多一个可选字段要理解 |
+| R2 | 拖动做到什么程度 | **手机端可拖 + 松手贴边吸附 + 按插件记忆** | 位移超过 touchSlop 才算拖动，否则仍是一次点击；落点存 `Prefers`，跨页面、跨重启保持。**电视端不拖**——遥控器没有拖动语义，硬加会破坏 P6 建立的焦点环契约 |
+| R3 | 已种下的旧样本怎么办 | **自动刷新宿主自己种的，用户手动导入的包不碰** | `SEED_REVISION` 1→2，让存量设备跟上清单新增的 `surfaces`。代价：用户手工改过内置样本的脚本会被覆盖 |
+
+### 22.2 交付物表
+
+| 文件 | 行数 | 变化 | 内容 |
+| --- | --- | --- | --- |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginSurface.java` | 88 | 新建 | 页面类型推导 `of(Activity)` + 声明比对 `matches(Set,String)` |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginUiPresenter.java` | 655 | +308/−1 | 按页面过滤 + 拖动/吸附/记忆 |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginManifest.java` | 379 | +49/−2 | `UiSlot` 新增 `surfaces` 分量 + 5 参便捷构造器 |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginSampleInstaller.java` | 304 | +64/−10 | `SEED_REVISION`=2、刷新分支、不复活判定 |
+| `app/src/main/assets/plugin/douban/manifest.json` | 20 | +2/−1 | `surfaces:["detail","playback"]` |
+| `app/src/main/assets/plugin/README.md` | 175 | +22 | §5 新增 surfaces 三行表 + 上限说明 + 示例 |
+| `app/src/test/java/com/fongmi/android/tv/plugin/PluginUiPresenterTest.java` | 124 | +49 | 6 条页面判定用例 |
+| `app/src/test/java/com/fongmi/android/tv/plugin/PluginManifestTest.java` | 249 | +50 | 4 条 surfaces 解析用例 |
+| `app/src/test/java/com/fongmi/android/tv/plugin/PluginSampleInstallerTest.java` | 340 | +116/−3 | 6 条升级/不复活用例 |
+| `app/src/androidTest/java/com/fongmi/android/tv/plugin/PluginUiPresenterDragAndSurfaceDeviceTest.java` | 400 | 新建 | 4 条真机用例（3 条页面判定 + 1 条拖动记忆） |
+
+### 22.3 页面绑定：为什么由宿主推导页面类型
+
+`PluginSurface.of(Activity)` 只读类的形状，不碰 `Context`，判定顺序**不能换**：
+
+```
+name.contains("Detail")           -> detail    // 必须先判
+activity instanceof PlaybackActivity -> playback // 后判
+name.startsWith("Home")           -> home
+其余                                -> other
+```
+
+顺序就是正确性：`TmdbDetailActivity extends PlaybackActivity`（`app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java:284`），先判 `instanceof PlaybackActivity` 会把所有详情页吞成 playback，豆瓣在详情页的声明就永久失配。类名判据用的是 `getSimpleName()` 含 `Detail`，因此 `TmdbDetailActivity` 与 `WebThemeDetailActivity`（`extends BaseActivity`）都归 detail。
+
+让插件自己上报页面名会被拒绝：插件看不到宿主页面栈，上报值必然靠猜，猜错的表现是「插件在某些页面突然消失」，比多一个可选字段难查得多。
+
+`matches` 的两条兜底是这一层的命门：
+
+- `surfaces == null || surfaces.isEmpty()` → `true`。不写字段的旧插件必须继续全页显示，否则 P8 之前导入的所有包会集体消失。
+- 匹配过程抛异常 → **也返回 true**。宁可多一个入口，也不因为一次异常让插件静默消失。
+
+过滤点在 `attach` 里、`decorOf` 与 `toolbarContainer` 之前：被过滤掉的槽位连控件都不建，因此 `attachedCount()` 天然不计入（真机用例 `declaredSurfaceSlotIsSkippedOnTheCurrentPage` 正是这么断言的）。`countRenderable` 一个字未改——它数的是「这个槽位类型能不能渲染」，和「当前页面该不该显示」是两件事。
+
+清单侧不做白名单校验：宿主不认识的值（如插件自己发明的 `"player"`）天然永不匹配，未来宿主扩展值域时也不必回头改校验表。上限 `MAX_SURFACES=8`、`MAX_SURFACE_LENGTH=16`，解析时统一 `toLowerCase(Locale.ROOT)` 去重。
+
+### 22.4 拖动：为什么落在 PluginUiPresenter 而不是造新控件
+
+拖动状态挂在控件自己的 `OnTouchListener` 上，用一次性 `DragState` 承载一次手势的中间量，不进类字段——`detach()` 之后没有任何残留状态需要清理。
+
+三个容易写错的地方，都有注释钉住：
+
+1. **`setOnClickListener` 不能置 null**。拖动实现里重设监听而不是清空监听，因为清空之后 chip 拖过一次就再也打不开面板。改成 `setOnClickListener(view -> { if (drag.consumeClick()) return; dispatch(entry, view); })`，`consumeClick()` 读完即复位，所以「拖完立刻点」仍然能开面板。
+2. **`setLayoutParams` 不会同步刷新 `view.getLeft()`**。`applyDrag` 末尾必须自己把 `drag.lastLeft`/`drag.lastTop` 记成新 margin，否则抬手时 `snap` 读到的是上一次绘制位置，吸附方向会算反。
+3. **父容器会抢触摸**。越过 touchSlop 后立刻 `requestDisallowInterceptTouchEvent(true)`，抬手或取消时再放回去，包 try/catch。
+
+吸附只看横向半边：`boolean atEnd = (drag.lastLeft + chipWidth / 2) * 2 >= parentWidth;`——中心过了中线就贴右，否则贴左。纵向保留比例、clamp 到 `[VERTICAL_INSET_DP, parentHeight - inset]`。写入格式 `("start"|"end") + ":" + String.format(Locale.US, "%.4f", center / parentHeight)`，键是 `plugin_chip_pos:<pluginId>:<action>`——同一插件不同槽位各自记位置，不互相覆盖。
+
+`readPosition`/`writePosition` 都包 `catch(Throwable)`：`Prefers` 只 catch `Exception`，而纯 JVM 单测里没有 `Init.context()`，静态初始化抛的是 `Error`。这是 P8 已经踩过的坑，这里直接按 Throwable 兜。
+
+电视端（`leanback == true`）整段拖动代码不执行：`if (!leanback) { restorePosition(...); ... }`，`addFocusableFloating` 保持 P6 的焦点环与 `requestFocus` 行为不变。
+
+### 22.5 样本升级到修订 2，以及被打破的 P8 契约
+
+P9 改了内置样本的清单，存量设备上的 `files/plugins/douban.comments` 仍是没有 `surfaces` 的旧副本，必须能自愈。`SEED_REVISION` 从 1 提到 2，但**只刷新宿主自己种的副本**：
+
+```
+existing != null && !isOwnedCopy(existing, id)  -> 0  // 用户手动导入的同 id 包，一行都不碰
+existing != null && !目录存在                  -> 0  // 僵尸条目不重建目录
+existing == null && !firstRun                  -> 0  // 种过之后删掉了，不许复活
+```
+
+第三条是这一轮最重要的修正。P8 已经把「用户删掉内置样本后不复活」写进契约（用例 `sampleDeletedByTheUserIsNotResurrected`），而修订号 1→2 时 `config.find(id) == null` 会走全新建分支，把用户删掉的样本重新种回来——**升级路径打破了 P8 的承诺**。修法是把「首次登记」与「升级刷新」当成两件事，唯一的事实是记账修订号是不是 0：
+
+```
+boolean firstRun = revision == 0;   // 从没种过，才允许新建
+```
+
+`isOwnedCopy` 用双端 `getCanonicalFile().equals(...)` 比较 `PluginPackageImporter.pluginsRoot()+id` 与条目里记的 `directory()`，因此路径写法不同（`//`、无尾斜杠）也认得出来。刷新时保留 `enabled` 与 `importedAt`——用户手动停用过的插件不能因为升级被重新打开。
+
+### 22.6 验证
+
+| 项 | 结果 |
+| --- | --- |
+| 四变体编译（mobile/leanback × main/androidTest） | EXIT=0 |
+| plugin JVM 单测 | **23 suites / 233 tests / 0 failures / 0 errors / 0 skipped** |
+| 真机 mobile（emulator-5560） | tests=32 failures=0 errors=0 **skipped=3** |
+| 真机 leanback（emulator-5560） | tests=32 failures=0 errors=0 **skipped=1** |
+
+跳过全部来自 `Assume` 门控，不是失败：mobile 变体上 `PluginPanelLeanbackFocusDeviceTest` 3 条（电视专属）与 `dragMovesTheChipSnapsToASideAndIsRestoredOnNextAttach` 真的跑了；leanback 变体上 `PluginPanelLeanbackFocusDeviceTest` 3 条真跑，只有拖动那条按 R2 裁定跳过。
+
+单测从 P8 的 217 涨到 233（+16）：`PluginUiPresenterTest` +6、`PluginManifestTest` +4、`PluginSampleInstallerTest` +6。
+
+真机端到端取证（emulator-5560，mobile 变体，`adb root` 后 `am start` 直达非 exported 页面）：
+
+1. 装包后 `run-as com.silent.android.webhtv cat files/plugins/douban.comments/manifest.json` 的 `ui[0]` 已含 `"surfaces":["detail","playback"]`，prefs 里 `plugin_sample_seed_revision = 2` → 升级刷新生效。
+2. 首页 uiautomator dump：**没有「豆瓣」节点**（clickable 7 个，全是宿主自己的按钮）→ 页面过滤生效。
+3. 详情页 dump：`<node text="豆瓣" clickable="true" bounds="[1800,847][1892,912]" />`（屏幕 1920x1080）→ 声明为 detail 的槽位在该页出现。
+4. `input swipe 1846 879 320 500 800` 后节点变 `bounds="[28,478][120,543]"`，prefs 出现 `plugin_chip_pos:douban.comments:douban.comments = start:0.4722` → 拖动改写落点并落盘。
+5. BACK 回首页（仍无「豆瓣」）→ 再次进入详情页 → 节点仍是 `[28,478][120,543]` → 记忆跨页面、跨进程重启都成立。
+
+### 22.7 已知边界
+
+1. `restorePosition` 与拖动用的是两份父容器高度：复原时 `decor.getHeight()` 常在首次布局前还是 0，回落到屏幕高度；拖动时拿的是真实高度。同一次会话内不漂移（写入用当次真实值），但在「窗口高度与屏幕高度不一致」的设备上首次复原可能与最终落点差几个像素。
+2. 手机端 panel 槽位复用 `addFloating`，因此**也继承拖动与记忆**。这是 R2「手机端所有浮标可拖」规格的必然结果，不是遗留缺陷；电视端 panel 走 `addToolbarChip` / `addFocusableFloating`，不受影响。
+3. `PluginSurface.of` 靠类名与继承关系判断，插件无法声明「只在某个具体 Activity 上出现」这种更细的粒度。当前值域四个够用，真需要更细时再加一层 `anchor`（该字段至今全仓零消费方）。
+4. 电视端 chip 位置仍固定（`END|BOTTOM` 或控制条内），焦点环可辨识度仍需人工在真电视盒子上验收（P6 遗留）。
+
+### 22.8 下一步
+
+1. `net.request` 域名白名单重新评估：审计已落盘（P7），D2 当时的取舍前提已变。
+2. py/html 运行时与 `page` 槽位——`page` 至今在 `PluginUiPresenter` 里被静默忽略。
+3. 面板 chip 连点叠窗口：`PluginPanelDialog.show` 缺 `findFragmentByTag` 复用分支（`TmdbVideoPlayerDialog.show` 有），属 HEAD 上既有缺陷。
+4. 电视端面板遥控器可达性人工验收。

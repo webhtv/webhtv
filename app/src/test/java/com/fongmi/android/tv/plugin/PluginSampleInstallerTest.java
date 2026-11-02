@@ -21,9 +21,10 @@ import java.util.Map;
 /**
  * 内置样本登记测试。
  *
- * <p>覆盖四件事：**首次启动真的把资产落盘并登记**（含清单 entry 被改写成绝对路径）、
- * **只做一次**（第二次启动不再碰盘）、**用户删掉之后不复活**、以及**已经存在的条目
- * 一行都不覆盖**。另外两条是失败路径：资产缺失与清单非法都不能记账——否则下一次启动
+ * <p>覆盖五件事：**首次启动真的把资产落盘并登记**（含清单 entry 被改写成绝对路径）、
+ * **同一修订号下只做一次**（第二次启动不再碰盘）、**用户删掉之后不复活**、**修订号前进时
+ * 只刷新宿主自己种下的那一份**（启用状态与导入时间沿用旧值）、以及**用户自己导入的同 id
+ * 包一行都不覆盖**。另外两条是失败路径：资产缺失与清单非法都不能记账——否则下一次启动
  * 就没有机会补上。
  *
  * <p>三个后端都注入内存实现：{@code Prefers} / {@code Asset} / {@code Path.files()} 在
@@ -164,6 +165,118 @@ public class PluginSampleInstallerTest {
         assertEquals(0, PluginSampleInstaller.seedOnce());
         assertEquals(0, store.revision());
         assertNull(config.find("douban.comments"));
+    }
+
+    @Test
+    public void revisionBumpRefreshesTheOwnedCopyInPlace() throws Exception {
+        // 造一台"已经种过修订号 1 的旧设备"：目录在 plugins/douban.comments，脚本是旧内容，
+        // 条目被用户关掉了，记账停在 0。
+        File owned = new File(pluginsRoot, "douban.comments");
+        assertTrue(owned.mkdirs());
+        File script = new File(owned, "douban.js");
+        Files.writeString(script.toPath(), "OLD SCRIPT");
+        config.put(new PluginSourceConfig.Entry("douban.comments", "豆瓣短评", "0.9", "py",
+                owned.getAbsolutePath(), false, 123L));
+        config.save();
+        store.mark(0);
+
+        assertEquals("刷新也算本类做的事，返回值必须有别于不动", 1, PluginSampleInstaller.seedOnce());
+
+        PluginSourceConfig.Entry entry = config.find("douban.comments");
+        assertEquals("新样本的元信息必须覆盖旧的", "js", entry.runtimeApi());
+        assertEquals("脚本内容必须被换成新资产", SCRIPT, Files.readString(script.toPath()));
+        assertFalse("用户关掉的插件不能被升级偷偷重新打开", entry.enabled());
+        assertEquals("刷新不是重新导入，导入时间沿用旧值", 123L, entry.importedAt());
+        String manifestText = Files.readString(new File(owned, "manifest.json").toPath());
+        assertEquals("清单也要重写成脚本绝对路径", script.getAbsolutePath(),
+                JsonParser.parseString(manifestText).getAsJsonObject()
+                        .getAsJsonObject("runtime").get("entry").getAsString());
+    }
+
+    @Test
+    public void refreshIsNotRepeatedWithinTheSameRevision() throws Exception {
+        PluginSampleInstaller.seedOnce();
+        File script = new File(config.find("douban.comments").directory(), "douban.js");
+        Files.writeString(script.toPath(), "TAMPERED");
+
+        assertEquals("刷新完就记账，同一修订号下不再动盘", 0, PluginSampleInstaller.seedOnce());
+        assertEquals(PluginSampleInstaller.SEED_REVISION, store.revision());
+        assertEquals("TAMPERED", Files.readString(script.toPath()));
+    }
+
+    @Test
+    public void deletedSampleIsNotResurrectedByARevisionBump() throws Exception {
+        // 用户已经删掉了内置样本：目录与条目都不在，只剩记账停在旧修订号。
+        store.mark(1);
+
+        assertEquals("升级不是首次装机，没有可刷新的对象就什么都不建",
+                0, PluginSampleInstaller.seedOnce());
+        assertFalse("用户删掉的样本不能因为修订号前进而复活",
+                new File(pluginsRoot, "douban.comments").exists());
+        assertNull("也不该凭空造出一条配置", config.find("douban.comments"));
+        assertEquals("按已处理记账，否则每次启动都白试一遍",
+                PluginSampleInstaller.SEED_REVISION, store.revision());
+    }
+
+    @Test
+    public void ownedEntryWhoseDirectoryIsGoneIsNotRecreated() throws Exception {
+        // 僵尸条目：配置说装着，目录其实已被删掉。
+        File owned = new File(pluginsRoot, "douban.comments");
+        assertFalse(owned.exists());
+        config.put(new PluginSourceConfig.Entry("douban.comments", "豆瓣短评", "0.9", "py",
+                owned.getAbsolutePath(), false, 123L));
+        config.save();
+        store.mark(0);
+
+        assertEquals("目录不在时的刷新是空操作，落盘流程一步都不进",
+                0, PluginSampleInstaller.seedOnce());
+        assertFalse("刷新分支里的 mkdirs 不能把用户删掉的目录重新造出来", owned.exists());
+        PluginSourceConfig.Entry entry = config.find("douban.comments");
+        assertNotNull("僵尸条目归管理页清理，本类不越界删配置", entry);
+        assertEquals("豆瓣短评", entry.name());
+        assertEquals("0.9", entry.version());
+        assertEquals("py", entry.runtimeApi());
+        assertFalse(entry.enabled());
+        assertEquals(123L, entry.importedAt());
+    }
+
+    @Test
+    public void ownedDirectoryIsRecognisedThroughPathSpelling() throws Exception {
+        PluginSampleInstaller.seedOnce();
+        File owned = new File(config.find("douban.comments").directory());
+        // 配置是明文可改的，可能是别处写进来的等价拼法：多一段 "." 与一个尾斜杠。
+        String spelled = pluginsRoot.getAbsolutePath() + File.separator + "."
+                + File.separator + "douban.comments" + File.separator;
+        config.put(new PluginSourceConfig.Entry("douban.comments", "豆瓣短评", "1", "js",
+                spelled, true, 123L));
+        config.save();
+        store.mark(0);
+        Files.writeString(new File(owned, "douban.js").toPath(), "OLD SCRIPT");
+
+        assertEquals("等价拼法不能被当成'别人的目录'，否则升级永远不发生",
+                1, PluginSampleInstaller.seedOnce());
+        assertEquals(SCRIPT, Files.readString(new File(owned, "douban.js").toPath()));
+    }
+
+    @Test
+    public void foreignCopyWithTheSameIdIsLeftAlone() throws Exception {
+        File foreign = new File(root, "user-picked");
+        assertTrue(foreign.mkdirs());
+        File foreignScript = new File(foreign, "douban.js");
+        Files.writeString(foreignScript.toPath(), "USER SCRIPT");
+        config.put(new PluginSourceConfig.Entry("douban.comments", "用户自己的", "9", "js",
+                foreign.getAbsolutePath(), true, 456L));
+        config.save();
+
+        assertEquals("用户自己导入的同 id 包不归本类管", 0, PluginSampleInstaller.seedOnce());
+
+        assertEquals("USER SCRIPT", Files.readString(foreignScript.toPath()));
+        assertFalse("连清单都不该被写进去", new File(foreign, "manifest.json").exists());
+        assertFalse("也不该在插件根目录下另种一份", new File(pluginsRoot, "douban.comments").exists());
+        PluginSourceConfig.Entry entry = config.find("douban.comments");
+        assertEquals("用户自己的", entry.name());
+        assertEquals(456L, entry.importedAt());
+        assertTrue(entry.enabled());
     }
 
     private static void delete(File file) {

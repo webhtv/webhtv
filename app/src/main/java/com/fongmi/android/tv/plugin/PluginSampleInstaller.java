@@ -27,16 +27,27 @@ import java.util.List;
  * 一个能直接读的路径。这里做的事相同但来源不同：读资产、落盘、把清单 {@code runtime.entry}
  * 改写成脚本绝对路径，登记到配置里。
  *
- * <p><b>为什么只做一次。</b>登记过就打修订号。用户删掉这个插件（管理页删除会连目录带
- * 条目一起清）之后不该在下次启动时"复活"——那不是内置推荐，是删不掉的东西。
+ * <p><b>为什么只在修订号前进时才动。</b>登记过就打修订号：同一修订号下第二次启动什么都不做，
+ * 用户删掉这个插件（管理页删除会连目录带条目一起清）之后也不该在下次启动时"复活"——那不是
+ * 内置推荐，是删不掉的东西。修订号前进时只刷新宿主自己种下的那一份（判据见
+ * {@link #isOwnedCopy}），用户手动导入的包一个字节都不碰；而且只刷新目录仍然存在的那一份——
+ * 升级绝不复活用户已经删掉的样本。
  *
  * <p><b>为什么任何失败都不抛。</b>调用点在 {@code App.onCreate} 投递的后台任务与插件
  * 管理页的导入回调里。内置样本是锦上添花，它的失败只该意味着"这次没有样本"。
  */
 public final class PluginSampleInstaller {
 
-    /** 登记修订号。将来替换内置样本时 +1，已经种过旧样本的设备会再走一次。 */
-    static final int SEED_REVISION = 1;
+    /**
+     * 登记修订号：{@code 1} 首次登记；{@code 2} 让已经种下的样本跟上清单新增的 {@code surfaces}
+     * 声明（旧样本没有它，宿主会在首页也露出豆瓣入口）。将来再换样本时继续 +1。
+     *
+     * <p><b>升级的代价写在明处。</b>修订号前进时会重写 {@code files/plugins/<id>/} 下的脚本与
+     * 清单：用户若手工改过内置豆瓣的脚本，那些改动会被覆盖掉。这是明确接受的取舍——内置样本
+     * 是宿主自己种下的文件，不是用户的工程产物；用户要长期改造就该自己导入一份，那种包本类
+     * 一律不碰。
+     */
+    static final int SEED_REVISION = 2;
 
     /** 记账键：存的是已登记到的修订号，而不是布尔值。 */
     static final String KEY_SEEDED = "plugin_sample_seed_revision";
@@ -121,11 +132,15 @@ public final class PluginSampleInstaller {
         }
         if (revision >= SEED_REVISION) return 0;
 
+        // 首次登记与升级刷新是两件事，唯一的事实是记账修订号是不是 0：0 表示从没种过。
+        // 把这个事实显式传下去，而不是让 seed() 从"配置里有没有条目"反推——用户删掉样本后
+        // 条目和目录会一起消失，那种情况下"没有条目"不等于"从没种过"。
+        boolean firstRun = revision == 0;
         Source localSource = source;
         int seeded = 0;
         boolean settled = true;
         for (String assetsDir : SAMPLES) {
-            int result = seed(assetsDir, localSource);
+            int result = seed(assetsDir, localSource, firstRun);
             if (result > 0) seeded += result;
             else if (result < 0) settled = false;
         }
@@ -144,9 +159,14 @@ public final class PluginSampleInstaller {
     /**
      * 种一条样本。
      *
-     * @return {@code 1} 本次新登记；{@code 0} 无需处理（已登记或样本不在本包里）；{@code -1} 失败
+     * @param firstRun {@code true} 表示记账修订号为 0（从没种过），此时允许新建；{@code false}
+     *                 表示这是修订号前进后的刷新，只刷新宿主自己种下且仍然存在的那一份，
+     *                 绝不新建——用户删掉的样本不能因为升级而复活
+     * @return {@code 1} 本次新登记或刷新了宿主自己种下的那一份；{@code 0} 无需处理（样本不在
+     * 本包里、同 id 已被用户自己导入的包占住、宿主自己那份已被删、或本次只许刷新而条目不存在）；
+     * {@code -1} 失败
      */
-    private static int seed(@Nullable String assetsDir, Source source) {
+    private static int seed(@Nullable String assetsDir, Source source, boolean firstRun) {
         if (assetsDir == null || assetsDir.isEmpty()) return 0;
         try {
             String manifestText = source.read(assetsDir + "/" + MANIFEST_NAME);
@@ -158,8 +178,17 @@ public final class PluginSampleInstaller {
             if (!PluginSourceConfig.isSafeId(id)) return -1;
 
             PluginSourceConfig config = PluginSourceConfig.get();
-            // 已登记就一行都不覆盖：可能是用户自己导入的同一 id，也可能上一条样本刚种下。
-            if (config.find(id) != null) return 0;
+            PluginSourceConfig.Entry existing = config.find(id);
+            // 三条判定，顺序不能换：先问"这份归不归我"，再问"它还在不在"，最后才问"我有没有
+            // 新建的资格"。反过来写会把用户删掉的样本重新种回来。
+            //
+            // 1) 用户自己导入的同 id 包：一个字节都不碰。
+            if (existing != null && !isOwnedCopy(existing, id)) return 0;
+            // 2) 宿主自己种的，但目录已经没了：用户在管理页删过它，升级不许把它复活。
+            //    这里也不顺手删那个僵尸条目——清配置是管理页的事，本类只保证不写盘。
+            if (existing != null && !new File(existing.directory()).isDirectory()) return 0;
+            // 3) 只许刷新时没有可刷新的对象：这次是升级，不是首次装机，绝不新建。
+            if (existing == null && !firstRun) return 0;
 
             String entryName = fileNameOf(manifest.getRuntimeEntry());
             if (entryName == null) return -1;
@@ -179,13 +208,38 @@ public final class PluginSampleInstaller {
             // 两边一旦不一致，配置里的元信息会开始说谎。
             PluginManifest registered = PluginManifest.parse(rewritten);
             if (registered == null) return -1;
+            // 刷新而不是新建时，两条元信息必须沿用旧值：enabled 沿用以尊重用户关掉它的选择
+            // （升级不该偷偷把插件重新打开），importedAt 沿用以维持管理页的排序与"首次出现时间"。
+            boolean enabled = existing == null || existing.enabled();
+            long importedAt = existing == null ? System.currentTimeMillis() : existing.importedAt();
             config.put(new PluginSourceConfig.Entry(registered.getId(), registered.getName(),
                     registered.getVersion(), registered.getRuntimeApi(), directory.getAbsolutePath(),
-                    true, System.currentTimeMillis()));
+                    enabled, importedAt));
             config.save();
             return 1;
         } catch (Throwable ignored) {
             return -1;
+        }
+    }
+
+    /**
+     * 已登记的那一条是不是宿主自己种下的那一份。
+     *
+     * <p>判据只有两个事实：id 相同，且目录就是 {@code files/plugins/<id>}。刻意不另加一个
+     * "种过哪些 id"的持久化键——多一份状态就多一处会和磁盘对不上的地方，而目录本身已经是那个
+     * 事实。
+     *
+     * <p>必须按 canonical 路径比较：配置里存的是 {@code getAbsolutePath()}，旧版本或人手改过的
+     * 配置可能留下带 {@code ..} 或尾斜杠的等价写法，字面比较会把宿主自己的目录判成"别人的"，
+     * 于是升级永远不发生。比较抛异常（路径非法）一律按"不是自己的"处理：两种误判的代价分别是
+     * "不升级"和"覆盖用户的文件"，后者更糟。
+     */
+    private static boolean isOwnedCopy(PluginSourceConfig.Entry existing, String id) {
+        try {
+            File owned = new File(PluginPackageImporter.pluginsRoot(), id);
+            return owned.getCanonicalFile().equals(new File(existing.directory()).getCanonicalFile());
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 

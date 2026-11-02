@@ -76,6 +76,28 @@ webhtv.request(...)     // 受控 HTTP 请求（需 net.request 权限）
 | `panel` | `ui.panel` | 点 chip 后由宿主打开的侧滑 WebView 面板 |
 | `page` | `ui.page` | 整页插件，SDK 1 未渲染 |
 
+每个 `ui[]` 项还可以声明 **`surfaces`**：这个槽位只在哪些页面上出现。
+
+| `surfaces` | 含义 |
+| --- | --- |
+| 不写这个键 | 空集 = **所有页面都显示**（早期清单的默认行为，不会因为升级而消失） |
+| `home` / `detail` / `playback` / `other` | 只在对应页面显示，可多选 |
+| 宿主不认识的值（含拼错） | 永不显示——不报错，也不拒绝整份清单 |
+
+至多 8 个元素、单元素至多 16 字符；比对前统一转小写，写 `"Detail"` 与写 `"detail"` 等价。
+
+```json
+"ui": [
+  {
+    "slot": "panel",
+    "label": "豆瓣",
+    "action": "douban.comments",
+    "event": "ui.contentShown",
+    "surfaces": ["detail", "playback"]
+  }
+]
+```
+
 **`panel` 的完整链路**：用户点 chip → 宿主调用插件的 `action` → **脚本返回的字符串被宿主当作 HTML** → 宿主用侧滑 WebView 面板渲染它。标题栏与关闭按钮由宿主提供，脚本不需要也不应该自己画；电视端方向键可以直接滚动面板内容。由此有四条约束：
 
 - `action` 处理器必须**同步返回字符串**。返回 `undefined` / `null` / 非字符串时面板是空的，且不会报错。

@@ -189,6 +189,56 @@ public class PluginManifestTest {
     }
 
     @Test
+    public void absentSurfacesMeansEveryPage() {
+        // 向后兼容的命门：早期清单都没有 surfaces 键，空集必须等于"全页显示"。
+        PluginManifest manifest = PluginManifest.parse(valid());
+        assertNotNull(manifest);
+        assertEquals(1, manifest.getUiSlots().size());
+        assertTrue(manifest.getUiSlots().get(0).surfaces().isEmpty());
+    }
+
+    @Test
+    public void surfacesAreParsedLowerCaseAndDeduplicated() {
+        String json = valid().replace(
+                "\"action\": \"comments.show\", \"event\": \"ui.contentShown\" }",
+                "\"action\": \"comments.show\", \"event\": \"ui.contentShown\","
+                        + " \"surfaces\": [\"Detail\", \"PLAYBACK\", \"detail\"] }");
+        PluginManifest manifest = PluginManifest.parse(json);
+        assertNotNull(manifest);
+        assertEquals(Set.of("detail", "playback"), manifest.getUiSlots().get(0).surfaces());
+    }
+
+    @Test
+    public void nonStringAndOversizedSurfacesAreDropped() {
+        // 坏元素逐个丢弃，既不抛也不把整份清单判死。
+        String json = valid().replace(
+                "\"action\": \"comments.show\", \"event\": \"ui.contentShown\" }",
+                "\"action\": \"comments.show\", \"event\": \"ui.contentShown\","
+                        + " \"surfaces\": [7, {\"a\": 1}, true, \"\", \"" + "x".repeat(17)
+                        + "\", \" \", \"detail\"] }");
+        PluginManifest manifest = PluginManifest.parse(json);
+        assertNotNull(manifest);
+        assertEquals(Set.of("detail"), manifest.getUiSlots().get(0).surfaces());
+    }
+
+    @Test
+    public void surfacesBeyondTheCapAreNotRead() {
+        StringBuilder many = new StringBuilder();
+        for (int i = 1; i <= 10; i++) {
+            if (i > 1) many.append(", ");
+            many.append('"').append("s").append(i).append('"');
+        }
+        String json = valid().replace(
+                "\"action\": \"comments.show\", \"event\": \"ui.contentShown\" }",
+                "\"action\": \"comments.show\", \"event\": \"ui.contentShown\","
+                        + " \"surfaces\": [" + many + "] }");
+        PluginManifest manifest = PluginManifest.parse(json);
+        assertNotNull(manifest);
+        assertEquals(8, manifest.getUiSlots().get(0).surfaces().size());
+        assertFalse(manifest.getUiSlots().get(0).surfaces().contains("s9"));
+    }
+
+    @Test
     public void nonObjectParamsAreIgnoredNotRejected() {
         // params 是可选字段：写成数组说明作者写错了，但整个插件不该因此装不上。
         String json = valid().replace("\"events\":", "\"params\": [1, 2],\n  \"events\":");

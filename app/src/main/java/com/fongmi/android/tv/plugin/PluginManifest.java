@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.plugin;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.gson.JsonArray;
@@ -48,6 +49,8 @@ public final class PluginManifest {
     private static final int MAX_EVENTS = 32;
     private static final int MAX_UI_SLOTS = 16;
     private static final int MAX_LABEL_LENGTH = 32;
+    private static final int MAX_SURFACES = 8;
+    private static final int MAX_SURFACE_LENGTH = 16;
 
     private static final String ID_PATTERN = "[A-Za-z0-9._-]+";
 
@@ -190,9 +193,39 @@ public final class PluginManifest {
             String action = string(slot, "action", MAX_PERMISSION_LENGTH);
             if (action == null || action.isEmpty()) continue;
             slots.add(new UiSlot(type, label == null ? "" : label, action,
-                    string(slot, "anchor", 32), string(slot, "event", MAX_PERMISSION_LENGTH)));
+                    string(slot, "anchor", 32), string(slot, "event", MAX_PERMISSION_LENGTH),
+                    surfaces(slot)));
         }
         return Collections.unmodifiableList(slots);
+    }
+
+    /**
+     * 解析槽位的 {@code surfaces}：这个槽位只在哪些页面上出现。
+     *
+     * <p><b>不写这个键 = 空集 = 所有页面都显示。</b>这是向后兼容的命门：SDK 1 早期的清单全都没有
+     * 这个键，若把空集理解成"哪都不显示"，所有既有插件会一次性集体消失。
+     *
+     * <p><b>不做白名单校验。</b>宿主不认识的值永远匹配不上真实页面，效果天然就是"永不显示"，
+     * 这个语义由消费侧自然产生。在这里拒绝整份清单，只会让插件作者一个拼写错误就整个装不上。
+     *
+     * <p>元素必须是小写字符串：非字符串、空串、超过 {@link #MAX_SURFACE_LENGTH} 的元素被逐个丢弃，
+     * 不做任何报错；超过 {@link #MAX_SURFACES} 之后的部分不再读取（防止恶意长数组耗尽解析时间）。
+     */
+    private static Set<String> surfaces(JsonObject slot) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        JsonArray array = array(slot, "surfaces");
+        if (array == null) return Collections.unmodifiableSet(values);
+        int count = 0;
+        for (JsonElement element : array) {
+            if (count >= MAX_SURFACES) break;
+            count++;
+            if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) continue;
+            // 统一小写：清单写 "Detail" 与写 "detail" 必须落到同一个页面。
+            String value = element.getAsString().trim().toLowerCase(Locale.ROOT);
+            if (value.isEmpty() || value.length() > MAX_SURFACE_LENGTH) continue;
+            values.add(value);
+        }
+        return Collections.unmodifiableSet(values);
     }
 
     /** 槽位类型 → 所需权限；未知槽位返回 {@code null}。 */
@@ -325,8 +358,22 @@ public final class PluginManifest {
      * @param action 点击后插件的动作标识
      * @param anchor 锚点提示（如 {@code bottom-end}、{@code before:episode-list}）
      * @param event  该槽位生效所依赖的事件
+     * @param surfaces 该槽位只在哪些页面上出现（home / detail / playback / other）；
+     *                 <b>空集表示所有页面都显示</b>，清单不写 {@code surfaces} 就是这个默认值
      */
     public record UiSlot(String slot, String label, String action, @Nullable String anchor,
-            @Nullable String event) {
+            @Nullable String event, @NonNull Set<String> surfaces) {
+
+        /**
+         * 五参便捷构造器：等价于"所有页面都显示"。
+         *
+         * <p>留着它是因为加 {@code surfaces} 组件会把三个既有测试（插件渲染相关的
+         * PluginUiPresenterTest、PluginUiPresenterDeviceTest、PluginPanelLeanbackFocusDeviceTest）
+         * 的 5 参构造全打红，而它们验证的是渲染不是清单解析；让它们继续只表达自己关心的事。
+         */
+        public UiSlot(String slot, String label, String action, @Nullable String anchor,
+                @Nullable String event) {
+            this(slot, label, action, anchor, event, Set.of());
+        }
     }
 }
