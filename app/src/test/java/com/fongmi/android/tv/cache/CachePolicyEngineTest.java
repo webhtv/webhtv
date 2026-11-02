@@ -29,7 +29,11 @@ public class CachePolicyEngineTest {
     @Test
     public void deepPlanCoversPlaybackAndMediaExactlyOnce() {
         List<CacheModuleId> modules = CachePolicyEngine.plan(CacheCleanupMode.DEEP).modules();
-        assertEquals(CacheModuleId.values().length - 3, modules.size());
+        // Four modules stay out of every tiered run: two report-only surfaces, unclassified cache
+        // (owner unknown), and the plugin HTTP cache (its entries only mean anything inside the TTL
+        // a plugin asked for, so a deep plan must not silently turn a cached plugin into a network
+        // call). Each remains reachable through its own module row.
+        assertEquals(CacheModuleId.values().length - 4, modules.size());
         assertEquals(modules.size(), modules.stream().distinct().count());
         // L3 = L2 + playback caches. The report-only modules are excluded by design.
         assertTrue(modules.contains(CacheModuleId.EXO));
@@ -37,6 +41,8 @@ public class CachePolicyEngineTest {
         assertTrue(modules.contains(CacheModuleId.MPV_DEMUXER));
         assertTrue(modules.contains(CacheModuleId.MPV_RUNTIME));
         assertFalse(modules.contains(CacheModuleId.DIAGNOSTIC_LOGS));
+        assertFalse(modules.contains(CacheModuleId.PLUGIN_AUDIT));
+        assertFalse(modules.contains(CacheModuleId.PLUGIN_HTTP_CACHE));
         assertFalse(modules.contains(CacheModuleId.UNCLASSIFIED));
     }
 

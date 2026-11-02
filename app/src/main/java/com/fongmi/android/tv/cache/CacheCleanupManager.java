@@ -10,6 +10,7 @@ import com.fongmi.android.tv.api.parser.EpgParser;
 import com.fongmi.android.tv.player.exo.MediaSourceFactory;
 import com.fongmi.android.tv.player.karaoke.KaraokeTrackRepository;
 import com.fongmi.android.tv.plugin.PluginAuditLog;
+import com.fongmi.android.tv.plugin.PluginHttpCache;
 import com.fongmi.android.tv.player.lyrics.LyricsRepository;
 import com.fongmi.android.tv.server.process.ApkUrlPush;
 import com.fongmi.android.tv.service.PlaybackService;
@@ -372,6 +373,7 @@ public final class CacheCleanupManager {
                     Updater.isDownloading(), ApkUrlPush.isActive(), System.currentTimeMillis());
             case DIAGNOSTIC_LOGS -> outcome(clearDiagnosticLogs());
             case PLUGIN_AUDIT -> outcome(clearPluginAudit());
+            case PLUGIN_HTTP_CACHE -> clearTree(new File(cache, PluginHttpCache.DIRECTORY));
             case LEGACY_FILES -> clearLegacyPaths(cache, mode);
             // Owner-managed and deliberately unreported: a cleanup must not guess at caches whose
             // owner is unknown, so this module is only ever measured. The full sweep is the one

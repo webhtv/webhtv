@@ -103,7 +103,8 @@ webhtv.request(...)     // 受控 HTTP 请求（需 net.request 权限）
 - `action` 处理器必须**同步返回字符串**。返回 `undefined` / `null` / 非字符串时面板是空的，且不会报错。
 - 返回的 HTML 必须自包含：不保证能加载外部资源，样式请内联在 `<style>` 里，图片不要指望 `<img src="http...">`。
 - 面板内容是插件自己拼的，**但里面的第三方文本不可信**：用户名、评论正文这类东西必须 HTML 转义后再拼进去，否则一段 `<script>` 就能在宿主面板里执行。
-- 抓取慢不会卡住控制条：`action` 在宿主的后台线程执行，面板先打开再等 HTML；但超过 `runtime.timeout` 后宿主放弃这次调用。
+- 抓取慢不会卡住控制条：`action` 在宿主的后台线程执行，面板先打开再等 HTML。但**一次 `action` 只有 5 秒**（宿主的硬上限，见 §7），超时不是"这次失败"而是把整个插件判成故障并禁用，脚本必须自己按时间预算收工。
+- **面板里的 JS 回不到插件。** 宿主只用 `loadDataWithBaseURL` 灌 HTML，没有 `addJavascriptInterface`，WebView 内部没有任何通道能再调 `webhtv`。所以"滚动到底加载更多"只能做成**数据在 `action` 里一次取全、滚动只切换显隐**（示例见 `douban/douban.js` 的 `.card.off` 与 `revealScript`）。面板内的 JS 仍然可以自由操作 DOM——它只是不能发请求。
 
 ### 5.1 action payload
 
@@ -160,8 +161,31 @@ var res = webhtv.request('GET', 'https://m.douban.com/rexxar/api/v2/movie/1/comm
 
 - 方法仅限 GET / POST / PUT / PATCH / DELETE / HEAD。
 - 响应体截断到 512 KiB，请求体上限 256 KiB。
-- 超时取清单 `runtime.timeout`（1..60 秒）。
+- 超时取清单 `runtime.timeout`（1..60 秒），这是**单个 HTTP 请求**的上限。
+- 它与一次 `action` 的总预算是两件事：宿主给脚本单次调用只留 **5 秒**（`QuickJsPluginRuntime.CALL_TIMEOUT_MS`），
+  超时后插件被 quarantine（此后点 chip 毫无反应，直到重新装载）。因此一次性发多个请求的脚本必须自己限定
+  "最晚什么时候还能再发一个请求"，示例见 `douban/douban.js` 的 `LATEST_REQUEST_AT_MS` 与 `canRequest()`。
 - **返回对象而不是抛异常**：失败也是 `{status:0, error:'...'}`，脚本无需 try/catch。
+
+### 7.1 第 5 个参数 `ttlSeconds`
+
+```js
+webhtv.request('GET', url, headers, null, 86400);
+```
+
+第 5 个参数是这条响应的**缓存存活秒数**，由宿主的 `PluginHttpCache` 落地：
+
+- 只缓存 **GET / HEAD 的 200 响应**。写方法即使传了 ttl 也一定真的发出去——否则脚本会拿到一个
+  「看起来成功、服务端从未收到」的结果。
+- 缓存键含 `pluginId`、方法、URL、请求体与**排序后**的请求头，任一不同都不互相命中：换个头顺序
+  不会白白多一次网络请求，两个插件请求同一个 URL 也不会串数据。
+- 过期判据是文件 mtime；0 字节、超大、读不动的文件一律当未命中，且不会抛异常。
+- 命中仍然写审计日志，`outcome` 记成 `cache`（真实请求是 `ok` / `error` / `timeout`），所以
+  「这次到底联没联网」在审计里分得清。
+- 传 `0`、负数或非数字表示这次不碰缓存，行为与不传第 5 参完全一致。
+- ttl 上限 2592000 秒（30 天）：再长会让「清了缓存还是不生效」变得无法解释。
+
+参考档位：已完结的电影/剧集 2592000（30 天），还在更新的剧集 86400（1 天）。
 
 ## 8. 安全边界
 

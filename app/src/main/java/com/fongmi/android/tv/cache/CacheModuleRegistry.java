@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.cache;
 
 import com.fongmi.android.tv.plugin.PluginAuditStore;
+import com.fongmi.android.tv.plugin.PluginHttpCache;
 
 import com.github.catvod.crawler.diagnostics.RollingDiagnosticFile;
 
@@ -22,7 +23,7 @@ public final class CacheModuleRegistry {
     private static final Set<String> MANAGED_ROOTS = Set.of(
             "exo", "mpv_hls", "mpv-demuxer-cache", "mpv_lut_shaders", "fontconfig",
             "lyrics", "karaoke_tracks", "webhome_ext", "webhome_raw", "epg",
-            "image_manager_disk_cache", "js", "py", "jar"
+            "image_manager_disk_cache", "js", "py", "jar", "plugin-http-cache"
     );
 
     private static final Set<String> PROTECTED_NAMES = Set.of(
@@ -31,6 +32,11 @@ public final class CacheModuleRegistry {
             "mpv-playback-recovery.result"
     );
 
+    /**
+     * Suffix families that belong to {@link CacheModuleId#TEMP_FILES}. Owner modules that must
+     * survive it therefore need suffix-free file names; that is why the plugin HTTP cache stores
+     * every entry under its raw SHA-256 hex name with no extension at all.
+     */
     private static final Set<String> TEMP_SUFFIXES = Set.of(".apk", ".zip", ".tmp", ".log");
 
     /**
@@ -116,6 +122,12 @@ public final class CacheModuleRegistry {
                 // would erase the evidence trail that D2 traded the domain allowlist for.
                 module(CacheModuleId.PLUGIN_AUDIT, CacheGroup.DIAGNOSTIC, List.of(
                         CacheRoot.prefixedFiles(cache, Set.of(PluginAuditStore.FILE_NAME), Set.of())
+                ), CacheCleanability.SAFE_NOW, CacheEvictionPolicy.AGE_BASED, false, true, false, false),
+                // Transparent HTTP responses kept for webhtv.request(..., ttlSeconds). Not evicted on
+                // its own: an entry only has value inside the TTL the plugin asked for, and a silent
+                // eviction would turn a cached plugin into a network call the user never asked for.
+                module(CacheModuleId.PLUGIN_HTTP_CACHE, CacheGroup.PLUGIN, List.of(
+                        CacheRoot.tree(new File(cache, PluginHttpCache.DIRECTORY))
                 ), CacheCleanability.SAFE_NOW, CacheEvictionPolicy.AGE_BASED, false, true, false, false),
                 module(CacheModuleId.LEGACY_FILES, CacheGroup.LEGACY, CacheLegacyRules.roots(cache), CacheCleanability.SAFE_NOW, CacheEvictionPolicy.AGE_BASED, true, true, false, false),
                 module(CacheModuleId.UNCLASSIFIED, CacheGroup.UNCLASSIFIED, List.of(CacheRoot.orphanTree(cache,

@@ -1621,3 +1621,135 @@ boolean firstRun = revision == 0;   // 从没种过，才允许新建
 2. py/html 运行时与 `page` 槽位——`page` 至今在 `PluginUiPresenter` 里被静默忽略。
 3. 面板 chip 连点叠窗口：`PluginPanelDialog.show` 缺 `findFragmentByTag` 复用分支（`TmdbVideoPlayerDialog.show` 有），属 HEAD 上既有缺陷。
 4. 电视端面板遥控器可达性人工验收。
+
+
+## 23. P10：豆瓣短评的总评分、滑动分页与宿主网络缓存
+
+### 23.1 需求来源与三条裁定
+
+用户原话（m05721）：「按你的建议来，豆瓣评论有缓冲吧？没有的话请加上，最好是加上总评分，再就是能显示全部评论嘛是否现有登录才能获取全部？」追问两问后裁定（m05783）：「Q1插件应该可以调用APP的缓冲功能吧？和TMDB的一样的方式实现吧，缓冲时间的话也差不多在更新的1天，完结的三十天之类的。」「Q2，滑动分页获取，比如进来20条滑倒后面再加载后续的（具体比例你来定看看接口怎么处理比较稳妥，也更好的配合缓冲）」
+
+| 编号 | 裁定 | 落地形态 |
+| --- | --- | --- |
+| R1 | 缓存走宿主持久层，对齐 TMDB 的文件加 TTL 方案，不放在插件内存 | 新增 `PluginHttpCache`，插件通过 `webhtv.request` 的第 5 个参数（ttlSeconds）声明缓存意愿 |
+| R2 | TTL 按连载/完结分档，连更 1 天、完结 30 天 | 脚本 `ttlOf(detail)` 决策，宿主只钳制上限 2592000 秒 |
+| R3 | 列表滑动分页，首屏 20 条，滚到底再继续 | 一次 action 取满 3 页共 150 条，前端只切换显隐分批揭示 |
+
+---
+
+### 23.2 交付物
+
+| 文件 | 变化 | 说明 |
+| --- | --- | --- |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginHttpCache.java` | 新建 218 行 | GET/HEAD 200 响应的磁盘缓存：键含 pluginId、方法、URL、请求体哈希与排序后请求头哈希 |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginNetBridge.java` | +35/-4 | 七参重载，ttl 钳制、命中审计 outcome=cache |
+| `app/src/main/java/com/fongmi/android/tv/plugin/QuickJsPluginRuntime.java` | +5/-3 | 脚本侧 `request` 接受第 5 参并转成 Java 的 ttlSeconds |
+| `app/src/main/java/com/fongmi/android/tv/cache/CacheModuleId.java` | +1 | 新增 `PLUGIN_HTTP_CACHE("plugin.http")` |
+| `app/src/main/java/com/fongmi/android/tv/cache/CacheModuleRegistry.java` | +13/-1 | 登记模块与托管根目录，避开 `TEMP_FILES` 的 .tmp/.log 清扫 |
+| `app/src/main/java/com/fongmi/android/tv/cache/CachePolicyEngine.java` | +5 | 把该模块排除出深度清理计划 |
+| `app/src/main/java/com/fongmi/android/tv/cache/CacheCleanupManager.java` | +2 | 手动清理分支 |
+| `app/src/main/java/com/fongmi/android/tv/ui/dialog/CacheManagementDialog.java` | +1 | 模块名映射 |
+| 三份 `strings.xml` | 各 +1 | 「插件网络缓存」「外掛網路快取」 |
+| `app/src/main/assets/plugin/douban/douban.js` | 185 到 423 行 | 总评分卡、展示全部评论、分批揭示、TTL 分档、搜索接口替换 |
+| `app/src/main/assets/plugin/douban/manifest.json` | 1 行 | `runtime.timeout` 20 收紧到 2 |
+| `app/src/main/assets/plugin/README.md` | +26/-2 | §4 与 §7.1：一次 action 只有 5 秒、面板 JS 回不到插件、ttlSeconds 的实际语义 |
+| `app/src/main/java/com/fongmi/android/tv/plugin/PluginSampleInstaller.java` | +9/-2 | `SEED_REVISION` 3 提到 4，让已种样本跟上新脚本 |
+| `app/src/test/java/com/fongmi/android/tv/plugin/PluginHttpCacheTest.java` | 新建 254 行 10 用例 | 键稳定性、TTL 边界、超大响应、空体、损坏目录 |
+| `app/src/test/java/com/fongmi/android/tv/cache/CachePluginHttpModuleTest.java` | 新建 77 行 2 用例 | 模块只统计自己的家族 |
+
+---
+
+### 23.3 为什么缓存必须是宿主的，插件做不到
+
+插件脚本能用的宿主对象只有 `webhtv.version/on/action/log/config/request`（`QuickJsPluginRuntime.java:56-86`），没有文件、没有 KV、没有定时器。`PluginNetBridge` 用的是裸 `OkHttp.client(...).newCall(...).execute()`（:89），没有 OkHttp Cache；`catvod/net` 下也没有任何 CacheControl 用法。所以「像 TMDB 一样」这条要求，只能由宿主新加一层，脚本侧只负责声明 TTL。
+
+关键的三条设计取舍：
+
+1. **只缓存 GET/HEAD 且只缓存 200**。`CACHEABLE_METHODS = Set.of("GET", "HEAD")`（:50）、`CACHE_STATUS = 200`（:48）。写请求缓存会让一次失败的 POST 被重放，代价远大于收益。
+2. **过期判据用文件 mtime，不另存元数据**。`long age = System.currentTimeMillis() - file.lastModified(); if (age < 0 || age > ttlSeconds * 1000L) return null;`（:100-116）。省掉一份需要自己维护一致性的索引文件，也让「清理器按时间淘汰」直接可用。
+3. **缓存文件名不带后缀**。`TEMP_SUFFIXES = Set.of(".apk", ".zip", ".tmp", ".log")`（`CacheModuleRegistry.java:34`）会把带这些后缀的文件当垃圾删掉，所以落盘名用裸的 64 位 sha256；写入时先用 `.part` 临时名再 `ATOMIC_MOVE`（失败回落普通 move），避免读到半截文件。
+
+TTL 的钳制只有一处：`MAX_TTL_SECONDS = 30 * 24 * 60 * 60`（2592000），`ttlSeconds()` 把非数字、负数、NaN 统一转成 0（等于不碰缓存），越界钳到上限，正数里小于 1 的抬到 1。
+
+---
+
+### 23.4 缓存命中也进审计
+
+用户和开发者都需要能分辨「这条短评是网络来的还是缓存来的」。命中分支写 `recordRequest(..., PluginHttpCache.CACHE_STATUS, 0, "cache")`（`PluginNetBridge.java:100-107`），真实请求的 outcome 保持 ok/error/timeout。真机取证（emulator-5560，同一个详情页第二次打开面板）的审计尾部：
+
+```
+GET m.douban.com /rexxar/api/v2/search/subjects          200    0ms cache
+GET m.douban.com /rexxar/api/v2/movie/35517044            200    0ms cache
+GET m.douban.com /rexxar/api/v2/movie/35517044/interests  200    0ms cache   (x3 页)
+```
+
+第一次打开时对应的是 `status 200 / outcome ok / duration 493ms` 与 332ms 这类真实耗时。
+
+---
+
+### 23.5 分页为什么是「一次取全、前端分显」
+
+面板是 `PluginPanelDialog` 用 `loadDataWithBaseURL` 灌进去的一段静态 HTML，**没有 `addJavascriptInterface`**，面板里的 JS 回不到插件，也没有第二次 action 的通道。可选的两条路：
+
+- 给面板加一个 JS 桥，让滚动回调触发第二次 action。代价是要新增一个跨进程边界的通信协议，且必须在主线程之外处理，安全面明显变大。
+- 一次 action 内串行取满若干页，HTML 里全部渲染，滚动只切换 `display`。
+
+选后者。实测匿名分页的硬上限决定页数：`count` 单次最多 50（传 100/200 也只回 50），`start <= 100` 才有数据（start=101 起 HTTP 200 但 `interests` 为空数组），所以 3 页 × 50 = 150 条正好填满匿名可见区间。脚本里 `MAX_PAGES = 3`、`PAGE_SIZE = 50`；首屏 `DEFAULT_FIRST = 20`，可由清单 `params.count` 调到最多 150。
+
+时间预算才是真正的约束：`QuickJsPluginRuntime.CALL_TIMEOUT_MS = 5_000L`（:44），超时不是这次调用失败，而是 `PluginHost` 的 catch(Throwable) 把整个插件 quarantine 掉。实测三段 interests 各 1029ms / 356ms / 1613ms，合计已经接近 3 秒，加上搜索 371 到 885ms 与详情请求，必须留余量。因此脚本用两道闸：
+
+- `LATEST_REQUEST_AT_MS = 2600`：`canRequest()` 在发起下一次取数前检查是否还剩时间，不够就提前收尾，页脚照样显示已拿到的部分。
+- 清单 `runtime.timeout` 从 20 收紧到 2：这个字段是**单个 HTTP 请求**的上限（`PluginManifest.java:131-132` 钳在 1 到 60），不是一次 action 的总预算。2 秒足以覆盖正常 400 到 1000ms，超时也不会把整体拖过 5 秒。
+
+页脚文案如实说明边界：「本页 N 条，豆瓣共 X 条 / 匿名可看前 150 条（豆瓣限制），更多需登录豆瓣」。继续翻页需要豆瓣登录态，宿主当前没有 cookie 注入点，也不该替用户保存第三方账号，因此不做。
+
+---
+
+### 23.6 搜索接口在本次任务中被替换（外部接口变更）
+
+首轮真机验证时面板只显示「在豆瓣没有搜到「霸王别姬」的条目」。独立复现后确认：`https://movie.douban.com/j/subject_suggest?q=...` 现在对任何查询都返回 HTTP 200 加 2 字节的 `[]`，换 UA、换 Referer、加 `X-Requested-With` 与 `Accept` 全部一样。旧链路的 `subjectId(url)` 正则 `/subject\/(\d+)/` 因此永远取不到 id。
+
+替代接口（实测可用）：`GET https://m.douban.com/rexxar/api/v2/search/subjects?q=<encodeURIComponent 片名>`，必须同时带 `User-Agent` 与 `Referer: https://m.douban.com/`，**不带 Referer 直接 400**。响应里 `subjects` 是对象而不是数组，条目 id 在 `subjects.items[i].target.id`（纯数字字符串），类型在 `target_type`（域恰是 movie/tv，与载荷里的 `context.mediaType` 同一套词）。脚本据此新增 `subjectItems(payload)`（逐层判空，任何一层不对就返回空数组）与改写后的 `pickSubject(items, mediaType)`（先按类型匹配，再回第一个 id 合法的条目）。
+
+失败文案拆成三档，避免把「接口不可用」误报成「没有这部片」：搜索请求失败、返回的不是 JSON 对象、确实没搜到。
+
+---
+
+### 23.7 样本升级：SEED_REVISION 提到 4
+
+内置样本只在记账修订号落后时才刷新，因此资产里的 `douban.js` 改了而修订号不变，已经装过 App 的设备会一直跑旧脚本。本次连提两次：3 对应脚本重写（总评分、分页、TTL 第 5 参）与清单 timeout 收紧，4 对应搜索接口替换。判定逻辑一个字没改，P9 定下的三条「不复活」规则仍然生效：修订号非 0 时只刷新不新建、非宿主自己的目录不碰、目录已被用户删掉不重造。
+
+---
+
+### 23.8 验证
+
+| 项 | 结果 |
+| --- | --- |
+| 两变体 Java 编译 + plugin/cache 单测 | `:app:testMobileArm64_v8aDebugUnitTest --tests 'com.fongmi.android.tv.plugin.*' --tests 'com.fongmi.android.tv.cache.*'` 全部通过，SUITES=39 TESTS=319 FAILURES=0 ERRORS=0 SKIPPED=1 |
+| 两变体 APK | `assembleMobileArm64_v8aDebug assembleLeanbackArm64_v8aDebug` 通过 |
+| 脚本 ES5 合规 | `node --check` 退出码 0；箭头函数、let/const、模板字符串各 0 处 |
+| 真机总评分 | 详情页「低智商犯罪」打开豆瓣面板，首屏显示 8.2 分 + 五颗星 + 「24.9万 人评价 · 9.4万 条短评」 |
+| 真机分页 | 同一面板连续滚动到底，页脚出现「本页 150 条，豆瓣共 9.4 万条 / 匿名可看前 150 条（豆瓣限制），更多需登录豆瓣」 |
+| 真机缓存 | 第二次打开同一面板，审计里搜索、详情、三页 interests 全部 outcome=cache、durationMs=0 |
+| 缓存落盘 | `/data/data/com.silent.android.webhtv/cache/plugin-http-cache/douban.comments/` 下出现无后缀的 64 位十六进制文件名 |
+| 样本刷新 | 重装后设备上的 `douban.js` 含新的 `SEARCH_URL` 常量，prefs 的 `plugin_sample_seed_revision` 为 4 |
+| 两变体真机 | emulator-5560 上 mobile 32 条（3 条 Assume 跳过）、leanback 32 条（1 条跳过），失败 0 错误 0；顺带修正 `PluginSampleInstallerDeviceTest` 里钉住旧站点 `movie.douban.com` 的过期断言，改为钉 `webhtv.action('douban.comments'` 与 `rexxar/api/v2` |
+
+---
+
+### 23.9 已知边界
+
+1. **匿名最多 150 条**，不是全部。`total` 显示的是豆瓣自己报的总数（例如 9.4 万），不是本面板能翻到的数量。要更多必须登录豆瓣，宿主不保存第三方账号。
+2. **缓存键包含请求头哈希**，因此同一个 URL 换了 UA 或 Referer 就是另一份缓存。这是刻意的：响应确实可能随请求头变化。代价是键空间比「只看 URL」更大。
+3. **缓存没有总量上限**，只有 TTL 与手动清理入口。长期使用会按插件与条目数线性增长，直到用户清理或 TTL 全部过期后被下一次清理回收。
+4. **TTL 分档依赖脚本自己的启发式**（非剧集、或剧集标注了「全」即视为完结），豆瓣详情里没有可靠的连载标志：`is_released` 与 `is_show` 实测恒为 True/False，`episodes_info` 恒为空字符串。判断不出时按连载档（1 天）走，宁可多取一次网络。
+5. **一次 action 最多 150 条**是 5 秒硬超时下的取舍。若某天豆瓣把单页上限从 50 提高，或响应变慢，`canRequest()` 会提前收尾，用户看到的是不足 150 条而不是插件被禁用。
+
+---
+
+### 23.10 下一步
+
+1. 给面板加可选的 JS 桥，让滚动真正触发增量 action，从「一次取 150 条」变成「按需取」；需要同时定义桥的权限与线程模型。
+2. 缓存总量上限与按容量淘汰（当前只有 TTL 与手动清理）。
+3. 若将来引入账号能力，再评估登录后的全量短评（属于产品决策，不是技术缺口）。
+4. 沿用 §20.9 与 §22.8 的遗留项：net.request 域名白名单重新评估、py/html 运行时与 page 槽位、面板 chip 连点叠窗口复用、电视端焦点环人工验收。

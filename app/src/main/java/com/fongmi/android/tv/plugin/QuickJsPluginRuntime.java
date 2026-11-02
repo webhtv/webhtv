@@ -58,13 +58,14 @@ public final class QuickJsPluginRuntime implements PluginRuntime {
                 on:function(event,fn){ if(typeof event==='string'&&typeof fn==='function') handlers[event]=fn; },
                 action:function(name,fn){ if(typeof name==='string'&&typeof fn==='function') handlers['action:'+name]=fn; },
                 log:function(){ try{ console.log('[plugin] '+Array.prototype.slice.call(arguments).join(' ')); }catch(e){} },
-                request:function(method,url,headers,body){
+                request:function(method,url,headers,body,ttlSeconds){
                   const native=globalThis.webhtv.__nativeRequest;
                   if(typeof native!=='function') return {status:0,error:'net.request is not available'};
                   const h=(headers===undefined||headers===null)?null:(typeof headers==='string'?headers:JSON.stringify(headers));
                   const b=(body===undefined||body===null)?null:(typeof body==='string'?body:JSON.stringify(body));
+                  const t=(typeof ttlSeconds==='number'||typeof ttlSeconds==='string')?ttlSeconds:null;
                   let raw;
-                  try{ raw=native(method===undefined?null:method, url===undefined?null:url, h, b); }
+                  try{ raw=native(method===undefined?null:method, url===undefined?null:url, h, b, t); }
                   catch(e){ return {status:0,error:String(e)}; }
                   if(typeof raw!=='string') return (raw===undefined||raw===null)?{status:0,error:'empty response'}:raw;
                   try{ return JSON.parse(raw); }catch(e){ return {status:0,error:String(raw)}; }
@@ -175,7 +176,8 @@ public final class QuickJsPluginRuntime implements PluginRuntime {
             return PluginNetBridge.blocked(pluginId, method, url,
                     "missing permission " + PluginCapabilityRegistry.PERMISSION_NET_REQUEST);
         }
-        return PluginNetBridge.request(pluginId, method, url, arg(args, 2), arg(args, 3), timeout);
+        int ttlSeconds = PluginHttpCache.ttlSeconds(arg(args, 4));
+        return PluginNetBridge.request(pluginId, method, url, arg(args, 2), arg(args, 3), timeout, ttlSeconds);
     }
 
     @Nullable

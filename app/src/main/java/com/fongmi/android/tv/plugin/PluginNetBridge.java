@@ -72,6 +72,19 @@ public final class PluginNetBridge {
      */
     public static String request(@Nullable String pluginId, @Nullable String method, @Nullable String url,
             @Nullable String headers, @Nullable String body, int timeoutSeconds) {
+        return request(pluginId, method, url, headers, body, timeoutSeconds, 0);
+    }
+
+    /**
+     * 执行一次请求，并允许复用一份尚未过期的响应。
+     *
+     * @param ttlSeconds  这次响应可以复用多少秒；{@code 0} 或负数表示完全不碰缓存，行为与
+     *                    {@link #request(String, String, String, String, String, int)} 逐字节相同
+     * @return 结果 JSON 文本；命中缓存时状态码恒为 {@link PluginHttpCache#CACHE_STATUS}（缓存里只有 200）
+     * @see PluginHttpCache 为什么只缓存 GET/HEAD、为什么键里必须有 pluginId、为什么文件名不带后缀
+     */
+    public static String request(@Nullable String pluginId, @Nullable String method, @Nullable String url,
+            @Nullable String headers, @Nullable String body, int timeoutSeconds, int ttlSeconds) {
         String verb = method == null ? "" : method.trim().toUpperCase(Locale.ROOT);
         if (verb.isEmpty()) verb = "GET";
         if (!ALLOWED_METHODS.contains(verb)) {
@@ -82,6 +95,16 @@ public final class PluginNetBridge {
             return blocked(pluginId, verb, target, "unsupported url scheme");
         }
         int timeout = timeoutSeconds < 1 || timeoutSeconds > MAX_TIMEOUT_SECONDS ? DEFAULT_TIMEOUT_SECONDS : timeoutSeconds;
+        int ttl = ttlSeconds < 1 ? 0 : Math.min(ttlSeconds, PluginHttpCache.MAX_TTL_SECONDS);
+
+        if (ttl > 0) {
+            String cached = PluginHttpCache.read(pluginId, verb, target, headers, body, ttl);
+            if (cached != null) {
+                PluginAuditLog.get().recordRequest(pluginId, null, null, verb, target,
+                        PluginHttpCache.CACHE_STATUS, 0, "cache");
+                return result(PluginHttpCache.CACHE_STATUS, cached);
+            }
+        }
 
         long started = System.currentTimeMillis();
         try {
@@ -92,10 +115,10 @@ public final class PluginNetBridge {
                 long elapsed = System.currentTimeMillis() - started;
                 PluginAuditLog.get().recordRequest(pluginId, null, null, verb, target, status, elapsed,
                         response.isSuccessful() ? "ok" : "error");
-                JsonObject result = new JsonObject();
-                result.addProperty("status", status);
-                result.addProperty("body", text == null ? "" : text);
-                return result.toString();
+                if (ttl > 0 && status == PluginHttpCache.CACHE_STATUS) {
+                    PluginHttpCache.write(pluginId, verb, target, headers, body, ttl, text);
+                }
+                return result(status, text);
             }
         } catch (IOException | RuntimeException error) {
             long elapsed = System.currentTimeMillis() - started;
@@ -220,6 +243,14 @@ public final class PluginNetBridge {
         } catch (Throwable ignored) {
         }
         return error(reason);
+    }
+
+    /** 成功响应的统一形状：缓存命中与真实响应必须长得一模一样，脚本才不用分支。 */
+    private static String result(int status, @Nullable String text) {
+        JsonObject result = new JsonObject();
+        result.addProperty("status", status);
+        result.addProperty("body", text == null ? "" : text);
+        return result.toString();
     }
 
     private static String error(String message) {

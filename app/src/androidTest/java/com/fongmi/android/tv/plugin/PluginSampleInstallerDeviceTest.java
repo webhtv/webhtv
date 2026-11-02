@@ -68,7 +68,9 @@ public class PluginSampleInstallerDeviceTest {
         String scriptText = Files.readString(script.toPath(), StandardCharsets.UTF_8);
         assertTrue("资产读取失败会得到一个空脚本，这里必须拦住",
                 scriptText.getBytes(StandardCharsets.UTF_8).length > 1000);
-        assertTrue("脚本内容必须是豆瓣插件本体", scriptText.contains("movie.douban.com"));
+        assertTrue("脚本内容必须是豆瓣插件本体",
+                scriptText.contains("webhtv.action('douban.comments'")
+                        && scriptText.contains("rexxar/api/v2"));
 
         JsonObject manifest = JsonParser
                 .parseString(Files.readString(new File(directory, "manifest.json").toPath()))

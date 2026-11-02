@@ -40,14 +40,21 @@ public final class PluginSampleInstaller {
 
     /**
      * 登记修订号：{@code 1} 首次登记；{@code 2} 让已经种下的样本跟上清单新增的 {@code surfaces}
-     * 声明（旧样本没有它，宿主会在首页也露出豆瓣入口）。将来再换样本时继续 +1。
+     * 声明（旧样本没有它，宿主会在首页也露出豆瓣入口）；{@code 3} 让样本跟上豆瓣脚本的重写
+     * （总评分、滑动分页，以及把缓存 TTL 作为 {@code webhtv.request} 的第 5 个参数下传）与随之
+     * 收紧的清单超时；{@code 4} 让样本跟上搜索接口的替换（{@code subject_suggest} 对任何查询
+     * 都返回 200 + 空数组，改走 {@code rexxar/api/v2/search/subjects}）。将来再换样本时继续 +1。
+     *
+     * <p><b>提修订号不等于再种一遍。</b>{@link #seedOnce} 只在记账修订号落后时才进入
+     * {@link #seed}，而 {@code firstRun} 是否为真决定它有没有新建目录的资格：修订号停在
+     * {@code 1..N-1} 之间的设备走的是纯刷新路径，用户删掉的样本不会因为这次前进而复活。
      *
      * <p><b>升级的代价写在明处。</b>修订号前进时会重写 {@code files/plugins/<id>/} 下的脚本与
      * 清单：用户若手工改过内置豆瓣的脚本，那些改动会被覆盖掉。这是明确接受的取舍——内置样本
      * 是宿主自己种下的文件，不是用户的工程产物；用户要长期改造就该自己导入一份，那种包本类
      * 一律不碰。
      */
-    static final int SEED_REVISION = 2;
+    static final int SEED_REVISION = 4;
 
     /** 记账键：存的是已登记到的修订号，而不是布尔值。 */
     static final String KEY_SEEDED = "plugin_sample_seed_revision";

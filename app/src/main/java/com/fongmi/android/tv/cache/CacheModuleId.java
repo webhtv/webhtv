@@ -13,6 +13,7 @@ public enum CacheModuleId {
     GLIDE("image.glide"),
     PLUGIN_SCRIPTS("plugin.scripts"),
     PLUGIN_AUDIT("plugin.audit"),
+    PLUGIN_HTTP_CACHE("plugin.http"),
     TEMP_FILES("temp.file"),
     DIAGNOSTIC_LOGS("diagnostic.logs"),
     LEGACY_FILES("legacy.file"),
