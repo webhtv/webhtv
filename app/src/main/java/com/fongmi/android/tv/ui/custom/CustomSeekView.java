@@ -25,6 +25,7 @@ import com.github.catvod.crawler.SpiderDebug;
 import java.util.Formatter;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
 
 public class CustomSeekView extends FrameLayout implements Player.Listener, TimeBar.OnScrubListener {
 
@@ -37,6 +38,7 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
     private static final int MIN_UPDATE_INTERVAL_MS = 200;
     private static final long DISK_RANGE_GAP_TOLERANCE_MS = 2000;
     private static final long PAUSED_BUFFER_LOG_INTERVAL_MS = 5000;
+    private static final long DURATION_FALLBACK_LOG_INTERVAL_MS = 5000;
     private static final long SEEK_POSITION_TOLERANCE_MS = 1500;
     private static final long SEEK_POSITION_HOLD_TIMEOUT_MS = 10000;
 
@@ -54,6 +56,8 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
     private Player player;
     private SeekListener seekListener;
     private Player progressPlayer;
+    private LongSupplier durationFallback;
+    private long lastDurationFallbackLogAtMs;
     private long lastPausedBufferLogAtMs;
     private long lastPausedBufferedPosition;
     private long lastBufferReadLogAtMs;
@@ -98,6 +102,17 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
     }
 
     /**
+     * Supplies the last known total duration while the engine has not published
+     * one yet. A positive engine duration always wins over this fallback.
+     * A {@code null} supplier or a returned value {@code <= 0} means no fallback.
+     */
+    public void setDurationFallback(@Nullable LongSupplier durationFallback) {
+        this.durationFallback = durationFallback;
+        lastDurationFallbackLogAtMs = 0;
+        if (attached) updateTimeline();
+    }
+
+    /**
      * Uses the in-process engine for timeline reads while commands continue to
      * go through the MediaController. MediaSession does not continuously send
      * buffered-position-only changes while playback is paused, which otherwise
@@ -124,11 +139,31 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
         return Util.getStringForTime(timeBuilder, timeFormatter, time);
     }
 
+    private long resolveDuration(Player progress) {
+        long duration = progress.getDuration();
+        if (duration > 0) return duration;
+        LongSupplier fallbackSource = durationFallback;
+        if (fallbackSource == null) return 0;
+        long fallback;
+        try {
+            fallback = fallbackSource.getAsLong();
+        } catch (Throwable ignored) {
+            return 0;
+        }
+        if (fallback <= 0) return 0;
+        long now = SystemClock.elapsedRealtime();
+        if (SpiderDebug.isEnabled() && now - lastDurationFallbackLogAtMs >= DURATION_FALLBACK_LOG_INTERVAL_MS) {
+            lastDurationFallbackLogAtMs = now;
+            SpiderDebug.log("playback-progress", "action=duration-fallback source=%s durationMs=%d",
+                    progress == player ? "controller" : "direct-engine", fallback);
+        }
+        return fallback;
+    }
+
     private void updateTimeline() {
         Player progress = getProgressPlayer();
         if (!attached || progress == null) return;
-        long duration = progress.getDuration();
-        if (duration < 0) duration = 0;
+        long duration = resolveDuration(progress);
         currentDuration = duration;
         setKeyTimeIncrement(duration);
         timeBar.setDuration(duration);
@@ -143,8 +178,7 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
         long reportedPosition = Math.max(0, progress.getCurrentPosition());
         long position = stableSeekPosition(reportedPosition);
         long buffered = effectiveBufferedPosition(progress);
-        long duration = progress.getDuration();
-        if (duration < 0) duration = 0;
+        long duration = resolveDuration(progress);
         if (duration != currentDuration) {
             currentDuration = duration;
             setKeyTimeIncrement(duration);
@@ -176,7 +210,7 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
         long diskBuffered = PlaybackDiskBufferStore.process().contiguousEnd(
                 mediaKey, buffered, DISK_RANGE_GAP_TOLERANCE_MS);
         long effective = Math.max(buffered, diskBuffered);
-        long duration = progress.getDuration();
+        long duration = resolveDuration(progress);
         long bounded = duration > 0 ? Math.min(effective, duration) : effective;
         long now = SystemClock.elapsedRealtime();
         if (SpiderDebug.isEnabled()

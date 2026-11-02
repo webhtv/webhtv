@@ -963,8 +963,7 @@ private boolean runtimeSourceOnly;
     public static void startDirectTmdb(Activity activity, String key, String id, String name, String pic, String mark, ArrayList<String> episodeTitles, TmdbItem item, Vod tmdbVod, Vod detailVod, String tmdbDetailCacheKey, String playFlag, String playEpisodeName, String playEpisodeUrl, int playSeasonNumber, int playEpisodeNumber, History resumeHistory) {
         startDirectTmdb(activity, key, id, name, pic, mark, episodeTitles, item, tmdbVod, detailVod,
                 tmdbDetailCacheKey, playFlag,
-                resumeHistory == null ? "" : resumeHistory.getSourceBindingKey(),
-                playEpisodeName, playEpisodeUrl, playSeasonNumber, playEpisodeNumber, resumeHistory);
+                "", playEpisodeName, playEpisodeUrl, playSeasonNumber, playEpisodeNumber, resumeHistory);
     }
 
     public static void startDirectTmdb(Activity activity, String key, String id, String name, String pic, String mark, ArrayList<String> episodeTitles, TmdbItem item, Vod tmdbVod, Vod detailVod, String tmdbDetailCacheKey, String playFlag, String playFlagKey, String playEpisodeName, String playEpisodeUrl, int playSeasonNumber, int playEpisodeNumber, History resumeHistory) {
@@ -1485,6 +1484,16 @@ private boolean runtimeSourceOnly;
     @Override
     protected CustomSeekView getSeekView() {
         return mBinding.control.seek;
+    }
+
+    @Override
+    protected long getDurationFallbackMs() {
+        return mHistory == null ? C.TIME_UNSET : mHistory.getDuration();
+    }
+
+    private String getTimelineDurationTime() {
+        // 复用 PlayerManager 的兜底，避免同屏出现第二个兜底来源。
+        return player().getDurationTime();
     }
 
     @Override
@@ -2170,6 +2179,10 @@ private boolean runtimeSourceOnly;
         }
         mPendingPlayerKernel = PlayerSetting.NONE;
         player().preparePlayer(kernel, forcePrepare);
+        // preparePlayer() 可能在 PlaySpec 建立前就重建引擎，此窗口内归属判假，
+        // PlaybackActivity.onPlayerRebuild() 整段跳过（其中含 setProgressPlayer），
+        // 进度条会继续读已释放的旧引擎、不再刷新进度，故这里显式跟上新引擎。
+        getSeekView().setProgressPlayer(player().getPlayer());
         setPlayerKernel();
         setDecode();
         return kernel;
@@ -2189,6 +2202,8 @@ private boolean runtimeSourceOnly;
         mPendingPlayerKernel = PlayerSetting.NONE;
         if (!PlayerSetting.isPlayer(kernel)) return;
         player().preparePlayer(kernel);
+        // 同上：服务就绪时补的内核重建同样早于 PlaySpec，重建回调被跳过。
+        getSeekView().setProgressPlayer(player().getPlayer());
     }
 
     /**
@@ -2462,6 +2477,8 @@ private boolean runtimeSourceOnly;
         Episode episode = findFastTmdbPlaybackEpisode(flag);
         if (flag == null || episode == null || TextUtils.isEmpty(episode.getUrl())) {
             mFastTmdbPlaybackStarted = false;
+            // 快速起播失败回落时从未起播，状态收圈路径全都到不了，这里必须显式收起加载圈，否则转圈永久残留。
+            hideProgress();
             SpiderDebug.log("video-flow", "fast tmdb playback missing playable episode key=%s id=%s", getKey(), getId());
             applyCachedTmdbDetailNextFrame(item);
             return;
@@ -2661,16 +2678,14 @@ private boolean runtimeSourceOnly;
 
     private Flag findFastTmdbPlaybackFlag(Vod item) {
         if (item == null) return null;
-        Flag flag = findIntentPlaybackFlag(item.getFlags(), getIntentPlaybackFlagKey(),
+        // 不再退回第一条线路：intent 选集失配时交给正常链路按历史身份重新定位，而不是静默播列表第一条。
+        return findIntentPlaybackFlag(item.getFlags(), getIntentPlaybackFlagKey(),
                 getIntentPlaybackFlag(), getIntentPlaybackEpisodeUrl());
-        if (flag != null) return flag;
-        return item.getFlags().isEmpty() ? null : item.getFlags().get(0);
     }
 
     private Episode findFastTmdbPlaybackEpisode(Flag flag) {
-        Episode episode = findIntentPlaybackEpisode(flag, getIntentPlaybackEpisodeName(), getIntentPlaybackEpisodeUrl());
-        if (episode != null) return episode;
-        return flag == null || flag.getEpisodes().isEmpty() ? null : flag.getEpisodes().get(0);
+        // 同上：定位不到就返回 null，由 startPendingFastTmdbPlayback 回落正常链路，绝不取第一集。
+        return findIntentPlaybackEpisode(flag, getIntentPlaybackEpisodeName(), getIntentPlaybackEpisodeUrl());
     }
 
     private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode) {
@@ -3998,7 +4013,10 @@ private boolean runtimeSourceOnly;
     }
 
     private boolean seamless(Flag flag) {
-        Episode episode = getMark().isEmpty() ? flag.find(mHistory.getEpisode(), true) : flag.find(mHistory.getVodRemarks(), false);
+        // 选集定位以历史身份（URL 优先、集号容错）为主，刮削标题（mark）只作兜底：
+        // 只有走 find(Episode) 才命中 Flag.find 的 URL 优先分支，否则同集多版本会被集名打分选成第一版本。
+        Episode episode = mHistory == null ? null : flag.find(mHistory.getEpisode(), true);
+        if (episode == null && !getMark().isEmpty()) episode = flag.find(getMark(), false);
         setQualityVisible(episode != null && episode.isSelected() && mQualityAdapter.getItemCount() > 1);
         if (episode == null || (isPlaybackFlag(flag) && episode.isSelected())) return false;
         selectEpisode(episode, false);
@@ -5693,7 +5711,7 @@ private boolean runtimeSourceOnly;
     private void showInfo() {
         showTopInfo();
         mBinding.widget.center.setVisibility(View.VISIBLE);
-        mBinding.widget.duration.setText(player().getDurationTime());
+        mBinding.widget.duration.setText(getTimelineDurationTime());
         mBinding.widget.position.setText(player().getPositionTime(0));
     }
 
@@ -6118,7 +6136,15 @@ private boolean runtimeSourceOnly;
         if (!TextUtils.isEmpty(playUrl)) {
             for (Episode episode : flag.getEpisodes()) if (TextUtils.equals(playUrl, episode.getUrl())) return episode;
         }
-        return TextUtils.isEmpty(playName) ? null : flag.find(playName, true);
+        if (!TextUtils.isEmpty(playName)) {
+            Episode episode = flag.find(playName, true);
+            // 名称通道只采纳真实命中：Flag.find 在打分全为 0 时可能用 position 槽位兜底，返回与该集名无关的条目；
+            // strict 只挡首集兜底，不挡位置兜底。命中不了就继续走历史集身份兜底。
+            if (episode != null && (flag.getEpisodes().size() == 1
+                    || episode.getScore(playName, Util.getEpisodeNumber(playName)) > 0)) return episode;
+        }
+        // 集名在换源/刮削后常失真，名称通道又可能被 position 兜底伪命中，最后用历史集身份（URL 优先 + 集号容错）兜底。
+        return mHistory == null ? null : flag.find(mHistory.getEpisode(), true);
     }
 
     private void saveHistory() {
@@ -8985,7 +9011,7 @@ private boolean runtimeSourceOnly;
     @Override
     public void onSeeking(long time) {
         mBinding.widget.center.setVisibility(View.VISIBLE);
-        mBinding.widget.duration.setText(player().getDurationTime());
+        mBinding.widget.duration.setText(getTimelineDurationTime());
         mBinding.widget.position.setText(player().getPositionTime(time));
         mBinding.widget.action.setImageResource(time > 0 ? R.drawable.ic_widget_forward : R.drawable.ic_widget_rewind);
         hideProgress();

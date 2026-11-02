@@ -890,7 +890,28 @@ public final class LabEnv {
     }
 
     private static void extract7z(File archive, File root, long total, ExtractProgress cb) throws IOException {
-        if (cb == null && extract7zNative(archive, root)) return;
+        // 没有进度回调、或量不出总字节（多流包连 measure7z 都会失败返回 0）时进度本来就用不上，
+        // 先走随包的 7zz：它支持 BCJ2 等多流 coder，能避免 commons-compress 白解一遍再失败。
+        boolean nativeTried = cb == null || total <= 0;
+        if (nativeTried && extract7zNative(archive, root, total, cb)) return;
+        // 其余情况先用 commons-compress：进度能按字节精确上报（上层要 formatSize 显示已解压字节）。
+        Exception compatFailure;
+        try {
+            extract7zCompat(archive, root, total, cb);
+            return;
+        } catch (Exception e) {
+            compatFailure = e;
+        }
+        // 多流 coder 的 7z 包 commons-compress 会抛 "Multi input/output stream coders are not yet
+        // supported"，这时才回落到 7zz：进度降级为百分比，量不出总字节时干脆不确定进度，
+        // 但总比整包解压直接失败好。两条路径都不通时抛出原始失败原因。
+        // nativeTried 为 true 说明 7zz 已经失败过一次，同样的调用重试一次只会白解一遍。
+        if (!nativeTried && extract7zNative(archive, root, total, cb)) return;
+        if (compatFailure instanceof IOException) throw (IOException) compatFailure;
+        throw new IOException("7z 解压失败: " + archive.getName(), compatFailure);
+    }
+
+    private static void extract7zCompat(File archive, File root, long total, ExtractProgress cb) throws IOException {
         Progress p = new Progress(total, cb);
         try (SevenZFile sevenZ = new SevenZFile(archive)) {
             SevenZArchiveEntry entry;
@@ -917,7 +938,12 @@ public final class LabEnv {
         if (cb != null) cb.onExtract(total, total);
     }
 
-    private static boolean extract7zNative(File archive, File root) throws IOException {
+    /**
+     * 走随包的 7zz 原生解压。多流 coder（BCJ2 等）的 7z 包 commons-compress 直接解不了，
+     * 会抛 "Multi input/output stream coders are not yet supported"，只能交给 7zz。
+     * 进度取自 7zz 的 -bsp1 百分比输出；读不到百分比就不回调，UI 退化为不确定进度。
+     */
+    private static boolean extract7zNative(File archive, File root, long total, ExtractProgress cb) throws IOException {
         try {
             if (Build.VERSION.SDK_INT < 24) return false;
             File sevenZz = ensure7z(App.get());
@@ -925,7 +951,7 @@ public final class LabEnv {
             if (!root.exists()) root.mkdirs();
             ProcessBuilder pb = new ProcessBuilder(
                     sevenZz.getAbsolutePath(),
-                    "x", "-y",
+                    "x", "-y", "-bsp1", "-bso0",
                     "-o" + root.getAbsolutePath(),
                     archive.getAbsolutePath());
             pb.redirectErrorStream(true);
@@ -934,17 +960,42 @@ public final class LabEnv {
             String oldLd = env.get("LD_LIBRARY_PATH");
             env.put("LD_LIBRARY_PATH", TextUtils.isEmpty(oldLd) ? libDir : libDir + ":" + oldLd);
             Process process = pb.start();
+            // ExtractProgress 的契约是字节：done=已解压字节，total=解压后总字节（<=0 表示未知），
+            // 上层用 formatSize() 直接渲染两个值。measure7z 对多流包同样会失败返回 0，
+            // 这时没有可信的总字节，就干脆不上报百分比，让 UI 停在不确定进度，
+            // 绝不把百分比当字节数伪造给上层。
+            PercentScanner scanner = new PercentScanner();
+            // 先发一次起点回调：总量未知时让 UI 切到不确定进度，已知时把进度条归零，
+            // 避免停留在上一阶段（下载）留下的百分比上。
+            if (cb != null) cb.onExtract(0, total > 0 ? total : 0);
             try (InputStream in = process.getInputStream()) {
                 byte[] buf = new byte[4096];
-                while (in.read(buf) != -1) {
+                int len;
+                while ((len = in.read(buf)) != -1) {
+                    // cb 为空或总量未知时也要继续排空 stdout，否则 7zz 会因管道写满而卡住。
+                    if (cb == null || total <= 0) continue;
+                    int percent = scanner.accept(buf, len);
+                    if (percent >= 0) cb.onExtract(nativeBytes(percent, total), total);
                 }
             }
             int code = process.waitFor();
             File[] files = root.listFiles();
-            return code == 0 && files != null && files.length > 0;
+            boolean ok = code == 0 && files != null && files.length > 0;
+            if (ok && cb != null && total > 0) cb.onExtract(total, total);
+            return ok;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * 把 7zz 的百分比折算成"已解压字节"。7zz 报的是**当前文件**的进度，同一包里的下一个文件
+     * 会回到 0%，所以它只能用来驱动进度条、不能当成整包进度：这里封顶 99%，把 100% 留给
+     * 解压真正结束时补发，避免"进度条满了但还在解压"。
+     */
+    static long nativeBytes(int percent, long total) {
+        if (total <= 0) return 0;
+        return total * Math.min(percent, 99) / 100;
     }
 
     private static void extractTar(InputStream in, File root, long total, ExtractProgress cb) throws IOException {
@@ -1034,6 +1085,49 @@ public final class LabEnv {
         Progress(long total, ExtractProgress cb) {
             this.total = total;
             this.cb = cb;
+        }
+    }
+
+    /**
+     * 从 7zz 的 -bsp1 进度流里挑出百分比。7zz 用 "\r  37% ..." 原地刷新一行，
+     * 所以只认行首（行首空白/退格之后）的 1~3 位 "NN%"，文件名里出现的数字一律不认。
+     * 跨 read 边界保留状态。7zz 是按"当前文件"报百分比的，下一个文件会从 0% 重来，
+     * 所以这里只保证不倒退（进度条不抖），真正的完成 100% 由解压结束时统一补发。
+     */
+    static final class PercentScanner {
+        private int last = -1;
+        private int digits = 0;
+        private int value = 0;
+        private boolean lineStart = true;
+
+        /** 喂一段字节，返回本次识别到的最大百分比（-1 表示没有新进度）。 */
+        int accept(byte[] buf, int len) {
+            int percent = -1;
+            for (int i = 0; i < len; i++) {
+                int c = buf[i] & 0xFF;
+                // 7zz 用 \r 或一串退格把光标拉回行首再重画进度，两者都当作"回到行首"。
+                if (c == '\r' || c == '\n' || c == '\b') {
+                    lineStart = true;
+                    digits = 0;
+                    value = 0;
+                    continue;
+                }
+                if (c >= '0' && c <= '9') {
+                    if (!lineStart) continue;
+                    if (digits < 4) value = value * 10 + (c - '0');
+                    digits++;
+                    continue;
+                }
+                if (c == '%' && lineStart && digits >= 1 && digits <= 3 && value > last && value <= 100) {
+                    last = value;
+                    percent = value;
+                }
+                // 空格/制表符是 7zz 进度行的前导填充，不改变"仍在行首"的状态。
+                lineStart = lineStart && (c == ' ' || c == '\t');
+                digits = 0;
+                value = 0;
+            }
+            return percent;
         }
     }
 
