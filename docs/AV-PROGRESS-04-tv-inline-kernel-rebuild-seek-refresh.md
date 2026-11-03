@@ -26,7 +26,7 @@ leanback/HistoryActivity.java:148（HomeActivity.java:1320 同）
 2. 随后 `player().preparePlayer(inlineHistoryPlayerKernel());`（:7937）。`inlineHistoryPlayerKernel()`（:11698-11700）= `history.getPlayerOrDefault()`，也就是**历史记录记住的内核**；与设置里当前活动内核不一致时，`PlayerManager.preparePlayer(int, boolean)`（`PlayerManager.java:2097-2127`）在 :2100 不做早退，走到 :2114-2120 释放旧引擎并新建引擎。
 3. 重建后 :2124 立刻回调 `callback.onPlayerRebuild(player, force)`，而 :2125 才清 `spec`。此时 `PlayerManager.getKey()` 返回 null（:587-589），`PlaybackActivity.isOwner()`（`PlaybackActivity.java:258-262`）判假。
 4. `PlaybackActivity.onPlayerRebuild(...)`（:1148-1155）整段包在 `if (isOwner())` 内，`getSeekView().setProgressPlayer(player)` 被一起跳过。
-5. 回到 `startInlinePlayer`：`startPlayer(getHistoryKey(), ...)`（:7943）此后才建立新的 PlaySpec，但已没有任何代码把 seek view 重新绑到新引擎。`CustomSeekView.progressPlayer` 仍指向已被 release 的旧 Player 实例（非 null，因此 `getProgressPlayer()` 不会退回 controller 通道），1 秒轮询读到 duration=0、position=0 ⇒ 左右恒 `00:00`。
+5. 回到 `startInlinePlayer`：`startPlayer(getHistoryKey(), ...)`（:7948）此后才建立新的 PlaySpec，但已没有任何代码把 seek view 重新绑到新引擎。`CustomSeekView.progressPlayer` 仍指向已被 release 的旧 Player 实例（非 null，因此 `getProgressPlayer()` 不会退回 controller 通道），1 秒轮询读到 duration=0、position=0 ⇒ 左右恒 `00:00`。
 6. 内核**一致**时 `PlayerManager.preparePlayer` 在 :2100 直接 return、不重建，回调不发生，进度条照常 ⇒ 与用户「只有内核一致才显示进度」的实测完全吻合。
 
 反向核对：播放器内手动换内核不受影响——`PlayerManager.java:2177` 的 `callback.onPlayerRebuild` 发生在 spec 被改写之前（旧 spec 仍在、同会话），`isOwner()` 为真，重绑正常执行。
@@ -67,3 +67,21 @@ getSeekView().setProgressPlayer(player().getPlayer());
 
 - 未改 `CustomSeekView`、`PlaybackActivity`、`PlayerManager`：归属判定的根在「重建发生在 PlaySpec 之前」，属共用语义，改动面大于本症候，且已被既有源码测试钉住。
 - 未做四内核（EXO / MPV / IJK / System）在别的重建入口的全量普查；本任务只覆盖已确认的内联起播路径。若后续发现第四条路径，沿用同一「重建后立即重绑」处理并追加对应契约测试。
+- 已知的第二处重建入口 `TmdbDetailActivity.java:9256`（`player().switchPlayer(...)`）：其回调发生在旧 spec 仍生效时，`isOwner()` 为真，重绑照常执行，因此不属于本症候；本次有意不改，待真机复现再评估。
+
+## 8. 独立复评（合并 beta 后）
+
+复评范围即本提交自身（`28d3ed286f` 已是 dev5 上唯一未进 `origin/beta` 的实质改动；`origin/beta` 新增的 `03958c154d` 只把 dev5 已推送内容合回 beta，合并提交 `f4cd37789a` 的树与合入前一致）。
+
+结论 **PASS**，无阻断项，复核要点：
+
+- 空值安全：`PlayerManager.preparePlayer(int, boolean)`（`PlayerManager.java:2100`）在重建分支上必然先赋值 `engine`/`player`（:2119-2120）才回调（:2124），`getPlayer()` 只是字段读（:522-524）；且前一行 :7937 已解引用 `player()`，新语句不引入新的空值前提。
+- 视图非空：`getSeekView()` → `inlineSeek()`（`TmdbDetailActivity.java:718-720`、:1520-1522）在电视分支恒为静态膨胀的 `binding.seek`（`activity_tmdb_detail.xml:1536-1540`，非 ViewStub），手机分支两条路径均有 `R.id.seek`（`view_control_vod_tmdb.xml:249-255`）；`binding` 字段从不置空。无 NPE 可达分支。
+- 时序：重绑位于 :7937 `preparePlayer` 与 :7948 `startPlayer` 之间，其间 `ensureInlineDanmakuController`/`SubtitleRestoreCoordinator.restore` 均不触碰引擎，`startPlayer` 内先写 `pinnedPlaybackKey`（`PlaybackActivity.java:622`/`:627`）才 parse/start。
+- 轮询机制确认：`CustomSeekView.java:133-136` 中 `progressPlayer != null` 优先于 controller 通道，已释放引擎读 0/0 ⇒ `00:00`；本页未覆写 `getDurationFallbackMs`，AV-PROGRESS-01 兜底不会掩盖该症状。
+- 空转成本：内核一致时 `setProgressPlayer` 走实例相等早退（`CustomSeekView.java:122`），仅一次引用比较。
+- 测试有效性：test 1 在回退修复后 `indexOf` 返回 -1 必然失败，是真回归守卫；test 2/3 看守的是相邻结构（委托路径、访问器），回退后仍通过——它们能防重构但不能防本缺陷，属已知边界（见 §7）。
+
+复评另指出本文件 §3 第 5 条曾引 `startPlayer(...)（:7943）`，为修复前旧行号，已改为 `:7948`。
+
+本轮由调度方独立重跑验证（未采信上文记录数字）：`:app:testLeanbackArm64_v8aDebugUnitTest --tests TmdbDetailSeekProgressSourceTest --tests VideoActivitySeekProgressSourceTest` ⇒ BUILD SUCCESSFUL，两个 suite 各 3 tests / 0 failures / 0 errors（`app/build/test-results/testLeanbackArm64_v8aDebugUnitTest/TEST-*.xml`）。
