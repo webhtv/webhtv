@@ -28,6 +28,7 @@ public class SettingDanmakuActivity extends BaseActivity implements DanmakuListe
     }
 
     private String getApiStatus() {
+        // 只读展示：用生效地址，本地包兜底也算「已就绪」，但这个值不会被写回 prefs。
         return getString(TextUtils.isEmpty(DanmakuSetting.getEffectiveApiUrl()) ? R.string.none : R.string.yes);
     }
 
@@ -67,7 +68,7 @@ public class SettingDanmakuActivity extends BaseActivity implements DanmakuListe
     }
 
     private void updateAutoVisibility() {
-        boolean show = DanmakuSetting.isLoad() && !TextUtils.isEmpty(DanmakuSetting.getEffectiveApiUrl());
+        boolean show = DanmakuSetting.isLoad() && (DanmakuSetting.hasValidApiUrl() || DanmakuSetting.isBundleSource());
         mBinding.danmakuAuto.setVisibility(show ? View.VISIBLE : View.GONE);
         updateSpiderVisibility();
     }
