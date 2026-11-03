@@ -216,3 +216,36 @@ V1 的连带处理：
 | 本轮改动 | 16 个已跟踪源文件 + `assets/plugin/README.md` + 2 份 docs（本文件与 `PLUGIN-01`）+ 4 个新增源文件（`PluginAuditCodec`/`PluginAuditWriter`/`PluginChipFactory`/`PluginFloatingDock`），代码部分 **+722 −810**（拆类后净减少） |
 | 分支 | `dev4` |
 | PR 目标 | `beta` |
+| 评审提交 | `c026bae6e6a654cbc2673134fec63668f5fed8c9`（22 files changed, +1940 −823） |
+| recovery tag | `recovery/C117-beta-merge-review-dev4-20261103/20261103231405`（指向上述提交） |
+| 推送 | `git push origin dev4` → `248cdfe111d..c026bae6e6a  dev4 -> dev4`（含此前 64 个未推提交），exit 0；恢复标签同批推送成功 |
+| Pull Request | **#519** → `https://github.com/Silent1566/webhtv/pull/519`，`dev4` → `beta`，state OPEN |
+| 拉取远端最新 | `git fetch --all --prune` exit 0（`origin/beta` 前进到 `03958c154df`）→ 见 §9 的再次合并 |
+| 终态一致性与后续 | 见 §9（合并提交 `42c7f865655`、推送与终态核对） |
+
+## 9. beta 前进后的再次合并（2026-11-03）
+
+PR #519 创建后 `git fetch --all --prune` 发现 `origin/beta` 已从 `954527e69e7` 前进到 `03958c154df`，新增 4 个提交：
+`03958c154df`（Merge PR #518 from dev5）、`b10b9fff865`（docs(tv) 记录 beta 合并复评与全量回归结果）、
+`5b24c6cfc4a`（Merge origin/beta into dev5）、`3e8cd7d3101`（fix(tv) 长按方向键在选集网格内持续推进），
+改动 7 个路径（+219 −31）。为满足「合并远端 beta 最新代码」的交付目标，本轮再次合并：
+
+- 冲突预检 `git merge-tree --write-tree HEAD origin/beta` → 只输出 tree oid `202e53279ffb5415891f23a168b70ea596569dc1`，无冲突；
+- `git merge --no-ff origin/beta` → **`42c7f865655ba2169b8b906b16cfbb5ab63195a2`**；`Auto-merging` 仅涉及 leanback
+  `VideoActivity.java` 与 `TmdbDetailActivity.java`，且落在互不重叠的区域（beta 改 `:501` 附近字段与 `:4695`/`:4749`
+  的长按选集逻辑；本分支的 `VideoActivity` 改动在 `:3358-3367` 的剧集上下文发布）；合并后 `git status --porcelain` 为空；
+- `git merge-base --is-ancestor origin/beta HEAD` → exit 0；`git rev-list --left-right --count origin/beta...HEAD` = `0 / 17`。
+
+合并后复核（beta 的新代码若撞坏插件埋点必须当场发现）：
+
+| 检查项 | 结果 |
+| --- | --- |
+| leanback `VideoActivity` 插件埋点存活 | `publishPluginEpisodeContext` `:2504` / `:3329`、定义 `:3358`、`PluginEpisodeContext.publish` `:3363`、`PluginHostEvents.episodeChanged` `:3367`、`republishPluginEpisodeContext` `:3384`、`onStart` 调用 `:9344` —— 全部在位 |
+| mobile `VideoActivity` 插件埋点存活 | `PluginHostEvents.episodeChanged` `:2864` 在位 |
+| `TmdbDetailActivity`（beta 改动最大）插件接线 | 10 处 `Plugin*` 引用全在（`:775` clear、`:3327`/`:3336`/`:3356` publish 与 republish、`:11498-11501` 返回本页重发），beta 未触碰这些区域 |
+| 双 flavour 编译 | `.\gradlew.bat :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:compileMobileArm64_v8aDebugJavaWithJavac --console=plain` → **BUILD SUCCESSFUL in 2m 14s**，58 tasks (4 executed / 54 up-to-date)，exit 0，仅既有 deprecation/unchecked 警告 |
+| 插件 + 缓存单测 | `:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.plugin.*" --tests "com.fongmi.android.tv.cache.*"` → **BUILD SUCCESSFUL in 1m 14s**；XML 汇总 **SUITES=39 TESTS=321 FAILURES=0 ERRORS=0 SKIPPED=1**，与合并前逐项相同 |
+| beta 自带的 3 个用例 | 同 module 追加 `TmdbDetailActivityLayoutTest` + `VideoActivityLayoutTest` + `TmdbEpisodeGridPolicyTest` → **BUILD SUCCESSFUL in 1m 58s**，exit 0 |
+
+结论：beta 增量与本分支的插件改动零路径冲突；合并后编译、插件/缓存单测、beta 自带用例三线全绿，
+未发现新增缺陷，本轮无需再修复。

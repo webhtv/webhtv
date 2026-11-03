@@ -1758,11 +1758,11 @@ GET m.douban.com /rexxar/api/v2/movie/35517044/interests  200    0ms cache   (x3
 
 ## Recovery anchor · 恢复锚点（2026-11-03）
 
-- **目标**：插件框架 P1–P10 全部落地在 `dev4`，并保持 `docs/C117-beta-merge-review-dev4-20261103.md` 记录的可提交状态。
+- **目标**：插件框架 P1–P10 全部落地在 `dev4`，并保持 `docs/C117-beta-merge-review-dev4-20261103.md` 记录的可提交状态。2026-11-03 收口后 `dev4` 已推送并开出 PR #519（→ `beta`），beta 随后前进 4 个提交，已再次合并（`42c7f865655`）并复验通过。
 - **验收标准**：双 flavour 编译通过 + `--tests 'com.fongmi.android.tv.plugin.*' --tests 'com.fongmi.android.tv.cache.*'` 全绿（基线 SUITES=39 TESTS=319 FAILURES=0 ERRORS=0 SKIPPED=1）+ 插件包内每个文件 ≤500 行（§7:310 门禁）。
 - **当前文件/符号**：`app/src/main/java/com/fongmi/android/tv/plugin/` 下 29 个类。2026-11-03 为满足 500 行门禁与评审结论完成拆分与补线：新增 `PluginAuditCodec`（落盘 JSON 编解码）、`PluginAuditWriter`（落盘调度与版本仲裁）、`PluginChipFactory`（chip 构造与配色）、`PluginFloatingDock`（悬浮入口挂载与拖动）；`PluginAuditLog` 542→279 行、`PluginUiPresenter` 655→382 行。
 - **已完成动作与结果**：见 `docs/C117-beta-merge-review-dev4-20261103.md` 的「修复清单」与「验证」——`QuickJsPluginRuntime` 超时释放、审计版本透传与 `bodySize` 字段、六条生命周期事件接线、chip nextFocus 链、五处重复消除。
-- **未验证的工作区改动**：无（2026-11-03 收口时的状态）。此前的评审轮次曾在工作区留下 16 个已跟踪改动 + 4 个新增文件，全部随 `docs/C117-beta-merge-review-dev4-20261103.md` 记录的验证（双 flavour 编译 + plugin/cache 单测 321 条全绿）一并收口；工作区现在只剩本轮任务的改动本身。
+- **未验证的工作区改动**：无。评审修复的 16 个已跟踪改动 + 4 个新增文件已随 `c026bae6e6a` 提交（验证：双 flavour 编译 + plugin/cache 单测 321 条全绿），已推送 `origin/dev4` 并附 recovery tag；beta 前进后再次合并为 `42c7f865655`，合并后重跑编译（BUILD SUCCESSFUL 2m 14s）、plugin/cache 单测（SUITES=39 TESTS=321 FAILURES=0 ERRORS=0 SKIPPED=1）、beta 自带 3 个用例（BUILD SUCCESSFUL 1m 58s）三线全绿。工作区仅剩本节文字更新本身。
 - **未解决风险**：见 §23.10 与 §22.7 的遗留项——page 整页槽位、py/html 运行时、订阅通道 `plugins[]`、清单 `targets[]` 与 `ui[].leanback` 覆盖块、`reservedNames`/`staged` 保护、插件设置页的审计查看/清理入口、电视端焦点环人工验收。
 - **回滚锚点**：`379fbcdd5aa`（合入 beta 后的基线）。本轮修复若已提交为一或数个提交，用 `git revert <sha>` 逐个撤回；未提交时直接 `git checkout -- <path>` 还原即可——本锚点只保证"回到合入 beta 时的状态"这件事有唯一确定的 commit。
 - **下一个动作**：按 §23.10 顺序取下一个尚未实施的项；开工前先确认 `docs/C117-beta-merge-review-dev4-20261103.md` 的遗留台账没有把它标成「已覆盖」。
