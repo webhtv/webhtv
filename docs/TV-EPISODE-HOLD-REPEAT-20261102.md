@@ -4,7 +4,7 @@
 
 - 目标：详情页（TmdbDetailActivity）与播放页（VideoActivity）的 TMDB 选集网格，按住遥控方向键应连续移动焦点/连续切集；松手后选集区不得弹回长按前的位置或第一集。
 - 验收：①按住 LEFT/RIGHT/UP/DOWN，焦点按格连续前进，不再只走一格；②松开方向键后选集区停在当前焦点所在行，不回跳；③未按住时（repeatCount==0）行为与修复前完全一致。
-- 现场：dev5 @ 53989159df，task_guard 会话 tv-episode-hold-repeat-20261102（mode standard）。
+- 现场：dev5 @ 53989159df，task_guard 会话 tv-episode-hold-repeat-20261102（mode standard）；20261103 合并 origin/beta 后复评于 dev5 @ 5b24c6cfc4，task_guard 会话 beta-merge-rereview-20261103。
 
 ## 用户报告
 
@@ -36,12 +36,21 @@
 - `holdBasePositionAdvancesFromTheLastRequestedCard` / `holdBasePositionKeepsRepeatingFromThePendingTarget` 覆盖 pending 推进语义。
 - 源字符串断言补充：`VideoActivityLayoutTest#leanbackPlaybackEpisodeGridAdvancesOneCardPerHeldRepeat`（长按目标即令牌 + 上下边界钳制）、`TmdbDetailActivityLayoutTest#detailEpisodeGridDpadUpDownUsesFullHeightRecyclerViewUntilBoundary`（新增 boundary 钳制行断言）。
 - 既有基线失败（与本改动无关，已用 `git stash` 全量回退复现）：testMobile 6 例（MpvFontConfigTest / MpvHlsCacheCoordinatorTest / ReaderPlaybackRoutingSourceTest ×2 / TmdbSourceOnlyInteractionTest / WebThemeTokenSourceTest）、testLeanback 1 例（NativeEnhancedPlaybackStyleFocusTest#everyTmdbRowCardCarriesItsOwnVerticalFocusTargets）。
+- 全量回归（20261103）：`gradlew.bat :app:testMobileArm64_v8aDebugUnitTest --offline` → 5625 tests, 6 failed（全部为上面既有的 6 例）；`gradlew.bat :app:testLeanbackArm64_v8aDebugUnitTest --offline` → 4863 tests, 8 failed ＝ 上面 testMobile 的同一批 6 例（跨 flavor 共享源码测试）＋ NativeEnhancedPlaybackStyleFocusTest 既有基线 ＋ SearchResultDownFocusTest#scrollCallbacksDeferResultLoadingUntilAfterLayout。
+- SearchResultDownFocusTest 的失败是 Windows 检出换行导致的环境性问题，不是回归：该测试在 `app/src/testLeanback/java/com/fongmi/android/tv/ui/activity/SearchResultDownFocusTest.java:82-83` 用 `source.indexOf("@Override\n    public void onItemClick", start)` 硬编码 LF，而本机 `core.autocrlf=true` 使 `app/src/leanback/java/com/fongmi/android/tv/ui/activity/CollectActivity.java` 工作区换行为 CRLF（实测 CRLF 计数 1130，LF 字面量不命中），断言因此报 `search scroll helpers must be present`（第 85 行）。两个文件都不在本改动的净差量内。
 
 设备实测（emulator-5554，arm64 leanback debug APK，真实 TMDB 详情页）：
 - 详情页（TmdbDetailActivity，「昨夜将至」12 集 span=4）：按住 DOWN 3s 推进到末行后停住；按住 UP 3s 回到首行后停住；按住 RIGHT 2.5s 横移到第 4 格；每次松手后等 3s 位置不变（无回跳）。
 - 播放页（VideoActivity，37 集）：按住 RIGHT 2.5s 横移 4 格；按住 DOWN 3s 下移一行；再按住 DOWN 停在末行并在行内移动；按住 UP 3s 回到首行；松手后 3.5s 位置均不变。
 - 单次按键映射未变：详情页单次 DOWN 仍逐行下移并在末行按原规则 `focusFirstVisibleTmdbRow()` 离开网格；播放页单次 UP 仍走 `findFocusUp` 离开网格。
 - 已知行为（设计取舍，未擅改）：在边界处“重新按住”时第一个事件 repeatCount==0，仍按原规则离开网格一次；若要“到底纹丝不动、必须松手再按才离开”，需把该规则改成显式按键状态机。
+
+## 合并 origin/beta 与复评（20261103）
+
+- `git merge --no-edit origin/beta` 干净合入（ort 策略、无冲突），合并提交 5b24c6cfc4；origin/beta 当时为 954527e69e（Merge PR #517）。
+- 本改动相对 origin/beta 的净差量未变，仍是 7 文件：VideoActivity.java、TmdbDetailActivity.java、TmdbEpisodeGridPolicy.java、TmdbDetailActivityLayoutTest.java、VideoActivityLayoutTest.java、TmdbEpisodeGridPolicyTest.java 与本文件。
+- beta 新带入的三条提交（954527e69e / 745365b8b6 / 6bb5560b1e）只动 HomeActivity.java 与 HomeCategoryNavigationSourceTest.java（+65/-3），与长按选集无关，复评结论是自洽的：`applyToolbarVisibility()` 用 `toolbarRequestedVisible && webToolbarVisible && !isCategoryVisible()` 决定工具条，`syncNativeContentInset()` 在工具条隐藏且处于分类页时用 `R.dimen.webhtv_space_6`（24dp）兜底，避免顶部留白跳变。`CustomVerticalGridView.setHeaderVisibility` 先改子视图可见性再回调 listener，滚动隐藏工具条时会在分类页短暂显示，随即被 `applyToolbarVisibility()` 纠正回来，属自愈路径。
+- 本轮复评未发现新缺陷，未改动本改动的 Java 源码；`:app:compileLeanbackArm64_v8aDebugJavaWithJavac --offline` 通过，定向用例 313 tests 0 failed。
 
 ## 回滚
 
