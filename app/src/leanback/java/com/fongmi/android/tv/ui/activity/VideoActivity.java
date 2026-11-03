@@ -501,6 +501,10 @@ private boolean runtimeSourceOnly;
     private View mFocus1;
     private ViewTreeObserver.OnGlobalLayoutListener mEpisodeGridFocusListener;
     private int mEpisodeGridFocusTarget = -1;
+    // 长按连续选集：最近一次请求的目标卡片。焦点落地前按住方向的重复按键以它为基准继续推进，
+    // 同时充当待定对焦回调的失效令牌（换目标即作废旧回调，避免过期坐标把列表滚回原处）。
+    private int mEpisodeHoldTarget = RecyclerView.NO_POSITION;
+    private static final int EPISODE_HOLD_FOCUS_MAX_ATTEMPTS = 6;
     // 焦点校正的尝试次数上限：只补偿「进场时焦点丢失」这一种情况，冲击几次就放手。
     private static final int EPISODE_GRID_FOCUS_MAX_ATTEMPTS = 3;
     private int mEpisodeGridFocusAttempts;
@@ -4695,27 +4699,36 @@ private boolean runtimeSourceOnly;
 
 
     private boolean onEpisodeKey(KeyEvent event) {
-        if (!KeyUtil.isActionDown(event)) return false;
+        if (!KeyUtil.isActionUp(event) && !KeyUtil.isActionDown(event)) return false;
+        if (KeyUtil.isActionUp(event)) {
+            mEpisodeHoldTarget = RecyclerView.NO_POSITION;
+            return false;
+        }
         RecyclerView episodeView = episodeGridMode ? mBinding.episodeGrid : mBinding.episode;
         View focus = getCurrentFocus();
         if (focus == null) return false;
         RecyclerView.ViewHolder holder = episodeView.findContainingViewHolder(focus);
         if (holder == null) return false;
-        int position = holder.getBindingAdapterPosition();
-        if (position == RecyclerView.NO_POSITION) return false;
+        int focusedPosition = holder.getBindingAdapterPosition();
+        if (focusedPosition == RecyclerView.NO_POSITION) return false;
+        if (event.getRepeatCount() == 0) mEpisodeHoldTarget = RecyclerView.NO_POSITION;
+        int position = episodeGridMode ? TmdbEpisodeGridPolicy.holdBasePosition(focusedPosition, mEpisodeHoldTarget) : focusedPosition;
         if (episodeGridMode) {
             RecyclerView.LayoutManager layoutManager = mBinding.episodeGrid.getLayoutManager();
             int spanCount = layoutManager instanceof GridLayoutManager gridLayoutManager ? gridLayoutManager.getSpanCount() : getEpisodeGridSpanCount();
             if (KeyUtil.isDownKey(event)) {
                 int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), true);
                 if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);
-                // 已到网格最后一行：继续往下必须落到“评分与数据”，否则焦点链在选集底部断掉，
+                // 长按撞到最后一排时停在原地，别让连续按键把焦点甩出网格。
+                if (event.getRepeatCount() > 0) return true;
+                // 单次按下到网格最后一行：必须落到“评分与数据”，否则焦点链在选集底部断掉，
                 // 用户报告“评分与数据下的卡片无法选中容易遥控跳过”。
                 return focusRatingRow();
             }
             if (KeyUtil.isUpKey(event)) {
                 int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), false);
                 if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);
+                if (event.getRepeatCount() > 0) return true;
             } else if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) {
                 // 集数卡片根视图不可聚焦、adapter 也没写水平 nextFocus，交回系统 FocusFinder 时
                 // 向左找不到同排邻居（按键无效）、向右直接跳出选集网格落到上方「简介」按钮
@@ -4740,12 +4753,34 @@ private boolean runtimeSourceOnly;
     }
 
     private boolean focusEpisodeGridPosition(int position) {
-        RecyclerView.ViewHolder holder = mBinding.episodeGrid.findViewHolderForAdapterPosition(position);
-        if (holder != null && holder.itemView.requestFocus()) return true;
-        mBinding.episodeGrid.scrollToPosition(position);
-        mBinding.episodeGrid.post(() -> {
-            RecyclerView.ViewHolder next = mBinding.episodeGrid.findViewHolderForAdapterPosition(position);
-            if (next != null) next.itemView.requestFocus();
+        return focusEpisodeGridPosition(position, 0);
+    }
+
+    /**
+     * 把焦点送到集数网格的某一格，直到真正落地为止。
+     *
+     * <p>原来只排一次 {@code post}：焦点还没绑到新卡片时那段回调就跑到，取不到 holder 就悄悄放弃，
+     * 于是按住方向键的后续重复事件仍以旧卡片为基准算出同一个目标（只走一格），
+     * 而且同一时刻还挂着多条互不知情的回调，彼此用过期坐标重新对焦、把列表拽回去（用户报告松手后闪回）。
+     * 这里改成「按帧重试 + 目标即令牌」：目标换了就作废旧回调，成功落地就停。
+     */
+    private boolean focusEpisodeGridPosition(int position, int attempt) {
+        if (isFinishing() || isDestroyed()) return false;
+        int count = mEpisodeGridAdapter == null ? 0 : mEpisodeGridAdapter.getItemCount();
+        if (count == 0) return false;
+        int target = Math.max(0, Math.min(position, count - 1));
+        mEpisodeHoldTarget = target;
+        RecyclerView.ViewHolder holder = mBinding.episodeGrid.findViewHolderForAdapterPosition(target);
+        if (holder != null) {
+            mBinding.episodeGrid.stopScroll();
+            if (holder.itemView.requestFocus()) return true;
+        } else if (attempt == 0) {
+            mBinding.episodeGrid.scrollToPosition(target);
+        }
+        if (attempt >= EPISODE_HOLD_FOCUS_MAX_ATTEMPTS) return true;
+        mBinding.episodeGrid.postOnAnimation(() -> {
+            if (mEpisodeHoldTarget != target) return;
+            focusEpisodeGridPosition(target, attempt + 1);
         });
         return true;
     }

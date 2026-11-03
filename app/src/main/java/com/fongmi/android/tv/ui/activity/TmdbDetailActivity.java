@@ -508,6 +508,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private int renderedEpisodeRangeIndex = -1;
     private int pendingEpisodeRangeFocus = -1;
     private int lastDetailEpisodeFocusRowStart = RecyclerView.NO_POSITION;
+    // 长按连续选集：最近一次请求的目标卡片。焦点落地前按住方向的重复按键以它为基准继续推进，
+    // 同时充当待定对焦回调的失效令牌（换目标即作废旧回调）。
+    private int pendingDetailEpisodeTarget = RecyclerView.NO_POSITION;
+    private static final int DETAIL_EPISODE_FOCUS_MAX_ATTEMPTS = 6;
     private boolean tmdbMediaLoading;
     private boolean lightTheme;
     private boolean backdropSlideLoading;
@@ -5433,6 +5437,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         boolean down = KeyUtil.isDownKey(event);
         int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, span, episodeAdapter.getItemCount(), down);
         if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) {
+            // 长按撞到首行/末行时停在原地。把焦点甩出网格会让"按住方向浏览选集"在边界处
+            // 突然跳到 TMDB 行并继续横向跑；松手后再按一次才按原规则离开网格。
+            if (event.getRepeatCount() > 0) return true;
             if (!down) {
                 if (focusDetailEpisodeRangeButton()) return true;
                 if (focusDetailEpisodeToolButton(View.FOCUS_UP)) return true;
@@ -5440,6 +5447,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
             return focusFirstVisibleTmdbRow();
         }
+        // 首次按键继续交给 RecyclerView 原生焦点搜索；只有长按重复事件才显式接管，
+        // 因为此时焦点尚未落到新卡片，FocusFinder 会按旧焦点再算一次，表现为按住上下只走一格。
+        if (event.getRepeatCount() > 0) return focusDetailEpisode(target);
         return false;
     }
 
@@ -5849,29 +5859,38 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean focusDetailEpisode(int position) {
+        return focusDetailEpisode(position, 0);
+    }
+
+    /**
+     * 把焦点送到选集网格的某一集，直到真正落地为止。
+     *
+     * <p>原来未命中可见卡片时排一次 {@code post} + {@code postDelayed(80ms)}：按住方向键时每个重复
+     * 事件都会再排一条，焦点还没落到上一集就又被下一个 80ms 回调按过期坐标 {@code scrollToPosition}
+     * 拽回去，表现为长按只走一格、松手后选集列表闪回原处（用户报告）。
+     * 这里改成「按帧重试 + 目标即令牌」：目标换了作废旧回调，成功落地即停。
+     */
+    private boolean focusDetailEpisode(int position, int attempt) {
         if (binding == null || episodeAdapter == null || episodeAdapter.getItemCount() == 0) return false;
         int target = Math.max(0, Math.min(position, episodeAdapter.getItemCount() - 1));
         int span = detailEpisodeSpanCount();
         int rowStart = Math.max(0, target - target % span);
+        pendingDetailEpisodeTarget = target;
         RecyclerView.ViewHolder visibleHolder = binding.episodeContainer.findViewHolderForAdapterPosition(target);
         if (visibleHolder != null) {
             binding.episodeContainer.stopScroll();
-            visibleHolder.itemView.requestFocus();
-            if (episodeGridMode) alignDetailEpisodeFocusedRow(visibleHolder.itemView, target);
-            return true;
-        }
-        binding.episodeContainer.post(() -> {
+            if (visibleHolder.itemView.requestFocus()) {
+                if (episodeGridMode) alignDetailEpisodeFocusedRow(visibleHolder.itemView, target);
+                return true;
+            }
+        } else if (attempt == 0) {
             binding.episodeContainer.stopScroll();
             scrollEpisodeToPosition(rowStart, ResUtil.dp2px(8));
-            binding.episodeContainer.postDelayed(() -> {
-                RecyclerView.ViewHolder holder = binding.episodeContainer.findViewHolderForAdapterPosition(target);
-                if (holder == null) {
-                    binding.episodeContainer.requestFocus();
-                    return;
-                }
-                holder.itemView.requestFocus();
-                if (episodeGridMode) alignDetailEpisodeFocusedRow(holder.itemView, target);
-            }, 80);
+        }
+        if (attempt >= DETAIL_EPISODE_FOCUS_MAX_ATTEMPTS) return true;
+        binding.episodeContainer.postOnAnimation(() -> {
+            if (binding == null || pendingDetailEpisodeTarget != target) return;
+            focusDetailEpisode(target, attempt + 1);
         });
         return true;
     }
@@ -11022,12 +11041,16 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private boolean onDetailEpisodeContainerKey(View focus, KeyEvent event) {
         if (!KeyUtil.isUpKey(event) && !KeyUtil.isDownKey(event) && !KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event)) return false;
-        if (!KeyUtil.isActionDown(event)) return true;
+        if (!KeyUtil.isActionDown(event)) {
+            pendingDetailEpisodeTarget = RecyclerView.NO_POSITION;
+            return true;
+        }
         RecyclerView.ViewHolder holder = binding.episodeContainer.findContainingViewHolder(focus);
         if (holder == null) return true;
         int position = holder.getBindingAdapterPosition();
         if (position == RecyclerView.NO_POSITION) return true;
-        return moveDetailEpisodeFocus(position, event);
+        if (event.getRepeatCount() == 0) pendingDetailEpisodeTarget = RecyclerView.NO_POSITION;
+        return moveDetailEpisodeFocus(TmdbEpisodeGridPolicy.holdBasePosition(position, pendingDetailEpisodeTarget), event);
     }
 
     private boolean isFocusInside(View focus, View parent) {
