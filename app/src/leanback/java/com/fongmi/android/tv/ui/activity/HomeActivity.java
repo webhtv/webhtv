@@ -135,6 +135,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private String webChromeMode = TV_NORMAL;
     private String webDefaultChromeMode = TV_FULL;
     private boolean webToolbarVisible = true;
+    private boolean toolbarRequestedVisible = true;
     private boolean loadingHomeCategory;
     private boolean skipNextVodConfigRefresh;
     private boolean pendingOpenVod; // 手动点击"点播"后等待数据加载完成再进分类页
@@ -415,8 +416,13 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void showHomeContent() {
         invalidatePendingFocusRequests();
         mCurrentType = null;
+        // 分类页里的滚动隐藏是分类页的临时状态，不该跨内容模式留下来：否则在分类页往下滚过
+        // 再返回首页，记录下来的“不想显示”会让首页工具条一直藏着（CustomVerticalGridView
+        // 会把 typeRecycler 和 toolbar 一起藏掉并回调到这里）。
+        toolbarRequestedVisible = true;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
         mBinding.categoryContainer.setVisibility(View.GONE);
+        applyToolbarVisibility();
         if (mFolder != null && mFolder.isAdded() && !mFolder.isHidden()) {
             mFolder.clearContentFocusRequest();
             mFolder.setUserVisibleHint(false);
@@ -460,6 +466,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         FolderFragment target = existing instanceof FolderFragment ? (FolderFragment) existing : FolderFragment.newInstance(getHome().getKey(), item);
         if (target == mFolder && target.isAdded() && !target.isHidden()) {
             mCurrentType = item;
+            applyToolbarVisibility();
             if (toggleFilter) updateFilter(item);
             return;
         }
@@ -482,6 +489,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         transaction.commit();
         mFolder = target;
         mCurrentType = item;
+        applyToolbarVisibility();
     }
 
     private void restoreTypeFocus(boolean keepTypeFocus, Class item) {
@@ -536,8 +544,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         clearStaleSiteTypes();
         mCurrentType = null;
         mFolder = null;
+        toolbarRequestedVisible = true;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
         mBinding.categoryContainer.setVisibility(View.GONE);
+        applyToolbarVisibility();
         // 状态清理是纯内存赋值，与能否提交事务无关；这里必须已经丢弃 mFolder，
         // 否则 isCurrentCategory() 会把一个即将消失的 Fragment 当成当前分类。
         if (!canCommitFragmentTransaction()) {
@@ -579,13 +589,29 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void updateToolbarVisibility(boolean visible) {
-        mBinding.toolbar.setVisibility(visible && webToolbarVisible ? View.VISIBLE : View.GONE);
+        toolbarRequestedVisible = visible;
+        applyToolbarVisibility();
+    }
+
+    /**
+     * 首页顶部工具条（logo + 站点名 + 时钟）只属于首页内容。
+     *
+     * <p>点播内联分类页要和关闭「默认加载点播」后 VodActivity 分类页保持一致：那边只有分类按钮行 +
+     * 内容容器，没有这条工具条（见 {@code app/src/leanback/res/layout/activity_vod.xml}），所以分类页
+     * 把工具条藏起来；分类按钮行照旧留在顶部，方向键还能继续切分类。首页里按最近一次滚动请求
+     * 恢复，切换内容模式时（离开或回到首页）这个请求会复位成显示。
+     */
+    private void applyToolbarVisibility() {
+        boolean show = toolbarRequestedVisible && webToolbarVisible && !isCategoryVisible();
+        mBinding.toolbar.setVisibility(show ? View.VISIBLE : View.GONE);
         syncNativeContentInset();
         syncWebOverlayLayout();
     }
 
     private void syncNativeContentInset() {
-        int top = isToolbarVisible() ? toolbarHeight() : 0;
+        // 工具条藏掉后首页内容贴到顶部；分类页的分类按钮行需要自己的留白，与 VodActivity 分类页一致。
+        // 三臂的单位都是 px（getPaddingTop/setPadding 和 toolbarHeight 都是 px），别在这里改成 dp。
+        int top = isToolbarVisible() ? toolbarHeight() : (isCategoryVisible() ? getResources().getDimensionPixelSize(R.dimen.webhtv_space_6) : 0);
         if (mBinding.nativeContent.getPaddingTop() == top) return;
         mBinding.nativeContent.setPadding(mBinding.nativeContent.getPaddingLeft(), top, mBinding.nativeContent.getPaddingRight(), mBinding.nativeContent.getPaddingBottom());
     }
