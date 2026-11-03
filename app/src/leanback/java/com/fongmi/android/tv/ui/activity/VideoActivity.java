@@ -3355,9 +3355,12 @@ private boolean runtimeSourceOnly;
         try {
             com.fongmi.android.tv.bean.TmdbItem item = getMatchedTmdbItem();
             if (item == null) item = getTmdbItem();
-            com.fongmi.android.tv.plugin.PluginEpisodeContext.publish(
-                    getClass().getSimpleName(),
-                    com.fongmi.android.tv.plugin.PluginEpisodePayload.of(item, mVod, episode));
+            com.google.gson.JsonObject context = com.fongmi.android.tv.plugin.PluginEpisodePayload.of(item, mVod, episode);
+            com.fongmi.android.tv.plugin.PluginEpisodeContext.publish(getClass().getSimpleName(), context);
+            // episode.changed 与上下文槽共用同一个 of() 结果：插件若从事件读到 A、点击时从槽里读到 B，
+            // 表现就是"评论串台"，而这类错在日志里没有任何痕迹。这里传的是 JsonObject，
+            // 序列化发生在 helper 内部的 hasSubscribers 短路之后，因此无订阅者时这一行确实零行为。
+            com.fongmi.android.tv.plugin.PluginHostEvents.episodeChanged(this, context);
         } catch (Throwable ignored) {
             // 插件上下文是可选增强：拿不到就当没有，绝不影响播放。
         }

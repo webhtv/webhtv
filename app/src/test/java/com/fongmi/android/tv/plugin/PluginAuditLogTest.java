@@ -458,4 +458,41 @@ public class PluginAuditLogTest {
         assertEquals(0, log.size());
         assertTrue(log.entries().isEmpty());
     }
+
+    /** bodySize 必须真的落盘并原样回读：它是"插件发出去多少字节"的唯一证据，只在内存里对不算数。 */
+    @Test
+    public void bodySizeSurvivesReload() {
+        MemorySink sink = new MemorySink();
+        PluginAuditLog.storeForTest(PluginAuditStore.useSinkForTest(sink));
+        try {
+            log.recordRequest("body.probe", "3.0.0", null, "net.request",
+                    "https://example.com/upload", 200, 7L, "ok", 12L);
+            PluginAuditLog.reloadForTest();
+            List<PluginAuditLog.Entry> restored = log.entries();
+            assertEquals(1, restored.size());
+            assertEquals(12L, restored.get(0).bodySize());
+        } finally {
+            PluginAuditLog.storeForTest(null);
+            PluginAuditStore.useSinkForTest(null);
+        }
+    }
+
+    /** 加 bodySize 之前的旧快照里没有这个键：必须照读并回落 0，不许整行报废。 */
+    @Test
+    public void legacySnapshotWithoutBodySizeFallsBackToZero() {
+        MemorySink sink = new MemorySink();
+        sink.write("{\"kind\":\"request\",\"pluginId\":\"legacy\",\"pluginVersion\":\"1\","
+                + "\"host\":\"e.com\",\"path\":\"/x\",\"status\":200,\"durationMs\":5,"
+                + "\"outcome\":\"ok\"}");
+        PluginAuditLog.storeForTest(PluginAuditStore.useSinkForTest(sink));
+        try {
+            PluginAuditLog.reloadForTest();
+            List<PluginAuditLog.Entry> restored = log.entries();
+            assertEquals(1, restored.size());
+            assertEquals(0L, restored.get(0).bodySize());
+        } finally {
+            PluginAuditLog.storeForTest(null);
+            PluginAuditStore.useSinkForTest(null);
+        }
+    }
 }

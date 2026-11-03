@@ -128,8 +128,10 @@ public final class PluginManifest {
         if (!isSupportedRuntime(api)) return null;
         String entry = string(runtime, "entry", MAX_ENTRY_LENGTH);
         if (entry == null || entry.isEmpty()) return null;
-        int timeout = integer(runtime, "timeout", 15);
-        if (timeout < 1 || timeout > 60) timeout = 15;
+        int timeout = integer(runtime, "timeout", PluginNetBridge.DEFAULT_TIMEOUT_SECONDS);
+        if (timeout < 1 || timeout > PluginNetBridge.MAX_TIMEOUT_SECONDS) {
+            timeout = PluginNetBridge.DEFAULT_TIMEOUT_SECONDS;
+        }
 
         Set<String> declared = stringSet(root, "permissions", MAX_PERMISSIONS, MAX_PERMISSION_LENGTH);
         Set<String> permissions = PluginCapabilityRegistry.filterPermissions(declared);
@@ -228,7 +230,14 @@ public final class PluginManifest {
         return Collections.unmodifiableSet(values);
     }
 
-    /** 槽位类型 → 所需权限；未知槽位返回 {@code null}。 */
+    /**
+     * 槽位类型 → 所需权限；未知槽位返回 {@code null}。
+     *
+     * <p><b>这张表没有重复来源，故保留在清单侧。</b>{@link PluginCapabilityRegistry} 只登记
+     * "权限 → 允许的事件"，并不记录"槽位类型 → 权限"；宿主侧
+     * {@code PluginHost.action} 也是向本方法要这个映射。若要抽走它，得先在注册表里
+     * 新造一份槽位表，那只是把一个真源换成另一个真源，并没有消除重复。
+     */
     @Nullable
     static String permissionForSlot(@Nullable String slot) {
         if (slot == null) return null;
@@ -241,12 +250,20 @@ public final class PluginManifest {
         };
     }
 
+    /**
+     * 该清单声明的运行时引擎是否为本宿主认识的引擎。
+     *
+     * <p><b>委托 {@link PluginRuntimeFactory#isKnownApi}，本类不再自带 case 列表。</b>
+     * 此前这里与注册表的 {@code KNOWN_APIS} 各写一遍 {@code js/py/html}：注册表新增
+     * 一个引擎时，清单侧会继续拒绝它，表现为"引擎已支持但清单装不上"，而两处都不报错。
+     * 引擎集合只有一个真源，就在注册表里。
+     *
+     * <p>注意这里判定的是"已知"而不是"已注册"：{@code py}/{@code html} 在当前版本
+     * 会装进 {@link PluginRuntimeFactory.UnsupportedRuntime}，由 {@code PluginHost.loadOne}
+     * 的 init 失败路径给出准确审计，而不是在解析清单这一步就被悄悄判为"清单不合法"。
+     */
     private static boolean isSupportedRuntime(@Nullable String api) {
-        if (api == null) return false;
-        return switch (api.toLowerCase(Locale.ROOT)) {
-            case "js", "py", "html" -> true;
-            default -> false;
-        };
+        return PluginRuntimeFactory.isKnownApi(api);
     }
 
     public String getId() {

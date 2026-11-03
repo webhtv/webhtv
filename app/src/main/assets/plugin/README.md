@@ -34,11 +34,28 @@ webhtv.request(...)     // 受控 HTTP 请求（需 net.request 权限）
 | `activity.created` | `{"activity":"VideoActivity"}` | `plugin.events` |
 | `activity.destroyed` | `{"activity":"VideoActivity"}` | `plugin.events` |
 | `ui.contentShown` | `{"activity":"TmdbDetailActivity"}` | `plugin.events` 或 `ui.floating` / `ui.toolbar` / `plugin.data.episode` |
+| `playback.ready` | `{"activity":"VideoActivity"}` | `plugin.events` |
+| `playback.playing` | `{"activity":"VideoActivity","playing":"true"}` | `plugin.events` |
+| `playback.state` | `{"activity":"VideoActivity","state":"3"}` | `plugin.events` |
+| `playback.pause` / `playback.resume` | `{"activity":"VideoActivity"}` | `plugin.events` |
+| `episode.changed` | `{"activity":"VideoActivity","episode":"{...}"}` | `plugin.data.episode` |
 
 > `ui.contentShown` 被多个页面共用（首页、文件、历史、收藏、详情、播放），
 > **必须按 payload 里的 `activity` 自行过滤**，不能假设它来自详情页。
+> `playback.*` 来自任意播放页（点播 / 直播 / 音频 / 投屏 / 详情），同样必须按 `activity`
+> 自行过滤，不要假设是某一个页面。
 
-五个事件都是纯生命周期信号，payload 里只有 `activity` 或为空。业务数据（片名、集号、海报等）**不通过事件下发**，只在 `action` 被调用时随 payload 的 `context` 字段提供——见 §5.1。
+`app.*` / `activity.*` / `ui.contentShown` / `playback.*` 都是纯生命周期信号，payload 里只有 `activity`
+或再加一个播放态字段。业务数据（片名、集号、海报等）**只出现在 `episode.changed` 的 `episode` 键**
+（与 `action` 的 `context` 同源同一份 JSON，需要 `plugin.data.episode` 权限）。
+
+`playback.*` 的取值口径：
+
+- `playing` 只有 `"true"` / `"false"` 两个值，来自播放器回调，**不是**页面可见性。
+- `state` 是 Media3 `Player.STATE_*` 的十进制字符串（1 idle / 2 buffering / 3 ready / 4 ended）。
+- `playback.pause` / `playback.resume` 挂的是**播放页 `onPause` / `onResume`（页面可见性）**；
+  后台播放、画中画、跳转都可能让播放继续而页面已不可见。要播放器语义请订阅 `playback.playing`。
+- 所有事件在没有订阅者时**零行为**：宿主先问一句"有人听吗"，再决定是否构造 payload。
 
 ## 4. 清单示例
 

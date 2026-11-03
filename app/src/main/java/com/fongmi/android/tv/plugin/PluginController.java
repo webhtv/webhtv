@@ -354,6 +354,7 @@ public final class PluginController {
     public static void reset() {
         synchronized (PluginController.class) {
             if (instance != null) {
+                instance.host.shutdown();
                 instance.host.unloadAll();
                 instance.detachOnMainThread();
                 instance.actions.shutdownNow();

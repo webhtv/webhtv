@@ -45,8 +45,45 @@ public final class PluginEventBus {
      */
     public static final String EVENT_UI_CONTENT_SHOWN = "ui.contentShown";
 
+    /**
+     * 播放页的播放服务已连接、控制器可用。
+     *
+     * <p>从点集到真正出画面之间还有取流、绑定 Service 与建控制器三段异步，
+     * 订阅者需要区分"用户进了播放页"（{@link #EVENT_PLAYBACK_RESUME}）和
+     * "播放器已经能接受指令"。这个事件报告的是后者。
+     */
+    public static final String EVENT_PLAYBACK_READY = "playback.ready";
+    /** 播放/暂停态翻转，payload 带 {@link #KEY_PLAYING}。 */
+    public static final String EVENT_PLAYBACK_PLAYING = "playback.playing";
+    /** 引擎状态机变化，payload 带 {@link #KEY_STATE}。 */
+    public static final String EVENT_PLAYBACK_STATE = "playback.state";
+    /**
+     * 播放页 {@code onPause}：用户离开了播放页。
+     *
+     * <p>它不是"播放器暂停"——后台播放、画中画与跳转都可能让播放继续，
+     * 需要播放器语义的订阅者应当看 {@link #EVENT_PLAYBACK_PLAYING}。两者分成两个事件，
+     * 是因为把页面可见性混进播放态后，订阅者再也无法分辨这两种完全不同的情况。
+     */
+    public static final String EVENT_PLAYBACK_PAUSE = "playback.pause";
+    /** 播放页 {@code onResume}：用户回到了播放页。语义同 {@link #EVENT_PLAYBACK_PAUSE}。 */
+    public static final String EVENT_PLAYBACK_RESUME = "playback.resume";
+    /**
+     * 播放页认领的剧集身份变了。
+     *
+     * <p>payload 带 {@link #KEY_EPISODE}，内容就是同一时刻发布到
+     * {@link PluginEpisodeContext} 的那份 JSON。两者同源是刻意的：订阅者若从事件里读到 A、
+     * 点击时又从上下文槽读到 B，评论就会串台，而这类错误在日志里完全没有痕迹。
+     */
+    public static final String EVENT_EPISODE_CHANGED = "episode.changed";
+
     /** payload 中承载宿主 Activity 简名的键。 */
     public static final String KEY_ACTIVITY = "activity";
+    /** payload 中承载 {@code playback.playing} 布尔值的键，取值只有 {@code "true"}/{@code "false"}。 */
+    public static final String KEY_PLAYING = "playing";
+    /** payload 中承载引擎状态机整数的键，取值是 {@code Player.STATE_*} 的十进制字符串。 */
+    public static final String KEY_STATE = "state";
+    /** payload 中承载剧集上下文 JSON 的键，与 {@link PluginEpisodeContext} 的同一份快照同源。 */
+    public static final String KEY_EPISODE = "episode";
 
     private static final PluginEventBus INSTANCE = new PluginEventBus();
 

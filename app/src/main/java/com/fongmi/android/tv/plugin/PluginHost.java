@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.plugin;
 
+import android.os.Looper;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -11,6 +13,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * 插件宿主：把"清单声明的插件"挂到 {@link PluginEventBus} 上，并守住三条边界。
@@ -37,6 +42,17 @@ public final class PluginHost implements PluginEventBus.Listener {
     private final PluginRuntimeFactory factory;
     private final PluginEventBus bus;
     private final PluginAuditLog audit;
+    /**
+     * 事件派发线程：脚本求值是同步阻塞调用（最长 {@code QuickJsPluginRuntime.CALL_TIMEOUT_MS}），
+     * 绝不能占用调用方线程。单线程是为了让同一插件看到的先后顺序与事件发生顺序一致。
+     *
+     * <p>懒创建：只有真的从主线程收到过事件才需要它。JVM 单测里 {@link #isMainThread()} 恒假，
+     * 事件一律同步走，这条线程永远不会被创建出来。
+     */
+    @Nullable
+    private volatile ExecutorService events;
+    /** 已重置：此后任何事件都不再派发，{@link #events()} 也不会再起线程。 */
+    private volatile boolean closed;
     private boolean subscribed;
 
     public PluginHost(PluginRuntimeFactory factory, PluginEventBus bus, PluginAuditLog audit) {
@@ -130,15 +146,93 @@ public final class PluginHost implements PluginEventBus.Listener {
      */
     @Override
     public void onEvent(@NonNull String event, @NonNull Map<String, String> payload) {
-        if (plugins.isEmpty()) return;
+        if (closed || plugins.isEmpty()) return;
         String json = toJson(payload);
+        if (!isMainThread()) {
+            deliver(event, json);
+            return;
+        }
+        // 主线程只排队：playback.playing/state 这些事件是从 Player.Listener 同步发出来的，
+        // 在这里等脚本就是让每次播放/暂停/seek 都握着主线程最多 5 秒。排队之后"事件发生"与
+        // "脚本看到事件"解耦，代价是插件晚一个轮次才知道状态变了，收益是界面永远不被拖住。
+        ExecutorService target = events();
+        if (target == null) return;
+        try {
+            target.execute(() -> deliver(event, json));
+        } catch (RejectedExecutionException ignored) {
+            // 宿主已重置：丢弃这条事件，绝不在调用方线程上补一次同步执行。
+        }
+    }
+
+    @Nullable
+    private ExecutorService events() {
+        ExecutorService local = events;
+        if (local != null) return local;
+        synchronized (this) {
+            if (closed) return null;
+            if (events == null) {
+                events = Executors.newSingleThreadExecutor(runnable -> {
+                    Thread thread = new Thread(runnable, "plugin-events");
+                    thread.setDaemon(true);
+                    return thread;
+                });
+            }
+            return events;
+        }
+    }
+
+    /**
+     * 丢弃排队中的事件并停掉派发线程。
+     *
+     * <p>只在进程级重置（{@code PluginController.reset()}）时调用。刻意不放进 {@link #unloadAll()}：
+     * 卸载之后还会重新装载，那时派发线程必须还在；而重置之后这个 host 实例本身要被丢掉。
+     * 先停线程再卸载，是为了让队列里那些还指向旧运行时的闭包直接消失，而不是卸载后才被派发到
+     * 已销毁的运行时上去。
+     */
+    synchronized void shutdown() {
+        closed = true;
+        ExecutorService local = events;
+        events = null;
+        if (local != null) local.shutdownNow();
+    }
+
+    /** 真正逐个派发。执行时重读 {@code plugins}，因此卸载之后排队的事件不会再打到已销毁的实例上。 */
+    private void deliver(String event, String json) {
         for (LoadedPlugin plugin : plugins.values()) {
-            if (plugin.failed) continue;
-            PluginManifest manifest = plugin.manifest;
-            if (!PluginCapabilityRegistry.allowsEvent(manifest.getPermissions(), event)) continue;
-            if (!manifest.subscribesTo(event)) continue;
+            if (!interested(plugin, event)) continue;
             dispatch(plugin, event, json);
         }
+    }
+
+    /**
+     * 当前是否在主线程；{@code Looper} 在 JVM 单测下是桩，必须兜住。
+     *
+     * <p>非主线程直接同步派发而不绕队列：调用方本来就是后台线程，阻塞它没有任何代价，
+     * 而绕一趟队列只会让"事件已发出"与"脚本已处理"之间多出一段不可观测的延迟。
+     */
+    private static boolean isMainThread() {
+        try {
+            return Looper.myLooper() == Looper.getMainLooper();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * 该插件此刻是否应当收到这个事件：未隔离 + 有权限 + 清单声明过。
+     *
+     * <p>抽成单一判定是因为 {@link #onEvent} 与 {@link #subscribersOf} 曾经各写一遍同样的
+     * 三个条件。两处条件一旦漂移，诊断接口会报告"某插件订阅了"，而派发路径却不给它事件——
+     * 这种不一致只能靠人眼比对两段 for 循环发现，代价远高于保留一个私有方法。
+     *
+     * <p>条件顺序保持 {@code allowsEvent} 在前：未声明权限不算违规，只是没订阅，
+     * 所以先被权限挡住的插件连清单查询都不做。
+     */
+    private static boolean interested(LoadedPlugin plugin, String event) {
+        if (plugin.failed) return false;
+        PluginManifest manifest = plugin.manifest;
+        return PluginCapabilityRegistry.allowsEvent(manifest.getPermissions(), event)
+                && manifest.subscribesTo(event);
     }
 
     private void dispatch(LoadedPlugin plugin, String event, String payload) {
@@ -180,14 +274,27 @@ public final class PluginHost implements PluginEventBus.Listener {
         }
     }
 
-    /** 该动作属于哪个槽位；找不到时返回 {@code null}（表示不额外校验槽位权限）。 */
+    /**
+     * 按 action 找出槽位声明；找不到时返回 {@code null}。
+     *
+     * <p>这是本类唯一的槽位查找逻辑：{@link #slotOf} 只取它的类型，
+     * {@link #slotOfAction} 只取它的完整对象。此前两者各写一遍同样的 for 循环，
+     * 一旦清单匹配规则（例如改为大小写不敏感）只改一处，点击校验与点击路由就会分叉。
+     */
     @Nullable
-    private static String slotOf(LoadedPlugin plugin, @Nullable String action) {
+    private static PluginManifest.UiSlot findSlot(LoadedPlugin plugin, @Nullable String action) {
         if (action == null) return null;
         for (PluginManifest.UiSlot slot : plugin.manifest.getUiSlots()) {
-            if (action.equals(slot.action())) return slot.slot();
+            if (action.equals(slot.action())) return slot;
         }
         return null;
+    }
+
+    /** 该动作属于哪个槽位类型；找不到时返回 {@code null}（表示不额外校验槽位权限）。 */
+    @Nullable
+    private static String slotOf(LoadedPlugin plugin, @Nullable String action) {
+        PluginManifest.UiSlot slot = findSlot(plugin, action);
+        return slot == null ? null : slot.slot();
     }
 
     /**
@@ -281,10 +388,8 @@ public final class PluginHost implements PluginEventBus.Listener {
         if (pluginId == null) return null;
         LoadedPlugin plugin = plugins.get(pluginId);
         if (plugin == null) return null;
-        for (PluginManifest.UiSlot slot : plugin.manifest.getUiSlots()) {
-            if (action != null && action.equals(slot.action())) return new PluginSlot(pluginId, slot);
-        }
-        return null;
+        PluginManifest.UiSlot slot = findSlot(plugin, action);
+        return slot == null ? null : new PluginSlot(pluginId, slot);
     }
 
     /** 收集对某事件感兴趣且仍有权限的插件 id，供诊断与 UI 决策。 */
@@ -293,11 +398,7 @@ public final class PluginHost implements PluginEventBus.Listener {
         if (event == null) return Collections.emptyList();
         List<String> ids = new ArrayList<>();
         for (LoadedPlugin plugin : plugins.values()) {
-            if (plugin.failed) continue;
-            if (PluginCapabilityRegistry.allowsEvent(plugin.manifest.getPermissions(), event)
-                    && plugin.manifest.subscribesTo(event)) {
-                ids.add(plugin.manifest.getId());
-            }
+            if (interested(plugin, event)) ids.add(plugin.manifest.getId());
         }
         return Collections.unmodifiableList(ids);
     }

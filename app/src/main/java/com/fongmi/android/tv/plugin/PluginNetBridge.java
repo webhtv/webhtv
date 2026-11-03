@@ -32,8 +32,9 @@ import okhttp3.ResponseBody;
  * fragment，只留 host + path），出问题能查出插件在跟谁说话。
  *
  * <p><b>硬上限（不是策略，是防呆）。</b>方法限定在 {@link #ALLOWED_METHODS}；响应体截到
- * {@link #MAX_RESPONSE_BYTES}，否则一个视频流 URL 就能把插件进程撑爆；超时由清单
- * {@code runtime.timeout}（1..60 秒）决定，与 {@code PluginManifest} 的校验同源。
+ * {@link #MAX_RESPONSE_BYTES}，否则一个视频流 URL 就能把插件进程撑爆；超时会先被
+ * {@link PluginConfig#timeoutOf} 按 {@link #MAX_TIMEOUT_SECONDS} 钳一次，本类再用同一个常量
+ * 兜一次底——两道闸共用一份范围定义，不会各自漂移成两个数字。
  *
  * <p><b>为什么用 {@code OkHttp.client(timeout)} 手工 execute，而不是 {@code OkHttp.string(url)}。</b>
  * 后者把所有异常吞成空串、也拿不到状态码，而审计需要 status 才能区分 403 与超时。
@@ -69,10 +70,11 @@ public final class PluginNetBridge {
      * @param timeoutSeconds 清单里的超时，越界回落到 {@link #DEFAULT_TIMEOUT_SECONDS}
      * @return 结果 JSON 文本，形如 {@code {"status":200,"body":"..."}}；
      *         失败时为 {@code {"status":0,"error":"..."}}。**永远不抛异常**——脚本侧不该处理 Java 异常。
+     * @see #request(String, String, String, String, String, String, int, int) 需要审计记到插件版本时用这个
      */
     public static String request(@Nullable String pluginId, @Nullable String method, @Nullable String url,
             @Nullable String headers, @Nullable String body, int timeoutSeconds) {
-        return request(pluginId, method, url, headers, body, timeoutSeconds, 0);
+        return request(pluginId, null, method, url, headers, body, timeoutSeconds, 0);
     }
 
     /**
@@ -85,23 +87,56 @@ public final class PluginNetBridge {
      */
     public static String request(@Nullable String pluginId, @Nullable String method, @Nullable String url,
             @Nullable String headers, @Nullable String body, int timeoutSeconds, int ttlSeconds) {
+        return request(pluginId, null, method, url, headers, body, timeoutSeconds, ttlSeconds);
+    }
+
+    /**
+     * 带插件版本的请求入口：审计因此能记到"哪个插件的哪个版本"。
+     *
+     * <p><b>为什么版本要单独传而不是让本类去查。</b>网络桥是纯静态工具，拿不到装载器；
+     * 让它反向依赖 {@code PluginHost} 才能拿到版本，会把一次 HTTP 调用绑死在插件生命周期上。
+     * 版本沿信封 -> 运行时 -> 本类一路透传，是本类保持无状态的最小代价。
+     *
+     * @param pluginVersion 插件自身版本，仅用于审计；{@code null} 表示调用方不知道
+     */
+    public static String request(@Nullable String pluginId, @Nullable String pluginVersion,
+            @Nullable String method, @Nullable String url, @Nullable String headers, @Nullable String body,
+            int timeoutSeconds, int ttlSeconds) {
+        return request(pluginId, pluginVersion, null, method, url, headers, body, timeoutSeconds, ttlSeconds);
+    }
+
+    /**
+     * 带「触发事件」的请求入口：审计因此能回答"插件在响应什么的时候把请求发了出去"。
+     *
+     * <p>docs §8.1:330 把触发事件列为审计字段。网络桥自己是静态工具，不知道当前在跑哪个事件或
+     * 动作，所以这个值沿运行时 -> 信封 -> 本类一路透传；{@code null} 表示装载期之外没有明确触发者
+     * （例如脚本顶层发起的请求由运行时标为 {@code runtime.init}）。
+     *
+     * @param event 触发这次请求的事件名或动作名，仅用于审计
+     */
+    public static String request(@Nullable String pluginId, @Nullable String pluginVersion,
+            @Nullable String event, @Nullable String method, @Nullable String url, @Nullable String headers,
+            @Nullable String body, int timeoutSeconds, int ttlSeconds) {
         String verb = method == null ? "" : method.trim().toUpperCase(Locale.ROOT);
         if (verb.isEmpty()) verb = "GET";
         if (!ALLOWED_METHODS.contains(verb)) {
-            return blocked(pluginId, verb, url, "unsupported method: " + verb);
+            return blocked(pluginId, pluginVersion, event, verb, url, "unsupported method: " + verb);
         }
         String target = url == null ? "" : url.trim();
         if (!target.startsWith("http://") && !target.startsWith("https://")) {
-            return blocked(pluginId, verb, target, "unsupported url scheme");
+            return blocked(pluginId, pluginVersion, event, verb, target, "unsupported url scheme");
         }
+        // 兜底而非唯一钳制点：信封侧的钳制在 PluginConfig.timeoutOf，但本方法是公共入口，
+        // 单测与其它调用方会直接传秒数进来，这条路必须自己守住。范围共用同一个常量。
         int timeout = timeoutSeconds < 1 || timeoutSeconds > MAX_TIMEOUT_SECONDS ? DEFAULT_TIMEOUT_SECONDS : timeoutSeconds;
         int ttl = ttlSeconds < 1 ? 0 : Math.min(ttlSeconds, PluginHttpCache.MAX_TTL_SECONDS);
 
         if (ttl > 0) {
             String cached = PluginHttpCache.read(pluginId, verb, target, headers, body, ttl);
             if (cached != null) {
-                PluginAuditLog.get().recordRequest(pluginId, null, null, verb, target,
-                        PluginHttpCache.CACHE_STATUS, 0, "cache");
+                // 缓存命中没有发出真实请求：字节数取不到，传 0 而不是猜一个 body 长度。
+                PluginAuditLog.get().recordRequest(pluginId, pluginVersion, event, verb, target,
+                        PluginHttpCache.CACHE_STATUS, 0, "cache", 0);
                 return result(PluginHttpCache.CACHE_STATUS, cached);
             }
         }
@@ -113,8 +148,8 @@ public final class PluginNetBridge {
                 int status = response.code();
                 String text = readCapped(response.body());
                 long elapsed = System.currentTimeMillis() - started;
-                PluginAuditLog.get().recordRequest(pluginId, null, null, verb, target, status, elapsed,
-                        response.isSuccessful() ? "ok" : "error");
+                PluginAuditLog.get().recordRequest(pluginId, pluginVersion, event, verb, target, status, elapsed,
+                        response.isSuccessful() ? "ok" : "error", requestBytes(verb, body));
                 if (ttl > 0 && status == PluginHttpCache.CACHE_STATUS) {
                     PluginHttpCache.write(pluginId, verb, target, headers, body, ttl, text);
                 }
@@ -122,7 +157,9 @@ public final class PluginNetBridge {
             }
         } catch (IOException | RuntimeException error) {
             long elapsed = System.currentTimeMillis() - started;
-            PluginAuditLog.get().recordRequest(pluginId, null, null, verb, target, 0, elapsed, "error");
+            // 请求体可能参与了这次失败：仍按实际载荷记账，但异常分支不再重算 method/body 语义。
+            PluginAuditLog.get().recordRequest(pluginId, pluginVersion, event, verb, target, 0, elapsed, "error",
+                    requestBytes(verb, body));
             return error(describe(error));
         }
     }
@@ -238,11 +275,34 @@ public final class PluginNetBridge {
      */
     public static String blocked(@Nullable String pluginId, @Nullable String method, @Nullable String url,
             String reason) {
+        return blocked(pluginId, null, method, url, reason);
+    }
+
+    /** 带插件版本的拒绝入口：被拒的那一次同样要能追到具体版本。 */
+    public static String blocked(@Nullable String pluginId, @Nullable String pluginVersion, @Nullable String method,
+            @Nullable String url, String reason) {
+        return blocked(pluginId, pluginVersion, null, method, url, reason);
+    }
+
+    /** 带版本与触发事件的拒绝入口：被拒的那一次同样要能归因到具体事件。 */
+    public static String blocked(@Nullable String pluginId, @Nullable String pluginVersion, @Nullable String event,
+            @Nullable String method, @Nullable String url, String reason) {
         try {
-            PluginAuditLog.get().recordRequest(pluginId, null, null, method, url, 0, 0, "blocked");
+            PluginAuditLog.get().recordRequest(pluginId, pluginVersion, event, method, url, 0, 0, "blocked", 0);
         } catch (Throwable ignored) {
         }
         return error(reason);
+    }
+
+    /**
+     * 这次请求实际带上的请求体字节数，仅用于审计。
+     *
+     * <p>GET/HEAD 在 {@link #build} 里被显式置为无 body，审计必须与真实发出的请求一致，
+     * 不能因为脚本多传了一个 {@code body} 参数就记成一个并不存在的载荷。
+     */
+    private static long requestBytes(String verb, @Nullable String body) {
+        if ("GET".equals(verb) || "HEAD".equals(verb)) return 0;
+        return body == null ? 0 : body.getBytes(StandardCharsets.UTF_8).length;
     }
 
     /** 成功响应的统一形状：缓存命中与真实响应必须长得一模一样，脚本才不用分支。 */

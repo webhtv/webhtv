@@ -1,10 +1,10 @@
 # PLUGIN-01 · 全局插件框架设计评估
 
-- 状态：**评估完成 + D1–D4 已裁定，未进入实施**
-- 日期：2026-10-30
-- 分支/HEAD：`dev4` @ `248cdfe111d`
-- 作者：Dispatch Agent（只读评估 + 文档；本次未改动任何生产代码）
-- 关联文档：`docs/universal-webhome-theme-design.md`、`docs/THEME-CUSTOMIZATION-LAYERS-20260921.md`、`docs/webtheme-compatibility-matrix.md`
+- 状态：**评估完成 + D1–D4 已裁定；P1–P10 已实施并合入 `dev4`**（本文件起初是只读评估稿，§10 起在同一文件里滚动追加各阶段实施记录；不要按 §0–§9 的「未进入实施」阅读）
+- 日期：2026-10-30（初次评估）；实施与救订记录截至 2026-11-03
+- 分支/HEAD：`dev4` @ `379fbcdd5aa`（已合入 `origin/beta`）
+- 作者：Dispatch Agent（§0–§9 为只读评估；§10 起为各阶段实施与评审记录）
+- 关联文档：`docs/universal-webhome-theme-design.md`、`docs/THEME-CUSTOMIZATION-LAYERS-20260921.md`、`docs/webtheme-compatibility-matrix.md`、`docs/C117-beta-merge-review-dev4-20261103.md`
 
 ---
 
@@ -1753,3 +1753,16 @@ GET m.douban.com /rexxar/api/v2/movie/35517044/interests  200    0ms cache   (x3
 2. 缓存总量上限与按容量淘汰（当前只有 TTL 与手动清理）。
 3. 若将来引入账号能力，再评估登录后的全量短评（属于产品决策，不是技术缺口）。
 4. 沿用 §20.9 与 §22.8 的遗留项：net.request 域名白名单重新评估、py/html 运行时与 page 槽位、面板 chip 连点叠窗口复用、电视端焦点环人工验收。
+
+---
+
+## Recovery anchor · 恢复锚点（2026-11-03）
+
+- **目标**：插件框架 P1–P10 全部落地在 `dev4`，并保持 `docs/C117-beta-merge-review-dev4-20261103.md` 记录的可提交状态。
+- **验收标准**：双 flavour 编译通过 + `--tests 'com.fongmi.android.tv.plugin.*' --tests 'com.fongmi.android.tv.cache.*'` 全绿（基线 SUITES=39 TESTS=319 FAILURES=0 ERRORS=0 SKIPPED=1）+ 插件包内每个文件 ≤500 行（§7:310 门禁）。
+- **当前文件/符号**：`app/src/main/java/com/fongmi/android/tv/plugin/` 下 29 个类。2026-11-03 为满足 500 行门禁与评审结论完成拆分与补线：新增 `PluginAuditCodec`（落盘 JSON 编解码）、`PluginAuditWriter`（落盘调度与版本仲裁）、`PluginChipFactory`（chip 构造与配色）、`PluginFloatingDock`（悬浮入口挂载与拖动）；`PluginAuditLog` 542→279 行、`PluginUiPresenter` 655→382 行。
+- **已完成动作与结果**：见 `docs/C117-beta-merge-review-dev4-20261103.md` 的「修复清单」与「验证」——`QuickJsPluginRuntime` 超时释放、审计版本透传与 `bodySize` 字段、六条生命周期事件接线、chip nextFocus 链、五处重复消除。
+- **未验证的工作区改动**：无（2026-11-03 收口时的状态）。此前的评审轮次曾在工作区留下 16 个已跟踪改动 + 4 个新增文件，全部随 `docs/C117-beta-merge-review-dev4-20261103.md` 记录的验证（双 flavour 编译 + plugin/cache 单测 321 条全绿）一并收口；工作区现在只剩本轮任务的改动本身。
+- **未解决风险**：见 §23.10 与 §22.7 的遗留项——page 整页槽位、py/html 运行时、订阅通道 `plugins[]`、清单 `targets[]` 与 `ui[].leanback` 覆盖块、`reservedNames`/`staged` 保护、插件设置页的审计查看/清理入口、电视端焦点环人工验收。
+- **回滚锚点**：`379fbcdd5aa`（合入 beta 后的基线）。本轮修复若已提交为一或数个提交，用 `git revert <sha>` 逐个撤回；未提交时直接 `git checkout -- <path>` 还原即可——本锚点只保证"回到合入 beta 时的状态"这件事有唯一确定的 commit。
+- **下一个动作**：按 §23.10 顺序取下一个尚未实施的项；开工前先确认 `docs/C117-beta-merge-review-dev4-20261103.md` 的遗留台账没有把它标成「已覆盖」。

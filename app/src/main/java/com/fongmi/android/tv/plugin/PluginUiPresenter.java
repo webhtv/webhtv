@@ -1,29 +1,17 @@
 package com.fongmi.android.tv.plugin;
 
 import android.app.Activity;
-import android.content.Context;
-import android.graphics.drawable.GradientDrawable;
-import android.view.Gravity;
 import android.view.View;
-import android.view.ContextThemeWrapper;
-import android.view.MotionEvent;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.view.ViewParent;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 
 import com.fongmi.android.tv.R;
-import com.fongmi.android.tv.theme.ThemeController;
-import com.fongmi.android.tv.utils.ResUtil;
-import com.github.catvod.utils.Prefers;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * 插件 UI 槽位渲染器：把清单声明的槽位变成真实控件，并把点击路由回插件。
@@ -43,14 +31,14 @@ import java.util.Locale;
  * 而是一个不存在的入口。所以 panel 在电视端必须先争取进控制条；控制条缺失时才退到一颗
  * 带焦点环切换的浮标，且这是唯一一处我们主动往焦点链里加停靠点的地方。
  *
- * <p><b>为什么 toolbar 靠 findViewById + 主题包装而不是改两份布局。</b>
+ * <p><b>为什么 toolbar 靠 findViewById + defStyleRes 而不是改两份布局。</b>
  * {@code R.id.control} 与 {@code R.id.container} 在 mobile 与 leanback 的
  * activity_video.xml 里都存在；{@code @style/Control} 也在 main(:117)/leanback(:80)/
  * mobile(:32) 三处有定义，且三份内容不同（leanback 带 {@code selector_chip} 与
  * {@code nextFocusDown=@id/timeBar}，mobile 用
- * {@code ?attr/selectableItemBackgroundBorderless}）。因此 chip 必须用
- * {@code ContextThemeWrapper(context, R.style.Control)} 套主题，让各 flavor 取自己那份，
- * 而不是在代码里点名某个 drawable——后者在另一侧根本不存在。
+ * {@code ?attr/selectableItemBackgroundBorderless}）。因此 chip 用四参构造
+ * {@code new TextView(context, null, 0, R.style.Control)} 把该样式当 defStyleRes 套上去，
+ * 让各 flavor 取自己那份，而不是在代码里点名某个 drawable——后者在另一侧根本不存在。
  *
  * <p><b>电视端方案的选择依据。</b>屏幕悬浮球不在任何焦点链里，遥控够不到；强行 focusable
  * 又会在原有导航路径上凭空多一个停靠点，破坏 {@code PlayerControlFocusHelper} 的方向推断。
@@ -61,20 +49,26 @@ import java.util.Locale;
  * <p><b>toolbar 缺容器时降级为 floating，而不是静默丢弃。</b>作者声明了入口就该看到入口；
  * 当前页面没有控制条（如首页）时，给一个悬浮按钮比什么都不给更有用。降级是显式的，
  * 可通过 {@link #lastFallbacks()} 查证。
+ *
+ * <p><b>为什么悬浮球那一整套（拖动状态机、落点记忆、吸附几何）不在这里。</b>本类回答的是
+ * "哪个槽位挂到哪"，那是一张类型到落位方式的表；拖动回答的是"挂上去之后手指怎么移动它"，
+ * 那是一套父容器尺寸与边距的几何换算。两条推理链没有共享前提，混在一个类里只会让想找槽位
+ * 判定的人先翻过几百行边距代码——所以后者整体在 {@link PluginFloatingDock}，chip 的构造与
+ * 配色在 {@link PluginChipFactory}。
  */
 public final class PluginUiPresenter {
 
     /** 挂载点标记前缀，便于卸载时精确移除、不误删他人视图。 */
     static final String TAG_PREFIX = "webhtv-plugin-host:";
 
-    /** 拖动落点的记忆键前缀，完整键为 {@code plugin_chip_pos:<pluginId>:<action>}。 */
-    private static final String POSITION_PREFIX = "plugin_chip_pos:";
-
-    /** 吸附后与屏幕左右边的间距（dp），与旧版默认落点一致。 */
-    private static final int EDGE_INSET_DP = 16;
-
-    /** 纵向钳制时留出的最小上下边距（dp），避免 chip 贴死在状态栏或导航栏上。 */
-    private static final int VERTICAL_INSET_DP = 24;
+    /** 槽位的落位方式。 */
+    private enum Landing {
+        /** 不挂控件：{@code page} 是整页接管，未知类型、空槽位同理。 */
+        NONE,
+        TOOLBAR,
+        PANEL,
+        FLOATING
+    }
 
     /** 槽位被点击时的回调，由装配层接上 {@link PluginHost#action(String, String, String)}。 */
     public interface OnSlotAction {
@@ -83,6 +77,8 @@ public final class PluginUiPresenter {
 
     private final List<View> attached;
     private final List<PluginHost.PluginSlot> fallbacks;
+    /** 被我们改过 {@code nextFocusDown} 的既有控件及其原值，{@link #detach} 时原样还回去。 */
+    private final List<FocusLink> focusLinks;
     private OnSlotAction onSlotAction;
     /** 最近一次被点击的入口控件，供面板关闭后归还焦点。 */
     @Nullable
@@ -91,11 +87,28 @@ public final class PluginUiPresenter {
     public PluginUiPresenter() {
         this.attached = new ArrayList<>();
         this.fallbacks = new ArrayList<>();
+        this.focusLinks = new ArrayList<>();
     }
 
     /** 设置点击回调。必须在 {@link #attach} 之前设置才能对当次挂载生效。 */
     public void setOnSlotAction(@Nullable OnSlotAction listener) {
         this.onSlotAction = listener;
+    }
+
+    /**
+     * 槽位类型 → 落位方式。
+     *
+     * <p>判定只此一处：{@link #attach} 按它决定挂到哪里，{@link #countRenderable} 按它决定
+     * 算不算一个入口。这两处从前各写一份字符串比较，多一种槽位类型就要记得改两遍，而漏改的
+     * 症状是"数得出 4 个、屏幕上只有 3 个"这种只在特定清单下才显形的偏差。
+     */
+    private static Landing landingOf(@Nullable PluginHost.PluginSlot entry) {
+        if (entry == null || entry.slot() == null) return Landing.NONE;
+        String type = entry.slot().slot();
+        if ("toolbar".equalsIgnoreCase(type)) return Landing.TOOLBAR;
+        if ("panel".equalsIgnoreCase(type)) return Landing.PANEL;
+        if ("floating".equalsIgnoreCase(type)) return Landing.FLOATING;
+        return Landing.NONE;
     }
 
     /**
@@ -113,27 +126,32 @@ public final class PluginUiPresenter {
         detach();
         if (activity == null || slots == null || slots.isEmpty()) return;
         String surface = PluginSurface.of(activity);
-        ViewGroup decor = decorOf(activity);
+        ViewGroup decor = PluginFloatingDock.decorOf(activity);
         if (decor == null) return;
         LinearLayout toolbar = toolbarContainer(activity);
         for (PluginHost.PluginSlot entry : slots) {
-            if (entry == null || entry.slot() == null) continue;
+            Landing landing = landingOf(entry);
+            if (landing == Landing.NONE) continue;
             // 先过滤再碰视图：这一页不该出现的入口，连控件都不建。
             if (!PluginSurface.matches(entry.slot().surfaces(), surface)) continue;
-            String type = entry.slot().slot();
-            boolean isToolbar = "toolbar".equalsIgnoreCase(type);
-            boolean isPanel = "panel".equalsIgnoreCase(type);
-            if (isToolbar && toolbar != null) {
-                addToolbarChip(toolbar, entry);
-            } else if (isPanel) {
+            switch (landing) {
+                case TOOLBAR -> {
+                    if (toolbar != null) {
+                        addToolbarChip(toolbar, entry);
+                    } else {
+                        // toolbar 在无控制条的页面上降级为 floating，并把这件事记下来。
+                        PluginFloatingDock.addFloating(this, decor, activity, entry, leanback);
+                        fallbacks.add(entry);
+                    }
+                }
                 // panel 单独一路：它的入口必须"够得到"，而 floating 在电视端刻意不可聚焦。
-                addPanelEntry(decor, activity, entry, leanback, toolbar);
-            } else if (isToolbar || "floating".equalsIgnoreCase(type)) {
-                // toolbar 在无控制条的页面上降级为 floating，floating 本身照常挂 decorView。
-                addFloating(decor, activity, entry, leanback);
-                // panel 不记进 fallbacks：降级记录专门表示"toolbar 想进控制条却没容器"，
-                // panel 进不了控制条是正常的端差异，不是降级。
-                if (isToolbar) fallbacks.add(entry);
+                // 它也**不**记进 fallbacks——降级记录专门表示"toolbar 想进控制条却没容器"，
+                // panel 进不了控制条是正常的端差异，不是降级，混进去会让诊断数据失真。
+                case PANEL -> addPanelEntry(decor, activity, entry, leanback, toolbar);
+                case FLOATING -> PluginFloatingDock.addFloating(this, decor, activity, entry, leanback);
+                default -> {
+                    // NONE 已被上面跳过，这里只是让 switch 穷尽。
+                }
             }
         }
     }
@@ -146,6 +164,13 @@ public final class PluginUiPresenter {
         }
         attached.clear();
         fallbacks.clear();
+        // 撤掉焦点链：控制条里那些控件是宿主自己的，改过的 nextFocusDown 必须还原。
+        // 不还原就会留下一条指向已移除 chip 的断头链——那之后从它往下走会退回几何推断，
+        // 而它原本明确指向时间条，等于插件退出后把宿主的焦点路径悄悄改掉了。
+        // 必须倒序还原：同一个控件被登记多次时，后一份快照记的是「指向某个 chip 的 id」，
+        // 只有从最后一份开始倒着还原，最早那份真实原值才会最后写回、成为最终值。
+        for (int i = focusLinks.size() - 1; i >= 0; i--) focusLinks.get(i).restore();
+        focusLinks.clear();
         // 控件已经被摘下来了，再留着引用只会在归还焦点时 requestFocus 到一个孤儿视图上。
         lastClicked = null;
     }
@@ -198,45 +223,64 @@ public final class PluginUiPresenter {
         return container instanceof LinearLayout linear ? linear : null;
     }
 
-    /** 向控制条追加 chip：沿用 {@code @style/Control} 的焦点语义，排在末尾不改肌肉记忆。 */
+    /**
+     * 向控制条追加 chip：沿用 {@code @style/Control} 的焦点语义，排在末尾不改肌肉记忆。
+     *
+     * <p><b>为什么必须补 nextFocus 链。</b>{@code @style/Control} 只声明了
+     * {@code nextFocusDown=@id/timeBar}，没有任何一条通往"追加在末尾的那个 chip"的通路：不补的话
+     * 遥控器在控制条上走不到它——视觉上它在末尾，实际上够不到，等于挂了个不存在的入口
+     * （docs §7:307 与 §8.3:365 把工具栏 chip 的 nextFocusUp/Down 链列为验收项）。
+     *
+     * <p><b>为什么只动"旧末尾 ⇄ 新 chip"这一环。</b>其余跳转全由布局文件自己声明；从中间插入
+     * 新跳转会让既有方向键路径凭空改道。只在末尾续一环，原有路径到旧末尾为止完全不变。
+     *
+     * <p><b>为什么两端都现发 id。</b>nextFocus 是 id 引用，而动态 view 默认没有 id。
+     * {@code View.generateViewId()} 给的是一次性的正整数 id，只参与这几条跳转，不注册进
+     * {@code R}，也就不会和任何布局里的 {@code @+id} 撞名。
+     *
+     * <p><b>为什么容器里没有可聚焦子视图时一个 nextFocus 都不设。</b>没有"上一个 chip"可指，
+     * 设了 nextFocusUp 只会让方向键从新 chip 跳到屏幕任意位置；此时保持 {@code Control} 自带
+     * 的默认行为，退化成与改动前一致，比造一条断头链更安全。
+     */
     private void addToolbarChip(LinearLayout container, PluginHost.PluginSlot entry) {
-        TextView chip = createChip(container.getContext(), entry, true);
+        TextView chip = PluginChipFactory.create(this, container.getContext(), entry, true);
+        // 先取旧末尾再 addView：挂上去之后"最后一个子视图"就变成新 chip 自己了。
+        View previous = lastFocusableChild(container);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMarginStart(dp(container.getContext(), 8));
+        params.setMarginStart(PluginChipFactory.dp(container.getContext(), 8));
         container.addView(chip, params);
+        if (previous != null) {
+            // 没有"上一个 chip"时连 id 都不发：这颗 chip 不参与任何跳转，不该凭空多出一个
+            // 可被布局保存/恢复机制认领的 id。
+            chip.setId(View.generateViewId());
+            if (previous.getId() == View.NO_ID) previous.setId(View.generateViewId());
+            chip.setNextFocusUpId(previous.getId());
+            // 旧末尾原本靠 Control 的 nextFocusDown 直接跳去时间条；不覆盖它，从新 chip 再往后
+            // 就断了，"末尾续了一环"只做了一半。原值记下来，detach 时还原。
+            focusLinks.add(new FocusLink(previous, previous.getNextFocusDownId()));
+            previous.setNextFocusDownId(chip.getId());
+        }
         attached.add(chip);
     }
 
     /**
-     * 挂一个悬浮按钮。电视端不进焦点链（见类注释）；手机端可用手指拖动并按插件记忆落点。
+     * 容器里最后一个可聚焦、且未被隐藏的子视图——也就是追加之前的"最后一个 chip"。
      *
-     * <p><b>为什么只有这一条路径装触摸监听。</b>控制条里的 chip 由播放页自己管手势与焦点，
-     * 电视端的可聚焦浮标靠方向键而非手指——给它们装拖动等于在两套既有交互上叠一层冲突。
-     * 悬浮按钮是手机端唯一的自由落点，它是"能拖"这件事的最小且唯一适用面。
+     * <p>跳过 {@code GONE} 是必要的：控制条里大量 chip（episodes/discMenu/actionQuality…）
+     * 默认不显示，把 nextFocus 指向它们，系统会再按方向猜一次落点，结果不可预期。
+     *
+     * <p>找不到（容器空、或全是隐藏/不可聚焦）时返回 {@code null}，调用方据此完全不碰 nextFocus。
      */
-    private void addFloating(ViewGroup decor, Activity activity, PluginHost.PluginSlot entry, boolean leanback) {
-        TextView button = createChip(activity, entry, false);
-        button.setFocusable(!leanback);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.gravity = Gravity.END | Gravity.BOTTOM;
-        params.setMarginEnd(dp(activity, 16));
-        params.bottomMargin = dp(activity, 96);
-        if (!leanback) {
-            // 复原必须赶在 addView 之前：落点只能靠 LayoutParams 表达，挂上去再改会先闪一次默认位置。
-            restorePosition(activity, decor, entry, button, params);
-            DragState drag = new DragState();
-            button.setOnTouchListener((view, event) -> onChipTouch(drag, decor, activity, entry, view, params, event));
-            // 拖过的手指不该再算一次点击。这里重设监听而不是 setOnClickListener(null)：
-            // 置 null 会让 chip 变成不可点击，拖一次之后就再也打不开面板。
-            button.setOnClickListener(view -> {
-                if (drag.consumeClick()) return;
-                dispatch(entry, view);
-            });
+    @Nullable
+    private static View lastFocusableChild(LinearLayout container) {
+        for (int i = container.getChildCount() - 1; i >= 0; i--) {
+            View child = container.getChildAt(i);
+            if (child == null) continue;
+            if (child.getVisibility() == View.GONE) continue;
+            if (child.isFocusable()) return child;
         }
-        decor.addView(button, params);
-        attached.add(button);
+        return null;
     }
 
     /**
@@ -247,7 +291,7 @@ public final class PluginUiPresenter {
      * （首页、设置页、插件管理页等）时，才退到一颗自己管焦点环的浮标——此时页面本来也没有
      * 播放控制，加一个停靠点不会和方向键推断冲突。
      *
-     * <p>手机端与 {@link #addFloating} 完全一致：那里本来就靠触摸，不需要焦点语义。
+     * <p>手机端与 {@link PluginFloatingDock#addFloating} 完全一致：那里本来就靠触摸，不需要焦点语义。
      */
     private void addPanelEntry(ViewGroup decor, Activity activity, PluginHost.PluginSlot entry, boolean leanback,
             @Nullable LinearLayout toolbar) {
@@ -256,68 +300,10 @@ public final class PluginUiPresenter {
             return;
         }
         if (!leanback) {
-            addFloating(decor, activity, entry, false);
+            PluginFloatingDock.addFloating(this, decor, activity, entry, false);
             return;
         }
-        addFocusableFloating(decor, activity, entry);
-    }
-
-    /**
-     * 挂一颗**可聚焦**的浮标，给电视端"没有控制条"的页面用。
-     *
-     * <p>与 {@link #addFloating} 的唯一差别是焦点：这里 {@code setFocusable(true)} 并自己切换
-     * 焦点环。电视上焦点环是"我在哪"的唯一表达，普通浮标的半透明底在选中与未选中时一模一样，
-     * 用户按方向键选中它之后看不出变化，反而会怀疑遥控器坏了。
-     */
-    private void addFocusableFloating(ViewGroup decor, Activity activity, PluginHost.PluginSlot entry) {
-        TextView button = createChip(activity, entry, false);
-        button.setFocusable(true);
-        button.setFocusableInTouchMode(true);
-        button.setBackground(ringBackground(activity, false));
-        button.setOnFocusChangeListener((view, focused) -> view.setBackground(ringBackground(activity, focused)));
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.gravity = Gravity.END | Gravity.BOTTOM;
-        params.setMarginEnd(dp(activity, 16));
-        params.bottomMargin = dp(activity, 96);
-        decor.addView(button, params);
-        attached.add(button);
-    }
-
-    /**
-     * 创建控件。
-     *
-     * <p>toolbar 与 floating 的背景来源刻意不同：toolbar 用静态资源
-     * {@code R.drawable.selector_chip} 以继承既有焦点环（两个 flavor 都有）；floating 走代码
-     * {@link #ringBackground}，因为它的描边色来自运行时主题，静态资源拿不到——
-     * 这与 {@code docs/THEME-CUSTOMIZATION-LAYERS} 的结论一致。
-     */
-    private TextView createChip(Context context, PluginHost.PluginSlot entry, boolean toolbar) {
-        String label = entry.slot().label();
-        if (label == null || label.isEmpty()) label = "插件";
-        // toolbar 走 @style/Control 主题包装：三种 flavor 各自持有该样式（main:117 基线、
-        // leanback:80 带 selector_chip + nextFocusDown、mobile:32 用
-        // ?attr/selectableItemBackgroundBorderless），套主题即可自动取到正确的那份。
-        // 早先这里直接写 R.drawable.selector_chip，在 mobile 上编译失败——那个资源只存在于
-        // leanback 源集。硬编码资源名等于把「两端同构」这个前提写死成谎言。
-        TextView chip = toolbar
-                ? new TextView(new ContextThemeWrapper(context, R.style.Control))
-                : new TextView(context);
-        chip.setText(label);
-        chip.setTextSize(12f);
-        chip.setTextColor(0xFFFFFFFF);
-        chip.setGravity(Gravity.CENTER);
-        chip.setTag(tagOf(entry));
-        chip.setClickable(true);
-        if (toolbar) {
-            // Control 已声明 focusable/textColor/background，此处只补间距。
-            chip.setPadding(dp(context, 12), dp(context, 6), dp(context, 12), dp(context, 6));
-        } else {
-            chip.setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10));
-            chip.setBackground(ringBackground(context));
-        }
-        chip.setOnClickListener(view -> dispatch(entry, view));
-        return chip;
+        PluginFloatingDock.addFocusableFloating(this, decor, activity, entry);
     }
 
     /**
@@ -325,8 +311,11 @@ public final class PluginUiPresenter {
      *
      * <p>顺手记下被点的控件：面板关闭后要把焦点还给它，否则电视用户关掉面板就"丢了"自己
      * 刚才站的位置，只能从头再按一遍方向键。
+     *
+     * <p>包可见而非私有：{@link PluginFloatingDock} 挂出来的悬浮球与浮标也要走同一条
+     * "记录 + 派发"路径，不能让它们各写一份。
      */
-    private void dispatch(PluginHost.PluginSlot entry, @Nullable View view) {
+    void dispatch(PluginHost.PluginSlot entry, @Nullable View view) {
         lastClicked = view;
         OnSlotAction listener = onSlotAction;
         if (listener == null) return;
@@ -336,304 +325,33 @@ public final class PluginUiPresenter {
         }
     }
 
-    /** 半透明底 + 主题焦点环描边，自动跟随深浅色主题。 */
-    private static GradientDrawable ringBackground(Context context) {
-        return ringBackground(context, false);
+    /** 登记一个由本渲染器挂上去的控件，供 {@link #detach} 精确移除。 */
+    void register(View view) {
+        attached.add(view);
     }
 
     /**
-     * 同上，但可指定焦点态。
+     * 一条被我们改过、需要还原的 nextFocus 边。
      *
-     * <p>未聚焦时与旧实现逐像素相同（{@code 0xCC000000} 底 + 1dp 描边），保证手机端观感不变；
-     * 聚焦时加深底色并加粗到 2dp，让电视端"选中了"这件事一眼可见。
+     * <p>只存"谁的哪条边、原值是什么"：还原时把原值写回去就够了，不涉及控件本身。
+     * 每个新 chip 至多产生一条，控件被 {@link #detach} 摘掉时一并撤销。
      */
-    private static GradientDrawable ringBackground(Context context, boolean focused) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(focused ? 0xF0000000 : 0xCC000000);
-        drawable.setCornerRadius(dp(context, 20));
-        drawable.setStroke(dp(context, focused ? 2 : 1), ThemeController.focusRingColor(context));
-        return drawable;
-    }
+    private static final class FocusLink {
+        private final View target;
+        private final int originalDown;
 
-    /**
-     * 复原上次拖动后的落点。
-     *
-     * <p>必须在 {@code decor.addView} 之前做完：位置只能通过 LayoutParams 的边距表达，挂上去之后
-     * 再改会先闪一次默认落点。也正因为此刻控件还没布局，高度只能自己量一次，再按"中心 Y"反推
-     * 上/下边距。
-     *
-     * <p>没有记录、格式坏了、{@code Prefers} 不可用（纯 JVM 单测里没有 Init.context()）一律静默
-     * 保留默认位置：记忆是便利，不该因为它坏了就把入口挪到屏幕外或让它消失。
-     */
-    private static void restorePosition(Context context, ViewGroup decor, PluginHost.PluginSlot entry,
-            TextView chip, FrameLayout.LayoutParams params) {
-        String raw = readPosition(entry);
-        if (raw == null) return;
-        int separator = raw.indexOf(':');
-        if (separator <= 0 || separator >= raw.length() - 1) return;
-        String side = raw.substring(0, separator).trim();
-        boolean atEnd = "end".equalsIgnoreCase(side);
-        if (!atEnd && !"start".equalsIgnoreCase(side)) return;
-        float ratio;
-        try {
-            ratio = Float.parseFloat(raw.substring(separator + 1).trim());
-        } catch (NumberFormatException e) {
-            return;
+        FocusLink(View target, int originalDown) {
+            this.target = target;
+            this.originalDown = originalDown;
         }
-        // NaN 会被这个比较挡掉（NaN 与任何数比较都为假），不必单独判。
-        if (!(ratio >= 0f && ratio <= 1f)) return;
-        chip.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        int height = chip.getMeasuredHeight();
-        if (height <= 0) return;
-        int parentHeight = heightOf(decor, context);
-        if (parentHeight <= 0) return;
-        int top = clampTop(Math.round(ratio * parentHeight) - height / 2, height, parentHeight);
-        applySide(params, atEnd, context, height, top, parentHeight);
-    }
 
-    /** 把"贴左还是贴右 + 纵向位置"写进 LayoutParams。两处调用（复原与吸附）必须同源，否则会漂。 */
-    private static void applySide(FrameLayout.LayoutParams params, boolean atEnd, Context context,
-            int chipHeight, int top, int parentHeight) {
-        if (atEnd) {
-            params.gravity = Gravity.END | Gravity.BOTTOM;
-            params.setMarginStart(0);
-            params.setMarginEnd(dp(context, EDGE_INSET_DP));
-            params.topMargin = 0;
-            params.bottomMargin = Math.max(0, parentHeight - top - chipHeight);
-        } else {
-            params.gravity = Gravity.START | Gravity.TOP;
-            params.setMarginStart(dp(context, EDGE_INSET_DP));
-            params.setMarginEnd(0);
-            params.topMargin = Math.max(0, top);
-            params.bottomMargin = 0;
-        }
-    }
-
-    /**
-     * 拖动中实时改边距。
-     *
-     * <p>统一改用 {@code START | TOP}：拖动时按绝对坐标最直观，不必为左右两侧各写一套换算；
-     * 松手吸附时再切回贴边的 gravity。
-     */
-    private static void applyDrag(DragState drag, View view, FrameLayout.LayoutParams params, int left, int top) {
-        int maxLeft = Math.max(0, drag.parentWidth - drag.chipWidth);
-        int maxTop = Math.max(0, drag.parentHeight - drag.chipHeight);
-        params.gravity = Gravity.START | Gravity.TOP;
-        params.setMarginStart(Math.max(0, Math.min(maxLeft, left)));
-        params.setMarginEnd(0);
-        params.topMargin = Math.max(0, Math.min(maxTop, top));
-        params.bottomMargin = 0;
-        // 记下最后一次真的写进去的坐标。setLayoutParams 只是排一次布局，抬手那一刻
-        // view.getLeft()/getTop() 很可能还停在上一次绘制的位置，直接用它会吸附回拖动前。
-        drag.lastLeft = params.leftMargin;
-        drag.lastTop = params.topMargin;
-        view.setLayoutParams(params);
-    }
-
-    /**
-     * 悬浮按钮的触摸处理。
-     *
-     * <p><b>为什么 DOWN 与"未超过 slop 的 MOVE"都不消费事件。</b>只有让事件继续走到 view 自己的
-     * {@code onTouchEvent}，系统才会计出一次点击、{@code setOnClickListener} 才会触发——这就是
-     * "没拖动就是点击"的来由。位移一旦超过 slop 就改为消费事件，手势变成拖动，抬手不再产生点击。
-     */
-    private static boolean onChipTouch(DragState drag, ViewGroup decor, Activity activity,
-            PluginHost.PluginSlot entry, View view, FrameLayout.LayoutParams params, MotionEvent event) {
-        switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                drag.tracking = true;
-                drag.moved = false;
-                drag.suppressClick = false;
-                drag.downRawX = event.getRawX();
-                drag.downRawY = event.getRawY();
-                drag.downLeft = view.getLeft();
-                drag.downTop = view.getTop();
-                drag.chipWidth = view.getWidth();
-                drag.chipHeight = view.getHeight();
-                drag.parentWidth = widthOf(decor, activity);
-                drag.parentHeight = heightOf(decor, activity);
-                return false;
-            case MotionEvent.ACTION_MOVE: {
-                if (!drag.tracking) return false;
-                float dx = event.getRawX() - drag.downRawX;
-                float dy = event.getRawY() - drag.downRawY;
-                if (!drag.moved) {
-                    int slop = slopOf(activity);
-                    if (Math.abs(dx) <= slop && Math.abs(dy) <= slop) return false;
-                    drag.moved = true;
-                    drag.suppressClick = true;
-                    // 拖动期间不让父容器抢事件，否则滑到边缘时手势会被别的控件接走。
-                    disallowIntercept(view, true);
-                    view.setPressed(false);
-                }
-                applyDrag(drag, view, params, drag.downLeft + Math.round(dx), drag.downTop + Math.round(dy));
-                return true;
+        /** 原值可能是 {@code View.NO_ID}（布局里没声明），写回去即恢复"交还给系统推断"。 */
+        void restore() {
+            try {
+                target.setNextFocusDownId(originalDown);
+            } catch (Throwable ignored) {
             }
-            case MotionEvent.ACTION_UP: {
-                boolean dragged = drag.moved;
-                if (dragged) snap(drag, decor, activity, entry, view, params);
-                drag.tracking = false;
-                drag.moved = false;
-                if (!dragged) drag.suppressClick = false;
-                disallowIntercept(view, false);
-                return dragged;
-            }
-            case MotionEvent.ACTION_CANCEL:
-                drag.tracking = false;
-                drag.moved = false;
-                drag.suppressClick = false;
-                disallowIntercept(view, false);
-                return false;
-            default:
-                return false;
         }
-    }
-
-    private static void disallowIntercept(View view, boolean disallow) {
-        ViewParent parent = view.getParent();
-        if (parent == null) return;
-        try {
-            parent.requestDisallowInterceptTouchEvent(disallow);
-        } catch (Throwable ignored) {
-        }
-    }
-
-    /**
-     * 松手吸附：水平贴到更近的一侧，纵向把 chip 中心钳制在屏内并留出
-     * {@link #VERTICAL_INSET_DP} 的上下留白。
-     *
-     * <p><b>为什么纵向存"中心 Y 的比例"而不是像素。</b>同一个落点在竖屏手机、横屏平板与不同 DPI
-     * 上应当是"屏幕靠下的同一个相对位置"；存像素换个设备就跑到屏幕外去了。
-     */
-    private static void snap(DragState drag, ViewGroup decor, Activity activity, PluginHost.PluginSlot entry,
-            View view, FrameLayout.LayoutParams params) {
-        int parentWidth = drag.parentWidth > 0 ? drag.parentWidth : widthOf(decor, activity);
-        int parentHeight = drag.parentHeight > 0 ? drag.parentHeight : heightOf(decor, activity);
-        int chipWidth = view.getWidth() > 0 ? view.getWidth() : drag.chipWidth;
-        int chipHeight = view.getHeight() > 0 ? view.getHeight() : drag.chipHeight;
-        if (parentWidth <= 0 || parentHeight <= 0 || chipHeight <= 0) return;
-        boolean atEnd = (drag.lastLeft + chipWidth / 2) * 2 >= parentWidth;
-        int inset = dp(activity, VERTICAL_INSET_DP);
-        int minCenter = Math.max(inset, chipHeight / 2);
-        int maxCenter = Math.min(parentHeight - inset, parentHeight - chipHeight / 2);
-        if (maxCenter < minCenter) maxCenter = minCenter;
-        int center = Math.max(minCenter, Math.min(maxCenter, drag.lastTop + chipHeight / 2));
-        int top = clampTop(center - chipHeight / 2, chipHeight, parentHeight);
-        applySide(params, atEnd, activity, chipHeight, top, parentHeight);
-        view.setLayoutParams(params);
-        writePosition(entry, atEnd, center, parentHeight);
-    }
-
-    /** 纵向钳制：既满足"中心不越界"，也保证 chip 整体在屏内（矮屏上后者更严格）。 */
-    private static int clampTop(int top, int chipHeight, int parentHeight) {
-        if (parentHeight <= 0 || chipHeight <= 0) return Math.max(0, top);
-        int max = Math.max(0, parentHeight - chipHeight);
-        return Math.max(0, Math.min(max, top));
-    }
-
-    private static int slopOf(Context context) {
-        try {
-            return ViewConfiguration.get(context).getScaledTouchSlop();
-        } catch (Throwable ignored) {
-            return dp(context, 8);
-        }
-    }
-
-    /** 父容器高度：优先 decorView 实测值，尚未布局时退回屏幕尺寸。 */
-    private static int heightOf(@Nullable ViewGroup decor, Context context) {
-        int measured = decor == null ? 0 : decor.getHeight();
-        if (measured > 0) return measured;
-        try {
-            return ResUtil.getScreenHeight(context);
-        } catch (Throwable ignored) {
-            return 0;
-        }
-    }
-
-    /** 父容器宽度，取法与 {@link #heightOf} 一致。 */
-    private static int widthOf(@Nullable ViewGroup decor, Context context) {
-        int measured = decor == null ? 0 : decor.getWidth();
-        if (measured > 0) return measured;
-        try {
-            return ResUtil.getScreenWidth(context);
-        } catch (Throwable ignored) {
-            return 0;
-        }
-    }
-
-    private static String positionKey(PluginHost.PluginSlot entry) {
-        return POSITION_PREFIX + entry.pluginId() + ":" + entry.slot().action();
-    }
-
-    /**
-     * 读记忆。
-     *
-     * <p>{@code Prefers.getString} 内部只 catch Exception，而纯 JVM 单测里没有
-     * {@code Init.context()}，静态初始化失败抛的是 Error——所以这里必须连 Throwable 一起挡。
-     */
-    @Nullable
-    private static String readPosition(PluginHost.PluginSlot entry) {
-        try {
-            String value = Prefers.getString(positionKey(entry), "");
-            return value == null || value.isEmpty() ? null : value;
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    /** 记住落点，值形如 {@code side:yRatio}。写失败只是丢一次记忆，不该影响本次拖动的手感。 */
-    private static void writePosition(PluginHost.PluginSlot entry, boolean atEnd, int center, int parentHeight) {
-        if (parentHeight <= 0) return;
-        float ratio = Math.max(0f, Math.min(1f, center / (float) parentHeight));
-        String value = (atEnd ? "end" : "start") + ":" + String.format(Locale.US, "%.4f", ratio);
-        try {
-            Prefers.put(positionKey(entry), value);
-        } catch (Throwable ignored) {
-        }
-    }
-
-    /**
-     * 单个悬浮按钮的拖动状态。
-     *
-     * <p>每个 chip 一份而不是做成渲染器字段：同屏可以有多家插件的入口，共用一份状态会让拖动
-     * 其中一颗时另一颗跟着跳。
-     */
-    private static final class DragState {
-        boolean tracking;
-        boolean moved;
-        boolean suppressClick;
-        float downRawX;
-        float downRawY;
-        int downLeft;
-        int downTop;
-        int chipWidth;
-        int chipHeight;
-        int parentWidth;
-        int parentHeight;
-        /** 最后一次写进 LayoutParams 的左上角坐标，父容器坐标系。 */
-        int lastLeft;
-        int lastTop;
-
-        /** 读一次"这次抬手是否属于刚结束的拖动"，读完即复位，避免吞掉下一次真实点击。 */
-        boolean consumeClick() {
-            boolean suppressed = suppressClick;
-            suppressClick = false;
-            return suppressed;
-        }
-    }
-
-    /** 挂载根：decorView 本身是 ViewGroup；否则退回内容根。绝不强转父节点。 */
-    @Nullable
-    private static ViewGroup decorOf(Activity activity) {
-        if (activity == null || activity.getWindow() == null) return null;
-        View decor = activity.getWindow().getDecorView();
-        if (decor instanceof ViewGroup group) return group;
-        View content = activity.findViewById(android.R.id.content);
-        return content instanceof ViewGroup group ? group : null;
-    }
-
-    private static int dp(Context context, int value) {
-        return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
     /** 给定槽位列表里有多少个需要挂载（floating + toolbar + panel），供调用方预判。 */
@@ -641,15 +359,24 @@ public final class PluginUiPresenter {
         if (slots == null) return 0;
         int count = 0;
         for (PluginHost.PluginSlot entry : slots) {
-            if (entry == null || entry.slot() == null) continue;
-            String type = entry.slot().slot();
-            if ("floating".equalsIgnoreCase(type) || "toolbar".equalsIgnoreCase(type) || "panel".equalsIgnoreCase(type)) count++;
+            if (landingOf(entry) != Landing.NONE) count++;
         }
         return count;
     }
 
     /** 控件 tag 形如 {@code webhtv-plugin-host:<pluginId>:<action>}，供测试与诊断定位。 */
     static String tagOf(PluginHost.PluginSlot entry) {
-        return TAG_PREFIX + entry.pluginId() + ":" + entry.slot().action();
+        return TAG_PREFIX + identityOf(entry);
+    }
+
+    /**
+     * 槽位的稳定标识 {@code <pluginId>:<action>}。
+     *
+     * <p>控件 tag 与 {@link PluginFloatingDock} 的落点记忆键都长成"前缀 + 这一串"，从前各拼
+     * 一份，差别只在前缀常量。两处一旦漂移，tag 找得到控件、落点却记到另一个键上——这种错只在
+     * "拖过并且换页面回来"时才显形，最难查。标识部分因此只留这一处定义。
+     */
+    static String identityOf(PluginHost.PluginSlot entry) {
+        return entry.pluginId() + ":" + entry.slot().action();
     }
 }

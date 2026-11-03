@@ -46,8 +46,21 @@ public final class PluginCapabilityRegistry {
                     PluginEventBus.EVENT_APP_BACKGROUND,
                     PluginEventBus.EVENT_ACTIVITY_CREATED,
                     PluginEventBus.EVENT_ACTIVITY_DESTROYED,
-                    PluginEventBus.EVENT_UI_CONTENT_SHOWN)),
-            new Capability(PERMISSION_EPISODE_DATA, Set.of(PluginEventBus.EVENT_UI_CONTENT_SHOWN)),
+                    PluginEventBus.EVENT_UI_CONTENT_SHOWN,
+                    PluginEventBus.EVENT_PLAYBACK_READY,
+                    PluginEventBus.EVENT_PLAYBACK_PLAYING,
+                    PluginEventBus.EVENT_PLAYBACK_STATE,
+                    PluginEventBus.EVENT_PLAYBACK_PAUSE,
+                    PluginEventBus.EVENT_PLAYBACK_RESUME)),
+            // 剧集身份变化（episode.changed）的 payload 携带片名/集号等业务数据，它是一条
+            // 业务数据事件而非纯生命周期信号，因此只由 plugin.data.episode 覆盖——只持
+            // plugin.events 的插件收不到它。真正由两条能力共同覆盖的是 ui.contentShown：
+            // events 侧拿到事件本身，data.episode 侧才拿得到 context。
+            // 切勿为了让 plugin.events 收到"换集了"而把 episode.changed 加进
+            // PERMISSION_EVENTS：那等于让只申请生命周期权限的插件拿到完整剧集数据，是越权。
+            new Capability(PERMISSION_EPISODE_DATA, Set.of(
+                    PluginEventBus.EVENT_UI_CONTENT_SHOWN,
+                    PluginEventBus.EVENT_EPISODE_CHANGED)),
             new Capability(PERMISSION_NET_REQUEST, Set.of()),
             new Capability(PERMISSION_UI_FLOATING, Set.of(PluginEventBus.EVENT_UI_CONTENT_SHOWN)),
             new Capability(PERMISSION_UI_TOOLBAR, Set.of(PluginEventBus.EVENT_UI_CONTENT_SHOWN)),
@@ -55,6 +68,20 @@ public final class PluginCapabilityRegistry {
             new Capability(PERMISSION_UI_PAGE, Set.of()));
 
     private static final Map<String, Capability> BY_PERMISSION = indexByPermission();
+
+    /**
+     * 事件 → 覆盖它的权限（反向索引）。
+     *
+     * <p>{@link #permissionForEvent} 原先每次线性扫描 {@link #CAPABILITIES}，而
+     * {@link #allowsEvent} 在事件热路径（每次页面切换的 {@code ui.contentShown}）上都要经过它。
+     * 索引在类初始化时建一次，之后是 O(1) 查表。
+     *
+     * <p><b>为什么是 putIfAbsent 而不是 put。</b>一个事件可能被多条能力覆盖
+     * （{@code ui.contentShown} 就同时属于 events / data.episode / ui.floating / ui.toolbar）。
+     * 旧实现返回的是"遍历顺序上第一条覆盖它的权限"，索引必须复刻这一语义，
+     * 否则 {@link #allowsEvent} 的判定会随清单顺序悄悄变化。
+     */
+    private static final Map<String, String> BY_EVENT = indexByEvent();
 
     private PluginCapabilityRegistry() {
     }
@@ -103,12 +130,9 @@ public final class PluginCapabilityRegistry {
     }
 
     /** 反向查找：覆盖该事件的最小权限；没有任何权限覆盖时返回 {@code null}。 */
+    @Nullable
     private static String permissionForEvent(@Nullable String event) {
-        if (event == null) return null;
-        for (Capability capability : CAPABILITIES) {
-            if (capability.events.contains(event)) return capability.permission;
-        }
-        return null;
+        return event == null ? null : BY_EVENT.get(event);
     }
 
     /** 某权限允许的事件集合；未知权限返回空集。 */
@@ -125,6 +149,15 @@ public final class PluginCapabilityRegistry {
     private static Map<String, Capability> indexByPermission() {
         LinkedHashMap<String, Capability> index = new LinkedHashMap<>();
         for (Capability capability : CAPABILITIES) index.put(capability.permission, capability);
+        return Collections.unmodifiableMap(index);
+    }
+
+    /** 建事件反向索引，保持 {@link #CAPABILITIES} 的遍历顺序（先到先得）。 */
+    private static Map<String, String> indexByEvent() {
+        LinkedHashMap<String, String> index = new LinkedHashMap<>();
+        for (Capability capability : CAPABILITIES) {
+            for (String event : capability.events) index.putIfAbsent(event, capability.permission);
+        }
         return Collections.unmodifiableMap(index);
     }
 

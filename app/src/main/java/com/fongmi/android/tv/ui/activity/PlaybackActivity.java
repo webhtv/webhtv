@@ -51,6 +51,7 @@ import com.fongmi.android.tv.player.engine.PlaySpec;
 import com.fongmi.android.tv.player.exo.ExoOutputModeManager;
 import com.fongmi.android.tv.player.exo.ExoOutputModePolicy;
 import com.fongmi.android.tv.player.exo.ExoUtil;
+import com.fongmi.android.tv.plugin.PluginHostEvents;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.player.exo.ass.ExoAssSession;
@@ -1187,6 +1188,10 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     @Override
     public void onIsPlayingChanged(boolean isPlaying) {
         syncKeepScreenOn();
+        // 埋点放在 isOwner() 早退之前：同一台设备上非 owner 的页面同样在播（服务侧起播、画中画、
+        // 多窗口），只有 owner 才广播会让订阅者以为"播放停了"。埋点只带宿主身份与本页拿到的
+        // 布尔值，不触碰视图也不再读 controller，越权观感与早退后的既有逻辑无关。
+        PluginHostEvents.playbackPlaying(this, isPlaying);
         if (!isOwner()) return;
         syncShutter();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "playing changed isPlaying=%s state=%d %s", isPlaying, mController == null ? -1 : mController.getPlaybackState(), lifecycleState());
@@ -1205,6 +1210,9 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
 
     @Override
     public void onPlaybackStateChanged(int state) {
+        // 同样放在 isOwner() 早退之前：Surface 绑定那段注释已经证明状态回调对非 owner 也照常到达，
+        // 而状态机是播放器的客观事实，不随本页是否有所有权而改变。
+        PluginHostEvents.playbackState(this, state);
         // 绑定视频 Surface 是所有权无关的必经动作：服务侧「浏览下一集」（VE: 选集键）起播时
         // isOwner() 为假，旧实现让下面的早退把 Surface 重绑一起吞掉，新引擎于是永远拿不到
         // Surface —— 解码器/音频正常、画面全黑，只有重开 App 才好。每次 BUFFERING/READY 都是
@@ -1345,6 +1353,9 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
         applyExoOutputMode();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-flow", "service connected cost=%dms key=%s", System.currentTimeMillis() - start, getPlaybackKey());
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "service connected %s", lifecycleState());
+        // 放在收口内、onServiceConnected() 之前：此刻控制器、回调与 Surface 都已就位，
+        // 订阅者拿到事件就能安全地读播放器状态。
+        PluginHostEvents.playbackReady(this);
         onServiceConnected();
     }
 
@@ -1374,6 +1385,7 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
             onReclaim();
         }
         syncKeepScreenOn();
+        PluginHostEvents.playbackResume(this);
     }
 
     @Override
@@ -1381,6 +1393,7 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "activity pause %s", lifecycleState());
         super.onPause();
         if (isRedirect() && mController != null) mController.pause();
+        PluginHostEvents.playbackPause(this);
     }
 
     @Override
