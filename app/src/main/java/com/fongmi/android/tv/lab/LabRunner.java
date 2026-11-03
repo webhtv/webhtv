@@ -126,8 +126,23 @@ public final class LabRunner {
         return "";
     }
 
+    /**
+     * 清空一条命令的日志：内存缓冲原地清零（pump 线程持有同一个 {@code StringBuilder} 引用，
+     * 换新实例会让之后的输出写进没人再读的旧引用），并截断落盘日志文件，重进输出页不再看到历史叠加。
+     */
     public static void clearLog(String key) {
-        LOGS.remove(key);
+        StringBuilder sb = LOGS.get(key);
+        if (sb != null) {
+            synchronized (sb) {
+                sb.setLength(0);
+            }
+        }
+        File file = LabProcManager.logFor(key);
+        if (file == null || !file.exists()) return;
+        try (java.io.FileWriter writer = new java.io.FileWriter(file, false)) {
+            writer.write("");
+        } catch (Exception ignored) {
+        }
     }
 
     public static Process getProcess(String key) {

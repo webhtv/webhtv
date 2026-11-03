@@ -68,6 +68,7 @@ public class LabOutputActivity extends AppCompatActivity {
         command = findCommand(item, commandId);
 
         mBinding.btnClose.setOnClickListener(v -> finish());
+        mBinding.btnClear.setOnClickListener(v -> clearLog());
         mBinding.btnStop.setOnClickListener(v -> stop());
         mBinding.btnSend.setOnClickListener(v -> sendInput());
         mBinding.inputEdit.setOnEditorActionListener((v, actionId, event) -> {
@@ -134,6 +135,12 @@ public class LabOutputActivity extends AppCompatActivity {
         LabRunner.stop(key());
         showRunning(false);
         append("\n=== 进程已停止 ===\n");
+    }
+
+    private void clearLog() {
+        mBinding.outputText.setText("");
+        mBinding.outputScroll.scrollTo(0, 0);
+        LabRunner.clearLog(key());
     }
 
     private void sendInput() {
