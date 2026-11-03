@@ -71,6 +71,28 @@ public class TmdbEpisodeGridPolicyTest {
     }
 
     @Test
+    public void holdBasePositionAdvancesFromTheLastRequestedCard() {
+        // 焦点已在 4，且上一次请求的目标就是它：基准应为焦点本身。
+        assertEquals(4, TmdbEpisodeGridPolicy.holdBasePosition(4, 4));
+        // 焦点还没落到 4（仍停在 0）时，上一次请求的 4 才是基准，重复按键才能继续推进到 8。
+        assertEquals(4, TmdbEpisodeGridPolicy.holdBasePosition(0, 4));
+        // 没有待定目标（首次按键、松手、或已收敛）时退回焦点位。
+        assertEquals(7, TmdbEpisodeGridPolicy.holdBasePosition(7, TmdbEpisodeGridPolicy.NO_FOCUS_TARGET));
+    }
+
+    @Test
+    public void holdBasePositionKeepsRepeatingFromThePendingTarget() {
+        int focused = 2;
+        int pending = TmdbEpisodeGridPolicy.NO_FOCUS_TARGET;
+        int[] expected = {6, 10, 14};
+        for (int step : expected) {
+            int base = TmdbEpisodeGridPolicy.holdBasePosition(focused, pending);
+            pending = TmdbEpisodeGridPolicy.verticalFocusTarget(base, 4, 40, true);
+            assertEquals(step, pending);
+        }
+    }
+
+    @Test
     public void shouldUseFallbackImageOnlyForLegacySmallGridPolicy() {
         assertFalse(TmdbEpisodeGridPolicy.shouldUseFallbackImage(false, 120));
         assertTrue(TmdbEpisodeGridPolicy.shouldUseFallbackImage(true, 24));
