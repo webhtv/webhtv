@@ -54,6 +54,17 @@
         <item name="webhtvColorOnWallpaper">@color/webhtv_on_wallpaper</item>
         <item name="webhtvColorOnWallpaperVariant">@color/webhtv_on_wallpaper_variant</item>
         <item name="webhtvColorOnWallpaperError">@color/webhtv_color_on_wallpaper_error</item>
+        <!--
+            条目遮罩族：列表/按钮在「聚焦/按下」时压在同一块表面上的那层半透明深色，以及它上面的
+            文字色。两者此前只声明、从未赋值（审计发现的「只声明、没接线」之一），所以任何想用
+            ?attr/webhtvColorItemOverlay 的 drawable 都取不到值、会静默退化成透明。
+
+            默认取值与编译期一致：底色 = @color/black_40（#66000000），文字色 = 该表 onPrimary，
+            因此未改过主题时渲染字节不变。用户改「条目遮罩」槽位后，由 ThemeBinder 在运行时改写
+            shape_*_focused / shape_*_activated 的 solid（?attr/ 是编译期资源，不会自动重解析）。
+        -->
+        <item name="webhtvColorItemOverlay">@color/webhtv_color_item_overlay</item>
+        <item name="webhtvColorOnItemOverlay">@color/webhtv_color_on_item_overlay</item>
     <!--
         浮层 scrim。此前 webhtvColorScrim / webhtvColorOverlayDark / webhtvColorOverlayLight
         三个属性都只声明、从未赋值（审计发现的「只声明、没接线」之一），所以任何想用它们的

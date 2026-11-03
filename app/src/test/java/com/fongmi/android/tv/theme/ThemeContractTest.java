@@ -178,7 +178,10 @@ public class ThemeContractTest {
         // 见 docs/TV-ERROR-STATE-20261012.md），同理不属于角色契约。
         // 55 → 56：新增 webhtv_color_error_value_bg（错误取值文字的实心深色底，
         // 让错误正文稳过 4.5:1，见 docs/TV-ERROR-STATE-CLOSEOUT-20261013.md）。
-        assertEquals(56, colors.size());
+        // 56 → 58：新增 webhtv_color_item_overlay / webhtv_color_on_item_overlay（条目遮罩的
+        // 底色与文字色，见 ThemeTokens.colorItemOverlay / colorOnItemOverlay）。它们**属于**
+        // 角色契约——默认值必须与 ThemeTokens 两张表逐值一致，否则默认外观就变了。
+        assertEquals(58, colors.size());
         for (RecordComponent component : ThemeTokens.class.getRecordComponents()) {
             if (!component.getType().equals(int.class)) continue;
             String name = component.getName();

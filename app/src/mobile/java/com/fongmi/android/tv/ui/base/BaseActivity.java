@@ -106,12 +106,11 @@ public abstract class BaseActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
         DisplayCutout cutout = ResUtil.getDisplay(this).getCutout();
         if (cutout == null) return;
-        int top = cutout.getSafeInsetTop();
+        // 切口必须按所在侧避让：把四边按位或后对称写进左右，会把竖屏的顶部切口高度变成左右内缩，
+        // 全屏时控制栏与底部菜单因此整体缩窄，左右露出画面黑边。
         int left = cutout.getSafeInsetLeft();
-        int right = cutout.getSafeInsetRight();
-        int bottom = cutout.getSafeInsetBottom();
-        int padding = left | right | top | bottom;
-        layout.setPadding(padding, 0, leftOnly ? 0 : padding, 0);
+        int right = leftOnly ? 0 : cutout.getSafeInsetRight();
+        layout.setPadding(left, 0, right, 0);
     }
 
     protected void noPadding(ViewGroup layout) {

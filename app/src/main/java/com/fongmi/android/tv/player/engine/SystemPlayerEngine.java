@@ -15,7 +15,6 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.crawler.SpiderDebug;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @UnstableApi
 public class SystemPlayerEngine implements PlayerEngine {
@@ -99,12 +98,12 @@ public class SystemPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean isLive() {
-        return player.getDuration() < TimeUnit.MINUTES.toMillis(1) || player.isCurrentMediaItemLive();
+        return TimelineStreamKindPolicy.isLive(player.getDuration(), player.isCurrentMediaItemLive());
     }
 
     @Override
     public boolean isVod() {
-        return player.getDuration() > TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
+        return TimelineStreamKindPolicy.isVod(player.getDuration(), player.isCurrentMediaItemLive());
     }
 
     @Override

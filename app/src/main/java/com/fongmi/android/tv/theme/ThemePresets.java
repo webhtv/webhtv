@@ -82,6 +82,9 @@ public final class ThemePresets {
                 ThemeProfile.SlotSet slots = profile.slots(dark);
                 slots.primary = hex(resolved.colorPrimary());
                 slots.focus = slots.primary; // Preserve the binder's shared primary/focus baseline mapping.
+                // 遮罩上的文字沿用该预设自己的 onPrimary：这里必须落成具体值，否则该槽为空，
+                // 预设就不是「完整调色板」了。用户改过遮罩色后它仍会在复合底色上被夹到 ≥4.5:1。
+                slots.onItemOverlay = hex(resolved.colorOnPrimary());
             }
             return profile;
         }
@@ -108,6 +111,10 @@ public final class ThemePresets {
             slots.playerCurrent = slots.success;
             slots.warning = semantic(warning, dark);
             slots.error = semantic(0xFFBA1A1A, dark);
+            // 条目遮罩：40% 黑刚好等于编译期 @color/black_40（#66000000），所以写清这两个槽
+            // 不会改变遮罩观感，只是让「完整预设」名下有全部颜色槽（ThemePresetsTest 的契约）。
+            slots.itemOverlay = hex(0xFF000000);
+            slots.itemOverlayOpacity = 0.40f;
             return slots;
         }
 

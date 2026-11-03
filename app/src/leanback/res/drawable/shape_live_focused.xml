@@ -4,8 +4,8 @@
     统一焦点环。
 
     只统一宽度：@dimen/webhtv_focus_ring_width（此前是 1.5dp）。环色保持与调色板无关的
-    白色：宿主 shape_live_list 是固定深色渐变（black_80→black_40→black_05），浅色表的 FOCUS
-    槽（深蓝）在该渐变上没有可用对比度。见 shape_chip_focused.xml 的同一判据。
+    白色：宿主 shape_live_list 是整块 black_80 纯黑（原为黑_80→黑_40→黑_05 渐变，已统一），
+    浅色表的 FOCUS 槽（深蓝）在该深色底上没有可用对比度。见 shape_chip_focused.xml 的同一判据。
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">

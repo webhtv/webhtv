@@ -81,6 +81,11 @@
     <color name="webhtv_color_health_bad">#FFB4AB</color>
     <color name="webhtv_color_overlay_light">#14FFFFFF</color>
     <color name="webhtv_color_overlay_dark">#66000000</color>
+    <!-- 条目遮罩底色与文字色。遮罩与日间表同值（@color/black_40 = #66000000）：它压的
+         底材是海报与封面，与页面调色板无关。文字色取本表 colorOnPrimary（深蓝 #062E6F），
+         与日间表取更深的 onPrimary 同理。核算见 values/webhtv_tokens.xml 的同名条目。 -->
+    <color name="webhtv_color_item_overlay">#66000000</color>
+    <color name="webhtv_color_on_item_overlay">#062E6F</color>
     <!--
         Foreground for content drawn straight on the app wallpaper.
 

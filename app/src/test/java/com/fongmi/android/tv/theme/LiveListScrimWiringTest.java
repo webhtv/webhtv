@@ -12,11 +12,12 @@ import static org.junit.Assert.assertTrue;
 /**
  * Wiring contract for the live-page channel drawer scrim.
  *
- * <p>The drawer used to be a fixed {@code shape_live_list} gradient. It now follows the
- * theme profile slot {@code liveListScrimOpacity} through {@link LiveListScrim}, so the
- * "unset slot == shipped look" and "the slider reaches 100%" requirements are protected
- * by asserting the two hosts still read the slot. These are source assertions on purpose:
- * both activities need an Android runtime for their real behaviour.
+ * <p>The drawer used to be a fixed {@code shape_live_list} gradient; it is now one flat
+ * black whose alpha follows the theme profile slot {@code liveListScrimOpacity} through
+ * {@link LiveListScrim}. The "unset slot == shipped look", "one uniform colour" and "the
+ * slider reaches 100%" requirements are protected by asserting the two hosts still read
+ * the slot and that the static XML fallback stayed flat too. These are source assertions
+ * on purpose: both activities need an Android runtime for their real behaviour.
  */
 public class LiveListScrimWiringTest {
 
@@ -35,6 +36,20 @@ public class LiveListScrimWiringTest {
         String activity = read("src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java");
         assertTrue(activity.contains("mBinding.recycler.setBackground(LiveListScrim.create(this));"));
         assertTrue(activity.contains("R.drawable.shape_live_embedded_list"));
+    }
+
+    @Test
+    public void theStaticDrawableFallbackIsOneFlatBlackInBothHosts() throws Exception {
+        // The layouts still name @drawable/shape_live_list as a fallback; if it stayed a
+        // gradient, any host that skipped the Java path would fade out again to the right.
+        for (String path : new String[]{
+                "src/leanback/res/drawable/shape_live_list.xml",
+                "src/mobile/res/drawable/shape_live_list.xml"}) {
+            String drawable = read(path);
+            assertTrue(path + " must stay a flat solid", drawable.contains("<solid"));
+            assertTrue(path + " must stay black_80", drawable.contains("@color/black_80"));
+            assertFalse(path + " must not fade out", drawable.contains("<gradient"));
+        }
     }
 
     @Test

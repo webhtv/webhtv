@@ -59,7 +59,18 @@ public record ThemeTokens(
         int colorHealthWarn,
         int colorHealthBad,
         int colorOverlayLight,
-        int colorOverlayDark
+        int colorOverlayDark,
+        /**
+         * 条目遮罩底色（已含 alpha）：默认 {@code #66000000}，即编译期 {@code @color/black_40}
+         * 的取值，透明度由 profile 的 itemOverlayOpacity 槽缩放。
+         *
+         * <p>前缀 color 不是命名洁癖：{@code ThemeContractTest} 用组件名推断同族资源名
+         * （{@code "webhtv_color_" + snakeCase(name.substring(5))}），组件名必须带 color 前缀
+         * 才能推断出 {@code webhtv_color_item_overlay}。
+         */
+        int colorItemOverlay,
+        /** 遮罩上的选中/聚焦文字色。默认等于本表的 {@link #colorOnPrimary}。 */
+        int colorOnItemOverlay
 ) {
 
     public static ThemeTokens light() {
@@ -122,7 +133,10 @@ public record ThemeTokens(
             0xFF7A5900,
             0xFFB3261E,
             0x14FFFFFF,
-            0x52000000
+            0x52000000,
+            // 同上：遮罩 = @color/black_40，遮罩文字 = 本表 colorOnPrimary（浅色表为白）。
+            0x66000000,
+            0xFFFFFFFF
     );
     }
 
@@ -182,7 +196,11 @@ public record ThemeTokens(
             0xFFF2C66D,
             0xFFFFB4AB,
             0x14FFFFFF,
-            0x66000000
+            // 条目遮罩沿用编译期 @color/black_40（#66000000）；遮罩上的文字沿用本表的
+            // colorOnPrimary，因此空 profile 的解析结果与改动前字节一致。
+            0x66000000,
+            0x66000000,
+            0xFF062E6F
     );
     }
 

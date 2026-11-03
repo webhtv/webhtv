@@ -22,18 +22,40 @@ public final class ThemeEditor {
         SURFACE, SURFACE_CONTAINER, SURFACE_CONTAINER_HIGH,
         ON_SURFACE, ON_SURFACE_VARIANT, OUTLINE,
         ERROR, SUCCESS, WARNING,
+        /**
+         * 条目遮罩底色。遮罩就是列表/按钮聚焦时压在同一块表面上的那层半透明深色，底色、文字色、
+         * 强度三者必须一起调才不会互相打架，所以三个槽相邻成组（见 ThemePreviewView 的分组）。
+         */
+        ITEM_OVERLAY,
+        /** 遮罩上的选中/聚焦文字色。 */
+        ON_ITEM_OVERLAY,
         SCRIM_OPACITY, DIALOG_OPACITY, OVERLAY_OPACITY,
         /**
          * 播放菜单遮盖层强度。只缩放黑幕 alpha、不改色相，所以仍走 opacity 分支。
          */
         PLAYER_SCRIM_OPACITY,
+        /** 条目遮罩强度：只缩放遮罩色的 alpha，不改色相。 */
+        ITEM_OVERLAY_OPACITY,
         /**
          * 直播页频道抽屉遮盖层强度。只缩放黑幕 alpha、不改色相，所以仍走 opacity 分支。
+         *
+         * <p>位置固定在末尾：beta 的 {@code ThemeEditorContractTest#theLiveListScrimSlotIsTheLastSlotAndUsesItsOwnRange}
+         * 以「这个槽是最后一个」作为「新槽不会被读成颜色槽」的守卫。合并时 {@code isColor()} 已改成
+         * 显式列出不透明度槽（不再依赖 ordinal），但保留该位置约束可以让两边的既有断言都无需改写。
          */
         LIVE_LIST_SCRIM_OPACITY;
 
+        /**
+         * 颜色槽 = 除不透明度槽以外的全部槽。这里刻意列出不透明度槽而不是用
+         * {@code ordinal() <= WARNING.ordinal()} 的位置判断：条目遮罩组就是插在 WARNING 之后
+         * 新增的颜色槽，位置一挪就会被误判成不透明度槽。
+         */
         public boolean isColor() {
-            return ordinal() <= WARNING.ordinal();
+            return switch (this) {
+                case SCRIM_OPACITY, DIALOG_OPACITY, OVERLAY_OPACITY, PLAYER_SCRIM_OPACITY, LIVE_LIST_SCRIM_OPACITY,
+                        ITEM_OVERLAY_OPACITY -> false;
+                default -> true;
+            };
         }
     }
 
@@ -159,11 +181,14 @@ public final class ThemeEditor {
             case ERROR -> slots.error;
             case SUCCESS -> slots.success;
             case WARNING -> slots.warning;
+            case ITEM_OVERLAY -> slots.itemOverlay;
+            case ON_ITEM_OVERLAY -> slots.onItemOverlay;
             case SCRIM_OPACITY -> slots.scrimOpacity == null ? null : String.valueOf(slots.scrimOpacity);
             case DIALOG_OPACITY -> slots.dialogOpacity == null ? null : String.valueOf(slots.dialogOpacity);
             case OVERLAY_OPACITY -> slots.overlayOpacity == null ? null : String.valueOf(slots.overlayOpacity);
             case PLAYER_SCRIM_OPACITY -> slots.playerScrimOpacity == null ? null : String.valueOf(slots.playerScrimOpacity);
             case LIVE_LIST_SCRIM_OPACITY -> slots.liveListScrimOpacity == null ? null : String.valueOf(slots.liveListScrimOpacity);
+            case ITEM_OVERLAY_OPACITY -> slots.itemOverlayOpacity == null ? null : String.valueOf(slots.itemOverlayOpacity);
         };
     }
 
@@ -183,6 +208,8 @@ public final class ThemeEditor {
             case ERROR -> slots.error = value;
             case SUCCESS -> slots.success = value;
             case WARNING -> slots.warning = value;
+            case ITEM_OVERLAY -> slots.itemOverlay = value;
+            case ON_ITEM_OVERLAY -> slots.onItemOverlay = value;
             default -> throw new IllegalArgumentException("not a color slot");
         }
     }
@@ -194,6 +221,7 @@ public final class ThemeEditor {
             case OVERLAY_OPACITY -> slots.overlayOpacity = value;
             case PLAYER_SCRIM_OPACITY -> slots.playerScrimOpacity = value;
             case LIVE_LIST_SCRIM_OPACITY -> slots.liveListScrimOpacity = value;
+            case ITEM_OVERLAY_OPACITY -> slots.itemOverlayOpacity = value;
             default -> throw new IllegalArgumentException("not an opacity slot");
         }
     }
@@ -207,6 +235,7 @@ public final class ThemeEditor {
             case OVERLAY_OPACITY -> inRange(value, ThemeProfileValidator.MIN_OVERLAY_OPACITY, ThemeProfileValidator.MAX_OVERLAY_OPACITY);
             case PLAYER_SCRIM_OPACITY -> inRange(value, ThemeProfileValidator.MIN_PLAYER_SCRIM_OPACITY, ThemeProfileValidator.MAX_PLAYER_SCRIM_OPACITY);
             case LIVE_LIST_SCRIM_OPACITY -> inRange(value, ThemeProfileValidator.MIN_LIVE_LIST_SCRIM_OPACITY, ThemeProfileValidator.MAX_LIVE_LIST_SCRIM_OPACITY);
+            case ITEM_OVERLAY_OPACITY -> inRange(value, ThemeProfileValidator.MIN_ITEM_OVERLAY_OPACITY, ThemeProfileValidator.MAX_ITEM_OVERLAY_OPACITY);
             default -> null;
         };
     }

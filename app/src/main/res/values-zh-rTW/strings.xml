@@ -944,6 +944,10 @@
     <string name="theme_editor_group_states">狀態提示</string>
     <string name="theme_editor_group_player">播放器</string>
     <string name="theme_editor_group_layers">透明度與浮層</string>
+    <string name="theme_editor_group_item_overlay">條目遮罩與選中</string>
+    <string name="theme_editor_slot_item_overlay">條目遮罩色</string>
+    <string name="theme_editor_slot_on_item_overlay">選中文字色</string>
+    <string name="theme_editor_slot_item_overlay_opacity">條目遮罩不透明度</string>
     <string name="theme_import_title">匯入配色</string>
     <string name="theme_import_input_hint">貼上 TweakCN JSON 或 HTTPS JSON 連結</string>
     <string name="theme_import_file">開啟 JSON</string>

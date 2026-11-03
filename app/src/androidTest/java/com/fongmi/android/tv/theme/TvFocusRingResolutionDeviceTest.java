@@ -34,9 +34,10 @@ import org.junit.runner.RunWith;
  * <ol>
  *   <li>{@code ?attr/tvFocusRing} 解析到的就是 {@code tv_item_focus_ring}，
  *       且该 token 直连主题 FOCUS 用户槽；</li>
- *   <li>{@code ThemeController.focusRingColor(...)} 与 {@code ?attr/tvFocusRing} 字节一致
- *       —— 代码路径与 XML 选择器路径共用同一取值，不得各走一套；</li>
- *   <li>用户覆写主题后两条路径仍然一致：任何一条单独"跟随"都会重新造出两种环色。</li>
+ *   <li>没有 FOCUS 覆写时 {@code ThemeController.focusRingColor(...)} 与
+ *       {@code ?attr/tvFocusRing} 字节一致——默认档两条路径共用同一取值；</li>
+ *   <li>用户显式设置 FOCUS 槽后，代码路径必须跟随该槽：卡片的焦点描边由代码路径绘制，
+ *       它不跟随就等于编辑器的「焦点色」对这些视图完全无效（用户实机报告）。</li>
  * </ol>
  */
 @RunWith(AndroidJUnit4.class)
@@ -47,6 +48,9 @@ public class TvFocusRingResolutionDeviceTest {
     @Before
     public void setUp() {
         originalProfile = ThemeProfileStore.load();
+        // 每条用例都从「无覆写」开始：设备上残留的主题档案会让静态属性断言失真。
+        ThemeProfileStore.apply(ThemeProfile.defaultProfile());
+        ThemeController.applyFromPreferences(null);
     }
 
     @After
@@ -89,12 +93,18 @@ public class TvFocusRingResolutionDeviceTest {
     }
 
     /**
-     * 回归门：主题覆写后，代码路径写下的描边与 XML 选择器路径写下的描边必须仍然相同。
-     * 详情页混用两条路径（{@code focusRingColor()} 与 {@code ?attr/tvFocusRing}），
-     * 任何一条单独跟随主题都会让同一个页面出现两种环色。
+     * 回归门：用户显式设置 FOCUS 槽后，代码路径必须跟随该槽。
+     *
+     * <p>默认档继续要求代码路径与 {@code ?attr/tvFocusRing} 字节一致（见上一条测试）；
+     * 一旦用户改写 FOCUS 槽，编译期静态属性无法跟随，此时让代码路径继续返回静态值等于
+     * 让「焦点色」对卡片描边永久失效——这正是用户实机反馈的现象。
      */
     @Test
-    public void bothRingPathsStayIdenticalUnderAThemeOverride() {
+    public void codeRingPathFollowsAnExplicitFocusOverride() {
+        int compiledRing = themedContext().getColor(R.color.tv_item_focus_ring);
+        assertEquals("未覆写时代码路径必须保持编译期环色",
+                compiledRing, ThemeController.focusRingColor(themedContext()));
+
         ThemeProfile profile = ThemeProfile.defaultProfile();
         profile.light.focus = "#00B0FF";
         profile.dark.focus = "#00B0FF";
@@ -102,9 +112,10 @@ public class TvFocusRingResolutionDeviceTest {
         ThemeController.applyFromPreferences(null);
 
         Context context = themedContext();
-        int attribute = resolveAttrColor(context);
         int codePath = ThemeController.focusRingColor(context);
-        assertEquals("代码路径与 XML 属性路径在主题覆写后仍必须同色", attribute, codePath);
+        assertEquals("代码路径必须跟随用户设置的 FOCUS 槽",
+                ThemeController.current().colorFocus(), codePath);
+        assertNotEquals("覆写后代码路径不得仍等于编译期静态环色", compiledRing, codePath);
 
         final int[] bound = new int[1];
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
@@ -115,11 +126,8 @@ public class TvFocusRingResolutionDeviceTest {
             ThemeController.bindTheme(root);
             bound[0] = card.getStrokeColor();
         });
-        // binder 只会把描边改写成解析后的角色取值；若它把两条路径分岔，这里会立刻暴露。
-        assertTrue("描边经 binder 后必须仍等于两条路径的共同取值",
-                bound[0] == attribute || bound[0] == ThemeController.current().colorFocus());
-        assertEquals("binder 改写后代码路径仍须与 XML 路径同色",
-                resolveAttrColor(context), ThemeController.focusRingColor(context));
+        assertTrue("描边经 binder 后必须仍等于代码路径取值",
+                bound[0] == codePath || bound[0] == ThemeController.current().colorFocus());
     }
 
     /** 应用真实主题（Theme.App -> Theme.Base 声明了 tvFocusRing）的 Context。 */

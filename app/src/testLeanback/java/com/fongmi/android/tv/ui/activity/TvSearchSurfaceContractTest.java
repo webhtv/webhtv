@@ -37,6 +37,11 @@ public class TvSearchSurfaceContractTest {
     private static final String WIDTH = "@dimen/webhtv_focus_ring_width";
     private static final String RING_COLOR = "?attr/tvFocusRing";
     private static final String ON_WALLPAPER = "?attr/webhtvColorOnWallpaper";
+    /** 条目遮罩槽位（本批把两个输入框 shape 的填充接到它）。 */
+    private static final String ITEM_OVERLAY = "?attr/webhtvColorItemOverlay";
+    private static final String TOKENS_DAY = "app/src/main/res/values/webhtv_tokens.xml";
+    private static final String STYLES = "app/src/main/res/values/webhtv_styles.xml";
+    private static final String BLACK_40 = "#66000000";
 
     /** 搜索页不允许再有写死的白色前景：浅色壁纸下它不可读。 */
     @Test
@@ -83,16 +88,32 @@ public class TvSearchSurfaceContractTest {
         return xml.substring(start, end).contains("android:focusable=\"true\"");
     }
 
-    /** 输入框底色必须与键盘同族（black_40），并给出焦点环的唯一取值来源。 */
+    /**
+     * 输入框底色、焦点环的唯一取值来源。
+     *
+     * <p>底色从 {@code @color/black_40} 改成 {@code ?attr/webhtvColorItemOverlay}：那就是
+     * 「条目遮罩」这一个用户槽位的语义载体（列表/按钮压在表面上的那层半透明深色），默认取值
+     * 仍是 {@code #66000000}，因此未改过主题时外观与键盘同族不变。
+     *
+     * <p><b>契约没有变松</b>：本条现在改为断言「默认解析结果仍是 black_40」——即
+     * {@code webhtv_color_item_overlay} 必须等于 {@code @color/black_40}、且主题必须把它赋给
+     * {@code webhtvColorItemOverlay}。这才是原本要守的不变量（能在浅色壁纸上压住恒定浅色前景），
+     * 而不是某个字面量写法。运行时把用户槽位灌进这两个 drawable 的机制由
+     * {@code ThemeBinderItemOverlayTest} 覆盖。
+     */
     @Test
     public void searchFieldKeepsTheSharedRingAndBackdropContract() throws Exception {
         String normal = values(read(SEARCH_FIELD));
         String focused = values(read(SEARCH_FIELD_FOCUSED));
 
-        assertTrue("输入框常态底色必须与键盘常态同族（恒定半透明黑，能压住浅色壁纸）",
-                normal.contains("android:color=\"@color/black_40\""));
-        assertTrue("聚焦态底色必须与键盘聚焦同族",
-                focused.contains("android:color=\"@color/black_40\""));
+        for (String body : new String[]{normal, focused}) {
+            assertTrue("输入框底色必须走条目遮罩槽位 ?attr/webhtvColorItemOverlay",
+                    body.contains("android:color=\"" + ITEM_OVERLAY + "\""));
+        }
+        assertTrue("条目遮罩 token 的默认值必须仍是 black_40（否则默认外观已经变了）",
+                values(read(TOKENS_DAY)).contains("<color name=\"webhtv_color_item_overlay\">" + BLACK_40 + "</color>"));
+        assertTrue("主题必须把 webhtvColorItemOverlay 赋给该 token（只声明、没赋值会让 ?attr/ 静默退化）",
+                values(read(STYLES)).contains("<item name=\"webhtvColorItemOverlay\">@color/webhtv_color_item_overlay</item>"));
         assertTrue("常态必须有可见的 1dp 调色板轮廓（否则浅色下仍然没有框）",
                 normal.contains("android:width=\"1dp\"") && normal.contains("android:color=\"?attr/colorOutline\""));
         assertTrue("聚焦态环宽必须引用唯一宽度 token " + WIDTH,

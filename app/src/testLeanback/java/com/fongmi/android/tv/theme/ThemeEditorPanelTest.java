@@ -90,6 +90,49 @@ public class ThemeEditorPanelTest {
         assertEquals(global, ThemeController.current());
     }
 
+    /**
+     * 条目遮罩是"底色 + 遮罩上的文字色 + 强度"三者联动的同一个机制，编辑器必须三行齐备；
+     * 只挂两张色卡或只挂滑杆都会让用户只能调一半。这里按既有测试的取证方式（tag 访客）确认三行
+     * 真的进了面板，并且强度滑杆落在新的 5%..100% 区间上——它的上界与 overlayOpacity 不同。
+     */
+    @Test
+    public void itemOverlayGroupContributesBothColourRowsAndItsOpacitySlider() {
+        Context context = new ContextThemeWrapper(App.get(), R.style.Theme_App);
+        ThemeEditor editor = new ThemeEditor(ThemeProfile.defaultProfile());
+        ThemeEditor.Slot[] clicked = {null};
+        ThemePreviewView panel = ThemePreviewView.createPanel(context, editor, false, editor.preview(false, 0), new ThemePreviewView.Callbacks() {
+            @Override public void onColorSlotClicked(ThemeEditor.Slot slot, boolean dark) { clicked[0] = slot; }
+            @Override public void onDraftChanged() { }
+        });
+        layout(panel);
+
+        View overlay = panel.findViewWithTag("theme-slot:ITEM_OVERLAY");
+        View onOverlay = panel.findViewWithTag("theme-slot:ON_ITEM_OVERLAY");
+        assertNotNull("the item overlay colour row must exist", overlay);
+        assertNotNull("the selected text colour row must exist", onOverlay);
+        overlay.performClick();
+        assertEquals(ThemeEditor.Slot.ITEM_OVERLAY, clicked[0]);
+        onOverlay.performClick();
+        assertEquals(ThemeEditor.Slot.ON_ITEM_OVERLAY, clicked[0]);
+
+        SeekBar opacity = panel.findViewWithTag("theme-opacity:ITEM_OVERLAY_OPACITY");
+        assertNotNull("the item overlay opacity slider must exist", opacity);
+        // 默认自动值就是解析后的遮罩 alpha（40%），落在 5%..100% 区间的 37% 位置上。
+        assertEquals(37, opacity.getProgress());
+        assertTrue(opacity.requestFocus());
+        int before = opacity.getProgress();
+        opacity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT));
+        opacity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT));
+        assertTrue(opacity.getProgress() > before);
+        assertTrue(editor.isDirty());
+
+        List<String> texts = texts(panel);
+        assertTrue(texts.contains(context.getString(R.string.theme_editor_slot_item_overlay)));
+        assertTrue(texts.contains(context.getString(R.string.theme_editor_slot_on_item_overlay)));
+        assertTrue(texts.contains(context.getString(R.string.theme_editor_slot_item_overlay_opacity)));
+        assertTrue(texts.contains(context.getString(R.string.theme_editor_group_item_overlay)));
+    }
+
     private static void layout(View view) {
         view.measure(View.MeasureSpec.makeMeasureSpec(1100, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(3000, View.MeasureSpec.AT_MOST));

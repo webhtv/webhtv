@@ -21,6 +21,13 @@ public final class ThemeProfileValidator {
     public static final float MAX_PLAYER_SCRIM_OPACITY = 1f;
     public static final float MIN_LIVE_LIST_SCRIM_OPACITY = 0.20f;
     public static final float MAX_LIVE_LIST_SCRIM_OPACITY = 1f;
+    /**
+     * 条目遮罩强度的取值范围。上限是 1（而不是环境遮罩槽的 0.60）：遮罩色由用户自选，选浅色
+     * 时往往需要压满才能盖住封面上的杂色，而强度只是缩放 alpha，压满等于「遮罩色说了算」；
+     * 下限沿用 0.05，低于它在电视观看距离上等于没有遮罩，滑到那里只会让用户以为功能失效。
+     */
+    public static final float MIN_ITEM_OVERLAY_OPACITY = 0.05f;
+    public static final float MAX_ITEM_OVERLAY_OPACITY = 1f;
 
     private static final Set<String> DANGEROUS_KEYS = Set.of(
             "script", "javascript", "resource", "resourcepath", "intent", "classname", "class", "css",
@@ -70,11 +77,14 @@ public final class ThemeProfileValidator {
         slots.error = color(slots.error, errors, path + ".error");
         slots.success = color(slots.success, errors, path + ".success");
         slots.warning = color(slots.warning, errors, path + ".warning");
+        slots.itemOverlay = color(slots.itemOverlay, errors, path + ".itemOverlay");
+        slots.onItemOverlay = color(slots.onItemOverlay, errors, path + ".onItemOverlay");
         slots.scrimOpacity = opacity(slots.scrimOpacity, MIN_SCRIM_OPACITY, MAX_SCRIM_OPACITY, errors, path + ".scrimOpacity");
         slots.dialogOpacity = opacity(slots.dialogOpacity, MIN_DIALOG_OPACITY, MAX_DIALOG_OPACITY, errors, path + ".dialogOpacity");
         slots.overlayOpacity = opacity(slots.overlayOpacity, MIN_OVERLAY_OPACITY, MAX_OVERLAY_OPACITY, errors, path + ".overlayOpacity");
         slots.playerScrimOpacity = opacity(slots.playerScrimOpacity, MIN_PLAYER_SCRIM_OPACITY, MAX_PLAYER_SCRIM_OPACITY, errors, path + ".playerScrimOpacity");
         slots.liveListScrimOpacity = opacity(slots.liveListScrimOpacity, MIN_LIVE_LIST_SCRIM_OPACITY, MAX_LIVE_LIST_SCRIM_OPACITY, errors, path + ".liveListScrimOpacity");
+        slots.itemOverlayOpacity = opacity(slots.itemOverlayOpacity, MIN_ITEM_OVERLAY_OPACITY, MAX_ITEM_OVERLAY_OPACITY, errors, path + ".itemOverlayOpacity");
     }
 
     private static String color(String value, List<String> errors, String path) {

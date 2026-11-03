@@ -51,6 +51,31 @@ public class ThemeWebBridgeTokenTest {
     }
 
     @Test
+    public void itemOverlayFieldsMirrorTheResolvedTokens() {
+        for (ThemeTokens tokens : new ThemeTokens[]{ThemeTokens.light(), ThemeTokens.dark()}) {
+            String json = ThemeWebBridge.snapshotJson(tokens);
+            assertTrue(json.contains("\"itemOverlay\":\"" + hex(tokens.colorItemOverlay()) + "\""));
+            assertTrue(json.contains("\"onItemOverlay\":\"" + hex(tokens.colorOnItemOverlay()) + "\""));
+            assertTrue(json.matches(".*\"itemOverlayOpacity\":\\d+\\.\\d{2}.*"));
+            assertEquals(round2(alpha(tokens.colorItemOverlay())), value(json, "itemOverlayOpacity"), 0.001);
+        }
+    }
+
+    @Test
+    public void itemOverlayFieldsFollowTheProfileSlots() {
+        ThemeProfile profile = ThemeProfile.defaultProfile();
+        profile.light.itemOverlay = "#203040";
+        profile.light.itemOverlayOpacity = 0.50f;
+        ThemeTokens active = ThemeResolver.resolve(
+                ThemeMode.LIGHT, ThemeSeed.NONE, 0, 0, profile, null, false);
+        String json = ThemeWebBridge.snapshotJson(active);
+        // 50% of #203040 is the alpha the resolver applies, so the page sees the strength the list uses.
+        assertTrue(json.contains("\"itemOverlay\":\"#80203040\""));
+        assertEquals(0.50f, value(json, "itemOverlayOpacity"), 0.001);
+        assertTrue(json.contains("\"onItemOverlay\":\"" + hex(active.colorOnItemOverlay()) + "\""));
+    }
+
+    @Test
     public void snapshotNeverLeaksProfileOrSeedInternals() {
         ThemeProfile profile = ThemeProfile.defaultProfile();
         profile.light.primary = "#123456";
@@ -75,6 +100,10 @@ public class ThemeWebBridgeTokenTest {
 
     private static float alpha(int color) {
         return ((color >>> 24) & 0xFF) / 255f;
+    }
+
+    private static String hex(int color) {
+        return String.format(java.util.Locale.US, "#%08X", color);
     }
 
     private static float value(String json, String key) {

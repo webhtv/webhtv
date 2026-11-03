@@ -44,7 +44,6 @@ import com.github.catvod.crawler.SpiderDebug;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import is.xyz.mpv.MPVLib;
@@ -212,12 +211,12 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean isLive() {
-        return player.getDuration() < TimeUnit.MINUTES.toMillis(1) || player.isCurrentMediaItemLive();
+        return TimelineStreamKindPolicy.isLive(player.getDuration(), player.isCurrentMediaItemLive());
     }
 
     @Override
     public boolean isVod() {
-        return player.getDuration() > TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
+        return TimelineStreamKindPolicy.isVod(player.getDuration(), player.isCurrentMediaItemLive());
     }
 
     @Override

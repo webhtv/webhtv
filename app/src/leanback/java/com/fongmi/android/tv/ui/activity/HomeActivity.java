@@ -135,6 +135,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private String webChromeMode = TV_NORMAL;
     private String webDefaultChromeMode = TV_FULL;
     private boolean webToolbarVisible = true;
+    private boolean toolbarRequestedVisible = true;
     private boolean loadingHomeCategory;
     private boolean skipNextVodConfigRefresh;
     private boolean pendingOpenVod; // 手动点击"点播"后等待数据加载完成再进分类页
@@ -145,6 +146,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private boolean mPendingContentRefresh;
     private boolean mPendingContentRefreshForceNative;
     private int focusGeneration;
+    private Runnable mPendingTypeUpdate;
+    private boolean mTypeUpdatePosted;
     private Runnable mPendingCategoryFocus;
     private final Runnable mTypeSwitch = this::switchType;
     private final Runnable mWebConfirmLongPress = this::triggerWebFocusedLongPress;
@@ -257,6 +260,76 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         });
     }
 
+    /**
+     * 类型栏的结构性修改（换 adapter 数据）在 RecyclerView 正在计算布局时必须让路：布局
+     * 过程中增删子 View 会让某个子 View 拿不到 ViewHolder，RecyclerView 随后在
+     * dispatchLayoutStep1 里崩溃。
+     *
+     * <p>这是类型栏结构性写入的唯一入口。本方法自己决定「立即执行」还是「入槽延后」，并且
+     * 两个分支都由本方法负责真正调用 {@code update}：调用方只允许写一句裸语句
+     * {@code runTypeMutation(...)}，不得再自己执行目标，也不得把本方法当成判定条件去决定
+     * 是否重复执行。（历史上它返回 boolean，于是非延后路径「方法内 run 一次 + 调用方再 run
+     * 一次」造成双执行，属于真缺陷，不是风格问题。）
+     *
+     * <p>单槽合并成立的前提是「写入均为整表替换」：槽位里只允许放整体覆盖 adapter 数据的
+     * 写入，后来的写入直接顶掉先前的，所以被顶掉的旧写入不需要单独执行，也不需要任何代际号。
+     *
+     * <p>延后不是一次性的：投递到下一帧动画时布局仍可能没结束，所以闭包必须像
+     * {@code BaseActivity#postRecyclerUpdate} 那样重新复查 {@link #isTypeLayoutBusy()}，
+     * 未就绪就把同一个 Runnable 再挂一帧。
+     *
+     * <p>排队语义是「单槽合并 + 必执行」，不是「代际号丢弃」：丢弃式代际号会让一次布局中的
+     * 写入被随后的焦点失效静默作废，类型栏就永久空白。这里的待写入只有一个槽位
+     * （{@link #mPendingTypeUpdate}），后来的写入直接覆盖先前的，因此旧写入不会盖掉新写入；
+     * 排队只允许存在一个 runner（{@link #mTypeUpdatePosted}），它执行时取出并执行槽位里的
+     * 最新写入，所以最新写入必然落地，不会变成无人执行的孤儿。丢弃只发生在一种情况下：
+     * 宿主正在结束或已销毁（{@code isFinishing() || isDestroyed()}）时，那时的 adapter
+     * 写入没有任何意义。
+     */
+    private void runTypeMutation(Runnable update) {
+        final RecyclerView view = mBinding.typeRecycler;
+        if (!isTypeLayoutBusy()) {
+            // 这次写入立刻落地，此前排队的那次已被它取代，必须清掉，否则旧数据会在下一帧
+            // 覆盖刚刚同步写入的新数据。
+            mPendingTypeUpdate = null;
+            update.run();
+            return;
+        }
+        // 单槽合并：后写者覆盖前者，这就是「旧不盖新」的全部实现，不需要任何代际号。
+        mPendingTypeUpdate = update;
+        // 同一时刻只允许一个 runner 在排队；已在排队时它执行时自然读到刚放进去的最新写入。
+        if (mTypeUpdatePosted) return;
+        mTypeUpdatePosted = true;
+        view.postOnAnimation(new Runnable() {
+            @Override
+            public void run() {
+                mTypeUpdatePosted = false;
+                // 宿主正在结束或已销毁：此时的 adapter 写入没有任何意义，丢弃是安全的。
+                if (!canDeferFragmentWork()) {
+                    mPendingTypeUpdate = null;
+                    return;
+                }
+                if (isTypeLayoutBusy()) {
+                    mTypeUpdatePosted = true;
+                    view.postOnAnimation(this);
+                    return;
+                }
+                // 取出并执行槽位里的最新写入：它必然被执行，不会被静默丢弃。
+                Runnable pending = mPendingTypeUpdate;
+                mPendingTypeUpdate = null;
+                if (pending != null) pending.run();
+            }
+        });
+    }
+
+    /**
+     * 布局忙碌判定：类型栏自己或内容行 recycler 正在算布局时，结构性写入都必须让路。
+     * 单点定义，避免同一个条件在守卫里出现两遍、改一处漏一处。
+     */
+    private boolean isTypeLayoutBusy() {
+        return mBinding.typeRecycler.isComputingLayout() || mBinding.recycler.isComputingLayout();
+    }
+
     private void scheduleTypeSwitch(int position) {
         mPendingTypePosition = position;
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
@@ -343,8 +416,13 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void showHomeContent() {
         invalidatePendingFocusRequests();
         mCurrentType = null;
+        // 分类页里的滚动隐藏是分类页的临时状态，不该跨内容模式留下来：否则在分类页往下滚过
+        // 再返回首页，记录下来的“不想显示”会让首页工具条一直藏着（CustomVerticalGridView
+        // 会把 typeRecycler 和 toolbar 一起藏掉并回调到这里）。
+        toolbarRequestedVisible = true;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
         mBinding.categoryContainer.setVisibility(View.GONE);
+        applyToolbarVisibility();
         if (mFolder != null && mFolder.isAdded() && !mFolder.isHidden()) {
             mFolder.clearContentFocusRequest();
             mFolder.setUserVisibleHint(false);
@@ -388,6 +466,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         FolderFragment target = existing instanceof FolderFragment ? (FolderFragment) existing : FolderFragment.newInstance(getHome().getKey(), item);
         if (target == mFolder && target.isAdded() && !target.isHidden()) {
             mCurrentType = item;
+            applyToolbarVisibility();
             if (toggleFilter) updateFilter(item);
             return;
         }
@@ -410,6 +489,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         transaction.commit();
         mFolder = target;
         mCurrentType = item;
+        applyToolbarVisibility();
     }
 
     private void restoreTypeFocus(boolean keepTypeFocus, Class item) {
@@ -459,11 +539,15 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void clearCategoryContent() {
         invalidatePendingFocusRequests();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
+        // 换源时不需要额外作废上一站点在途的写入：清理本身是最后一次写入，单槽合并让
+        // 它直接覆盖先前排队的那次（后写者胜）。
         clearStaleSiteTypes();
         mCurrentType = null;
         mFolder = null;
+        toolbarRequestedVisible = true;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
         mBinding.categoryContainer.setVisibility(View.GONE);
+        applyToolbarVisibility();
         // 状态清理是纯内存赋值，与能否提交事务无关；这里必须已经丢弃 mFolder，
         // 否则 isCurrentCategory() 会把一个即将消失的 Fragment 当成当前分类。
         if (!canCommitFragmentTransaction()) {
@@ -490,19 +574,44 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void clearStaleSiteTypes() {
         // Site switching starts asynchronously. Remove the old type row immediately so stale
         // category buttons cannot be mistaken for the newly selected site during loading.
-        mTypeAdapter.addAll(Collections.emptyList());
+        // 隐藏与选中的撤销是纯状态量，必须同步做完：延后它们会让旧分类按钮至少多活一帧，
+        // 期间它仍然可见、可聚焦，switchType() 还会按旧 adapter 判定并打开旧 Class。
         mPendingTypePosition = -1;
         mBinding.typeRecycler.setVisibility(View.GONE);
+        // 只有真正的结构性写入（adapter 换数据）需要让路：这条链路
+        // （clearCategoryContent ← syncCategorySite ← 站点切换）就是目标崩溃场景。
+        runTypeMutation(this::clearStaleTypeItems);
+    }
+
+    /** 清空旧站点的分类按钮；结构性修改只允许经 {@link #runTypeMutation(Runnable)} 这条守卫进入。 */
+    private void clearStaleTypeItems() {
+        mTypeAdapter.addAll(Collections.emptyList());
     }
 
     private void updateToolbarVisibility(boolean visible) {
-        mBinding.toolbar.setVisibility(visible && webToolbarVisible ? View.VISIBLE : View.GONE);
+        toolbarRequestedVisible = visible;
+        applyToolbarVisibility();
+    }
+
+    /**
+     * 首页顶部工具条（logo + 站点名 + 时钟）只属于首页内容。
+     *
+     * <p>点播内联分类页要和关闭「默认加载点播」后 VodActivity 分类页保持一致：那边只有分类按钮行 +
+     * 内容容器，没有这条工具条（见 {@code app/src/leanback/res/layout/activity_vod.xml}），所以分类页
+     * 把工具条藏起来；分类按钮行照旧留在顶部，方向键还能继续切分类。首页里按最近一次滚动请求
+     * 恢复，切换内容模式时（离开或回到首页）这个请求会复位成显示。
+     */
+    private void applyToolbarVisibility() {
+        boolean show = toolbarRequestedVisible && webToolbarVisible && !isCategoryVisible();
+        mBinding.toolbar.setVisibility(show ? View.VISIBLE : View.GONE);
         syncNativeContentInset();
         syncWebOverlayLayout();
     }
 
     private void syncNativeContentInset() {
-        int top = isToolbarVisible() ? toolbarHeight() : 0;
+        // 工具条藏掉后首页内容贴到顶部；分类页的分类按钮行需要自己的留白，与 VodActivity 分类页一致。
+        // 三臂的单位都是 px（getPaddingTop/setPadding 和 toolbarHeight 都是 px），别在这里改成 dp。
+        int top = isToolbarVisible() ? toolbarHeight() : (isCategoryVisible() ? getResources().getDimensionPixelSize(R.dimen.webhtv_space_6) : 0);
         if (mBinding.nativeContent.getPaddingTop() == top) return;
         mBinding.nativeContent.setPadding(mBinding.nativeContent.getPaddingLeft(), top, mBinding.nativeContent.getPaddingRight(), mBinding.nativeContent.getPaddingBottom());
     }
@@ -818,14 +927,23 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void setTypes(Result result) {
         if (result.getTypes().isEmpty()) {
-            mTypeAdapter.addAll(Collections.emptyList());
-            mBinding.typeRecycler.setVisibility(View.GONE);
-            showHomeContent();
+            // 守卫自己负责执行或入槽；这里直接返回，绝不能自己再执行一次目标。
+            runTypeMutation(this::clearTypes);
             return;
         }
         List<Class> items = new ArrayList<>();
         if (Setting.isHomeVodAutoLoad()) items.add(createHomeType());
         items.addAll(result.getTypes());
+        runTypeMutation(() -> applyTypes(items));
+    }
+
+    private void clearTypes() {
+        mTypeAdapter.addAll(Collections.emptyList());
+        mBinding.typeRecycler.setVisibility(View.GONE);
+        showHomeContent();
+    }
+
+    private void applyTypes(List<Class> items) {
         mTypeAdapter.addAll(items);
         if (Setting.isHomeVodAutoLoad()) {
             mBinding.typeRecycler.setSelectedPosition(0);

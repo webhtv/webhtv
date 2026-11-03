@@ -330,6 +330,9 @@ public final class ThemeController {
             case ON_ERROR -> R.color.webhtv_color_on_error;
             case ON_SUCCESS -> R.color.webhtv_color_on_success;
             case ON_WARNING -> R.color.webhtv_color_on_warning;
+            // 条目遮罩族没有编译期颜色资源（遮罩取 @color/black_40，文字取 onPrimary），
+            // 因此这里如实返回 0，与「角色没有资源」的既有语义一致。
+            case ITEM_OVERLAY, ON_ITEM_OVERLAY -> 0;
         };
     }
 
@@ -407,20 +410,38 @@ public final class ThemeController {
      * {@code #FFD166} 写死在 Java 里，于是 {@code tv_item_focus_ring} 接线到主题 FOCUS 槽
      * 之后，同一个 TV 应用里就出现了两种焦点环色：播放页/追更页跟随主题，详情页永远黄色。
      *
-     * <p><b>主题覆写的传播方式与其它 {@code ?attr/tvFocusRing} 消费者完全一致，本方法不
-     * 额外做一套。</b> {@code ?attr/tvFocusRing} 是编译期静态资源，Android 没有公开 API 能在
-     * 运行时改写已编译的 {@code ?attr/color*}（见 {@link ThemeBinder} 类注释），因此用户覆写
-     * 只能由 {@code ThemeBinder} 在视图树上按基线角色改写生效——实测 MaterialButton 的
-     * stroke 会被改写（seed 改 {@code #00B0FF} 后 {@code #A8C7FA} → {@code #96CCF8}），而
-     * 前景选择器与 MaterialCardView 的歧义描边按 binder 既有边界保持静态。
-     * 本方法因此也返回同一个静态值：若只让代码路径动态取 {@code current().colorFocus()}，
-     * 就会在主题覆写后重新造出「代码路径跟随、选择器不跟随」的两种环色，反而倒退。
+     * <p><b>取值规则：活动快照的 FOCUS 槽一旦偏离冻结基线就跟随它，否则保持编译期静态值。</b>
+     * {@code ?attr/tvFocusRing} 是编译期静态资源，Android 没有公开 API 能在运行时改写已编译的
+     * {@code ?attr/color*}（见 {@link ThemeBinder} 类注释）。只有代码路径能动态取值，因此：
+     * <ul>
+     *   <li>FOCUS 槽与冻结基线同值时返回 {@code ?attr/tvFocusRing}，与 XML 选择器字节一致——
+     *       默认档两条路径永远同色，不会出现「代码路径跟随、选择器不跟随」的两种环色；</li>
+     *   <li>FOCUS 槽被改过（编辑器 FOCUS 槽覆写，或 seed/壁纸重新生成色板导致 FOCUS 变化）时
+     *       返回 {@code current().colorFocus()}。这与 {@link ThemeBinder} 的判据一致：binder 也是
+     *       在 {@code baseline != current} 时把白名单 selector 的环改写为 FOCUS 角色，因此代码路径
+     *       与白名单 selector 始终同色。这也是用户对「焦点色」这一项设置唯一能看到的反馈：卡片
+     *       描边（{@code TmdbCardFocusHelper}、{@code TmdbEpisodeAdapter}、详情页/追更页）由代码
+     *       路径绘制，若这里仍返回静态值，编辑器的焦点色对这些视图永远无效。</li>
+     * </ul>
+     * 已知并发面：XML 选择器与 {@code ?attr/tvPlayerRing} 玻璃族仍是静态环色，覆写后同一个
+     * 屏幕里可能出现「卡片环跟随、选择器环不跟随」，属于 {@link ThemeBinder} 白名单边界，
+     * 需要另外扩展白名单才能统一。
      *
      * <p>同时这也修正了浅色详情页的可读性缺陷：{@code #FFD166} 画在浅色底板
      * （cinema {@code #EBE3DA}、chip {@code #F5F8FB}）上只有 1.14–1.35:1，环几乎看不见，
      * 而主题 FOCUS 槽的浅色取值是 5.03–5.99:1（Resolver 另有 ≥3:1 的对比度门）。
      */
     public static int focusRingColor(Context context) {
+        int compiled = compiledFocusRingColor(context);
+        // Comparing the resolved FOCUS role against the frozen baseline avoids a second
+        // light/dark resolution here (this runs on every card focus change) and states the
+        // rule exactly: follow the profile only when it actually moved the focus colour.
+        int active = current.colorFocus();
+        return active == baseline.colorFocus() ? compiled : active;
+    }
+
+    /** The compiled {@code ?attr/tvFocusRing} value, shared with the XML selector path. */
+    private static int compiledFocusRingColor(Context context) {
         if (context != null) {
             TypedValue value = new TypedValue();
             if (context.getTheme().resolveAttribute(R.attr.tvFocusRing, value, true)) {

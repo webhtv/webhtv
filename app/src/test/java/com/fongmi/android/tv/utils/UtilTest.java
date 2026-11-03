@@ -133,6 +133,44 @@ public class UtilTest {
     }
 
     @Test
+    public void getNumber_stripsGluedQualityTokens() {
+        // 粘连的画质标记（如 4KHQHDR）应被整体剥离，前置集号不能被吞掉
+        assertEquals(1, Util.getEpisodeNumber("01 4KHQHDR(4.5 GB)"));
+        assertEquals(2, Util.getEpisodeNumber("02 4KHQHDR(4.73 GB)"));
+        assertEquals(3, Util.getEpisodeNumber("03 4KHQHDR(4.53 GB)"));
+        assertEquals(4, Util.getEpisodeNumber("04 4KHQHDR(4.8 GB)"));
+        assertEquals(1, Util.getEpisodeNumber("01 4K HDR(4.5 GB)"));
+        assertEquals(12, Util.getEpisodeNumber("12 8KHQHDR(1.2 GB)"));
+        assertEquals(5, Util.getEpisodeNumber("05 HQHDR"));
+        assertEquals(7, Util.getEpisodeNumber("07 4KHQHDR"));
+
+        // 分辨率与后续编码/画质粘连时，同样只能取前面的集号
+        assertEquals(5, Util.getEpisodeNumber("05 1080pHDR"));
+        assertEquals(5, Util.getEpisodeNumber("05 2160pHEVC"));
+        assertEquals(9, Util.getEpisodeNumber("09 x265.10bit.1080p"));
+        assertEquals(13, Util.getEpisodeNumber("13 WEB-DL.2160p.HEVC"));
+
+        // HDR10 / 10bit 带数字的标记也必须整体剥离，否则其数字会被误读成集号
+        assertEquals(6, Util.getEpisodeNumber("06 HDR10"));
+        assertEquals(6, Util.getEpisodeNumber("06 4KHQHDR10"));
+        assertEquals(10, Util.getEpisodeNumber("10 4K HDR10+"));
+        assertEquals(5, Util.getEpisodeNumber("05 4KHQHDR.10bit"));
+        assertEquals(8, Util.getEpisodeNumber("08 1080p 10bit"));
+        assertEquals(8, Util.getEpisodeNumber("08 2160p.DV.HDR10"));
+
+        // 拉丁正文词不能被连带吞掉（HDRip/SDTV/HDRipx 后面没有 ASCII 字母数字，链尾断言拦住）
+        assertEquals(11, Util.getEpisodeNumber("11 SDDV"));
+        assertEquals(2, Util.getEpisodeNumber("HDRip 第2集"));
+        assertEquals(4, Util.getEpisodeNumber("SDTV 第4集"));
+        assertEquals(5, Util.getEpisodeNumber("HDRipx 第5集"));
+        assertEquals(-1, Util.getEpisodeNumber("DVDRip"));
+
+        // 中文正文词前的 ASCII 标记仍会被剥离（与旧实现一致），集号取自"第X集"
+        assertEquals(3, Util.getEpisodeNumber("SD高达 第3集"));
+        assertEquals(5, Util.getEpisodeNumber("第5集 4KHQHDR"));
+    }
+
+    @Test
     public void getNumber_parsesSeasonEpisodeSuffixWithoutConcatenating() {
         assertEquals(1, Util.getEpisodeNumber("一人之下6_01"));
         assertEquals(20, Util.getEpisodeNumber("一人之下6_20.mp4"));

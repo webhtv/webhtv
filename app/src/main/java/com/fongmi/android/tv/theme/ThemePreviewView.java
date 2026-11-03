@@ -62,6 +62,15 @@ public final class ThemePreviewView extends LinearLayout {
             layers.view.addView(row.view, ThemeEditorUi.fullWidth(context, 8));
         }
         addView(layers.view, ThemeEditorUi.fullWidth(context, 12));
+        // 条目遮罩就是列表/按钮聚焦时的同一个视觉机制：遮罩底色、遮罩上的文字色、遮罩强度
+        // 三者必须一起调才不会互相打架，所以单独成组；强度滑杆也跟着留在这里，不拆去 layers 组，
+        // 否则用户调这一处机制要跨两个分组来回找。
+        Group itemOverlay = colorGroup(R.string.theme_editor_group_item_overlay,
+                ThemeEditor.Slot.ITEM_OVERLAY, ThemeEditor.Slot.ON_ITEM_OVERLAY);
+        OpacityRow itemOverlayOpacity = new OpacityRow(ThemeEditor.Slot.ITEM_OVERLAY_OPACITY);
+        opacities.put(ThemeEditor.Slot.ITEM_OVERLAY_OPACITY, itemOverlayOpacity);
+        itemOverlay.view.addView(itemOverlayOpacity.view, ThemeEditorUi.fullWidth(context, 8));
+        addView(itemOverlay.view, ThemeEditorUi.fullWidth(context, 12));
     }
 
     public static ThemePreviewView createPanel(Context context, ThemeEditor editor, boolean dark,
@@ -243,6 +252,9 @@ public final class ThemePreviewView extends LinearLayout {
                 case DIALOG_OPACITY -> tokens.dialogOpacity();
                 case PLAYER_SCRIM_OPACITY -> PlaybackMenuScrim.DEFAULT_OPACITY;
                 case LIVE_LIST_SCRIM_OPACITY -> LiveListScrim.DEFAULT_OPACITY;
+                // 遮罩强度就是遮罩色的 alpha，所以「自动」时的取值直接读解析后的 alpha，
+                // 不另立一个默认常量，避免两处默认值漂移。
+                case ITEM_OVERLAY_OPACITY -> ThemeEditorUi.alpha(tokens.colorItemOverlay());
                 default -> ThemeEditorUi.alpha(tokens.colorOverlayLight());
             };
             if (raw != null) opacity = Float.parseFloat(raw);
@@ -266,7 +278,7 @@ public final class ThemePreviewView extends LinearLayout {
 
     private static String symbol(ThemeEditor.Slot slot) {
         return switch (slot) {
-            case ON_SURFACE, ON_SURFACE_VARIANT -> "Aa";
+            case ON_SURFACE, ON_SURFACE_VARIANT, ON_ITEM_OVERLAY -> "Aa";
             case SUCCESS -> "✓";
             case WARNING -> "!";
             case ERROR -> "×";
@@ -282,6 +294,8 @@ public final class ThemePreviewView extends LinearLayout {
             case SECONDARY_CONTAINER -> tokens.colorSecondaryContainer();
             case FOCUS -> tokens.colorFocus();
             case PLAYER_CURRENT -> tokens.colorPlayerCurrentRing();
+            case ITEM_OVERLAY -> tokens.colorItemOverlay();
+            case ON_ITEM_OVERLAY -> tokens.colorOnItemOverlay();
             case SURFACE -> tokens.colorSurface();
             case SURFACE_CONTAINER -> tokens.colorSurfaceContainer();
             case SURFACE_CONTAINER_HIGH -> tokens.colorSurfaceContainerHigh();
@@ -301,6 +315,9 @@ public final class ThemePreviewView extends LinearLayout {
             case DIALOG_OPACITY -> ThemeProfileValidator.MIN_DIALOG_OPACITY;
             case PLAYER_SCRIM_OPACITY -> ThemeProfileValidator.MIN_PLAYER_SCRIM_OPACITY;
             case LIVE_LIST_SCRIM_OPACITY -> ThemeProfileValidator.MIN_LIVE_LIST_SCRIM_OPACITY;
+            // 条目遮罩的有效区间是 5%..100%（见 ThemeProfileValidator），与 OVERLAY_OPACITY 的
+            // 5%..60% 不同；不显式列出就会落到 default 分支，滑杆永远推不到 100%。
+            case ITEM_OVERLAY_OPACITY -> ThemeProfileValidator.MIN_ITEM_OVERLAY_OPACITY;
             default -> ThemeProfileValidator.MIN_OVERLAY_OPACITY;
         };
     }
@@ -311,6 +328,7 @@ public final class ThemePreviewView extends LinearLayout {
             case DIALOG_OPACITY -> ThemeProfileValidator.MAX_DIALOG_OPACITY;
             case PLAYER_SCRIM_OPACITY -> ThemeProfileValidator.MAX_PLAYER_SCRIM_OPACITY;
             case LIVE_LIST_SCRIM_OPACITY -> ThemeProfileValidator.MAX_LIVE_LIST_SCRIM_OPACITY;
+            case ITEM_OVERLAY_OPACITY -> ThemeProfileValidator.MAX_ITEM_OVERLAY_OPACITY;
             default -> ThemeProfileValidator.MAX_OVERLAY_OPACITY;
         };
     }
@@ -336,6 +354,9 @@ public final class ThemePreviewView extends LinearLayout {
             case OVERLAY_OPACITY -> R.string.theme_editor_slot_overlay_opacity;
             case PLAYER_SCRIM_OPACITY -> R.string.theme_editor_slot_player_scrim_opacity;
             case LIVE_LIST_SCRIM_OPACITY -> R.string.theme_editor_slot_live_list_scrim_opacity;
+            case ITEM_OVERLAY -> R.string.theme_editor_slot_item_overlay;
+            case ON_ITEM_OVERLAY -> R.string.theme_editor_slot_on_item_overlay;
+            case ITEM_OVERLAY_OPACITY -> R.string.theme_editor_slot_item_overlay_opacity;
         };
     }
 }

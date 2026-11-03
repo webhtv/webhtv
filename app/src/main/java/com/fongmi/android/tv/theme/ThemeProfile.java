@@ -2,7 +2,7 @@ package com.fongmi.android.tv.theme;
 
 import java.util.Locale;
 
-/** Persisted B-safe theme profile limited to the 19 user-editable semantic slots. */
+/** Persisted B-safe theme profile limited to the 22 user-editable semantic slots. */
 public final class ThemeProfile {
 
     public static final int SCHEMA_VERSION = 2;
@@ -76,7 +76,7 @@ public final class ThemeProfile {
         return SEED_NONE;
     }
 
-    /** The 14 color slots plus 5 opacity slots a user may edit. */
+    /** The 16 color slots plus 6 opacity slots a user may edit. */
     public static final class SlotSet {
         public String primary;
         public String primaryContainer;
@@ -96,9 +96,26 @@ public final class ThemeProfile {
         public String error;
         public String success;
         public String warning;
+        /**
+         * 条目遮罩底色。列表/按钮聚焦时压在封面与标题上的那层半透明深色就是它。
+         * null 表示沿用编译期 {@code @color/black_40}（{@code #66000000}）的取值，因此空
+         * profile 的解析结果与改动前字节一致；强度单独由 {@link #itemOverlayOpacity} 控制，
+         * 颜色槽本身仍只接受不透明 #RRGGBB（与其它颜色槽同一套 B-safe 校验）。
+         */
+        public String itemOverlay;
+        /**
+         * 遮罩上的选中/聚焦文字色。null 表示沿用 {@code colorOnPrimary}：遮罩上的文字本来就是
+         * onPrimary 一族、跟随明暗表；只有用户显式改过，才在「遮罩复合底色」上夹取 ≥4.5:1。
+         */
+        public String onItemOverlay;
         public Float scrimOpacity;
         public Float dialogOpacity;
         public Float overlayOpacity;
+        /**
+         * 条目遮罩强度：只缩放 {@link #itemOverlay} 的 alpha，不改色相。null 表示不缩放，
+         * 于是默认遮罩仍是编译期的 40% 黑（{@code #66000000}）。
+         */
+        public Float itemOverlayOpacity;
         /**
          * 播放菜单遮盖层（播放页底部控制条黑幕）的强度，只缩放 alpha，色相固定取
          * colorPlayerScrim；null 表示回落到 {@code PlaybackMenuScrim.DEFAULT_OPACITY}。
@@ -126,9 +143,12 @@ public final class ThemeProfile {
             copy.error = error;
             copy.success = success;
             copy.warning = warning;
+            copy.itemOverlay = itemOverlay;
+            copy.onItemOverlay = onItemOverlay;
             copy.scrimOpacity = scrimOpacity;
             copy.dialogOpacity = dialogOpacity;
             copy.overlayOpacity = overlayOpacity;
+            copy.itemOverlayOpacity = itemOverlayOpacity;
             copy.playerScrimOpacity = playerScrimOpacity;
             copy.liveListScrimOpacity = liveListScrimOpacity;
             return copy;

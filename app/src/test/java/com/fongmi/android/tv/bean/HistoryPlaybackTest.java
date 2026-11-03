@@ -708,6 +708,60 @@ public class HistoryPlaybackTest {
     }
 
     @Test
+    public void findPlaybackCandidateKeepsSameKeyEpisodeAfterSeasonBindingDrift() {
+        History drifted = history("site@@vod@@drift", "示例剧", "第5集", "s1e5-url", 90_000, 300_000);
+        drifted.setTmdbEpisodePosition(1, 5);
+        Episode current = Episode.create("第5集", "s1e5-url");
+
+        History result = History.findPlaybackCandidate(
+                "site@@vod@@drift", List.of(drifted), List.of(flag(current)), 2);
+
+        assertEquals(90_000, result.getPosition());
+        assertEquals(1, result.getTmdbSeasonNumber());
+    }
+
+    @Test
+    public void rebindClearsEpisodeUrlWhenRouteChangesWithoutMatchingEpisode() {
+        History source = history("site-a@@vod@@1", "示例剧", "第5集", "old-url", 90_000, 300_000);
+        source.setVodFlag("线路A");
+        Flag target = new Flag("线路B");
+        target.getEpisodes().add(Episode.create("第9集", "new-url-9"));
+
+        History rebound = History.findPlaybackCandidate(
+                "site-b@@vod@@2", List.of(source), List.of(target));
+
+        assertEquals("线路B", rebound.getVodFlag());
+        assertEquals("", rebound.getEpisodeUrl());
+    }
+
+    @Test
+    public void rebindKeepsEpisodeUrlWhenSameRouteStillCannotBindTheEpisode() {
+        History source = history("site@@vod@@1", "示例剧", "第5集", "old-url", 90_000, 300_000);
+        source.setVodFlag("线路A");
+        Flag route = new Flag("线路A");
+        route.getEpisodes().add(Episode.create("第9集", "new-url-9"));
+
+        History rebound = History.findPlaybackCandidate(
+                source.getKey(), List.of(source), List.of(route));
+
+        assertEquals("线路A", rebound.getVodFlag());
+        assertEquals("old-url", rebound.getEpisodeUrl());
+    }
+
+    @Test
+    public void rebindKeepsEpisodeUrlWhenTheRecordHadNoRouteToBeginWith() {
+        History source = history("site@@vod@@legacy", "示例剧", "第5集", "legacy-url", 90_000, 300_000);
+        Flag route = new Flag("线路A");
+        route.getEpisodes().add(Episode.create("第9集", "new-url-9"));
+
+        History rebound = History.findPlaybackCandidate(
+                source.getKey(), List.of(source), List.of(route));
+
+        assertEquals("线路A", rebound.getVodFlag());
+        assertEquals("legacy-url", rebound.getEpisodeUrl());
+    }
+
+    @Test
     public void findPlaybackCandidateKeepsSameKeyLegacyCompatibilityWhenTargetSeasonIsKnown() {
         History legacy = history("site-a@@vod@@season2", "示例剧", "第5集", "old-url", 90_000, 300_000);
         Episode current = Episode.create("第5集", "new-url");

@@ -64,6 +64,15 @@
     <color name="webhtv_color_overlay_light">#14FFFFFF</color>
     <color name="webhtv_color_overlay_dark">#52000000</color>
     <!--
+        条目遮罩：列表/按钮聚焦时压在封面与标题上的那层半透明深色，以及它上面的文字色。
+        #66000000 就是 @color/black_40 的取值（键盘键底、搜索框、输入框、shape_item_focused
+        等固定资源共用的同一个值），所以主题化之后默认外观与改动前完全一致——这是
+        「默认字节不变」在这两个新角色上的落点。文字色取本表 colorOnPrimary：遮罩本来就是
+        压在白字列表上的一层黑，白字正是它原本搭配的前景色。
+    -->
+    <color name="webhtv_color_item_overlay">#66000000</color>
+    <color name="webhtv_color_on_item_overlay">#FFFFFF</color>
+    <!--
         Foreground for content drawn straight on the app wallpaper.
 
         One ?attr/colorOnSurface cannot serve both mobile consumers: every mobile

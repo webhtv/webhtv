@@ -4,11 +4,13 @@
     - 环宽唯一来源：@dimen/webhtv_focus_ring_width（不得写死 1.5dp/2dp/3dp）；
     - 环色唯一来源：?attr/tvFocusRing（= @color/tv_item_focus_ring = 主题 FOCUS 用户槽）。
     判据见 shape_item_focused.xml 与 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md。
+    填充同样走 ?attr/webhtvColorItemOverlay：默认值仍是 @color/black_40，未改过主题时渲染字节不变；
+    normal 态为何不接线、运行时为何要由 ThemeBinder 改写，理由见 shape_item_focused.xml。
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="@color/black_40" />
+    <solid android:color="?attr/webhtvColorItemOverlay" />
 
     <corners android:radius="28dp" />
 

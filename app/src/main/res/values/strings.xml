@@ -993,6 +993,10 @@
     <string name="theme_editor_group_states">Status colors</string>
     <string name="theme_editor_group_player">Player</string>
     <string name="theme_editor_group_layers">Opacity &amp; overlays</string>
+    <string name="theme_editor_group_item_overlay">Item overlay &amp; selection</string>
+    <string name="theme_editor_slot_item_overlay">Item overlay colour</string>
+    <string name="theme_editor_slot_on_item_overlay">Selected text colour</string>
+    <string name="theme_editor_slot_item_overlay_opacity">Item overlay opacity</string>
     <string name="theme_import_title">Import palette</string>
     <string name="theme_import_input_hint">Paste TweakCN JSON or an HTTPS JSON link</string>
     <string name="theme_import_file">Open JSON</string>

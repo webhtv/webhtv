@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 选中/激活态的条目底座。填充同样走 ?attr/webhtvColorItemOverlay：默认值仍是 @color/black_40，
+     未改过主题时渲染字节不变；理由与运行时改写见 shape_item_focused.xml。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="@color/black_40" />
+    <solid android:color="?attr/webhtvColorItemOverlay" />
 
     <corners android:radius="4dp" />
 

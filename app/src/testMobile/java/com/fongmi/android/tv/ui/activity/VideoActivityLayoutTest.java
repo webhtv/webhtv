@@ -855,9 +855,19 @@ public class VideoActivityLayoutTest {
 
         assertTrue("CustomKeyDownVod must expose the guarded speed release state", keyDown.contains("public boolean isChangingSpeed()") && keyDown.contains("public void releaseSpeed()"));
         assertTrue("releaseSpeed must clear the flag and end the boost", releaseBody.contains("changeSpeed = false;") && releaseBody.contains("listener.onSpeedEnd();"));
-        assertTrue("dispatchKeyEvent must release the boost when a key is released outside the state machine", methodBody(leanback, "public boolean dispatchKeyEvent(KeyEvent event)", "private boolean dispatchLutQuickKey(KeyEvent event)").contains("mKeyDown.releaseSpeed()"));
+        String dispatchBody = methodBody(leanback, "public boolean dispatchKeyEvent(KeyEvent event)", "private boolean dispatchLutQuickKey(KeyEvent event)");
+
+        assertTrue("dispatchKeyEvent must release the boost when a key is released outside the state machine", dispatchBody.contains("mKeyDown.releaseSpeed()"));
         assertTrue("onWindowFocusChanged must release the boost when window focus is lost", methodBody(leanback, "public void onWindowFocusChanged(boolean hasFocus)", "private boolean isInitAuto()").contains("mKeyDown.releaseSpeed()"));
         assertTrue("onStop must release the boost", methodBody(leanback, "protected void onStop()", "protected void onBackInvoked()").contains("mKeyDown.releaseSpeed()"));
+        int boostStart = dispatchBody.indexOf("if (mKeyDown.isChangingSpeed() &&");
+        int boostStop = dispatchBody.indexOf("}", boostStart);
+        assertTrue("the boost release branch must exist", boostStart >= 0 && boostStop > boostStart);
+        String boostRelease = dispatchBody.substring(boostStart, boostStop);
+        assertTrue("a speed boost must end only on an up-key release, not on every key release", boostRelease.contains("if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {"));
+        assertTrue("a released speed boost must not fall through to the menu-opening key-up path", boostRelease.trim().endsWith("return true;"));
+        assertFalse("the boost state must not be mirrored into a second owner", leanback.contains("mSpeedBoostEngaged"));
+        assertTrue("a plain up key press must still open the menu", methodBody(leanback, "public void onKeyUp()", "public void onKeyDown()").contains("showControl(getFocus2());"));
     }
 
     @Test

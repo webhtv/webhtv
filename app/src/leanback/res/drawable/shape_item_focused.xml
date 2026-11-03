@@ -11,11 +11,22 @@
     边框，边框粗细也貌似不一样」。colorPrimary 在 TV 上还同时驱动着约 100 个布局的聚焦文字色，
     不能兼作焦点环语义；白色则完全不随主题走。两者统一到 tvFocusRing 后，用户改主题的
     「焦点色」槽即可同时改变全部应用表面焦点环。
+
+    填充（条目遮罩）改走 ?attr/webhtvColorItemOverlay：这一个用户槽位就是「列表/按钮聚焦时压在
+    同一块表面上的那层半透明深色」的底色。默认取值仍是 @color/black_40（#66000000），所以未改过
+    主题时渲染字节不变；改过之后由 ThemeBinder 在运行时改写这里的 solid——?attr/ 是编译期资源，
+    用户改槽位不会让已经充气的 drawable 重新解析，没有那一步的话新槽位就只会出现在编辑器预览与
+    Web 快照里，真实界面纹丝不动。
+
+    为什么 normal 态（shape_item_normal / shape_item_round_normal / shape_search_hot_word_normal）
+    刻意不跟着接线：它们的填充是 @color/black_20（#33000000）。接到同一个槽位会让「没改过主题」
+    的默认外观从 20% 黑跳到 40% 黑——那是外观回归，不是主题化。shape_item_selected（black_30）、
+    shape_keyboard_focused（black_30）同理不接线。
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="@color/black_40" />
+    <solid android:color="?attr/webhtvColorItemOverlay" />
 
     <corners android:radius="4dp" />
 

@@ -54,6 +54,11 @@
     <attr name="webhtvColorHealthBad" format="color" />
     <attr name="webhtvColorOverlayLight" format="color" />
     <attr name="webhtvColorOverlayDark" format="color" />
+    <!-- 条目遮罩底色与遮罩上的文字色。两者是「列表/按钮聚焦时压在同一块表面上的那层半透明
+         深色」的底色与文字色，跟随用户档案变化；默认值就是既有外观（@color/black_40 与
+         onPrimary），所以未改过主题时它们读出来与编译期等价。 -->
+    <attr name="webhtvColorItemOverlay" format="color" />
+    <attr name="webhtvColorOnItemOverlay" format="color" />
     <!-- onSurface at 20/70/80/90% alpha for text and strokes drawn directly over video.
          Declared here because the player overlay cannot rely on ?attr/colorOnSurface alpha,
          and the alpha variants must stay tied to the onSurface token per light/dark mode. -->

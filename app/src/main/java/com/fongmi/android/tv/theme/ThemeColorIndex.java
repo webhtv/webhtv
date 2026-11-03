@@ -14,6 +14,10 @@ import java.util.Set;
  * <p>The binder never guesses: a view color is only rewritten when it exactly
  * equals a baseline role value, and only when every role sharing that value
  * resolves to the same active color. Ambiguous or unknown colors are left alone.
+ *
+ * <p>条目遮罩族（{@code ITEM_OVERLAY}/{@code ON_ITEM_OVERLAY}）不入表：它们的默认值
+ * {@code #66000000}（{@code @color/black_40}）与白字在仓库里被大量固定资源共用，入表会让
+ * 一次遮罩色编辑连带改掉刻意固定的深玻璃族。见 {@link ThemeRole#rewritesBaseline()}。
  */
 public final class ThemeColorIndex {
 
@@ -30,6 +34,7 @@ public final class ThemeColorIndex {
         Map<ThemeRole, Integer> byRole = new EnumMap<>(ThemeRole.class);
         if (baseline != null) {
             for (ThemeRole role : ThemeRole.values()) {
+                if (!role.rewritesBaseline()) continue;
                 int color = role.colorOf(baseline);
                 if (color == 0) continue;
                 byRole.put(role, color);

@@ -1,5 +1,9 @@
 # LIVE-LIST-SCRIM-OPACITY-20261029 · TV 直播列表遮盖层可配置
 
+> **状态：已被取代（2026-10-31）** · 本任务实现的渐变形态（`GradientDrawable` / `BASE_ALPHAS = {0.80f, 0.40f, 0.05f}` / `gradientColors()`）已被
+> `docs/LIVE-LIST-SCRIM-UNIFORM-20261031-live-list-scrim.md` 取代并从代码中删除。未设置槽位时现在渲染的是整块 `black_80`（`#CC000000`），
+> 不再是 `black_80` / `black_40` / `black_05` 三段。本文件以下关于三段的描述与数值表是 2026-10-29 当轮的历史记录，不代表当前行为。
+
 ## Recovery anchor
 
 - 目标：让 TV（leanback）与 mobile 直播页的频道抽屉遮罩像「播放菜单遮盖层」那样可调，解决用户反馈的「太透、远一点看不清」（图一）。
@@ -47,7 +51,7 @@
 - `DEFAULT_OPACITY = 0.80f`，`BASE_ALPHAS = {0.80f, 0.40f, 0.05f}`（对应 black_80/black_40/black_05）
 - `create(Context)`：`ThemeController.configuredLiveListScrimOpacity(!ThemeController.isNight(context))` → `GradientDrawable(Orientation.LEFT_RIGHT, gradientColors(opacity))`
 - `gradientColors(float)`：`scale = clamp(opacity,0,1) / DEFAULT_OPACITY`，逐项 `withAlpha(min(1f, BASE_ALPHAS[i] * scale))`，颜色恒为纯黑
-- 数值基准：未设置 → `{0xCC000000, 0x66000000, 0x0D000000}`；1.00 → `{0xFF000000, 0x80000000, 0x10000000}`；0.20 → `{0x33000000, 0x1A000000, 0x03000000}`
+- 数值基准：未设置 → `{0xCC000000, 0x66000000, 0x0D000000}`；1.00 → `{0xFF000000, 0x80000000, 0x10000000}`；0.20 → `{0x33000000, 0x1A000000, 0x03000000}`（以上三段渐变实现已于 20261031 任务删除，见上述状态横幅）
 
 槽位链路镜像：`ThemeProfile.SlotSet.liveListScrimOpacity`（Float，默认 null）→ validator `MIN/MAX_LIVE_LIST_SCRIM_OPACITY = 0.20f/1f` → controller `configuredLiveListScrimOpacity(boolean light)` → `ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY`（最后一个常量）→ `ThemePreviewView` 图层组 + `minimumOf/maximumOf/labelOf`（`labelOf` 的 switch 无 default，漏 case 会编译失败）→ 三 locale 字符串 `theme_editor_slot_live_list_scrim_opacity`。
 

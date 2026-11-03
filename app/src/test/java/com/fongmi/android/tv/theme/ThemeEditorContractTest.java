@@ -54,6 +54,60 @@ public class ThemeEditorContractTest {
         assertFalse(editor.set(ThemeEditor.Slot.PLAYER_SCRIM_OPACITY, false, null, Float.NaN).success());
     }
 
+    /**
+     * 条目遮罩是"底色 + 遮罩上的文字色 + 强度"三者联动的同一个视觉机制。三者必须同时可编辑，
+     * 否则用户改了底色却改不动强度，编辑器就会给出一个只调了一半的面板。
+     */
+    @Test
+    public void itemOverlayGroupIsEditableThroughTheSameSlotApi() {
+        assertTrue(ThemeEditor.Slot.ITEM_OVERLAY.isColor());
+        assertTrue(ThemeEditor.Slot.ON_ITEM_OVERLAY.isColor());
+        assertFalse(ThemeEditor.Slot.ITEM_OVERLAY_OPACITY.isColor());
+
+        ThemeEditor editor = new ThemeEditor(ThemeProfile.defaultProfile());
+        assertTrue(editor.set(ThemeEditor.Slot.ITEM_OVERLAY, false, "#801122", 0f).success());
+        assertTrue(editor.set(ThemeEditor.Slot.ON_ITEM_OVERLAY, false, "#FFEE11", 0f).success());
+        assertEquals("#801122", editor.valueOf(ThemeEditor.Slot.ITEM_OVERLAY, false));
+        assertEquals("#FFEE11", editor.valueOf(ThemeEditor.Slot.ON_ITEM_OVERLAY, false));
+        assertTrue(editor.isDirty());
+
+        assertTrue(editor.clear(ThemeEditor.Slot.ITEM_OVERLAY, false).success());
+        assertTrue(editor.clear(ThemeEditor.Slot.ON_ITEM_OVERLAY, false).success());
+        assertNull(editor.valueOf(ThemeEditor.Slot.ITEM_OVERLAY, false));
+        assertNull(editor.valueOf(ThemeEditor.Slot.ON_ITEM_OVERLAY, false));
+    }
+
+    @Test
+    public void itemOverlayOpacityIsClampedToItsOwnRange() {
+        ThemeEditor editor = new ThemeEditor(ThemeProfile.defaultProfile());
+        assertTrue(editor.set(ThemeEditor.Slot.ITEM_OVERLAY_OPACITY, false, null,
+                ThemeProfileValidator.MIN_ITEM_OVERLAY_OPACITY).success());
+        assertTrue(editor.set(ThemeEditor.Slot.ITEM_OVERLAY_OPACITY, false, null,
+                ThemeProfileValidator.MAX_ITEM_OVERLAY_OPACITY).success());
+        // 条目遮罩强度与 overlayOpacity 的有效区间不同，越界必须被拒绝而不是静默夹取。
+        assertFalse(editor.set(ThemeEditor.Slot.ITEM_OVERLAY_OPACITY, false, null,
+                ThemeProfileValidator.MIN_ITEM_OVERLAY_OPACITY - 0.01f).success());
+        assertFalse(editor.set(ThemeEditor.Slot.ITEM_OVERLAY_OPACITY, false, null,
+                ThemeProfileValidator.MAX_ITEM_OVERLAY_OPACITY + 0.01f).success());
+        assertFalse(editor.set(ThemeEditor.Slot.ITEM_OVERLAY_OPACITY, false, null, Float.NaN).success());
+    }
+
+    /** 三个新槽位在编辑器里显示的是三语各自的本土文案，不能只剩英文兜底。 */
+    @Test
+    public void itemOverlayGroupIsLabelledInEveryLocale() throws Exception {
+        String[] keys = {
+                "theme_editor_group_item_overlay",
+                "theme_editor_slot_item_overlay",
+                "theme_editor_slot_on_item_overlay",
+                "theme_editor_slot_item_overlay_opacity"};
+        for (String locale : new String[]{"values", "values-zh-rCN", "values-zh-rTW"}) {
+            String xml = read("src/main/res/" + locale + "/strings.xml");
+            for (String key : keys) {
+                assertTrue(locale + " must label " + key, xml.contains("name=\"" + key + "\""));
+            }
+        }
+    }
+
     @Test
     public void invalidColorsAreRejectedWithoutTouchingTheDraft() {
         ThemeEditor editor = new ThemeEditor(ThemeProfile.defaultProfile());
@@ -186,7 +240,7 @@ public class ThemeEditorContractTest {
         ThemeEditor.Slot[] slots = ThemeEditor.Slot.values();
         ThemeEditor.Slot last = slots[slots.length - 1];
         assertEquals("LIVE_LIST_SCRIM_OPACITY", last.name());
-        // isColor() decides by ordinal(), so the new slot must not be read as a colour.
+        // 位置仍是守卫的一部分：isColor() 现在显式列出不透明度槽，但末尾这个槽必须继续读作强度而不是颜色。
         assertFalse(last.isColor());
 
         ThemeEditor editor = new ThemeEditor(ThemeProfile.defaultProfile());

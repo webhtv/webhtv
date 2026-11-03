@@ -193,8 +193,12 @@ public final class ThemeResolver {
         // focus drifted away from primary, primary-as-text views (dialog actions) would keep
         // their compiled colour and stay unreadable. `primary` already clears 4.5:1 on the
         // surface, so it also clears the 3.0:1 focus requirement.
+        // A user-chosen focus colour is clamped exactly like primary: hue and chroma are kept
+        // and only tone moves. Snapping to black/white instead turned a legible deep red such
+        // as #8C0000 (1.86:1 on the dark surface) into pure #FFFFFF, which is why the editor
+        // showed "输入 #8C0000 / 显示 #FFFFFF" and every dark-surface ring came out white.
         int focus = hasFocus || hasSurface
-                ? ensureContrast(color(slots.focus, primary), surface, 3.0)
+                ? readableAccent(color(slots.focus, primary), 3.0, surface)
                 : base.colorFocus();
 
         int surfaceDim = hasSurface ? mix(surface, 0xFF000000, dark ? 0.06 : 0.10) : base.colorSurfaceDim();
@@ -221,6 +225,33 @@ public final class ThemeResolver {
         float dialogOpacity = slots.dialogOpacity == null ? base.dialogOpacity() : slots.dialogOpacity;
         float overlayOpacity = slots.overlayOpacity == null ? (base.colorOverlayLight() >>> 24) / 255f : slots.overlayOpacity;
 
+        // ---------------------------------------------------------------- 条目遮罩
+        // 遮罩底色默认取编译期 @color/black_40（#66000000）：强度槽为空时**完全不动 alpha**，
+        // 空 profile 解析出的 token 才与改动前的静态资源字节一致。用户改过颜色槽之后才用强度槽
+        // 重写 alpha（空则视作 1.0），因为颜色槽只接受不透明 #RRGGBB，本身没有 alpha 可继承。
+        boolean hasItemOverlay = slots.itemOverlay != null;
+        boolean hasItemOverlayOpacity = slots.itemOverlayOpacity != null;
+        int itemOverlayColor = hasItemOverlay
+                ? ThemeProfileValidator.parseColor(slots.itemOverlay, base.colorItemOverlay())
+                : base.colorItemOverlay();
+        int itemOverlay = hasItemOverlayOpacity
+                ? withAlpha(itemOverlayColor, slots.itemOverlayOpacity) : itemOverlayColor;
+        // 遮罩上的文字：用户显式改过才夹取可读性（保持色相、只走明度，与 FOCUS 槽同一口径）。
+        // 夹取的宿主是「遮罩压在 surface 各层上」的复合底色——遮罩自带 alpha，直接拿 surface 比
+        // 会高估对比度。用户没改文字色但遮罩变了（底色或强度）时，仍用既有的 readableOn 在这几个
+        // 复合底色上重挑黑/白：否则默认的选中文字压在用户选的不透明浅色遮罩上会跌到 4.5:1 以下。
+        int onItemOverlay;
+        if (slots.onItemOverlay != null) {
+            onItemOverlay = readableAccent(color(slots.onItemOverlay, base.colorOnItemOverlay()),
+                    MIN_ACCENT_CONTRAST,
+                    overlayBackdrops(itemOverlay, surface, surfaceContainer, surfaceContainerHigh));
+        } else if (hasItemOverlay || hasItemOverlayOpacity) {
+            onItemOverlay = readableOverlayText(base.colorOnItemOverlay(),
+                    overlayBackdrops(itemOverlay, surface, surfaceContainer, surfaceContainerHigh));
+        } else {
+            onItemOverlay = base.colorOnItemOverlay();
+        }
+
         return new ThemeTokens(
                 primary, onPrimary, primaryContainer, onPrimaryContainer,
                 base.colorSecondary(), base.colorOnSecondary(),
@@ -237,10 +268,44 @@ public final class ThemeResolver {
                 playerFocusRing, playerCurrentRing, dialogOpacity,
                 base.colorPlayerControl(), base.colorPlayerControlMuted(), base.colorPlayerControlActive(), base.colorPlayerScrim(),
                 base.colorHealthGood(), base.colorHealthWarn(), base.colorHealthBad(),
-                withAlpha(base.colorOverlayLight(), overlayOpacity), base.colorOverlayDark()
+                withAlpha(base.colorOverlayLight(), overlayOpacity), base.colorOverlayDark(),
+                itemOverlay, onItemOverlay
         );
     }
 
+    /**
+     * 条目遮罩真正压在什么底色上：遮罩自身的 alpha 与 surface 各层复合后的结果。
+     *
+     * <p>遮罩是半透明的，用户又可能只改强度，因此对比度必须按复合后的实色算；
+     * 直接拿 surface 当宿主会把默认白字算成 4.5:1 以上，实机却是 3.2:1。
+     */
+    private static int[] overlayBackdrops(int itemOverlay, int... surfaces) {
+        int[] backdrops = new int[surfaces.length];
+        for (int index = 0; index < surfaces.length; index++) {
+            backdrops[index] = ThemeContrast.composite(itemOverlay, surfaces[index]);
+        }
+        return backdrops;
+    }
+
+    /**
+     * 用户只改了遮罩（底色或强度）时，让既有的 onPrimary 一族在这几个复合底色上重新可读。
+     *
+     * <p>为什么不逐个底色跑 {@link #readableOn}：那个方法只对**一个**底色保证 4.5:1，
+     * 逐个套用会在不同底色间来回改判（遮罩压在 surface 与 surfaceContainerHigh 上亮度不同），
+     * 最终可能连第一个底色都不再达标。这里一次性比较黑/白在**全部**底色上的最差比值，
+     * 既有的 default 值只要本来全部达标就原样保留——空 profile 之外的常见路径也不会漂移。
+     */
+    private static int readableOverlayText(int preferred, int... backdrops) {
+        if (clearsContrast(preferred, MIN_ACCENT_CONTRAST, backdrops)) return preferred;
+        return worstRatio(0xFF000000, backdrops) >= worstRatio(0xFFFFFFFF, backdrops) ? 0xFF000000 : 0xFFFFFFFF;
+    }
+
+    /** 前景色在全部底色上最差的那个对比度。 */
+    private static double worstRatio(int foreground, int... backdrops) {
+        double worst = Double.MAX_VALUE;
+        for (int backdrop : backdrops) worst = Math.min(worst, ThemeContrast.ratio(foreground, backdrop));
+        return worst;
+    }
     private static int enforceBase(int foreground, int surface, int container, int containerHigh) {
         int result = ensureContrast(foreground, surface, 4.5);
         if (container >= 0) result = ensureContrast(result, container, 4.5);
@@ -363,7 +428,8 @@ public final class ThemeResolver {
                 scheme.getShadow(), scheme.getPrimary(), fallback.focusScale(),
                 fallback.colorPlayerFocusRing(), fallback.colorPlayerCurrentRing(), fallback.dialogOpacity(), fallback.colorPlayerControl(),
                 fallback.colorPlayerControlMuted(), fallback.colorPlayerControlActive(), fallback.colorPlayerScrim(),
-                fallback.colorHealthGood(), fallback.colorHealthWarn(), fallback.colorHealthBad(), fallback.colorOverlayLight(), fallback.colorOverlayDark()
+                fallback.colorHealthGood(), fallback.colorHealthWarn(), fallback.colorHealthBad(), fallback.colorOverlayLight(), fallback.colorOverlayDark(),
+                fallback.colorItemOverlay(), fallback.colorOnItemOverlay()
         );
     }
 
