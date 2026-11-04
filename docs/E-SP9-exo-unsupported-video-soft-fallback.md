@@ -107,3 +107,15 @@ FFmpeg 软解：声音正常、画面卡顿。降低声明等级（PY 改 L150�
 - `CompatFfmpegVideoRendererSourceTest`（3 项，含新增 `hardwareModeWithFallbackAppendsTheYieldingRenderer`）通过；
   `ExoVideoHardwareDecodeTest`、`ExoAudioCodecSelectorTest` 通过，0 失败。
 - 回滚锚点：`bb8fceda8ddebc829389307368d18c9876c9665d`。
+
+### 断言口径变更（2026-11-04）
+
+- 测试方法 `hardwareModeKeepsFfmpegAsTheLastVideoRenderer` 改名为 `hardwareModeWithFallbackAppendsTheYieldingRenderer`，
+  断言从「硬解不注册任何 FFmpeg 视频回退（`assertFalse(exoUtil.contains("new CompatFfmpegVideoRenderer("))`）」
+  改为「`MODE_ON` 分支追加 `new CompatFfmpegVideoRenderer(...)` 且带上与 MediaCodec 渲染器同一个
+  `videoCodecSelector`，`MODE_PREFER` 分支保持 `FfmpegVideoRenderer`」。
+- 本条同步修订 [C-AVS3-video-decoding.md](C-AVS3-video-decoding.md) 顶部解码合同里引用该断言的表述：
+  硬解不再是无条件不注册任何 FFmpeg 视频回退，而是「兜底开时追加会让轨的 Compat 视频回退」；
+  「不让轨给软件解码器」由 `CompatFfmpegVideoRenderer.platformHandlesMimeType` 只问 mime、不问 Format 保证。
+- 复评记录：定向测试 `CompatFfmpegVideoRendererSourceTest` 3 + `ExoVideoHardwareDecodeTest` 10 +
+  `ExoAudioCodecSelectorTest` 4 = 17 项，0 失败，0 错误（`:app:testMobileArm64_v8aDebugUnitTest`）。
