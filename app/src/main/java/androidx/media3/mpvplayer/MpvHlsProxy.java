@@ -909,6 +909,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
             return new HlsPlaylistRewriter.MappedUri(targetUrl, rewrittenUrl);
         });
         recordPlaylistDetails(session, playlistUrl, text, result, inheritedVariant);
+        if (kernel == PlayerSetting.IJK) logPlaylistDump(session, result.text());
         SpiderDebug.log(TAG,
                 "playlist shape session=%d master=%s key=%s map=%s byterange=%s segments=%d variants=%d units=%d url=%s",
                 session, text.contains("#EXT-X-STREAM-INF"), text.contains("#EXT-X-KEY"),
@@ -1650,6 +1651,53 @@ public final class MpvHlsProxy extends NanoHTTPD {
 
     private static double finiteNonNegative(double value) {
         return Double.isFinite(value) ? Math.max(0, value) : 0;
+    }
+
+    /**
+     * Shape-only view of the playlist handed to IJK: enough to tell whether a tag the demuxer needs
+     * is missing, without exporting any URL or key material.
+     */
+    private void logPlaylistDump(int session, String rewritten) {
+        Map<String, Integer> tags = new LinkedHashMap<>();
+        List<String> keys = new ArrayList<>();
+        int segmentUris = 0;
+        int localUris = 0;
+        int extinf = 0;
+        for (String line : rewritten.split("\n", -1)) {
+            String value = line.trim();
+            if (value.isEmpty()) continue;
+            if (!value.startsWith("#")) {
+                segmentUris++;
+                if (value.startsWith("http://127.0.0.1")) localUris++;
+                continue;
+            }
+            if (value.startsWith("#EXTINF")) {
+                extinf++;
+                continue;
+            }
+            String name = value.split(":", 2)[0];
+            tags.merge(name, 1, Integer::sum);
+            if ("#EXT-X-KEY".equals(name)) keys.add(describeKey(value));
+        }
+        SpiderDebug.log(TAG,
+                "playlist dump session=%d extinf=%d segmentUris=%d localUris=%d tags=%s keys=%s",
+                session, extinf, segmentUris, localUris, tags, keys);
+    }
+
+    /** Keeps METHOD/IV presence and whether the key URI stays remote; drops the URL itself. */
+    private static String describeKey(String line) {
+        StringBuilder out = new StringBuilder();
+        for (String part : line.substring("#EXT-X-KEY:".length()).split(",")) {
+            String attribute = part.trim();
+            if (attribute.startsWith("URI=")) {
+                out.append("URI=")
+                        .append(attribute.contains("127.0.0.1") ? "local" : "remote")
+                        .append(' ');
+            } else if (!attribute.isEmpty()) {
+                out.append(attribute).append(' ');
+            }
+        }
+        return out.toString().trim();
     }
 
     private void logCacheFailure(String action, Throwable error) {
