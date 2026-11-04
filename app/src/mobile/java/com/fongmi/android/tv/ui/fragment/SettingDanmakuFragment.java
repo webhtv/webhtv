@@ -66,7 +66,7 @@ public class SettingDanmakuFragment extends BaseFragment implements DanmakuListe
     }
 
     private void updateAutoVisibility() {
-        boolean show = DanmakuSetting.isLoad() && DanmakuSetting.hasValidApiUrl();
+        boolean show = DanmakuSetting.isLoad() && (DanmakuSetting.hasValidApiUrl() || DanmakuSetting.isBundleSource());
         mBinding.danmakuAuto.setVisibility(show ? View.VISIBLE : View.GONE);
         updateSpiderVisibility();
     }
