@@ -808,8 +808,8 @@ public final class MpvHlsProxy extends NanoHTTPD {
                         ? newChunkedResponse(streamingStatus, mime, stream)
                         : newFixedLengthResponse(streamingStatus, mime, stream, contentLength);
                 addStreamingHeaders(result, response, forwardedRange);
-                SpiderDebug.log(TAG, "item id=%s code=%d range=%s contentRange=%s length=%d mime=%s url=%s",
-                        id, response.code(), forwardedRange, response.header("Content-Range"), contentLength, mime, shortUrl(target.url));
+                SpiderDebug.log(TAG, "item id=%s code=%d role=%s range=%s contentRange=%s length=%d mime=%s url=%s",
+                        id, response.code(), target.role(), forwardedRange, response.header("Content-Range"), contentLength, mime, shortUrl(target.url));
                 return result;
             } catch (Throwable error) {
                 try {
@@ -904,6 +904,12 @@ public final class MpvHlsProxy extends NanoHTTPD {
             return new HlsPlaylistRewriter.MappedUri(targetUrl, rewrittenUrl);
         });
         recordPlaylistDetails(session, playlistUrl, text, result, inheritedVariant);
+        SpiderDebug.log(TAG,
+                "playlist shape session=%d master=%s key=%s map=%s byterange=%s segments=%d variants=%d units=%d url=%s",
+                session, text.contains("#EXT-X-STREAM-INF"), text.contains("#EXT-X-KEY"),
+                text.contains("#EXT-X-MAP"), text.contains("#EXT-X-BYTERANGE"),
+                result.segments().size(), result.variants().size(), result.mediaUnits().size(),
+                shortUrl(playlistUrl));
         if (!result.variants().isEmpty()) {
             SpiderDebug.log(TAG, "master playlist preserved variants session=%d variants=%d", session, result.variants().size());
         }
