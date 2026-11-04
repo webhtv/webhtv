@@ -896,6 +896,11 @@ public final class MpvHlsProxy extends NanoHTTPD {
     private String rewritePlaylist(String playlistUrl, String text, int session, @Nullable HlsPlaylistRewriter.Variant inheritedVariant) {
         HlsPlaylistRewriter.Result result = HlsPlaylistRewriter.rewrite(text, inheritedVariant, (uri, cacheable, context) -> {
             String targetUrl = resolve(playlistUrl, uri);
+            if (context.role() == HlsPlaylistRewriter.UriRole.ENCRYPTION_KEY
+                    && kernel == PlayerSetting.IJK) {
+                SpiderDebug.log(TAG, "key direct session=%d url=%s", session, shortUrl(targetUrl));
+                return new HlsPlaylistRewriter.MappedUri(targetUrl, targetUrl);
+            }
             HlsPlaylistRewriter.Variant targetVariant = context.variant();
             String rewrittenUrl = proxyItemUrl(
                     targetUrl, session, cacheable, targetVariant,

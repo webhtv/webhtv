@@ -128,6 +128,10 @@ final class HlsPlaylistRewriter {
                     parseVariant(line, VariantKind.IMAGE), 0,
                     startSeconds, false);
         }
+        if (upper.startsWith("#EXT-X-KEY")) {
+            return new UriContext(UriRole.ENCRYPTION_KEY, inheritedVariant, 0,
+                    startSeconds, false);
+        }
         if (upper.startsWith("#EXT-X-PART") || (upper.startsWith("#EXT-X-PRELOAD-HINT") && upper.contains("TYPE=PART"))) {
             return new UriContext(
                     UriRole.MEDIA_SEGMENT,
@@ -230,6 +234,7 @@ final class HlsPlaylistRewriter {
     enum UriRole {
         VARIANT_PLAYLIST,
         MEDIA_SEGMENT,
+        ENCRYPTION_KEY,
         OTHER
     }
 
