@@ -118,6 +118,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     private boolean mScreenOnWhilePlaying;
     private boolean mStayAwake;
     private SurfaceHolder mSurfaceHolder;
+    private volatile boolean mLogEnabled;
     private boolean mAudioCodecInfoFailureLogged;
     private boolean mVideoCodecInfoFailureLogged;
     private int mVideoHeight;
@@ -914,6 +915,20 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
 
     @Override // tv.danmaku.ijk.media.player.IMediaPlayer
     public void setLogEnabled(boolean z6) {
+        mLogEnabled = z6;
+        applyNativeLogLevel();
+    }
+
+    /**
+     * Applies the caller's log preference to the native runtime. {@link #initNativeOnce()} silences
+     * the runtime unconditionally, which is why native surface and EGL failures were invisible.
+     */
+    private void applyNativeLogLevel() {
+        try {
+            native_setLogLevel(mLogEnabled ? IJK_LOG_DEBUG : IJK_LOG_SILENT);
+        } catch (UnsatisfiedLinkError e) {
+            Log.w(TAG, "IJK log level is unavailable in current native library", e);
+        }
     }
 
     @Override // tv.danmaku.ijk.media.player.IMediaPlayer
