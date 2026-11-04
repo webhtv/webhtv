@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @RunWith(AndroidJUnit4.class)
 public class PluginUiPresenterDragAndSurfaceDeviceTest {
 
-    /** 自己的插件 id：{@code PluginController} 会把内置的 douban 入口挂到同一个 decorView 上，
+    /** 自己的插件 id：{@code PluginController} 会把用户自己导入的插件的入口也挂到同一个 decorView 上，
      *  用独立 id 才能保证 {@link PluginUiPresenter#tagOf} 只命中本类自己挂的控件。 */
     private static final String PROBE_PLUGIN_ID = "probe.drag";
     private static final String LABEL = "拖动探测";
@@ -259,7 +259,7 @@ public class PluginUiPresenterDragAndSurfaceDeviceTest {
         return onMain(presenter::attachedCount, -1);
     }
 
-    /** 按 tag 精确找自己挂的控件；{@code decorView} 上还有内置插件的入口，不能按前缀扫。 */
+    /** 按 tag 精确找自己挂的控件；{@code decorView} 上还有用户自己导入的插件的入口，不能按前缀扫。 */
     private View findTagged(PluginHost.PluginSlot slot) {
         return poll(() -> activity.getWindow().getDecorView().findViewWithTag(PluginUiPresenter.tagOf(slot)),
                 PRESENCE_WAIT_MS);

@@ -59,10 +59,11 @@ webhtv.request(...)     // 受控 HTTP 请求（需 net.request 权限）
 
 ## 4. 清单示例
 
-本目录下有两个示例，分别演示不同的能力组合：
+App **不再内置任何面板/联网插件**，本目录下只剩一个示例：
 
 - `example/manifest.json` + `example/hello.js`：**最小可用清单**。一个 floating 槽位、一个事件订阅，用来确认装载、事件派发与故障隔离这三条链路是通的。
-- `assets/plugin/douban/manifest.json` + `assets/plugin/douban/douban.js`：**完整示例**。演示 `panel` 渲染 + `plugin.data.episode` 上下文 + `net.request` 联网三件事凑在一起：点「豆瓣」chip，脚本用片名搜豆瓣条目、取第一条匹配的 subject id、再拉短评列表，最后把结果拼成一段自包含 HTML 交给宿主面板。**读它的价值在于看错误路径怎么处理**——每一步失败都返回一句可读的提示 HTML，而不是抛异常（抛异常会让整个插件被隔离）。
+
+**完整示例在仓库之外**：[`webhtv-plugin-douban`](https://github.com/Silent1566/webhtv-plugin-douban) 是一个真实可用的独立插件包（豆瓣短评），演示 `panel` 渲染 + `plugin.data.episode` 上下文 + `net.request` 联网三件事凑在一起：点「豆瓣」chip，脚本用片名搜豆瓣条目、取第一条匹配的 subject id、再拉短评列表，最后把结果拼成一段自包含 HTML 交给宿主面板，并渲染 1–5 星打分比例。**读它的价值在于看错误路径怎么处理**——每一步失败都返回一句可读的提示 HTML，而不是抛异常（抛异常会让整个插件被隔离）。
 
 最小可用清单：
 

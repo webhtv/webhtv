@@ -174,9 +174,9 @@ public class PluginUiPresenterDeviceTest {
      * 只找本用例自己挂的那一个控件。
      *
      * <p>不能按 {@code TAG_PREFIX} 前缀匹配：宿主 resume 时 {@code PluginController} 会用它
-     * 自己的 {@link PluginUiPresenter} 把已装载插件的槽位也挂到同一个 decorView 上（内置的
-     * {@code douban.comments} 就是这样），前缀匹配会先命中别人的「豆瓣」控件，让断言
-     * {@code expected:<探测> but was:<豆瓣>} 变成一条与本节逻辑无关的红。
+     * 自己的 {@link PluginUiPresenter} 把已装载插件的槽位也挂到同一个 decorView 上（用户自己
+     * 导入的插件就是这样），前缀匹配会先命中别人的控件，让断言
+     * {@code expected:<探测> but was:<别的标签>} 变成一条与本节逻辑无关的红。
      */
     private static View findTagged(ViewGroup root) {
         String prefix = PluginUiPresenter.TAG_PREFIX + PROBE_PLUGIN_ID + ":";
