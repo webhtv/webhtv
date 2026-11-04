@@ -981,21 +981,24 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         ownsSurface = false;
     }
 
-    private void bindVideoOutput() {
+    private boolean bindVideoOutput() {
         try {
             if (surfaceHolder != null) {
                 surface = surfaceHolder.getSurface();
                 if (surface != null && surface.isValid()) {
                     ijk.setDisplay(surfaceHolder);
+                    return true;
                 }
             } else if (surface != null && surface.isValid()) {
                 ijk.setSurface(surface);
+                return true;
             }
         } catch (Throwable e) {
             SpiderDebug.log("ijk",
                     "bind surface failed errorType=%s action=keep-current",
                     e.getClass().getSimpleName());
         }
+        return false;
     }
 
     /**
@@ -1008,10 +1011,10 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         boolean hasHolder = surfaceHolder != null;
         boolean hasSurface = surface != null && surface.isValid();
         if (!hasHolder && !hasSurface) return;
-        bindVideoOutput();
+        String action = bindVideoOutput() ? "rebound" : "none";
         SpiderDebug.log("ijk",
-                "surface rebind reason=%s holder=%s valid=%s",
-                reason, hasHolder, hasSurface);
+                "surface rebind reason=%s holder=%s valid=%s action=%s",
+                reason, hasHolder, hasSurface, action);
     }
 
     private void clearVideoOutput() {

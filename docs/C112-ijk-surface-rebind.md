@@ -4,8 +4,8 @@
 
 - 目标：修复 IJK（硬解与软解均）「只有声音、无图像黑屏」，并让 IJK 原生渲染失败可见。
 - 验收：Java 编译通过；真机复现时出现 `video-rendering-start`（info=3）或 `surface rebind` 日志行，且画面出现。
-- 状态：代码已改，编译验证中；未提交。
-- 下一动作：读编译结果，然后写回本文件并交用户真机验证。
+- 状态：已提交 `e370242207`；已合并 `origin/beta` `6e23ec560d`（合并提交 `f6ab19f76a`，无冲突）；C118 复评已修 2 处并双 flavor 编译通过；待真机验证。
+- 下一动作：真机按下方验收步骤复现，确认日志行与画面；失败则据 `[EGL]` 原生行继续定位。
 
 ## 症状与证据
 
@@ -68,4 +68,22 @@ Surface 在 native 视频输出存在**之前**下发，此后没有任何重新
 
 - 编译：`./gradlew :app:compileLeanbackArmeabi_v7aDebugJavaWithJavac --offline` → **BUILD SUCCESSFUL in 1m 11s**（1 个既有 Room 警告，与本改动无关）。
   - 注：`compileLeanbackDebugJavaWithJavac` 不是有效任务名；flavor 维度为 `mode`（leanback/mobile）× `abi`（arm64_v8a/armeabi_v7a），见 `app/build.gradle:63-80`。
-- 真机（待用户执行）：开诊断后在 IJK 硬解/软解上复现，预期出现 `surface rebind reason=... holder=... valid=...` 日志行与 `video-rendering-start`（info=3）。若仍黑屏，原生 EGL 错误此时会以 `[EGL] ...` 进入 logcat，可据此继续判断。
+- 真机（待用户执行）：开诊断后在 IJK 硬解/软解上复现，预期出现 `surface rebind reason=... holder=... valid=... action=...` 日志行与 `video-rendering-start`（info=3）。若仍黑屏，原生 EGL 错误此时会以 `[EGL] ...` 进入 logcat，可据此继续判断。
+
+## C118 合并 beta 后的复评修复（2026-11-04）
+
+合并 `origin/beta` `6e23ec560d` 后双轴复评，修 2 处，均为可观测性缺陷而非主修复路径缺陷：
+
+1. `IjkSimplePlayer.bindVideoOutput()` 改为返回 `boolean`；`rebindVideoOutput` 用它区分真实下发与空操作，日志新增 `action=rebound|none`。原实现无条件打印 `surface rebind`，会把「持 holder 但 surface 无效、实际什么都没绑」记成已重绑，削弱本任务第二目标（让失败可见）；`action=` 也与既有 `bind surface failed ... action=keep-current` 词表对齐。
+2. `IjkMediaPlayer` 删除 `mLogEnabled` 字段，`applyNativeLogLevel(boolean enabled)` 直接接收参数。该字段唯一读者就在同方法内，属冗余状态。
+
+复评保留：`prepareAsync()` 之后（`:812`）与 `onPrepared()`（`:583`）两处补绑均保留——后者是真正出画时机，前者为 spec 明确要求且无害。
+
+评审判定为**非缺陷、不改**的项：
+- `volatile` 争议：字段已删除，随该修复消失。
+- 原生符号风险：`initNativeOnce()` 原本就无保护地调用 `native_setLogLevel(IJK_LOG_SILENT)`（`app/src/main/java/tv/danmaku/ijk/media/player/IjkMediaPlayer.java:484`），随包 `.so` 必然导出该符号；本次仅改传参，未新增符号依赖。
+- 运行中切换诊断开关不即时生效：`setLogEnabled` 仅在构造时调用一次（`IjkSimplePlayer.java:152`）；因开关在设置页、每次播放都会重建 player，实际影响可忽略。
+
+验证：`./gradlew :app:compileLeanbackArmeabi_v7aDebugJavaWithJavac :app:compileMobileArmeabi_v7aDebugJavaWithJavac --offline` → **BUILD SUCCESSFUL in 2m 19s**。
+
+回归基线：`./gradlew :app:testLeanbackArmeabi_v7aDebugUnitTest :app:testMobileArmeabi_v7aDebugUnitTest --offline` → 4886 tests, 8 failed, 3 skipped。8 项**全部为既有失败**，与本改动无关：`origin/beta` 与 `HEAD` 的差异仅本任务 3 个文件，且这 7 个测试文件与 beta 逐字节相同、无一引用被改文件。失败清单：`MpvFontConfigTest`、`MpvHlsCacheCoordinatorTest`、`NativeEnhancedPlaybackStyleFocusTest`、`ReaderPlaybackRoutingSourceTest`×2、`SearchResultDownFocusTest`、`TmdbSourceOnlyInteractionTest`、`WebThemeTokenSourceTest`。
