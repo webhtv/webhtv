@@ -68,6 +68,7 @@ public class LabOutputActivity extends AppCompatActivity {
         command = findCommand(item, commandId);
 
         mBinding.btnClose.setOnClickListener(v -> finish());
+        mBinding.btnClear.setOnClickListener(v -> clearLog());
         mBinding.btnStop.setOnClickListener(v -> stop());
         mBinding.btnSend.setOnClickListener(v -> sendInput());
         mBinding.inputEdit.setOnEditorActionListener((v, actionId, event) -> {
@@ -134,6 +135,39 @@ public class LabOutputActivity extends AppCompatActivity {
         LabRunner.stop(key());
         showRunning(false);
         append("\n=== 进程已停止 ===\n");
+    }
+
+    /**
+     * 清 UI 先由点击线程 {@link App#post} 入队，之后才让后台线程清缓冲与截文件：
+     *
+     * <p>「清缓冲 + 截文件」必须离开点击线程——{@link LabRunner#clearLog} 要与 pump 每行的 flush
+     * 争同一把锁，慢存储上会卡住输入事件。
+     *
+     * <p>UI 清空必须先用点击线程入队，不能等 {@code clearLog} 返回后再入队：{@link #append} 只投递到
+     * TextView、不写缓冲与文件，停止横幅、退出码、输入回显、转后台提示这类行只存在于界面与主线程
+     * 队列里；若延后入队，这段时间产生的行会排在 {@code setText("")} 之前，被它永久抹掉且无处找回。
+     *
+     * <p>回调里写空串而不回填 {@link LabRunner#getLog}：回填时缓冲与文件可能已被后台清掉、也可能还没
+     * 清，回填结果与仍在途的 {@code append} 无法判重，界面会重复或短暂回退到旧内容。
+     *
+     * <p>截断跑在自建线程上而不是 {@code Task.execute}：{@code Task} 是全 app 共享的固定 5 线程池
+     * （Web 请求、清单解析都在用），池被占满时截断会无限期排队；这里是一次性的用户点按，自建线程不受
+     * 其影响，也与 pump 自建读者线程的做法一致。界面清空走的是主线程队列、不经过该池，所以文本在点按后
+     * 下一帧就清空；落盘截断要等后台线程取到 pump 的缓冲锁，若正在写一行则顺延。不再额外同步
+     * {@code setText("")} 一次，否则已入队的行会先冒出来再被抹掉，出现闪烁。
+     *
+     * <p>已知代价：点击到后台拿到锁之间新产生的 pump 行（可能不止一条，取决于线程调度），其
+     * {@code append} 排在 {@code setText("")} 之后因而留在界面上，但缓冲与文件里的副本被这次清除一并
+     * 截掉——重进输出页时这些行不再出现。反之，重进输出页若正落在「UI 已清、后台未截」的窗口里，
+     * onCreate 的回填会短暂显示旧日志。
+     */
+    private void clearLog() {
+        String logKey = key();
+        App.post(() -> {
+            mBinding.outputText.setText("");
+            mBinding.outputScroll.scrollTo(0, 0);
+        });
+        new Thread(() -> LabRunner.clearLog(logKey), "lab-clear-log").start();
     }
 
     private void sendInput() {

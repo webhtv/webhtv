@@ -7949,6 +7949,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inlineStartPosition = resumePosition == C.TIME_UNSET ? getInlineResumePosition() : Math.max(0, resumePosition);
         inlineStartPositionApplied = false;
         player().preparePlayer(inlineHistoryPlayerKernel());
+        // 内核不一致时 preparePlayer() 会在 PlaySpec 建立之前就重建引擎，那一刻 getKey() 还是
+        // null、归属判定必为假，PlaybackActivity.onPlayerRebuild() 会整段跳过——其中就包含
+        // setProgressPlayer()。进度视图于是继续读已被 release 的旧引擎，读到时长 0、位置 0，
+        // 进度条恒为 00:00。这里在重建刚发生后显式跟上新引擎，对齐 leanback VideoActivity 的同一处理。
+        getSeekView().setProgressPlayer(player().getPlayer());
         setInlineSpeed(getInlinePlaybackSpeed());
         updateInlineButtons(false);
         Site site = getCurrentSite();

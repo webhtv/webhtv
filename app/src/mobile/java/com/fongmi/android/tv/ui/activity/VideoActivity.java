@@ -181,6 +181,7 @@ import com.fongmi.android.tv.ui.helper.EpisodeSeasonPolicy;
 import com.fongmi.android.tv.ui.helper.SourceEpisodeSeasonCache;
 import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
+import com.fongmi.android.tv.ui.helper.TmdbMatchPolicy;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
 import com.fongmi.android.tv.ui.helper.TmdbBundle;
 import com.fongmi.android.tv.ui.helper.TmdbSourceAdapter;
@@ -6066,7 +6067,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         // 如果历史记录中已有有效倍速，使用历史倍速；否则使用默认播放倍速
         float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
-        mHistory.setVodName(item.getName());
+        mHistory.setVodName(historyVodName(item));
         mHistory.setVodPic(getInitialArtwork(item));
         enrichHistoryMeta(item);
         PlaybackEventCollector.get().updateHistory(mHistory);
@@ -6183,11 +6184,23 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         else if (!getWallPic().isEmpty()) setContextWall(getWallPic());
     }
 
+    /**
+     * 推送片名：真实片名在 Intent 里，源站 Vod 常常只有裸地址，直接用它弹幕必然搜不到。
+     */
+    private String historyVodName(Vod item) {
+        String name = item == null ? "" : item.getName();
+        if (!SiteApi.PUSH.equals(getKey())) return name;
+        PushParser.Parsed push = PushParser.fromId(getId());
+        if (push.hasExplicitTitle()) return push.getTitle();
+        String intentName = getName();
+        return TmdbMatchPolicy.shouldAutoMatchPushTitle(intentName) ? intentName : name;
+    }
+
     private History createHistory(Vod item) {
         History history = new History();
         history.setKey(getHistoryKey());
         history.setCid(VodConfig.getCid());
-        history.setVodName(item.getName());
+        history.setVodName(historyVodName(item));
         history.setVodPic(getInitialArtwork(item));
         history.setWallPic(getWallPic());
         history.findEpisode(item.getFlags());
@@ -6466,7 +6479,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             }
         }
         boolean historyReloaded = reloadHistoryAfterTmdbMatch();
-        if (name) mHistory.setVodName(item.getName());
+        if (name) mHistory.setVodName(historyVodName(item));
         if (name) mBinding.name.setText(item.getName());
         // 原生增强：TMDB 富集完成后回写题材/地区/演员/主创到 History（enrichVod 已填充 item，仅补空字段）
         if (mHistory != null) {
@@ -8250,6 +8263,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (isRedirect() || !event.isVod()) return;
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.invalidateSubscription();
         if (mParseAdapter != null) mParseAdapter.reload();
+        if (player() != null) player().dropStaleBundleDanmaku();
     }
 
     /**

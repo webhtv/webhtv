@@ -5,7 +5,9 @@ import android.text.TextUtils;
 
 import androidx.media3.ui.danmaku.DanmakuConfig;
 
+import com.fongmi.android.tv.api.CatSource;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.node.NodeRuntime;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Prefers;
 
@@ -298,11 +300,44 @@ public class DanmakuSetting {
         Prefers.put("danmaku_show_special", value);
     }
 
-    public static String getEffectiveApiUrl() {
+    /**
+     * 真实配置过的接口地址：用户手填优先，其次订阅配置的 danmaku 字段。
+     *
+     * <p>不含本地包兜底。设置界面的输入框回填必须用这个值，否则用户不改直接确定，
+     * {@link #putApiUrl} 会把运行时算出来的本机回环地址固化进 prefs，换包后指向一个死地址。
+     */
+    public static String getConfiguredApiUrl() {
         String userUrl = getApiUrl();
         if (!TextUtils.isEmpty(userUrl)) return userUrl.trim();
         String configUrl = VodConfig.get().getConfig().getDanmaku();
         return configUrl == null ? "" : configUrl.trim();
+    }
+
+    /**
+     * 搜索接口地址：真实配置优先，都没配时才回退到猫源 bundle 自带的弹幕服务。
+     *
+     * <p>最后一档是为了本地包开箱可用：本地包把弹幕服务开在猫源端口之外（实测 9321），
+     * 但 index.config.js 里没有 danmaku 字段，没有这个回退时用户必须自己查出端口手填才有弹幕。
+     */
+    public static String getEffectiveApiUrl() {
+        String configured = getConfiguredApiUrl();
+        return TextUtils.isEmpty(configured) ? bundleApiUrl() : configured;
+    }
+
+    /** 当前订阅是否还是猫源本地包：与运行时是否就绪无关，探测窗口期内也必须为 true。 */
+    public static boolean isBundleSource() {
+        return CatSource.isBundle(VodConfig.get().getConfig().getUrl());
+    }
+
+    /**
+     * 只有当前订阅还是猫源 bundle 时才回退。
+     *
+     * <p>切到普通订阅时 {@code VodConfig} 不会停 node，{@code :node} 进程和端口都还活着，
+     * 只判存活会把本地包的地址继续交给普通线路——用户切源后仍看到「有接口」且真能搜到弹幕，
+     * 要重启 APP 才恢复正常。
+     */
+    private static String bundleApiUrl() {
+        return isBundleSource() ? NodeRuntime.danmakuApiUrl() : "";
     }
 
     public static String getValidApiUrl() {

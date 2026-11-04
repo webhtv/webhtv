@@ -95,6 +95,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.CompatFfmpegAudioRenderer;
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.CompatFfmpegVideoRenderer;
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer;
 
 public class ExoUtil {
@@ -1249,12 +1250,22 @@ public class ExoUtil {
             // consistent. Audio has its own policy.
             if (videoRenderMode == EXTENSION_RENDERER_MODE_OFF) return;
             try {
-                out.add(getExtensionRendererIndex(videoRenderMode, videoPrefer, out), buildFfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener));
+                out.add(getExtensionRendererIndex(videoRenderMode, videoPrefer, out), buildFfmpegVideoRenderer(videoRenderMode, videoCodecSelector, allowedVideoJoiningTimeMs, eventHandler, eventListener));
             } catch (Throwable ignored) {
             }
         }
 
-        private FfmpegVideoRenderer buildFfmpegVideoRenderer(long allowedVideoJoiningTimeMs, Handler eventHandler, VideoRendererEventListener eventListener) {
+        private Renderer buildFfmpegVideoRenderer(int videoRenderMode, MediaCodecSelector videoCodecSelector, long allowedVideoJoiningTimeMs, Handler eventHandler, VideoRendererEventListener eventListener) {
+            // 硬解 + 兜底开（MODE_ON）时 FFmpeg 只能接平台完全没有解码器的编码：FfmpegVideoRenderer 的
+            // supportsFormat 无条件报 FORMAT_HANDLED，会盖过 MediaCodec 对「等级超出声明」的
+            // FORMAT_EXCEEDS_CAPABILITIES，让 HEVC L186 这类视频被软解抢走（画面卡、声音正常）。
+            // CompatFfmpegVideoRenderer 只问平台有没有这个 mime 的解码器，有就让轨，没接手的编码
+            // （AVS2/AVS3 等）仍由 FFmpeg 兜住，不会退化成整轨丢弃、只有声音。
+            if (videoRenderMode == EXTENSION_RENDERER_MODE_ON) {
+                return softVideoTune
+                        ? new CompatFfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY, Runtime.getRuntime().availableProcessors(), 4, 4, FFMPEG_SKIP_FRAME_NONREF, FFMPEG_SKIP_LOOP_FILTER_ALL, FFMPEG_LOWRES_HALF, true, videoCodecSelector)
+                        : new CompatFfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY, true, videoCodecSelector);
+            }
             if (!softVideoTune) return new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY);
             return new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY, Runtime.getRuntime().availableProcessors(), 4, 4, FFMPEG_SKIP_FRAME_NONREF, FFMPEG_SKIP_LOOP_FILTER_ALL, FFMPEG_LOWRES_HALF);
         }

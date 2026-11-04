@@ -11,6 +11,7 @@ import android.text.TextUtils;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.crawler.SpiderDebug;
 
 import java.io.File;
@@ -49,7 +50,30 @@ public final class NodeRuntime {
     static final long READY_PROBE_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(2);
     static final long READY_POLL_MS = 200L;
 
+    /**
+     * bundle 自带弹幕服务的探测预算。它的端口在猫源本体就绪之后才陆续写进 port 文件，
+     * 所以不能只探一次；放后台轮询，界面全程只读缓存值。
+     */
+    private static final long DANMAKU_PROBE_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(20);
+    private static final long DANMAKU_PROBE_POLL_MS = 500L;
+    /**
+     * 在飞去重记的是<b>正在探测的世代号</b>，不是「有没有线程在探」。
+     *
+     * <p>MSG_READY 与 start 的复用捷径都可能触发探测。按「有无线程」去重时，快速换源会撞上
+     * 上一代仍在跑的线程（最长 20s）：新一代唯一的触发点被挡回去，旧线程随后在世代核对处退出，
+     * 新 bundle 的弹幕端口就永久探不到，整场没有弹幕。按世代去重后不同世代互不阻塞。
+     */
+    private static final AtomicLong DANMAKU_PROBING_GENERATION = new AtomicLong(-1);
+
     private static volatile int port;
+    private static volatile int danmakuPort;
+    /**
+     * 最近一次探到的弹幕端口，换源清零 port/danmakuPort 时故意保留。
+     *
+     * <p>换源后正是靠它认出上一场本地包残留的弹幕地址：端口一旦忘了，那个回环地址就与陌生人
+     * 的回环地址无从区分，只能永久留在屏幕上。
+     */
+    private static volatile int lastDanmakuPort;
     private static final AtomicBoolean STARTING = new AtomicBoolean(false);
     private static volatile boolean running;
     private static volatile String servingUrl = "";
@@ -113,12 +137,54 @@ public final class NodeRuntime {
         return port;
     }
 
+    /** 本机回环地址的统一拼法：猫源本体与它自带的弹幕服务都在这一个前缀下。 */
+    private static String loopbackUrl(int value, String path) {
+        return "http://127.0.0.1:" + value + path;
+    }
+
     public static String baseUrl() {
-        return "http://127.0.0.1:" + port;
+        return loopbackUrl(port, "");
     }
 
     public static String configUrl() {
-        return "http://127.0.0.1:" + port + "/config";
+        return loopbackUrl(port, "/config");
+    }
+
+    /**
+     * bundle 自带的内置弹幕服务地址；未探测到或运行时未就绪时为空串。
+     *
+     * <p>本地包把弹幕服务开在猫源本体之外的另一个端口（实测 9321），只把它记在 port 文件的
+     * 候选集合里。没有这个回退，用户必须自己手填 {@code http://127.0.0.1:端口/danmaku}
+     * 才有弹幕，等于本地包开箱不生效。
+     */
+    public static String danmakuApiUrl() {
+        int value = danmakuPort;
+        // `:node` 被系统杀掉时没有任何回调会把 running/danmakuPort 置零，只认端口号会把
+        // 一个没人监听的地址交给弹幕搜索。与 isServing 同一套判据，先无阻塞判标志再探进程。
+        if (value <= 0 || !running || !serviceAlive()) return "";
+        return loopbackUrl(value, "/danmaku");
+    }
+
+    /** 这个回环地址是不是本运行时自己开出来（现在或曾经）的端口：猫源本体或它自带的弹幕服务。 */
+    public static boolean ownsLoopbackPort(String url) {
+        if (TextUtils.isEmpty(url)) return false;
+        try {
+            int value = android.net.Uri.parse(url.trim()).getPort();
+            return value > 0 && (value == port || value == danmakuPort || value == lastDanmakuPort);
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /**
+     * 端口失效时必须两个一起清：留下旧的弹幕端口会把新源的弹幕指到旧进程的地址上。
+     *
+     * <p>{@link #lastDanmakuPort} 例外，这里不能把它一起清零——换源后正是靠它认出上一场
+     * 本地包残留的弹幕地址，清掉就再也认不出来了。
+     */
+    private static void clearPort() {
+        port = 0;
+        danmakuPort = 0;
     }
 
     /**
@@ -136,6 +202,8 @@ public final class NodeRuntime {
         // 还必须确认子进程仍在：它被杀掉时没有任何回调会把 running 置假。
         boolean alive = running && serviceAlive();
         if (alive && same(url) && NodeBundle.servesCurrentSource(url, servingSourceKey)) {
+            // bundle 的弹幕服务可能晚于首次探测预算才落盘端口，复用路径不重探就整场没有弹幕。
+            if (danmakuPort == 0) resolveDanmakuPort(port, START_GENERATION.get());
             if (callback != null) callback.onReady(baseUrl());
             return;
         }
@@ -143,7 +211,7 @@ public final class NodeRuntime {
             SpiderDebug.log("node", "node process is gone while runtime still marked running, restarting");
             running = false;
             servingSourceKey = "";
-            port = 0;
+            clearPort();
         }
         if (!STARTING.compareAndSet(false, true)) {
             if (callback != null) callback.onError("正在启动中");
@@ -162,7 +230,7 @@ public final class NodeRuntime {
             waitForProcessDeath(context);
             running = false;
             servingSourceKey = "";
-            port = 0;
+            clearPort();
             notifyProgress(context, callback, context.getString(R.string.node_switch_restart));
         }
         servingUrl = NodeBundle.bundleUrl(url);
@@ -175,7 +243,7 @@ public final class NodeRuntime {
             running = false;
             servingUrl = "";
             servingSourceKey = "";
-            port = 0;
+            clearPort();
             pendingCallback = null;
             replyMessenger = null;
             SpiderDebug.log("node", "failed to start node service: %s", e.getMessage());
@@ -191,7 +259,7 @@ public final class NodeRuntime {
         NodeService.stop(context);
         running = false;
         servingSourceKey = "";
-        port = 0;
+        clearPort();
         NodeNotify.done(context, "猫源启动失败：服务未在预期时间内就绪");
         Notify.show("猫源启动失败：服务未在预期时间内就绪");
         Callback callback = pendingCallback;
@@ -280,8 +348,10 @@ public final class NodeRuntime {
             switch (msg.what) {
                 case NodeService.MSG_READY: {
                     port = msg.arg1;
+                    danmakuPort = 0;
                     running = true;
                     servingSourceKey = NodeBundle.installedSourceKey(App.get());
+                    resolveDanmakuPort(port, generation);
                     STARTING.set(false);
                     pendingCallback = null;
                     replyMessenger = null;
@@ -302,6 +372,7 @@ public final class NodeRuntime {
                     STARTING.set(false);
                     running = false;
                     servingSourceKey = "";
+                    clearPort();
                     pendingCallback = null;
                     replyMessenger = null;
                     NodeNotify.done(App.get(), "猫源启动失败：" + text);
@@ -350,6 +421,80 @@ public final class NodeRuntime {
             return ports;
         } catch (Exception ignored) {
             return ports;
+        }
+    }
+
+    /** 认领本世代的一次探测：同一世代已有线程在探才让路，新世代必须能立刻开工。 */
+    private static boolean claimDanmakuProbe(long generation) {
+        while (true) {
+            long current = DANMAKU_PROBING_GENERATION.get();
+            if (current == generation) return false;
+            if (DANMAKU_PROBING_GENERATION.compareAndSet(current, generation)) return true;
+        }
+    }
+
+    /** 探测收工：只释放自己认领的那一代，不误清后来者的认领。 */
+    private static void releaseDanmakuProbe(long generation) {
+        DANMAKU_PROBING_GENERATION.compareAndSet(generation, -1);
+    }
+
+    /**
+     * 在猫源端口之外的候选端口里找 bundle 自带的内置弹幕服务。
+     *
+     * <p>只认 {@code GET /danmaku} 回 200 且 body 是 JSON 的那个：猫源本体的同名路径回 404，
+     * 而弹幕服务的 /config 回 401，两者正反都区分得开。
+     */
+    private static void resolveDanmakuPort(int catPort, long generation) {
+        // 复用捷径与 MSG_READY 都可能来探：同一世代只需一个线程，重复进来直接让路。
+        if (!claimDanmakuProbe(generation)) return;
+        try {
+            Task.execute(() -> {
+                // 复位必须写在任务里：Task.execute 只投递，写在投递处等于没去重。
+                try {
+                    okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                            .connectTimeout(READY_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                            .readTimeout(READY_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                            .callTimeout(READY_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                            .build();
+                    long deadline = System.currentTimeMillis() + DANMAKU_PROBE_TIMEOUT_MS;
+                    // 换源会 incrementAndGet 出新世代：旧线程把上一代 bundle 的端口写回，
+                    // 界面就会「选了 B 源却连到 A 源」，所以每一轮都要核对世代。
+                    while (running && generation == START_GENERATION.get() && danmakuPort == 0 && System.currentTimeMillis() < deadline) {
+                        for (int candidate : readPorts(new File(NodeBundle.dir(App.get()), "port"))) {
+                            if (candidate == catPort) continue;
+                            if (!isDanmakuService(client, candidate)) continue;
+                            // 探一次要一秒左右，回来时可能已经换了源，写之前必须再核对一次。
+                            if (generation != START_GENERATION.get() || !running) return;
+                            danmakuPort = candidate;
+                            lastDanmakuPort = candidate;
+                            SpiderDebug.log("node", "bundle danmaku service on port %d", candidate);
+                            return;
+                        }
+                        try {
+                            Thread.sleep(DANMAKU_PROBE_POLL_MS);
+                        } catch (InterruptedException e) {
+                            return;
+                        }
+                    }
+                } finally {
+                    releaseDanmakuProbe(generation);
+                }
+            });
+        } catch (Throwable e) {
+            // 线程池拒收时把这一代的认领让回去，否则同一世代再也探不出端口。
+            releaseDanmakuProbe(generation);
+        }
+    }
+
+    private static boolean isDanmakuService(okhttp3.OkHttpClient client, int candidate) {
+        try (okhttp3.Response response = client.newCall(new okhttp3.Request.Builder()
+                .url(loopbackUrl(candidate, "/danmaku"))
+                .build()).execute()) {
+            if (response.code() != 200 || response.body() == null) return false;
+            String body = response.body().string().trim();
+            return body.startsWith("[") || body.startsWith("{");
+        } catch (Exception e) {
+            return false;
         }
     }
 }
