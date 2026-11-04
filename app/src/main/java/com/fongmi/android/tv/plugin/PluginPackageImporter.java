@@ -18,8 +18,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * 插件包导入：把用户选中的目录整包复制进 {@code files/plugins/<id>/}，并改写成可装载形态。
@@ -68,6 +71,32 @@ public final class PluginPackageImporter {
             return entry != null && error == null;
         }
     }
+
+    /**
+     * 打包导入里单个插件的结局。
+     *
+     * @param entry 该插件成功安装时的配置条目；失败时为 {@code null}
+     * @param error 该插件失败的原因；成功时为 {@code null}
+     */
+    public record ItemResult(PluginBundleIndex.Candidate candidate, @Nullable PluginSourceConfig.Entry entry,
+            @Nullable String error) {
+    }
+
+    /**
+     * 打包导入的整批结果。
+     *
+     * <p>{@code error} 只表示"整批无从开始"（压缩包打不开、没选任何插件）。某个插件装失败
+     * 不是整批失败：它落在对应的 {@link ItemResult#error()} 上，其余插件照常装上。
+     */
+    public record BundleResult(List<ItemResult> items, @Nullable String error) {
+
+        public boolean isSuccess() {
+            return error == null;
+        }
+    }
+
+    /** 打包导入的临时解压目录名，位于插件根目录的父目录下（刻意不在 {@link #pluginsRoot()} 内部）。 */
+    private static final String BUNDLE_TMP_DIR = "plugin-bundle-tmp";
 
     /** 测试用根目录覆盖：JVM 单测没有 {@code Init.context()}，无法走 {@code Path.files()}。 */
     private static volatile File rootOverride;
@@ -187,6 +216,197 @@ public final class PluginPackageImporter {
         config.put(entry);
         config.save();
         return new Result(entry, null);
+    }
+
+    /**
+     * 导入一个 zip 里用户勾选的那几个插件。
+     *
+     * <p><b>每个插件都走一遍既有的 {@link #importFrom(File)}。</b>这是本方法唯一的存在理由：
+     * 包导入新增的只有"从 zip 里把某个目录解出来"这一步，其余（清单校验、目录名安全、
+     * 体积与文件数上限、入口解析、字段改写、失败回滚）必须原封不动地复用。把那些规则在
+     * 包导入路径上重写一遍，等于给安全策略开了第二个真源，两边迟早会不一致——而不一致的那
+     * 一侧就是漏洞。
+     *
+     * <p><b>解压本身仍要自己把门。</b>{@link PluginBundleIndex} 放过越界条目名只是为了不给出
+     * 注定失败的候选，它不构成写入许可：这里对每个条目名再判一次，并用 canonical 路径确认
+     * 落点确实在临时目录内（{@code ./a/../../b} 这类写法靠字符串检查是拦不住的）。
+     *
+     * <p><b>单个失败不中止整批。</b>用户勾了五个插件，第三个的清单坏了，不该让第四、第五个
+     * 失去机会；失败信息落在自己那一项上，其余项照常返回结果。
+     *
+     * <p>本方法不抛异常：压缩包不可读、没选插件、解压失败都以 {@link BundleResult} 返回。
+     */
+    public static BundleResult importBundle(@Nullable File zip, @Nullable List<PluginBundleIndex.Candidate> selected) {
+        if (zip == null) return new BundleResult(List.of(), "未选择插件包");
+        if (!zip.exists()) return new BundleResult(List.of(), "插件包不存在：" + zip.getAbsolutePath());
+        if (!zip.isFile()) return new BundleResult(List.of(), "插件包不是文件：" + zip.getAbsolutePath());
+        if (selected == null || selected.isEmpty()) return new BundleResult(List.of(), "未选择要导入的插件");
+
+        File tempRoot = bundleTempRoot();
+        if (!tempRoot.isDirectory() && !tempRoot.mkdirs()) {
+            return new BundleResult(List.of(), "无法创建临时目录：" + tempRoot.getAbsolutePath());
+        }
+
+        List<ItemResult> items = new ArrayList<>(selected.size());
+        try (ZipFile archive = new ZipFile(zip)) {
+            for (PluginBundleIndex.Candidate candidate : selected) {
+                items.add(importCandidate(archive, candidate, tempRoot));
+            }
+        } catch (IOException error) {
+            // 打开失败时 items 还是空的；关闭失败时所有项已有结论，不该反过来判整批失败。
+            if (items.isEmpty()) return new BundleResult(List.of(), "无法读取压缩包：" + describe(error));
+        } catch (RuntimeException error) {
+            if (items.isEmpty()) return new BundleResult(List.of(), "无法读取压缩包：" + describe(error));
+        }
+        return new BundleResult(List.copyOf(items), null);
+    }
+
+    /**
+     * 解出单个候选并交给 {@link #importFrom(File)}。
+     *
+     * <p>临时目录在 {@code finally} 里删：无论导入成功、失败还是抛错，都不该在应用私有目录里
+     * 留下一份解压副本——它既占空间，也会让"盘上有包"的判断失去唯一性（插件根目录之外还有
+     * 一份同名内容，排查时永远不会有人想到去看那里）。
+     */
+    private static ItemResult importCandidate(ZipFile archive, @Nullable PluginBundleIndex.Candidate candidate,
+            File tempRoot) {
+        if (candidate == null) return new ItemResult(null, null, "无效的插件候选");
+        String entryPath = candidate.entryPath() == null ? "" : candidate.entryPath().trim();
+        File tempDir = null;
+        try {
+            tempDir = createTempDir(tempRoot, candidate.id());
+            extract(archive, entryPath, tempDir);
+            Result result = importFrom(tempDir);
+            return new ItemResult(candidate, result.entry(), result.error());
+        } catch (ImportFailure error) {
+            return new ItemResult(candidate, null, error.getMessage());
+        } catch (Throwable error) {
+            return new ItemResult(candidate, null, "导入失败：" + describe(error));
+        } finally {
+            deleteRecursively(tempDir);
+        }
+    }
+
+    /**
+     * 打包导入临时目录的父目录。
+     *
+     * <p>取插件根目录的父目录（真机即 {@code files/}）：同一处解析逻辑只写一遍，单测里
+     * {@link #overrideRootForTest(File)} 一改，导入根与临时根一起搬走，不需要第二个接缝。
+     * 刻意<b>不</b>放在 {@link #pluginsRoot()} 内部：装载期会扫插件根目录，解压到一半的
+     * 半成品若出现在那里，就会被当成一个真实插件去加载。
+     */
+    private static File bundleTempRoot() {
+        File parent = pluginsRoot().getParentFile();
+        return new File(parent == null ? pluginsRoot() : parent, BUNDLE_TMP_DIR);
+    }
+
+    /** 每次导入用全新目录：同 id 连装两次不能共用残留内容。 */
+    private static File createTempDir(File root, @Nullable String hint) {
+        String suffix = hint == null ? "plugin" : hint.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (suffix.length() > 32) suffix = suffix.substring(0, 32);
+        for (int attempt = 0; attempt < 16; attempt++) {
+            File dir = new File(root, "bundle-" + System.nanoTime() + "-" + suffix);
+            if (dir.mkdirs()) return dir;
+        }
+        throw new ImportFailure("无法创建临时解压目录");
+    }
+
+    /**
+     * 把一个候选目录（{@code entryPath} 之下，或 {@code ""} 表示整包）解到 {@code tempDir}。
+     *
+     * <p>上限口径与 {@link #MAX_PACKAGE_BYTES} / {@link #MAX_FILES} 一致，但超出时只让这一个
+     * 候选失败：整包超限是"这个插件不该装"，不是"这批插件都别装"。
+     */
+    private static void extract(ZipFile archive, String entryPath, File tempDir) {
+        String prefix = entryPath.isEmpty() ? "" : entryPath + "/";
+        String root = canonicalOf(tempDir);
+        long total = 0;
+        int files = 0;
+
+        Enumeration<? extends ZipEntry> entries = archive.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry entry = entries.nextElement();
+            if (entry.isDirectory()) continue;
+            String name = entry.getName();
+            if (name == null || name.isEmpty()) continue;
+            if (!prefix.isEmpty() && !name.startsWith(prefix)) continue;
+            String relative = safeRelativePath(name.substring(prefix.length()));
+            // 越界条目只是被丢弃，而不是让整项失败：与索引阶段同一个口径，用户不必为包里
+            // 一个多余条目就失去这个插件。
+            if (relative == null) continue;
+
+            files++;
+            if (files > MAX_FILES) throw new ImportFailure("文件数超过上限 " + MAX_FILES);
+            File destination = new File(tempDir, relative);
+            File parent = destination.getParentFile();
+            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+                throw new ImportFailure("无法创建目录：" + parent.getName());
+            }
+            if (!isInside(root, destination)) throw new ImportFailure("条目逃出解压目录：" + entry.getName());
+            total += writeEntry(archive, entry, destination, total);
+        }
+        if (files == 0) {
+            throw new ImportFailure("选中的插件目录为空：" + (entryPath.isEmpty() ? "<压缩包根目录>" : entryPath));
+        }
+    }
+
+    /** 写一个条目并返回实际写入字节数；整包累计超限时立刻中止。 */
+    private static long writeEntry(ZipFile archive, ZipEntry entry, File destination, long consumed) {
+        long written = 0;
+        try (InputStream input = archive.getInputStream(entry); OutputStream output = new FileOutputStream(destination)) {
+            byte[] buffer = new byte[16384];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                written += read;
+                if (consumed + written > MAX_PACKAGE_BYTES) {
+                    throw new ImportFailure("解压后超过 " + MAX_PACKAGE_BYTES + " 字节上限");
+                }
+                output.write(buffer, 0, read);
+            }
+            output.flush();
+        } catch (IOException error) {
+            throw new ImportFailure("解压失败：" + entry.getName() + " (" + describe(error) + ")");
+        }
+        return written;
+    }
+
+    /**
+     * 条目相对路径归一化：返回 {@code null} 表示这个条目一律不写。
+     *
+     * <p>判据与 {@link PluginBundleIndex} 相同：绝对路径、盘符、反斜杠、{@code .}/{@code ..} 段、
+     * 以点开头的段都是"想写到目标目录之外"或"不是插件内容"的写法。
+     */
+    @Nullable
+    private static String safeRelativePath(String relative) {
+        if (relative == null || relative.isEmpty()) return null;
+        if (relative.indexOf('\\') >= 0) return null;
+        if (relative.startsWith("/") || relative.matches("^[A-Za-z]:.*")) return null;
+        StringBuilder normalized = new StringBuilder(relative.length());
+        for (String segment : relative.split("/", -1)) {
+            if (segment.isEmpty()) return null;
+            if (segment.startsWith(".")) return null;
+            if (normalized.length() > 0) normalized.append('/');
+            normalized.append(segment);
+        }
+        return normalized.length() == 0 ? null : normalized.toString();
+    }
+
+    private static String canonicalOf(File file) {
+        try {
+            return file.getCanonicalPath();
+        } catch (IOException error) {
+            throw new ImportFailure("无法解析目录路径：" + file.getAbsolutePath());
+        }
+    }
+
+    /** canonical 前缀比较：与 {@link #contains(File, File)} 同一口径，缺了结尾分隔符会把兄弟目录当成内部。 */
+    private static boolean isInside(String canonicalRoot, File file) {
+        try {
+            String path = file.getCanonicalPath();
+            return path.equals(canonicalRoot) || path.startsWith(canonicalRoot + File.separator);
+        } catch (IOException error) {
+            return false;
+        }
     }
 
     /**

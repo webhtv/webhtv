@@ -32,6 +32,14 @@
             android:text="@string/plugin_manager_import" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/remoteImportPlugin"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="@string/plugin_manager_remote_import" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/reloadPlugins"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
