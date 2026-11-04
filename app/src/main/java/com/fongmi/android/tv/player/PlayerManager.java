@@ -40,6 +40,7 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.impl.ParseCallback;
+import com.fongmi.android.tv.node.NodeRuntime;
 import com.fongmi.android.tv.player.codec.CodecCapabilityInspector;
 import com.fongmi.android.tv.player.engine.ExoPlayerEngine;
 import com.fongmi.android.tv.player.exo.ass.ExoAssSession;
@@ -1363,6 +1364,10 @@ public class PlayerManager implements ParseCallback {
 
     private void restoreDanmakuDataSource() {
         if (danmakuController == null || TextUtils.isEmpty(currentDanmakuUrl)) return;
+        if (isStaleBundleDanmaku(currentDanmakuUrl)) {
+            clearDanmaku("stale_bundle_source");
+            return;
+        }
         if (!DanmakuUrlPolicy.classify(currentDanmakuUrl).isStatic()) return;
         loadingDanmakuKey = currentDanmakuKey;
         danmakuLoadStartedAtMs = SystemClock.elapsedRealtime();
@@ -7019,6 +7024,10 @@ public void resetTrack(int type) {
         }
         if (danmakuController == null) return;
         String url = DanmakuUrlPolicy.normalize(DanmakuSetting.getValidApiUrl(), item.getRealUrl());
+        if (isStaleBundleDanmaku(url)) {
+            clearDanmaku("stale_bundle_source");
+            return;
+        }
         DanmakuUrlPolicy.SourceType sourceType = DanmakuUrlPolicy.classify(url);
         if (!sourceType.isSupported()) {
             if (spec != null) spec.setDanmaku(item);
@@ -7076,6 +7085,24 @@ public void resetTrack(int type) {
         loadingDanmakuKey = null;
         danmakuLoadStartedAtMs = 0;
         danmakuLoadInProgress = false;
+    }
+
+    /** 换源后上一场本地包加载的弹幕还挂在屏幕上，这里把它清掉。 */
+    public void dropStaleBundleDanmaku() {
+        if (isStaleBundleDanmaku(currentDanmakuUrl)) clearDanmaku("stale_bundle_source");
+    }
+
+    /** 只有「属于本地包、且本地包已经不是当前源」的回环地址才算残留。 */
+    private static boolean isStaleBundleDanmaku(String url) {
+        // 只有「属于本地包、且本地包已经不是当前源」的回环地址才算残留：
+        // 反过来问「用户有没有配置」会把仍在工作的本地包弹幕也清掉（条目地址是 ws://127.0.0.1:<端口>/live，
+        // 既不等于配置的 api 地址，也不等于兜底地址）。归属只认 NodeRuntime 真的开过的端口：
+        // 形态（回环 + path /danmaku）不是归属证明，用户自建的回环弹幕服务形态相同。
+        if (TextUtils.isEmpty(url)) return false;
+        if (TextUtils.equals(url, DanmakuSetting.getConfiguredApiUrl())) return false;
+        if (!DanmakuUrlPolicy.isLoopback(url)) return false;
+        if (DanmakuSetting.isBundleSource()) return false;
+        return NodeRuntime.ownsLoopbackPort(url);
     }
 
     private void clearDanmaku(String reason) {

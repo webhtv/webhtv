@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -15,12 +16,26 @@ public final class MediaTitleParser {
     private static final Pattern RELEASE_DATE_PATTERN = Pattern.compile("(?<!\\d)(?:19|20)\\d{2}(?:[-./_](?:0?[1-9]|1[0-2])[-./_](?:0?[1-9]|[12]\\d|3[01])|(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01]))(?!\\d)");
     private static final Pattern BRACKET_PATTERN = Pattern.compile("[\\[【「『(（]([^\\]】」』)）]{1,60})[\\]】」』)）]");
     private static final Pattern NOISE_WORDS = Pattern.compile("(?i)\\b(HD|4K|8K|1080P|2160P|720P|HDR|HDR10|DV|BluRay|WEB[- ]?DL|HDTV|BDRip|Remux|HEVC|H\\.?265|H\\.?264|x265|x264|AAC|DTS|DDP|Atmos|NF|Netflix|AMZN|DSNP)\\b");
+    private static final Set<String> CATEGORY_LABELS = Set.of(
+            "电影", "電影", "电视剧", "電視劇", "剧集", "劇集", "动漫", "動漫", "动画", "動畫", "综艺", "綜藝",
+            "纪录片", "紀錄片", "纪录", "紀錄", "短片", "微电影", "微電影", "国漫", "國漫", "日漫", "美漫",
+            "美剧", "美劇", "韩剧", "韓劇", "日剧", "日劇", "港剧", "港劇", "台剧", "台劇", "泰剧", "泰劇",
+            "短剧", "短劇", "连续剧", "連續劇", "戏曲", "戲曲", "音乐", "音樂", "体育", "體育", "儿童", "兒童",
+            "大陆", "大陸", "内地", "內地", "中国", "中國", "国产", "國產", "港台", "香港", "台湾", "台灣",
+            "澳门", "澳門", "日本", "日韩", "日韓", "韩国", "韓國", "美国", "美國", "欧美", "歐美", "英国", "英國",
+            "法国", "法國", "德国", "德國", "泰国", "泰國", "印度", "新加坡", "加拿大", "澳大利亚", "澳大利亞",
+            "澳洲", "俄罗斯", "俄羅斯", "西班牙", "意大利", "土耳其", "巴西", "墨西哥",
+            "动作", "動作", "喜剧", "喜劇", "爱情", "愛情", "科幻", "恐怖", "惊悚", "驚悚", "悬疑", "懸疑",
+            "犯罪", "剧情", "劇情", "冒险", "冒險", "奇幻", "战争", "戰爭", "历史", "歷史", "传记", "傳記",
+            "歌舞", "家庭", "运动", "運動", "武侠", "武俠", "古装", "古裝", "灾难", "災難", "西部", "青春",
+            "都市", "谍战", "諜戰", "真人秀", "脱口秀", "脫口秀");
     private static final Pattern SUSPICIOUS_MARKERS = Pattern.compile("[#＃]");
     private static final Pattern BOOK_TITLE_PATTERN = Pattern.compile("《([^》]{1,80})》");
     private static final Pattern URL_PATTERN = Pattern.compile("(?i)https?://\\S+");
     private static final Pattern INLINE_FROM_PATTERN = Pattern.compile("\\bfrom\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern DASH_SEPARATOR_PATTERN = Pattern.compile("\\s+[-－—~～]\\s+");
     private static final Pattern FRAME_RATE_PATTERN = Pattern.compile("(?i)(?<!\\d)(?:24|25|30|50|60|120)\\s*(?:fps|帧)(?![\\u4e00-\\u9fffA-Za-z0-9])");
+    private static final Pattern EXTENSION_PATTERN = Pattern.compile("(?i)\\.(mkv|mp4|avi|mov|wmv|flv|rmvb|ts|m2ts)$");
 
     public MediaTitleResolution parse(MediaTitleRequest request) {
         MediaTitleRequest safe = request == null ? MediaTitleRequest.builder().build() : request;
@@ -89,7 +104,7 @@ public final class MediaTitleParser {
         if (isBlank(text)) return "";
         String raw = text.trim();
         String clean = raw;
-        clean = clean.replaceAll("(?i)\\.(mkv|mp4|avi|mov|wmv|flv|rmvb|ts|m2ts)$", " ");
+        clean = EXTENSION_PATTERN.matcher(clean).replaceAll(" ");
         clean = removeNoiseBrackets(clean);
         clean = EPISODE_PATTERN.matcher(clean).replaceAll(" ");
         clean = SEASON_PATTERN.matcher(clean).replaceAll(" ");
@@ -197,6 +212,8 @@ public final class MediaTitleParser {
         String source = normalizePlaybackName(URL_PATTERN.matcher(text.trim()).replaceAll(" "));
         Matcher book = BOOK_TITLE_PATTERN.matcher(source);
         while (book.find()) addCleanSearchTitle(result, book.group(1));
+
+        addCleanSearchTitle(result, mainTitleWithoutCategoryLabels(source));
 
         boolean bracketTitle = addCleanSearchTitle(result, bestBracketTitle(source));
         if (bracketTitle && looksLikeBracketReleaseName(source)) return;
@@ -404,7 +421,81 @@ public final class MediaTitleParser {
         String value = normalize(text);
         if (value.isEmpty()) return true;
         return NOISE_WORDS.matcher(text).find()
-                || value.matches(".*(真彩|臻彩|高码|高碼|无水印|無水印|无台标|無台標|国语|國語|国配|國配|国粤|國粵|粤语|粵語|中字|字幕|内封|內封|简繁|簡繁|双语|雙語|官中|杜比|合集|全集|完结|完結|未删减|未刪減|加长版|加長版|修复版|修復版).*");
+                || value.matches(".*(真彩|臻彩|高码|高碼|无水印|無水印|无台标|無台標|国语|國語|国配|國配|国粤|國粵|粤语|粵語|中字|字幕|内封|內封|简繁|簡繁|双语|雙語|官中|杜比|合集|全集|完结|完結|未删减|未刪減|加长版|加長版|修复版|修復版|完整版|未剪辑|未剪輯|双字|雙字|国英|國英|中英|票房).*");
+    }
+
+    /**
+     * 括号里是「电影」「美国 恐怖 奇幻」这类分类标签时，真实片名在括号外。
+     * 弹幕服务按整串匹配，带标签的串一律搜不到，所以这里优先把所有括号剥掉只留主干。
+     * 但全剥会误伤片名本身写在括号里的标题，因此按三档依次回退：
+     * 第一档｜全剥：删掉所有括号内容，仅在至少一个括号是分类标签时才参与比较，
+     *   对应「[电影] 小丑回魂：德里故事 (2026) [...] [美国 恐怖 奇幻]」这类片名在括号外的标题；
+     * 第二档｜只留片名括号：仅分类标签括号被删，剩下的非标签括号里只有片名该进标题，
+     *   对应「[美国][恐怖][我的电影].mkv」这类片名写在括号里的标题，否则全剥会把它删成近乎空串；
+     * 第三档｜两档都不可用则返回空串，保持调用方 addCleanSearchTitles 的既有语义，
+     *   bestBracketTitle 候选仍在，[恐怖].mkv 这类不会因此丢候选。
+     */
+    private String mainTitleWithoutCategoryLabels(String text) {
+        // 先摘掉扩展名：否则「[美国][恐怖][我的电影].mkv」全剥后只剩「.mkv」，
+        // 经 effectiveSearchTitle 会变成可用标题「mkv」，第二档就永远轮不到。
+        String source = text == null ? "" : EXTENSION_PATTERN.matcher(text).replaceAll(" ").trim();
+        if (!hasCategoryLabel(source)) return "";
+        String all = stripAllBrackets(source);
+        if (isUsableCleanSearchTitle(effectiveSearchTitle(all))) return all;
+        return lastUsableBracketTitle(source);
+    }
+
+    /**
+     * 第二档不能整串返回：effectiveSearchTitle 只删括号字符，括号里的文字会带空格拼进标题，
+     * 「[北美票房][美国][阿凡达]」因此会得到「北美票房 阿凡达」。所以这里在多个括号里取最靠后的
+     * 可用括号；但片名后面还可能挂着发行噪声，最靠后的括号就不再是片名，因此跳过两类括号：
+     * 一｜分类标签括号，判据 isCategoryLabel，如「[美国]」「[恐怖]」；
+     * 二｜发行噪声括号，判据 isNoiseTag，如「[完整版]」「[未剪辑]」「[双字]」「[北美票房]」。
+     */
+    private String lastUsableBracketTitle(String text) {
+        Matcher matcher = BRACKET_PATTERN.matcher(text == null ? "" : text);
+        String best = "";
+        while (matcher.find()) {
+            if (isCategoryLabel(matcher.group(1))) continue;
+            if (isNoiseTag(matcher.group(1))) continue;
+            if (!isUsableCleanSearchTitle(effectiveSearchTitle(matcher.group(1)))) continue;
+            best = matcher.group();
+        }
+        return best;
+    }
+
+    private boolean hasCategoryLabel(String text) {
+        Matcher matcher = BRACKET_PATTERN.matcher(text == null ? "" : text);
+        while (matcher.find()) if (isCategoryLabel(matcher.group(1))) return true;
+        return false;
+    }
+
+    /** 第一档：删掉所有括号内容，只留括号外的主干。 */
+    private String stripAllBrackets(String text) {
+        return BRACKET_PATTERN.matcher(text == null ? "" : text).replaceAll(" ").trim();
+    }
+
+    private boolean isCategoryLabel(String text) {
+        String value = text == null ? "" : text.trim();
+        if (value.isEmpty()) return false;
+        boolean labeled = false;
+        for (String token : value.split("[\\s,，、/|·]+")) {
+            if (token.isEmpty()) continue;
+            if (!isCategoryLabelToken(token)) return false;
+            labeled = true;
+        }
+        // 只有分隔符（如 "[//]"）时一个 token 都没命中，不能算分类标签。
+        return labeled;
+    }
+
+    /** 判的是「电影」「美国」「恐怖」这类分类词；与上面的 looksLikeGroupToken（a-z1-4、短码、tv|bd 这类发布组标记）不是一回事。 */
+    private boolean isCategoryLabelToken(String token) {
+        if (CATEGORY_LABELS.contains(token)) return true;
+        int length = token.length();
+        if (length < 2) return false;
+        String head = token.substring(0, length - 1);
+        char tail = token.charAt(length - 1);
+        return (tail == '剧' || tail == '劇' || tail == '片' || tail == '番') && CATEGORY_LABELS.contains(head);
     }
 
     private int inferTrailingSeason(String raw) {

@@ -2808,6 +2808,38 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackPlaybackEpisodeGridAdvancesOneCardPerHeldRepeat() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private boolean onEpisodeKey(KeyEvent event)");
+        int methodEnd = source.indexOf("\n    private ", method + 1);
+        String body = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
+        String holdAdvance = "if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);";
+        int lastRow = body.indexOf("if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);");
+        String holdBoundary = "if (event.getRepeatCount() > 0) return true;";
+        int upTarget = body.indexOf("TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), false)");
+
+        assertTrue(sourcePath + " is missing onEpisodeKey", method >= 0 && methodEnd > method);
+        assertTrue("a held DPAD press must move one card per repeat instead of leaving the grid",
+                body.contains(holdAdvance)
+                        && !body.contains("if (event.getRepeatCount() > 0) return focusEpisodeGridPosition(target);"));
+        assertTrue("the first DPAD press must keep native grid focus so a single press still moves exactly one card",
+                body.contains("if (event.getRepeatCount() == 0) mEpisodeHoldTarget = RecyclerView.NO_POSITION;"));
+        assertTrue("held repeats must continue from the last requested card so the next repeat skips it",
+                body.contains("TmdbEpisodeGridPolicy.holdBasePosition(focusedPosition, mEpisodeHoldTarget)"));
+        assertTrue("a released key must clear the hold target so the grid never snaps back after the gesture",
+                body.contains("mEpisodeHoldTarget = RecyclerView.NO_POSITION;"));
+        assertTrue("held DPAD_DOWN must stop on the last row instead of handing focus to the rating row",
+                lastRow > 0
+                        && body.indexOf(holdBoundary, lastRow) > lastRow
+                        && body.indexOf(holdBoundary, lastRow) < body.indexOf("return focusRatingRow();"));
+        assertTrue("held DPAD_UP must stop on the first row instead of leaving the grid",
+                upTarget > 0
+                        && body.indexOf("if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);", upTarget) > upTarget
+                        && body.indexOf(holdBoundary, upTarget) > upTarget);
+    }
+
+    @Test
     public void leanbackEpisodeDialogLetsHeaderScrollWithEpisodes() throws Exception {
         Path layoutPath = findLeanbackResPath().resolve(Path.of("layout", "dialog_episode_list.xml"));
         String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);

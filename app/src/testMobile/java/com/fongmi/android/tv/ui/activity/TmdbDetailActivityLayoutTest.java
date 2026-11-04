@@ -2009,20 +2009,25 @@ public class TmdbDetailActivityLayoutTest {
         String focusChangeBody = activity.substring(focusChange, flagKey);
         String viewportBody = activity.substring(viewport, viewportEnd);
 
-        assertTrue("card-to-card DPAD_UP should let RecyclerView keep its native focus and scroll behavior",
+        String holdAdvance = "if (event.getRepeatCount() > 0) return focusDetailEpisode(target);";
+        assertTrue("the first DPAD press should still let RecyclerView keep its native focus and scroll behavior",
                 moveBody.contains("TmdbEpisodeGridPolicy.verticalFocusTarget(position, span, episodeAdapter.getItemCount(), down)")
                         && moveBody.contains("return false;")
                         && !moveBody.contains("return focusDetailEpisode(position - span"));
-        assertTrue("card-to-card DPAD_DOWN should let RecyclerView keep its native focus and scroll behavior",
+        assertTrue("held DPAD should advance one card per repeat and only leave the grid on the last row",
                 moveBody.contains("if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET)")
                         && moveBody.contains("return focusFirstVisibleTmdbRow();")
-                        && !moveBody.contains("return focusDetailEpisode(target"));
+                        && moveBody.contains(holdAdvance)
+                        && moveBody.indexOf("return false;") > moveBody.indexOf(holdAdvance));
+        String holdBoundary = "if (event.getRepeatCount() > 0) return true;";
         assertTrue("boundary DPAD_DOWN should still leave the episode grid only when no next row exists",
                 moveBody.contains("if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET)")
-                        && moveBody.contains("return focusFirstVisibleTmdbRow();"));
+                        && moveBody.contains("return focusFirstVisibleTmdbRow();")
+                        && moveBody.contains(holdBoundary)
+                        && moveBody.indexOf(holdBoundary) < moveBody.indexOf("return focusFirstVisibleTmdbRow();"));
         assertTrue("manual episode entry should still focus and align a concrete card",
                 focusBody.contains("RecyclerView.ViewHolder visibleHolder = binding.episodeContainer.findViewHolderForAdapterPosition(target);")
-                        && focusBody.contains("visibleHolder.itemView.requestFocus();")
+                        && focusBody.contains("visibleHolder.itemView.requestFocus()")
                         && focusBody.contains("alignDetailEpisodeFocusedRow(visibleHolder.itemView, target);"));
         assertTrue("card-to-card moves must not use viewport-preserve state that can fight RecyclerView focus restoration",
                 !activity.contains("preserveDetailEpisodeViewportOnce")

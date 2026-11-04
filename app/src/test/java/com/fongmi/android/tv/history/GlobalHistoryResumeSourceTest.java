@@ -351,8 +351,17 @@ public class GlobalHistoryResumeSourceTest {
             int end = source.indexOf("private void enrichHistoryMeta", start);
             String method = source.substring(start, end);
 
-            assertTrue(method.contains("mHistory.setVodName(item.getName())"));
+            assertTrue(method.contains("mHistory.setVodName(historyVodName(item))"));
             assertTrue(method.contains("mHistory.setVodPic(getInitialArtwork(item))"));
+            // 推送片名的兜底写在 historyVodName 里，断言必须切到该方法体内：整文件搜索会命中
+            // 别处同名字符串（含注释），helper 被删掉或改空也照样通过。
+            int helper = source.indexOf("private String historyVodName(Vod item)");
+            assertTrue("historyVodName must exist", helper > 0);
+            int helperEnd = source.indexOf("private History createHistory(Vod item)", helper);
+            assertTrue("historyVodName must be followed by createHistory", helperEnd > helper);
+            String body = source.substring(helper, helperEnd);
+            assertTrue(body.contains("PushParser.fromId(getId())"));
+            assertTrue(body.contains("TmdbMatchPolicy.shouldAutoMatchPushTitle(intentName)"));
         }
     }
 
