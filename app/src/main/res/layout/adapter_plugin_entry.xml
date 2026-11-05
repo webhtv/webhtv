@@ -58,7 +58,7 @@
         android:focusable="true"
         android:padding="8dp"
         android:src="@drawable/ic_action_setting"
-        app:tint="?attr/colorOnSurfaceVariant" />
+        app:tint="@color/fixed_light_focus_icon" />
 
     <androidx.appcompat.widget.AppCompatImageButton
         android:id="@+id/entryDelete"
@@ -71,5 +71,5 @@
         android:focusable="true"
         android:padding="8dp"
         android:src="@drawable/ic_action_delete"
-        app:tint="?attr/colorOnSurfaceVariant" />
+        app:tint="@color/fixed_light_focus_icon" />
 </androidx.appcompat.widget.LinearLayoutCompat>

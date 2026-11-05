@@ -49,7 +49,6 @@ import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 import com.github.catvod.utils.Path;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.gson.JsonElement;
@@ -492,7 +491,7 @@ public class PluginManagerActivity extends BaseActivity {
             Notify.show(getString(R.string.plugin_manager_remote_all_ok, installed));
             return;
         }
-        new MaterialAlertDialogBuilder(this)
+        new WebHtvAlertDialogBuilder(this)
                 .setTitle(R.string.plugin_manager_remote_result_title)
                 .setMessage(String.join("\n", lines))
                 .setPositiveButton(R.string.dialog_confirm, null)
@@ -635,7 +634,7 @@ public class PluginManagerActivity extends BaseActivity {
     }
 
     private void confirmDelete(PluginSourceConfig.Entry entry) {
-        new MaterialAlertDialogBuilder(this)
+        new WebHtvAlertDialogBuilder(this)
                 .setTitle(R.string.plugin_manager_delete_title)
                 .setMessage(getString(R.string.plugin_manager_delete_message, entry.name()))
                 .setNegativeButton(R.string.dialog_cancel, null)
