@@ -3691,6 +3691,31 @@ public class TmdbDetailActivityLayoutTest {
                 save.contains("Task.execute(() -> FlagPreferenceCache.get().save())"));
     }
 
+    @Test
+    public void detailInlineRotateKeepsTheOrientationTheUserChose() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String rotate = javaBlockAt(source, "private void rotateInlineFullscreen()");
+        String applyOrientation = javaBlockAt(source, "private void setInlineFullscreenOrientation()");
+        String toggleLock = javaBlockAt(source, "private void toggleInlineLock()");
+        String enter = javaBlockAt(source, "private void enterInlineFullscreen()");
+        String exit = javaBlockAt(source, "private void exitInlineFullscreen()");
+
+        assertTrue("the rotate button must remember the orientation the user asked for before requesting it",
+                rotate.contains("inlineManualOrientation = ResUtil.isLand(this) ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;")
+                        && rotate.contains("setRequestedOrientation(inlineManualOrientation);")
+                        && rotate.indexOf("inlineManualOrientation = ") < rotate.indexOf("setRequestedOrientation(inlineManualOrientation);"));
+        assertTrue("the video-shape driven orientation must not overwrite the orientation the user chose",
+                applyOrientation.contains("if (inlineManualOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) return;")
+                        && applyOrientation.indexOf("if (inlineManualOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) return;") < applyOrientation.indexOf("setRequestedOrientation(orientation);"));
+        assertTrue("unlocking must restore the orientation the user chose instead of recomputing it from the video shape",
+                toggleLock.contains("} else if (inlineManualOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {")
+                        && toggleLock.contains("setRequestedOrientation(inlineManualOrientation);"));
+        assertTrue("entering detail fullscreen must rebuild the automatic orientation baseline",
+                enter.contains("inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;"));
+        assertTrue("leaving detail fullscreen must drop the manual orientation override",
+                exit.contains("inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;"));
+    }
+
     private static Path findMainJavaPath() {
         Path moduleRelative = Path.of("src", "main", "java");
         if (Files.exists(moduleRelative)) return moduleRelative;
