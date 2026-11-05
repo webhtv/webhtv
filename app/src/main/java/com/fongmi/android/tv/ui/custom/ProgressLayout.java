@@ -11,6 +11,7 @@ import android.widget.TextView;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ViewEmptyBinding;
 import com.fongmi.android.tv.databinding.ViewProgressBinding;
+import com.fongmi.android.tv.plugin.PluginHostEvents;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -270,6 +271,9 @@ public class ProgressLayout extends RelativeLayout {
                 if (mEmptyView != null) mEmptyView.setVisibility(GONE);
                 if (mProgressView != null) mProgressView.setVisibility(GONE);
                 setContentVisibility(true);
+                // 宿主内容可见的埋点。本类被 Home/File/History/Keep/Video 等多页共用，
+                // 因此事件只带 Activity 身份，由订阅者按类型过滤（详见 PluginEventBus 类注释）。
+                PluginHostEvents.uiContentShown(this);
                 break;
             case PROGRESS:
                 ensureProgressView();

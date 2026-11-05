@@ -770,6 +770,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         vod = null;
         matchedTmdbItem = null;
         matchedTmdbDetail = null;
+        // 换源/换片会在同一个 Activity 里清空身份：不跟着撤回，插件在这段空窗里点开会读到上一部剧。
+        try {
+            com.fongmi.android.tv.plugin.PluginEpisodeContext.clear(getClass().getSimpleName());
+        } catch (Throwable ignored) {
+        }
         cachedEpisodeInfo = null;
         cachedEpisodeInfoItem = null;
         cachedEpisodeInfoDetail = null;
@@ -3319,6 +3324,42 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         clearSeasonResolutionCache();
         if (selectedFlag != null) loadTmdbSeasonBinding();
         updateTmdbSeasonActionVisibility();
+        publishPluginEpisodeContext();
+    }
+
+    /**
+     * 把当前详情页的剧集身份交给插件通道。
+     *
+     * <p>详情页没有"当前集"概念，{@code episode} 恒为 {@code null}；{@code bundle} 为空时
+     * 载荷随之清空——插件读不到数据，好过让它读到上一部剧的数据。
+     */
+    private void publishPluginEpisodeContext() {
+        try {
+            com.fongmi.android.tv.plugin.PluginEpisodeContext.publish(
+                    getClass().getSimpleName(),
+                    com.fongmi.android.tv.plugin.PluginEpisodePayload.of(matchedTmdbItem, vod, null));
+        } catch (Throwable ignored) {
+            // 插件上下文是可选增强：任何异常都不许影响详情页。
+        }
+    }
+
+    /**
+     * 回到本页时重新认领剧集上下文。
+     *
+     * <p>{@code PluginEpisodeContext} 是全局单槽：播放页发布后本页的快照就被覆盖了，而
+     * 返回本页不会触发任何重新装载。不在这里补发，用户走过一次「详情页 → 播放页 → 返回」
+     * 之后，本页的插件 chip 读到的永远是 {@code null}（名字不匹配即 null）。
+     *
+     * <p>身份已被 {@code resetDetailState()} 清空时直接返回，不发布：{@code publish(name, null)}
+     * 的语义是「清除」，一次没有数据的回归发布会把原本正确的快照擦掉，比不发布更糟。
+     */
+    private void republishPluginEpisodeContext() {
+        try {
+            if (matchedTmdbItem == null && vod == null) return;
+            publishPluginEpisodeContext();
+        } catch (Throwable ignored) {
+            // 插件上下文是可选增强：任何异常都不许影响详情页回归。
+        }
     }
 
     private void showTmdbMatchDialog(List<TmdbItem> items) {
@@ -11459,6 +11500,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     @Override
     protected void onResume() {
         super.onResume();
+        // PluginEpisodeContext 是全局单槽：播放页发布后本页的快照已被覆盖，而返回本页
+        // 不触发任何重新装载。不在这里认领，用户走过一次「详情页 → 播放页 → 返回详情页」，
+        // 本页的插件 chip 此后永远读不到剧集上下文。
+        republishPluginEpisodeContext();
         refreshSelectionAfterExternalPlayback();
         if (vod != null && binding.loading.getVisibility() != View.VISIBLE) revealDefaultPlaybackLoadingPage();
         scheduleBackdropSlide(BACKDROP_SLIDE_DELAY_MS);

@@ -23,6 +23,9 @@ import com.fongmi.android.tv.player.MediaBadgeCatalog;
 import com.fongmi.android.tv.player.PlaybackMemoryMonitor;
 import com.fongmi.android.tv.player.PlaybackSystemConditionMonitor;
 import com.fongmi.android.tv.player.mpv.PlaybackRecoveryMonitor;
+import com.fongmi.android.tv.plugin.PluginBootstrap;
+import com.fongmi.android.tv.plugin.PluginController;
+import com.fongmi.android.tv.plugin.PluginHostEvents;
 import com.fongmi.android.tv.remote.RemoteAgent;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -145,6 +148,8 @@ public class App extends Application implements Application.ActivityLifecycleCal
         warmDeviceIdentity();
         warmSubtitleProviders();
         warmMediaBadgePatterns();
+        // 插件装载会读盘并初始化脚本引擎（阻塞），必须离开主线程；失败也已在本层吞掉。
+        Task.execute(PluginBootstrap::installAndReloadQuietly);
         post(() -> CacheScheduler.get().start(), 30_000L);
     }
 
@@ -344,19 +349,25 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     public void onActivityResumed(@NonNull Activity activity) {
         if (activity != activity()) this.activity = activity;
+        PluginHostEvents.appForeground();
+        PluginController.safeOnResumed(activity);
     }
 
     @Override
     public void onActivityPaused(@NonNull Activity activity) {
         if (activity == activity()) this.activity = null;
+        PluginHostEvents.appBackground();
     }
 
     @Override
     public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {
+        PluginHostEvents.activityCreated(activity);
     }
 
     @Override
     public void onActivityDestroyed(@NonNull Activity activity) {
+        PluginHostEvents.activityDestroyed(activity);
+        PluginController.safeOnDestroyed(activity);
     }
 
     @Override

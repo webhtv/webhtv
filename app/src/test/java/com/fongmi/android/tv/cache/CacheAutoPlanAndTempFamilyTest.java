@@ -101,6 +101,10 @@ public class CacheAutoPlanAndTempFamilyTest {
         assertFalse(family.matches("mpv-playback-recovery.result"));
         assertFalse("a rotated diagnostic segment is not a temporary file",
                 family.matches("webhtv-debug-log.txt.1"));
+        assertFalse("the plugin audit trail is owned by its own module, not by temp files",
+                family.matches(com.fongmi.android.tv.plugin.PluginAuditStore.FILE_NAME));
+        assertFalse("the rotated audit segment belongs to the same owner",
+                family.matches(com.fongmi.android.tv.plugin.PluginAuditStore.FILE_NAME + ".1"));
         assertFalse(family.matches("unrelated.bin"));
         assertFalse(family.matches("notes.txt"));
         assertFalse(family.matches(null));
