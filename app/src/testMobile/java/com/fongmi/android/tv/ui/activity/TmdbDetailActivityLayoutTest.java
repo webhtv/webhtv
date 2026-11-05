@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -3714,6 +3716,48 @@ public class TmdbDetailActivityLayoutTest {
                 enter.contains("inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;"));
         assertTrue("leaving detail fullscreen must drop the manual orientation override",
                 exit.contains("inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;"));
+    }
+
+    /**
+     * 芯片内边距曾经写成裸像素 {@code setPadding(24, 12, 24, 12)}：
+     * 密度 2x 的机器上等于 12dp 看着正常，3x 的机器上只剩 8dp，文字就贴到描边上
+     * （用户反馈「按钮边框包不住文本」，且只在部分设备复现）。
+     * 这条用例把「按 dp 换算」和「取值与 shape_video_item 对齐」两件事一起钉死。
+     */
+    @Test
+    public void metaChipPaddingIsDensityIndependentAndMatchesTheVideoItemShape() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String create = javaBlockAt(source, "private MaterialButton createChipButton(String text)");
+        String padding = javaBlockAt(source, "private void applyChipPadding(MaterialButton button)");
+        String focus = javaBlockAt(source, "private void applyChipFocus(MaterialButton button, boolean selected, boolean focused, ThemeColors colors)");
+        String shape = readMainRes("drawable", "shape_video_item.xml");
+
+        int horizontal = dpConstant(source, "CHIP_PADDING_H_DP");
+        int vertical = dpConstant(source, "CHIP_PADDING_V_DP");
+        assertTrue("chip padding constants must exist and be positive dp values", horizontal > 0 && vertical > 0);
+        assertEquals("chip horizontal padding must stay equal to shape_video_item's chip padding",
+                shapeDp(shape, "android:left"), horizontal);
+        assertEquals("chip vertical padding must stay equal to shape_video_item's chip padding",
+                shapeDp(shape, "android:top"), vertical);
+
+        assertTrue("the chip must take its padding from the dp helper instead of a raw pixel literal",
+                create.contains("applyChipPadding(button);")
+                        && !create.contains("setPadding(24, 12, 24, 12)"));
+        assertTrue("the dp helper must convert through ResUtil.dp2px so every density renders the same padding",
+                padding.contains("ResUtil.dp2px(CHIP_PADDING_H_DP)")
+                        && padding.contains("ResUtil.dp2px(CHIP_PADDING_V_DP)"));
+        assertFalse("Material stroke/tint updates only touch the MaterialShapeDrawable, so focus restyling must not re-apply view padding",
+                focus.contains("applyChipPadding(button);"));
+    }
+
+    private static int dpConstant(String source, String name) {
+        Matcher matcher = Pattern.compile("static final int " + name + " = (\\d+);").matcher(source);
+        return matcher.find() ? Integer.parseInt(matcher.group(1)) : -1;
+    }
+
+    private static int shapeDp(String shape, String attribute) {
+        Matcher matcher = Pattern.compile(attribute + "=\"(\\d+)dp\"").matcher(shape);
+        return matcher.find() ? Integer.parseInt(matcher.group(1)) : -1;
     }
 
     private static Path findMainJavaPath() {
