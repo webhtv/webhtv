@@ -419,6 +419,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean defaultPlaybackLaunchPending;
     private boolean inlineFullscreen;
     private boolean inlineShortDramaMode;
+    /**
+     * 用户在内嵌全屏里显式选过的方向（旋转按钮）。非 {@code UNSPECIFIED} 表示用户已表态：
+     * 视频形态变化触发的自动方向重设不得再覆盖它，否则一次点击会被紧随其后的
+     * VideoSize/STATE_READY 回调改回原方向，表现成「按两次才生效」。
+     * 与 {@code VideoActivity.manualRotate} 同一语义。进/出内嵌全屏时清空，重建自动基线。
+     */
+    private int inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
     private boolean inlinePauseInfo;
     private boolean inlinePlaybackReconnectPending;
     private boolean savingTmdbPhoto;
@@ -770,6 +777,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         vod = null;
         matchedTmdbItem = null;
         matchedTmdbDetail = null;
+        // 换源/换片会在同一个 Activity 里清空身份：不跟着撤回，插件在这段空窗里点开会读到上一部剧。
+        try {
+            com.fongmi.android.tv.plugin.PluginEpisodeContext.clear(getClass().getSimpleName());
+        } catch (Throwable ignored) {
+        }
         cachedEpisodeInfo = null;
         cachedEpisodeInfoItem = null;
         cachedEpisodeInfoDetail = null;
@@ -3329,6 +3341,42 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         clearSeasonResolutionCache();
         if (selectedFlag != null) loadTmdbSeasonBinding();
         updateTmdbSeasonActionVisibility();
+        publishPluginEpisodeContext();
+    }
+
+    /**
+     * 把当前详情页的剧集身份交给插件通道。
+     *
+     * <p>详情页没有"当前集"概念，{@code episode} 恒为 {@code null}；{@code bundle} 为空时
+     * 载荷随之清空——插件读不到数据，好过让它读到上一部剧的数据。
+     */
+    private void publishPluginEpisodeContext() {
+        try {
+            com.fongmi.android.tv.plugin.PluginEpisodeContext.publish(
+                    getClass().getSimpleName(),
+                    com.fongmi.android.tv.plugin.PluginEpisodePayload.of(matchedTmdbItem, vod, null));
+        } catch (Throwable ignored) {
+            // 插件上下文是可选增强：任何异常都不许影响详情页。
+        }
+    }
+
+    /**
+     * 回到本页时重新认领剧集上下文。
+     *
+     * <p>{@code PluginEpisodeContext} 是全局单槽：播放页发布后本页的快照就被覆盖了，而
+     * 返回本页不会触发任何重新装载。不在这里补发，用户走过一次「详情页 → 播放页 → 返回」
+     * 之后，本页的插件 chip 读到的永远是 {@code null}（名字不匹配即 null）。
+     *
+     * <p>身份已被 {@code resetDetailState()} 清空时直接返回，不发布：{@code publish(name, null)}
+     * 的语义是「清除」，一次没有数据的回归发布会把原本正确的快照擦掉，比不发布更糟。
+     */
+    private void republishPluginEpisodeContext() {
+        try {
+            if (matchedTmdbItem == null && vod == null) return;
+            publishPluginEpisodeContext();
+        } catch (Throwable ignored) {
+            // 插件上下文是可选增强：任何异常都不许影响详情页回归。
+        }
     }
 
     private void showTmdbMatchDialog(List<TmdbItem> items) {
@@ -10322,6 +10370,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (isLock()) {
             setRequestedOrientation(PlaybackOrientation.getScreenOrientation(this));
             hideInlineGestureOverlays();
+        } else if (inlineManualOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+            // 解锁后回到用户选过的方向，而不是按视频形态重算，否则旋转按钮的效果会被解锁动作抹掉。
+            setRequestedOrientation(inlineManualOrientation);
         } else {
             setInlineFullscreenOrientation();
         }
@@ -10331,7 +10382,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void rotateInlineFullscreen() {
         if (!Util.isMobile() || !inlineFullscreen || isLock()) return;
         touchInlineControls();
-        setRequestedOrientation(ResUtil.isLand(this) ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        // 方向由用户这次点击决定：先记下期望方向，再请求。随后到来的 VideoSize/STATE_READY
+        // 会走 applyInlineShortDramaMode 按视频形态重算方向，没有这个标记就会把刚转过去的方向
+        // 改回原方向，用户看到的就是「第一次点击完全没反应，第二次才转」。
+        inlineManualOrientation = ResUtil.isLand(this) ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+        setRequestedOrientation(inlineManualOrientation);
         scheduleMobileInlineSideControlMarginUpdate();
     }
 
@@ -10340,6 +10395,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inlineFullscreen = true;
         updateDetailThemeButtonVisibility();
         requestedOrientation = getRequestedOrientation();
+        // 每次进全屏都重建自动方向基线，手动旋转的覆盖到此为止。
+        inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         // playerPanel 已提升到 root 层，全屏只需铺满整个 root，不做 reparent（避免 SurfaceView 销毁重建导致黑屏）。
         applyInlinePlayerFullscreenLayout();
         binding.playerPanel.setTranslationY(0f);
@@ -10410,6 +10467,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void setInlineFullscreenOrientation() {
         if (!inlineFullscreen) return;
+        if (inlineManualOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) return;
         int orientation = getInlineFullscreenOrientation();
         if (getRequestedOrientation() != orientation) setRequestedOrientation(orientation);
     }
@@ -10660,6 +10718,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setRequestedOrientation(requestedOrientation);
         focusInlinePlayerPanel();
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+        inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         updateDetailThemeButtonVisibility();
     }
 
@@ -11505,6 +11564,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     @Override
     protected void onResume() {
         super.onResume();
+        // PluginEpisodeContext 是全局单槽：播放页发布后本页的快照已被覆盖，而返回本页
+        // 不触发任何重新装载。不在这里认领，用户走过一次「详情页 → 播放页 → 返回详情页」，
+        // 本页的插件 chip 此后永远读不到剧集上下文。
+        republishPluginEpisodeContext();
         refreshSelectionAfterExternalPlayback();
         if (vod != null && binding.loading.getVisibility() != View.VISIBLE) revealDefaultPlaybackLoadingPage();
         scheduleBackdropSlide(BACKDROP_SLIDE_DELAY_MS);

@@ -7,6 +7,8 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class HlsPlaylistRewriterTest {
@@ -211,6 +213,88 @@ public class HlsPlaylistRewriterTest {
         assertTrue(result.variants().isEmpty());
         assertTrue(result.segments().isEmpty());
         assertTrue(result.mediaUnits().isEmpty());
+    }
+
+    @Test
+    public void stripsEncryptionKeyAndNumbersSegmentsFromMediaSequence() {
+        String playlist = """
+                #EXTM3U
+                #EXT-X-VERSION:3
+                #EXT-X-TARGETDURATION:6
+                #EXT-X-MEDIA-SEQUENCE:5
+                #EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+                #EXTINF:4.5,
+                first.ts
+                #EXTINF:6,
+                second.ts
+                #EXT-X-ENDLIST
+                """;
+        List<Mapping> mappings = new ArrayList<>();
+
+        HlsPlaylistRewriter.Result result = HlsPlaylistRewriter.rewrite(playlist, null, (uri, cacheable, context) -> {
+            mappings.add(new Mapping(uri, cacheable, context));
+            return new HlsPlaylistRewriter.MappedUri("source:" + uri, "proxy:" + uri);
+        }, true);
+
+        assertFalse(result.text().contains("#EXT-X-KEY"));
+        assertTrue(result.text().contains("#EXT-X-MEDIA-SEQUENCE:5"));
+        assertEquals(2, result.segments().size());
+        HlsPlaylistRewriter.UriContext first = mappings.stream()
+                .filter(m -> m.context().role() == HlsPlaylistRewriter.UriRole.MEDIA_SEGMENT)
+                .findFirst().orElseThrow().context();
+        assertEquals(5, first.mediaSequence());
+    }
+
+    @Test
+    public void keepsEncryptionKeyRewrittenWhenNotStripping() {
+        String playlist = """
+                #EXTM3U
+                #EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+                #EXTINF:4.5,
+                first.ts
+                #EXT-X-ENDLIST
+                """;
+        List<Mapping> mappings = new ArrayList<>();
+
+        HlsPlaylistRewriter.Result result = rewrite(playlist, null, mappings);
+
+        assertTrue(result.text().contains("#EXT-X-KEY"));
+        assertTrue(result.text().contains("URI=\"proxy:key.bin\""));
+    }
+
+    @Test
+    public void findsAes128KeyAndKeepsCommaInsideQuotedUri() {
+        String playlist = """
+                #EXTM3U
+                #EXT-X-KEY:METHOD=AES-128,URI="data:text/plain;base64,c2VjcmV0",IV=0x000102030405060708090a0b0c0d0e0f
+                #EXTINF:4.5,
+                first.ts
+                """;
+
+        HlsPlaylistRewriter.EncryptionKey key = HlsPlaylistRewriter.findAes128Key(playlist);
+
+        assertNotNull(key);
+        assertEquals("AES-128", key.method());
+        assertEquals("data:text/plain;base64,c2VjcmV0", key.uri());
+        assertNotNull(key.explicitIv());
+        assertEquals(16, key.explicitIv().length);
+        assertEquals(0, key.explicitIv()[0]);
+        assertEquals(0x0f, key.explicitIv()[15]);
+    }
+
+    @Test
+    public void ignoresSampleAesAndKeylessPlaylists() {
+        assertNull(HlsPlaylistRewriter.findAes128Key("""
+                #EXTM3U
+                #EXT-X-KEY:METHOD=SAMPLE-AES,URI="key.bin"
+                #EXTINF:4.5,
+                first.ts
+                """));
+        assertNull(HlsPlaylistRewriter.findAes128Key("""
+                #EXTM3U
+                #EXTINF:4.5,
+                first.ts
+                """));
     }
 
     private static HlsPlaylistRewriter.Result rewrite(String playlist, HlsPlaylistRewriter.Variant inherited, List<Mapping> mappings) {

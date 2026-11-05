@@ -2505,6 +2505,8 @@ private boolean runtimeSourceOnly;
         beginPlayHealth();
         prepareFastTmdbPlaybackHistory(item, flag, episode);
         SpiderDebug.log("video-flow", "fast tmdb playback start cost=%dms key=%s flag=%s episode=%s url=%s", System.currentTimeMillis() - start, getKey(), flag.getFlag(), episode.getName(), episode.getUrl());
+        // 快播路径不经过 getPlayer：不在这里补发，插件第一次点击就会读到上一集的上下文。
+        publishPluginEpisodeContext(episode);
         beginPlayerContentRequest(getKey(), flag.getFlag(), episode.getUrl());
         mPlaybackFlagKey = playbackFlagKey(flag);
         mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), applyHistoryPlayerKernel());
@@ -3329,6 +3331,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void getPlayer(Flag flag, Episode episode) {
+        publishPluginEpisodeContext(episode);
         mBinding.widget.title.setText(getPlaybackControlTitle(episode));
         playerStartTime = System.currentTimeMillis();
         beginPlayHealth();
@@ -3348,6 +3351,49 @@ private boolean runtimeSourceOnly;
         mBinding.widget.title.setSelected(true);
         updateHistory(episode);
         showProgress();
+    }
+
+    /**
+     * 把当前集的剧集身份交给插件通道。
+     *
+     * <p>挂在起播的唯一收口而不是各个点击处：初次进入、点集、自动连播、切线路与阅读器
+     * 换章最后都汇到这一个方法，只有在这里注入才不会有某条路径漏发。上下文是可选增强，
+     * 任何异常都不许影响播放，所以整段吞掉。
+     */
+    private void publishPluginEpisodeContext(Episode episode) {
+        try {
+            com.fongmi.android.tv.bean.TmdbItem item = getMatchedTmdbItem();
+            if (item == null) item = getTmdbItem();
+            com.google.gson.JsonObject context = com.fongmi.android.tv.plugin.PluginEpisodePayload.of(item, mVod, episode);
+            com.fongmi.android.tv.plugin.PluginEpisodeContext.publish(getClass().getSimpleName(), context);
+            // episode.changed 与上下文槽共用同一个 of() 结果：插件若从事件读到 A、点击时从槽里读到 B，
+            // 表现就是"评论串台"，而这类错在日志里没有任何痕迹。这里传的是 JsonObject，
+            // 序列化发生在 helper 内部的 hasSubscribers 短路之后，因此无订阅者时这一行确实零行为。
+            com.fongmi.android.tv.plugin.PluginHostEvents.episodeChanged(this, context);
+        } catch (Throwable ignored) {
+            // 插件上下文是可选增强：拿不到就当没有，绝不影响播放。
+        }
+    }
+
+    /**
+     * 回到本页时重新认领剧集上下文。
+     *
+     * <p>{@code PluginEpisodeContext} 是全局单槽：播放页发布后本页的快照就被覆盖了，而
+     * 返回本页不会触发任何起播路径。不在这里补发，用户走过一次「本页 → 别的页 → 返回」
+     * 之后，插件 chip 读到的永远是 {@code null}（名字不匹配即 null）——这是永久缺口，
+     * 不是一次竞态。
+     *
+     * <p>拿不到当前集时直接返回，不发布：{@code publish(name, null)} 的语义是「清除」，
+     * 一次没有数据的回归发布会把原本正确的快照擦掉，比不发布更糟。
+     */
+    private void republishPluginEpisodeContext() {
+        try {
+            Episode episode = getEpisode();
+            if (episode == null) return;
+            publishPluginEpisodeContext(episode);
+        } catch (Throwable ignored) {
+            // 插件上下文是可选增强：任何异常都不许影响播放页回归。
+        }
     }
 
     private void setPlayer(Result result) {
@@ -9313,6 +9359,7 @@ private boolean runtimeSourceOnly;
     @Override
     protected void onStart() {
         super.onStart();
+        republishPluginEpisodeContext();
         mClock.stop().start();
         mPlayerUi.onStart();
         if (service() != null) refreshLyrics();

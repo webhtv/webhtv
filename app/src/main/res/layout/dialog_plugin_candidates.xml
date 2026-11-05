@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  远程插件包的选择面板：发现数量 + 来源主机 + 全选开关 + 可滚动的候选行。
+
+  高度写死而不是 wrap_content：RecyclerView 在弹窗里没有可参考的父高度，wrap_content 会把
+  所有行一次铺开，几十个候选的包会把对话框顶出屏幕；给一个固定的可滚动窗口，遥控器能一直往下走。
+-->
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="20dp">
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/candidateCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="17sp"
+        tools:text="发现 3 个插件" />
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/candidateSource"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="13sp"
+        tools:text="来源：github.com" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/selectAll"
+        style="@style/Widget.Material3.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:focusable="true"
+        android:text="@string/plugin_manager_remote_select_none" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/candidateList"
+        android:layout_width="match_parent"
+        android:layout_height="260dp"
+        android:layout_marginTop="4dp"
+        android:clipToPadding="false"
+        android:focusable="false"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp" />
+</androidx.appcompat.widget.LinearLayoutCompat>
