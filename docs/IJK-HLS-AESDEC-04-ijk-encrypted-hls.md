@@ -91,3 +91,43 @@ IJK 拿到 playlist 后未请求任何分片即判定失败。
 ## 回滚
 
 单一提交，`git revert` 即可；无二进制、无配置迁移。
+
+## 2026-11-05 二审：合入 `origin/beta ddf6454cbc` 后复评与修正
+
+### 本轮范围
+
+- 合并 `origin/beta`（`ddf6454cbc`，含 `2b6644a98a` `fix(exo): let the platform keep EXCEEDS-capability video tracks`
+  与 `ecc0a7154d` 文档同步）到 `dev2`，无冲突（4 个文件）。
+- 复评对象：本任务 4 个本地未推送提交（`ee7396e0ec`、`7ba8533c8e`、`5eb7872c7b`、`d8ca528dc2`）
+  与 beta 侧的 `ExoUtil` / `CompatFfmpegVideoRendererSourceTest` 改动。
+
+### 二审发现并修正的缺陷（本轮唯一代码缺陷）
+
+**密钥作用域错误**：原实现在 `MpvHlsProxy` 用 `Map<Integer, EncryptionKey> sessionKeys`
+按 *session* 存密钥。分片 target 注册时读的是 `sessionKeys.get(session)`，于是：
+
+1. 同一 session 内在加密 playlist 之后重写的**非加密** playlist，其分片 target 会继承上一条
+   playlist 的密钥 → 对明文 TS 走解密（长度非 16 倍数必然失败）→ 返回 500；
+2. 主 playlist 下多个变体各自声明不同密钥时，后写的密钥会覆盖前者，先注册的分片用错密钥。
+
+修正：删除 `sessionKeys`，把密钥作为**本次 playlist 的局部值**随 `rewrite` 的 mapper 闭包
+直接传给 `proxyItemUrl(...)`，只挂在 `UriRole.MEDIA_SEGMENT` 的 `Target` 上。
+`HlsPlaylistRewriter` 与 `HlsSegmentDecryptor` 无需改动。
+
+### 验证（`:app:testMobileArm64_v8aDebugUnitTest`）
+
+`HlsPlaylistRewriterTest` 12/12、`HlsSegmentDecryptorTest` 8/8、`MpvHlsAdblockTest` 6/6、
+`CompatFfmpegVideoRendererSourceTest` 3/3、`ExoVideoHardwareDecodeTest` 10/10、
+`ExoAudioCodecSelectorTest` 4/4 —— 43 项，0 失败 0 错误；`:app` 主源码与单测源码均编译通过。
+
+### 已知限制（不构成本轮回归）
+
+- 按 `#EXT-X-BYTERANGE` 分片、`SAMPLE-AES`、以及**逐分片轮换密钥**的 playlist 不进入代理解密，
+  行为与修复前一致（IJK 仍失败并回退 MPV）。前两条是本任务设计时就排除的范围；第三条是
+  `findAes128Key` 只取第一个 AES-128 声明的直接后果，属后续可选增强。
+
+### 回滚
+
+本轮修正为单一提交，`git revert` 即可恢复 `sessionKeys` 版本；合并提交与 beta 侧 ExoUtil 改动
+各自独立可回滚。
+
