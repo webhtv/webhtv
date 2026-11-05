@@ -58,7 +58,6 @@
                 android:singleLine="true"
                 android:inputType="text"
                 android:nextFocusUp="@+id/inputDesc"
-                android:nextFocusDown="@+id/switchAutoExecute"
                 android:imeOptions="actionDone"
                 android:fontFamily="monospace"/>
         </com.google.android.material.textfield.TextInputLayout>

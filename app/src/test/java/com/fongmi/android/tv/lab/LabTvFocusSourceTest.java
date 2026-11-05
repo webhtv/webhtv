@@ -42,8 +42,13 @@ public class LabTvFocusSourceTest {
     @Test
     public void commandEditorReleasesVerticalDpadKeys() throws Exception {
         String editor = stripComments(read("src/main/java/com/fongmi/android/tv/lab/LabCommandEditDialog.java"));
-        assertTrue("all editor inputs need a remote focus escape", editor.contains("releaseVerticalKeys(root, dialog);"));
-        assertTrue(editor.contains("root instanceof EditText"));
+        assertTrue("the dialog must build an explicit focus chain",
+                editor.contains("collectFocusChain(root, chain);"));
+        assertTrue("dialog buttons are the tail of that chain",
+                editor.contains("chain.add(dialog.getButton(AlertDialog.BUTTON_POSITIVE));"));
+        assertTrue(editor.contains("releaseVerticalKeys(chain);"));
+        assertTrue("the first chain entry owns the initial focus",
+                editor.contains("chain.get(0).requestFocus();"));
         assertTrue(editor.contains("KeyEvent.KEYCODE_DPAD_DOWN"));
         assertTrue(editor.contains("KeyEvent.KEYCODE_DPAD_UP"));
         // 实测（emulator-5560，mInTouchMode=true）：遥控器按键同样走触摸模式，
@@ -51,26 +56,31 @@ public class LabTvFocusSourceTest {
         assertFalse("touch mode must not disable the vertical-key escape",
                 editor.contains("isInTouchMode()"));
         assertTrue("autocomplete popup must keep native arrow selection", editor.contains("isPopupShowing()"));
-        assertTrue(editor.contains("v.focusSearch(direction)"));
-        assertTrue(editor.contains("next.requestFocus(direction)"));
-        assertTrue("downward escape must reach Save", editor.contains("AlertDialog.BUTTON_POSITIVE"));
-        assertTrue("upward escape must reach Cancel", editor.contains("AlertDialog.BUTTON_NEGATIVE"));
-        assertTrue("the dialog must anchor the initial focus on the first input",
-                editor.contains("inputTitle.requestFocus();"));
+        // 实测：按几何位置 focusSearch 会在「删除」按钮与最后一行参数之间来回弹跳，
+        // 上方参数行被跳过；链式索引移动才是确定的。
+        assertFalse("geometric focus search must not drive the editor chain",
+                editor.contains("v.focusSearch("));
+        assertTrue("an unfocusable field must not occupy a chain slot",
+                editor.contains("view.isFocusable()"));
+        assertTrue("a hidden row must not occupy a chain slot",
+                editor.contains("getVisibility() != View.VISIBLE"));
+    }
 
+    /**
+     * 编辑弹窗的可滚动内容不能靠 nextFocus* 硬连到底部。
+     *
+     * <p>实测（emulator-5560）：把命令框的 DOWN 钉到「自动运行」开关后，带变量的命令区
+     * 整段被跳过，参数行按 DOWN 永远进不去。
+     */
+    @Test
+    public void commandEditorDoesNotJumpOverTheParameterRows() throws Exception {
         String layout = stripComments(read("src/main/res/layout/dialog_add_command.xml"));
-        assertTrue("title must hand focus down to description",
+        assertTrue("title hands focus down to description",
                 layout.contains("android:nextFocusDown=\"@+id/inputDesc\""));
-        assertTrue("description must lead back up to title",
-                layout.contains("android:nextFocusUp=\"@+id/inputTitle\""));
-        assertTrue("description must hand focus down to command",
+        assertTrue("description hands focus down to the command field",
                 layout.contains("android:nextFocusDown=\"@+id/inputCommand\""));
-        assertTrue("command must lead back up to description",
-                layout.contains("android:nextFocusUp=\"@+id/inputDesc\""));
-        assertTrue("command must hand focus down to the auto-run switch",
+        assertFalse("the command field must not jump straight past the parameter rows",
                 layout.contains("android:nextFocusDown=\"@+id/switchAutoExecute\""));
-        // 实测（emulator-5560，带变量的命令）：命令框会被 setFocusable(false)，
-        // 此时给开关硬连 nextFocusUp=命令框会让 UP 落空、焦点直接消失；交给几何就近回退。
         assertFalse("the switch must not pin UP to a possibly unfocusable command field",
                 layout.contains("android:nextFocusUp=\"@+id/inputCommand\""));
     }
