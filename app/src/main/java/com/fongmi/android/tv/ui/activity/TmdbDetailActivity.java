@@ -419,6 +419,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean defaultPlaybackLaunchPending;
     private boolean inlineFullscreen;
     private boolean inlineShortDramaMode;
+    /**
+     * 用户在内嵌全屏里显式选过的方向（旋转按钮）。非 {@code UNSPECIFIED} 表示用户已表态：
+     * 视频形态变化触发的自动方向重设不得再覆盖它，否则一次点击会被紧随其后的
+     * VideoSize/STATE_READY 回调改回原方向，表现成「按两次才生效」。
+     * 与 {@code VideoActivity.manualRotate} 同一语义。进/出内嵌全屏时清空，重建自动基线。
+     */
+    private int inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
     private boolean inlinePauseInfo;
     private boolean inlinePlaybackReconnectPending;
     private boolean savingTmdbPhoto;
@@ -10349,6 +10356,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (isLock()) {
             setRequestedOrientation(PlaybackOrientation.getScreenOrientation(this));
             hideInlineGestureOverlays();
+        } else if (inlineManualOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+            // 解锁后回到用户选过的方向，而不是按视频形态重算，否则旋转按钮的效果会被解锁动作抹掉。
+            setRequestedOrientation(inlineManualOrientation);
         } else {
             setInlineFullscreenOrientation();
         }
@@ -10358,7 +10368,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void rotateInlineFullscreen() {
         if (!Util.isMobile() || !inlineFullscreen || isLock()) return;
         touchInlineControls();
-        setRequestedOrientation(ResUtil.isLand(this) ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        // 方向由用户这次点击决定：先记下期望方向，再请求。随后到来的 VideoSize/STATE_READY
+        // 会走 applyInlineShortDramaMode 按视频形态重算方向，没有这个标记就会把刚转过去的方向
+        // 改回原方向，用户看到的就是「第一次点击完全没反应，第二次才转」。
+        inlineManualOrientation = ResUtil.isLand(this) ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+        setRequestedOrientation(inlineManualOrientation);
         scheduleMobileInlineSideControlMarginUpdate();
     }
 
@@ -10367,6 +10381,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inlineFullscreen = true;
         updateDetailThemeButtonVisibility();
         requestedOrientation = getRequestedOrientation();
+        // 每次进全屏都重建自动方向基线，手动旋转的覆盖到此为止。
+        inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         // playerPanel 已提升到 root 层，全屏只需铺满整个 root，不做 reparent（避免 SurfaceView 销毁重建导致黑屏）。
         applyInlinePlayerFullscreenLayout();
         binding.playerPanel.setTranslationY(0f);
@@ -10437,6 +10453,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void setInlineFullscreenOrientation() {
         if (!inlineFullscreen) return;
+        if (inlineManualOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) return;
         int orientation = getInlineFullscreenOrientation();
         if (getRequestedOrientation() != orientation) setRequestedOrientation(orientation);
     }
@@ -10655,6 +10672,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setRequestedOrientation(requestedOrientation);
         focusInlinePlayerPanel();
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+        inlineManualOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         updateDetailThemeButtonVisibility();
     }
 
