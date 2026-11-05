@@ -67,3 +67,55 @@
 - 回滚原因：设备的「有声音无画面」不是原提交可绕过的自动软解场景；正确操作是用户手动切换软解。若需要改善硬解无候选的提示文案，应作为独立产品需求评估，不在本任务中改变解码选择。
 - 回滚锚点：本提交的父提交 `4a9f0fd14d04aa5f45c8601d9f77334666b435de`。撤销本回滚即可恢复该提交行为。
 - 2026-10-12：`C65` 按用户明确批准修订本合同；上述回滚提交与锚点保持原样，仅合同口径更新。
+
+## 2026-11-04 追加：硬解 + 兜底开时改由让轨渲染器接管（`E-SP9-ffmpeg-yield-to-platform`）
+
+### 现场证据
+
+- 同一网络环境、同一批短剧源，`红果.py` 的 1080p 及以下分辨率几乎全部卡顿；影视＋、biecuile、avbox 同片流畅。属播放器侧差异，不是网络问题。
+- 用户实测：设置 → 播放 → 播放性能 → 关闭「解码器兜底」即流畅，其余项未动。
+- 另一例：Exo 兜底开启时画面卡、声音正常；日志显示卡顿时走 FFmpeg 软解；把 PY 里的 HEVC 等级从 L186 改成 L150 后，保留兜底也能用华为硬解流畅播放。
+- 结论：兜底开启时 FFmpeg 视频渲染器抢走了本可由 MediaCodec 硬解的视频轨。
+
+### 根因
+
+`ExoUtil.buildVideoRenderers` 在硬解 + 「解码器兜底」开（`EXTENSION_RENDERER_MODE_ON`）时追加的是
+`FfmpegVideoRenderer`。该类 `supportsFormat` 对任何它能解码的 mime 无条件返回 `FORMAT_HANDLED`，
+按 Media3 的渲染器打分顺序（`FORMAT_HANDLED` > `FORMAT_EXCEEDS_CAPABILITIES`）压过 MediaCodec 渲染器对
+`hvc1.*.L186` 这类超出设备声明等级的 HEVC 给出的 `FORMAT_EXCEEDS_CAPABILITIES`，于是整条视频轨被交给
+FFmpeg 软解：声音正常、画面卡顿。降低声明等级（PY 改 L150）之所以有效，正是因为它让 MediaCodec 不再
+报 EXCEEDS，从而重新赢回打分。
+
+### 方案
+
+- 只改 `EXTENSION_RENDERER_MODE_ON` 这一个分支：改用仓库内已有的 `CompatFfmpegVideoRenderer(systemDecoderFallbackOnly=true, platformDecoderSelector=videoCodecSelector)`。
+  它「平台对该 mime 有解码器就让轨」，且刻意不做 Format 级判定，因此 L186 场景下 FFmpeg 退场、
+  MediaCodec 硬解接管；平台根本没有该编码解码器（AVS2/AVS3 等）时 FFmpeg 仍然接手，不会重现
+  「整轨被丢弃、只有声音」。
+- 软解（`EXTENSION_RENDERER_MODE_PREFER`）分支保持 `FfmpegVideoRenderer` 不变；MPV 与音频回退不变。
+- 安全网：`PlayerManager.maybeFallbackToSoftDecode` 仍在，若让轨后视频轨确实无可硬解通路，会按修订后的
+  `C65` 合同显式切软解并写入 `switch-decode-auto` 轨迹。
+
+### 与 2026-09-20 回滚的区别
+
+那次是从「硬解不注册任何 FFmpeg」改成「无条件由 FFmpeg 接管出帧」，与人工切换合同冲突；
+本次不改变解码模式判定，只把**最后一级视频回退**从「抢轨」换成「让轨」，解码模式仍由 MediaCodec 与
+`C65` 的收窄例外决定。
+
+### 验证
+
+- `CompatFfmpegVideoRendererSourceTest`（3 项，含新增 `hardwareModeWithFallbackAppendsTheYieldingRenderer`）通过；
+  `ExoVideoHardwareDecodeTest`、`ExoAudioCodecSelectorTest` 通过，0 失败。
+- 回滚锚点：`bb8fceda8ddebc829389307368d18c9876c9665d`。
+
+### 断言口径变更（2026-11-04）
+
+- 测试方法 `hardwareModeKeepsFfmpegAsTheLastVideoRenderer` 改名为 `hardwareModeWithFallbackAppendsTheYieldingRenderer`，
+  断言从「硬解不注册任何 FFmpeg 视频回退（`assertFalse(exoUtil.contains("new CompatFfmpegVideoRenderer("))`）」
+  改为「`MODE_ON` 分支追加 `new CompatFfmpegVideoRenderer(...)` 且带上与 MediaCodec 渲染器同一个
+  `videoCodecSelector`，`MODE_PREFER` 分支保持 `FfmpegVideoRenderer`」。
+- 本条同步修订 [C-AVS3-video-decoding.md](C-AVS3-video-decoding.md) 顶部解码合同里引用该断言的表述：
+  硬解不再是无条件不注册任何 FFmpeg 视频回退，而是「兜底开时追加会让轨的 Compat 视频回退」；
+  「不让轨给软件解码器」由 `CompatFfmpegVideoRenderer.platformHandlesMimeType` 只问 mime、不问 Format 保证。
+- 复评记录：定向测试 `CompatFfmpegVideoRendererSourceTest` 3 + `ExoVideoHardwareDecodeTest` 10 +
+  `ExoAudioCodecSelectorTest` 4 = 17 项，0 失败，0 错误（`:app:testMobileArm64_v8aDebugUnitTest`）。

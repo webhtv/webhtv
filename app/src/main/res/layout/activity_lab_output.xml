@@ -42,6 +42,19 @@
             android:textSize="13sp"
             android:textColor="?attr/colorOnSurface"
             android:gravity="center"
+            android:id="@+id/btnClear"
+            android:background="@drawable/shape_lab_click_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:text="清除"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:layout_marginStart="8dp" />
+
+        <TextView
+            android:textSize="13sp"
+            android:textColor="?attr/colorOnSurface"
+            android:gravity="center"
             android:id="@+id/btnStop"
             android:background="@drawable/shape_lab_stop_btn"
             android:visibility="gone"

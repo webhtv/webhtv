@@ -149,6 +149,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         super(Looper.getMainLooper());
         this.decode = decode;
         ijk = new IjkMediaPlayer();
+        ijk.setLogEnabled(SpiderDebug.isEnabled());
         ijk.setListener(this);
         ijk.setOnNativeInvokeListener(this::onNativeInvoke);
         hlsProxy = new MpvHlsProxy(PlayerSetting.IJK);
@@ -579,6 +580,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
             updateCurrentCues(position());
         }
         requestPreload(Math.max(0, position()));
+        rebindVideoOutput("prepared");
         if (playWhenReady) ijk.start();
         invalidateState();
         startStateRefresh();
@@ -807,6 +809,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
             ijk.setLooping(repeatOne);
             ijk.setSpeed(playbackParameters.speed);
             ijk.prepareAsync();
+            rebindVideoOutput("prepare");
             invalidateState();
             startStateRefresh();
         } catch (Throwable e) {
@@ -978,21 +981,40 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         ownsSurface = false;
     }
 
-    private void bindVideoOutput() {
+    private boolean bindVideoOutput() {
         try {
             if (surfaceHolder != null) {
                 surface = surfaceHolder.getSurface();
                 if (surface != null && surface.isValid()) {
                     ijk.setDisplay(surfaceHolder);
+                    return true;
                 }
             } else if (surface != null && surface.isValid()) {
                 ijk.setSurface(surface);
+                return true;
             }
         } catch (Throwable e) {
             SpiderDebug.log("ijk",
                     "bind surface failed errorType=%s action=keep-current",
                     e.getClass().getSimpleName());
         }
+        return false;
+    }
+
+    /**
+     * Re-issues the current surface once the native video output exists. {@link #openCurrent()} binds
+     * before {@code setDataSource}, while the native renderer is created during prepare; without a
+     * second bind a valid surface can stay unregistered, and the renderer then emits zero frames
+     * while decoding and audio continue normally (sound with no picture).
+     */
+    private void rebindVideoOutput(String reason) {
+        boolean hasHolder = surfaceHolder != null;
+        boolean hasSurface = surface != null && surface.isValid();
+        if (!hasHolder && !hasSurface) return;
+        String action = bindVideoOutput() ? "rebound" : "none";
+        SpiderDebug.log("ijk",
+                "surface rebind reason=%s holder=%s valid=%s action=%s",
+                reason, hasHolder, hasSurface, action);
     }
 
     private void clearVideoOutput() {

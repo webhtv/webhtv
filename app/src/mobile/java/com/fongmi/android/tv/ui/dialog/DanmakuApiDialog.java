@@ -34,7 +34,9 @@ public class DanmakuApiDialog extends BaseAlertDialog {
     @Override
     protected void initView() {
         String text;
-        binding.text.setText(text = DanmakuSetting.getEffectiveApiUrl());
+        // 只回填真实配置过的地址：用 getEffectiveApiUrl() 会把本地包运行时算出来的回环地址
+        // 显示在输入框里，用户不改直接确定就把它固化进 prefs。
+        binding.text.setText(text = DanmakuSetting.getConfiguredApiUrl());
         binding.text.setSelection(TextUtils.isEmpty(text) ? 0 : text.length());
     }
 
