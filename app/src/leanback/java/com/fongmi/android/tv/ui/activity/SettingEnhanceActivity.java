@@ -17,6 +17,7 @@ import com.fongmi.android.tv.bean.ShortDramaConfig;
 import com.fongmi.android.tv.gitcloud.GitCloudAccountStore;
 import com.fongmi.android.tv.lab.LabActivity;
 import com.fongmi.android.tv.playback.ViewingRecordSyncStore;
+import com.fongmi.android.tv.plugin.PluginSourceConfig;
 import com.fongmi.android.tv.remote.RemoteStore;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.databinding.ActivitySettingEnhanceBinding;
@@ -24,6 +25,7 @@ import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.setting.SiteNameStore;
+import com.fongmi.android.tv.ui.activity.PluginManagerActivity;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.AudioSourceDialog;
 import com.fongmi.android.tv.ui.dialog.ShortDramaSourceDialog;
@@ -106,6 +108,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         }));
         mBinding.loginState.setOnClickListener(view -> LoginStateLearnDialog.show(this, this::setText));
         mBinding.oneKeySync.setOnClickListener(v -> OneKeySyncDialog.create().show(this));
+        mBinding.pluginManager.setOnClickListener(view -> PluginManagerActivity.start(this));
     }
 
     private void reorderItems() {
@@ -131,7 +134,8 @@ public class SettingEnhanceActivity extends BaseActivity {
                 mBinding.shortDramaSource,
                 mBinding.siteHealthSort,
                 mBinding.debugLog,
-                mBinding.playbackWebhook
+                mBinding.playbackWebhook,
+                mBinding.pluginManager
         };
         for (View view : order) parent.removeView(view);
         for (View view : order) parent.addView(view);
@@ -157,6 +161,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         safeSet("managePage", mBinding.managePageText, () -> getString(R.string.manage_page_web));
         safeSet("remoteTrust", mBinding.remoteTrustText, () -> RemoteStore.summary(this));
         safeSet("gitCloud", mBinding.gitCloudText, () -> getString(R.string.git_cloud_account_count, GitCloudAccountStore.list().size()));
+        safeSet("pluginManager", mBinding.pluginManagerText, () -> getString(R.string.plugin_manager_entry_count, PluginSourceConfig.get().entries().size()));
         setShellProxyText();
         setCustomCspText();
         safeSet("loginState", mBinding.loginStateText, () -> {

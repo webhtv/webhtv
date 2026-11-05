@@ -9,6 +9,8 @@ import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.api.parser.EpgParser;
 import com.fongmi.android.tv.player.exo.MediaSourceFactory;
 import com.fongmi.android.tv.player.karaoke.KaraokeTrackRepository;
+import com.fongmi.android.tv.plugin.PluginAuditLog;
+import com.fongmi.android.tv.plugin.PluginHttpCache;
 import com.fongmi.android.tv.player.lyrics.LyricsRepository;
 import com.fongmi.android.tv.server.process.ApkUrlPush;
 import com.fongmi.android.tv.service.PlaybackService;
@@ -370,6 +372,8 @@ public final class CacheCleanupManager {
             case TEMP_FILES -> clearTemporaryFiles(cache, explicitRetention(mode, TEMP_RETENTION_MS), limit,
                     Updater.isDownloading(), ApkUrlPush.isActive(), System.currentTimeMillis());
             case DIAGNOSTIC_LOGS -> outcome(clearDiagnosticLogs());
+            case PLUGIN_AUDIT -> outcome(clearPluginAudit());
+            case PLUGIN_HTTP_CACHE -> clearTree(new File(cache, PluginHttpCache.DIRECTORY));
             case LEGACY_FILES -> clearLegacyPaths(cache, mode);
             // Owner-managed and deliberately unreported: a cleanup must not guess at caches whose
             // owner is unknown, so this module is only ever measured. The full sweep is the one
@@ -439,6 +443,22 @@ public final class CacheCleanupManager {
     private static boolean clearDiagnosticLogs() {
         try {
             DebugLogStore.clear();
+            return true;
+        } catch (Throwable error) {
+            return false;
+        }
+    }
+
+    /**
+     * Deletes the plugin audit trail through its owner.
+     *
+     * <p>{@code PluginAuditLog.clear()} drops the in-memory ring *and* the file on disk. Deleting
+     * the file directly is not enough: the in-memory copy would be written back by the next
+     * {@code append}, so the records the user just removed would reappear.</p>
+     */
+    private static boolean clearPluginAudit() {
+        try {
+            PluginAuditLog.get().clear();
             return true;
         } catch (Throwable error) {
             return false;

@@ -32,10 +32,21 @@ public final class CachePolicyEngine {
      * run must not remove diagnostic logs (owner-bounded, evidence the user may still need) or
      * unclassified cache (owner unknown). Both remain reachable through their own module row, which
      * is a separate {@link CacheCleanupMode#MODULE} plan and therefore unaffected.</p>
+     *
+     * <p>The plugin audit trail is excluded for the same reason as the diagnostic logs: it is the
+     * only evidence surface for plugin network access, so a tiered run of any level must leave it
+     * to the explicit module row. It is also excluded in
+     * {@link CachePolicyEngine#allowsAutomatic(CacheModuleId)}.</p>
+     *
+     * <p>The plugin HTTP cache is excluded on the same footing: those entries exist only for the TTL
+     * a plugin asked for, and widening the plan to include them would let an unrelated "deep clean"
+     * turn a cached plugin back into a network call the user never asked for.</p>
      */
     private static Set<CacheModuleId> deepModules() {
         EnumSet<CacheModuleId> ids = EnumSet.allOf(CacheModuleId.class);
         ids.remove(CacheModuleId.DIAGNOSTIC_LOGS);
+        ids.remove(CacheModuleId.PLUGIN_AUDIT);
+        ids.remove(CacheModuleId.PLUGIN_HTTP_CACHE);
         ids.remove(CacheModuleId.UNCLASSIFIED);
         return ids;
     }

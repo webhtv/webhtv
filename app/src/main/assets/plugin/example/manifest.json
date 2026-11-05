@@ -1,0 +1,19 @@
+{
+  "protocol": "webhtv-plugin",
+  "version": 1,
+  "id": "example.hello",
+  "name": "示例插件",
+  "sdk": 1,
+  "runtime": { "api": "js", "entry": "assets://plugin/example/hello.js", "timeout": 15 },
+  "params": { "greeting": "${GREETING}", "limit": 20 },
+  "events": ["ui.contentShown"],
+  "ui": [
+    {
+      "slot": "floating",
+      "label": "示例",
+      "action": "hello.show",
+      "event": "ui.contentShown"
+    }
+  ],
+  "permissions": ["plugin.events", "ui.floating"]
+}

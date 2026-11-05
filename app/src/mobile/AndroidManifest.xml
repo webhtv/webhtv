@@ -117,6 +117,11 @@
             android:screenOrientation="fullUser" />
 
         <activity
+            android:name=".ui.activity.PluginManagerActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:screenOrientation="fullUser" />
+
+        <activity
             android:name=".ui.activity.FileActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout"
             android:screenOrientation="fullUser" />

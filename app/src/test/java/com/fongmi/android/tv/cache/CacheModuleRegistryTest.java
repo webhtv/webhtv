@@ -113,6 +113,32 @@ public class CacheModuleRegistryTest {
         return roots;
     }
 
+    /**
+     * The audit module must measure the live file and its rotated segment, and nothing else: a
+     * measurement that also counted unrelated cache-root files would report the wrong size, and one
+     * that missed the rotated segment would under-report the evidence trail after the first rotation.
+     */
+    @Test
+    public void pluginAuditModuleMeasuresOnlyItsOwnFamily() throws Exception {
+        File cache = cacheDir("registry-plugin-audit");
+        String name = com.fongmi.android.tv.plugin.PluginAuditStore.FILE_NAME;
+        Files.writeString(new File(cache, name).toPath(), "1234", java.nio.charset.StandardCharsets.UTF_8);
+        Files.writeString(new File(cache, name + ".1").toPath(), "123456",
+                java.nio.charset.StandardCharsets.UTF_8);
+        Files.writeString(new File(cache, "goProxy.log").toPath(), "12345678",
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        CacheModule audit = CacheModuleRegistry.modules(cache).stream()
+                .filter(module -> module.id() == CacheModuleId.PLUGIN_AUDIT)
+                .findFirst().orElseThrow();
+
+        CacheMeasurement measurement = CacheInventory.measureRoots(CacheModuleId.PLUGIN_AUDIT,
+                audit.roots());
+
+        assertEquals(10, measurement.bytes());
+        assertEquals(2, measurement.fileCount());
+    }
+
     private static CacheModule module(CacheModuleId id, File root) {
         return new CacheModule() {
             @Override
