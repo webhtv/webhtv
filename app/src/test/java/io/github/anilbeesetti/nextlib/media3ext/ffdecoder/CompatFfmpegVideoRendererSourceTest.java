@@ -44,13 +44,15 @@ public class CompatFfmpegVideoRendererSourceTest {
     }
 
     /**
-     * 硬解的优先级仍然是「系统 MediaCodec 先接管」，但 FFmpeg 必须保留为最后一级视频渲染器：
-     * 平台根本没有该编码解码器时（AVS2/AVS3、部分 HEVC profile），旧行为会把整条视频轨判成
-     * 不支持的子类型丢弃、只留声音。FFmpeg 只有在平台没有对应 mime 解码器时才接手，这一点由
-     * 上面两个 ownership 断言锁定，所以保留注册不会让 4K HEVC 回退到软解。
+     * 硬解 + 「解码器兜底」开（MODE_ON）时，追加的视频回退必须是会「让轨」的
+     * {@link CompatFfmpegVideoRenderer}：{@code FfmpegVideoRenderer.supportsFormat} 无条件报
+     * {@code FORMAT_HANDLED}，会盖过 MediaCodec 对超出声明等级的 HEVC（例如 L186）给出的
+     * {@code FORMAT_EXCEEDS_CAPABILITIES}，于是这类视频在兜底开启时被 FFmpeg 软解抢走，
+     * 表现为画面卡顿、声音正常。Compat 版只问平台有没有该 mime 的解码器，有就让轨。
+     * 平台根本没有该编码解码器时（AVS2/AVS3）仍由 FFmpeg 接手，所以不会退化成只有声音。
      */
     @Test
-    public void hardwareModeKeepsFfmpegAsTheLastVideoRenderer() throws Exception {
+    public void hardwareModeWithFallbackAppendsTheYieldingRenderer() throws Exception {
         String exoUtil = readSource(EXO_UTIL_PATH);
         int start = exoUtil.indexOf("private static int getVideoRenderMode(int decode)");
         assertTrue("getVideoRenderMode must exist", start >= 0);
@@ -63,7 +65,12 @@ public class CompatFfmpegVideoRendererSourceTest {
         assertTrue(mode, mode.contains("EXTENSION_RENDERER_MODE_OFF"));
         assertTrue(exoUtil.contains("if (videoRenderMode == EXTENSION_RENDERER_MODE_OFF) return;"));
         assertTrue(exoUtil.contains("buildFfmpegVideoRenderer("));
-        assertFalse(exoUtil.contains("new CompatFfmpegVideoRenderer("));
+        // ON 分支必须换成让轨版本，并带上与 MediaCodec 渲染器同一个 selector；
+        // 其余分支（软解 PREFER）保持原 FfmpegVideoRenderer。
+        assertTrue(exoUtil.contains("videoRenderMode == EXTENSION_RENDERER_MODE_ON"));
+        assertTrue(exoUtil.contains("new CompatFfmpegVideoRenderer("));
+        assertTrue(exoUtil.contains("true, videoCodecSelector"));
+        assertTrue(exoUtil.contains("new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY)"));
     }
 
     private static String readSource() throws Exception {
