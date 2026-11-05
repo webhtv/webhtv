@@ -74,6 +74,7 @@ public final class LabCommandEditDialog {
         AlertDialog dialog = builder.create();
         dialog.setOnShowListener(d -> {
             releaseVerticalKeys(root, dialog);
+            inputTitle.requestFocus();
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String title = inputTitle.getText() == null ? "" : inputTitle.getText().toString().trim();
             String desc = inputDesc.getText() == null ? "" : inputDesc.getText().toString().trim();
@@ -94,18 +95,24 @@ public final class LabCommandEditDialog {
         dialog.show();
     }
 
-    /** Release vertical DPAD navigation so TV users can leave any input and reach dialog buttons. */
+    /**
+     * 让编辑弹窗里的输入框把上下键让给焦点搜索。
+     *
+     * <p>可编辑文本会把上下键当光标键吃掉（单行框里毫无用处），遥控器又没有 TAB，
+     * 于是焦点停在第一个输入框就出不去。触摸模式下 {@code mInTouchMode} 为真时同样要吃键——
+     * 遥控器只是另一个输入设备，不能据此放弃拦截；左/右键保持原生光标行为不动。
+     */
     private static void releaseVerticalKeys(View root, AlertDialog dialog) {
         if (root instanceof EditText) {
             root.setOnKeyListener((v, keyCode, event) -> {
-                if (event.getAction() != KeyEvent.ACTION_DOWN || v.isInTouchMode()) return false;
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN && keyCode != KeyEvent.KEYCODE_DPAD_UP) return false;
                 if (v instanceof AutoCompleteTextView && ((AutoCompleteTextView) v).isPopupShowing()) return false;
                 int direction = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? View.FOCUS_DOWN : View.FOCUS_UP;
                 View next = v.focusSearch(direction);
                 if (next != null && next != v && next.requestFocus(direction)) return true;
                 View button = dialog.getButton(direction == View.FOCUS_DOWN ? AlertDialog.BUTTON_POSITIVE : AlertDialog.BUTTON_NEGATIVE);
-                if (button != null && button.requestFocus()) return true;
+                if (button != null) button.requestFocus();
                 return true;
             });
         }

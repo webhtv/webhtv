@@ -22,6 +22,7 @@
                 android:hint="标题 *"
                 android:singleLine="true"
                 android:inputType="text"
+                android:nextFocusDown="@+id/inputDesc"
                 android:imeOptions="actionNext"/>
         </com.google.android.material.textfield.TextInputLayout>
         <com.google.android.material.textfield.TextInputLayout
@@ -38,6 +39,8 @@
                 android:hint="命令说明"
                 android:singleLine="true"
                 android:inputType="text"
+                android:nextFocusUp="@+id/inputTitle"
+                android:nextFocusDown="@+id/inputCommand"
                 android:imeOptions="actionNext"/>
         </com.google.android.material.textfield.TextInputLayout>
         <com.google.android.material.textfield.TextInputLayout
@@ -54,6 +57,8 @@
                 android:hint="执行的命令 *"
                 android:singleLine="true"
                 android:inputType="text"
+                android:nextFocusUp="@+id/inputDesc"
+                android:nextFocusDown="@+id/switchAutoExecute"
                 android:imeOptions="actionDone"
                 android:fontFamily="monospace"/>
         </com.google.android.material.textfield.TextInputLayout>

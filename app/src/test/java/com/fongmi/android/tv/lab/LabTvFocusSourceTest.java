@@ -46,12 +46,33 @@ public class LabTvFocusSourceTest {
         assertTrue(editor.contains("root instanceof EditText"));
         assertTrue(editor.contains("KeyEvent.KEYCODE_DPAD_DOWN"));
         assertTrue(editor.contains("KeyEvent.KEYCODE_DPAD_UP"));
-        assertTrue("touch-mode editing must stay native", editor.contains("v.isInTouchMode()"));
+        // 实测（emulator-5560，mInTouchMode=true）：遥控器按键同样走触摸模式，
+        // 把触摸模式当跳过条件会让上下键重新被文本控件吃掉，弹窗里焦点出不去。
+        assertFalse("touch mode must not disable the vertical-key escape",
+                editor.contains("isInTouchMode()"));
         assertTrue("autocomplete popup must keep native arrow selection", editor.contains("isPopupShowing()"));
         assertTrue(editor.contains("v.focusSearch(direction)"));
         assertTrue(editor.contains("next.requestFocus(direction)"));
         assertTrue("downward escape must reach Save", editor.contains("AlertDialog.BUTTON_POSITIVE"));
         assertTrue("upward escape must reach Cancel", editor.contains("AlertDialog.BUTTON_NEGATIVE"));
+        assertTrue("the dialog must anchor the initial focus on the first input",
+                editor.contains("inputTitle.requestFocus();"));
+
+        String layout = stripComments(read("src/main/res/layout/dialog_add_command.xml"));
+        assertTrue("title must hand focus down to description",
+                layout.contains("android:nextFocusDown=\"@+id/inputDesc\""));
+        assertTrue("description must lead back up to title",
+                layout.contains("android:nextFocusUp=\"@+id/inputTitle\""));
+        assertTrue("description must hand focus down to command",
+                layout.contains("android:nextFocusDown=\"@+id/inputCommand\""));
+        assertTrue("command must lead back up to description",
+                layout.contains("android:nextFocusUp=\"@+id/inputDesc\""));
+        assertTrue("command must hand focus down to the auto-run switch",
+                layout.contains("android:nextFocusDown=\"@+id/switchAutoExecute\""));
+        // 实测（emulator-5560，带变量的命令）：命令框会被 setFocusable(false)，
+        // 此时给开关硬连 nextFocusUp=命令框会让 UP 落空、焦点直接消失；交给几何就近回退。
+        assertFalse("the switch must not pin UP to a possibly unfocusable command field",
+                layout.contains("android:nextFocusUp=\"@+id/inputCommand\""));
     }
 
     /**
