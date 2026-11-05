@@ -2,8 +2,10 @@ package com.fongmi.android.tv.lab;
 
 import android.app.Activity;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.AutoCompleteTextView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -70,7 +72,9 @@ public final class LabCommandEditDialog {
             });
         }
         AlertDialog dialog = builder.create();
-        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        dialog.setOnShowListener(d -> {
+            releaseVerticalKeys(root, dialog);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String title = inputTitle.getText() == null ? "" : inputTitle.getText().toString().trim();
             String desc = inputDesc.getText() == null ? "" : inputDesc.getText().toString().trim();
             String cmd = inputCommand.getText() == null ? "" : inputCommand.getText().toString().trim();
@@ -85,8 +89,30 @@ public final class LabCommandEditDialog {
             saveCommand(activity, item, command, title, desc, cmd, switchAuto.isChecked(), vars);
             if (onSaved != null) onSaved.run();
             dialog.dismiss();
-        }));
+            });
+        });
         dialog.show();
+    }
+
+    /** Release vertical DPAD navigation so TV users can leave any input and reach dialog buttons. */
+    private static void releaseVerticalKeys(View root, AlertDialog dialog) {
+        if (root instanceof EditText) {
+            root.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN || v.isInTouchMode()) return false;
+                if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN && keyCode != KeyEvent.KEYCODE_DPAD_UP) return false;
+                if (v instanceof AutoCompleteTextView && ((AutoCompleteTextView) v).isPopupShowing()) return false;
+                int direction = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? View.FOCUS_DOWN : View.FOCUS_UP;
+                View next = v.focusSearch(direction);
+                if (next != null && next != v && next.requestFocus(direction)) return true;
+                View button = dialog.getButton(direction == View.FOCUS_DOWN ? AlertDialog.BUTTON_POSITIVE : AlertDialog.BUTTON_NEGATIVE);
+                if (button != null && button.requestFocus()) return true;
+                return true;
+            });
+        }
+        if (root instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) releaseVerticalKeys(group.getChildAt(i), dialog);
+        }
     }
 
     private static void saveCommand(Activity activity, LabModels.Item item, LabModels.Command command, String name, String description, String commandText, boolean autoExecute, Map<String, String> vars) {

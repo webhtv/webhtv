@@ -39,6 +39,21 @@ public class LabTvFocusSourceTest {
             "src/main/res/drawable/selector_lab_icon_btn.xml"
     };
 
+    @Test
+    public void commandEditorReleasesVerticalDpadKeys() throws Exception {
+        String editor = stripComments(read("src/main/java/com/fongmi/android/tv/lab/LabCommandEditDialog.java"));
+        assertTrue("all editor inputs need a remote focus escape", editor.contains("releaseVerticalKeys(root, dialog);"));
+        assertTrue(editor.contains("root instanceof EditText"));
+        assertTrue(editor.contains("KeyEvent.KEYCODE_DPAD_DOWN"));
+        assertTrue(editor.contains("KeyEvent.KEYCODE_DPAD_UP"));
+        assertTrue("touch-mode editing must stay native", editor.contains("v.isInTouchMode()"));
+        assertTrue("autocomplete popup must keep native arrow selection", editor.contains("isPopupShowing()"));
+        assertTrue(editor.contains("v.focusSearch(direction)"));
+        assertTrue(editor.contains("next.requestFocus(direction)"));
+        assertTrue("downward escape must reach Save", editor.contains("AlertDialog.BUTTON_POSITIVE"));
+        assertTrue("upward escape must reach Cancel", editor.contains("AlertDialog.BUTTON_NEGATIVE"));
+    }
+
     /**
      * 周期刷新不能再整表重建列表。
      *
