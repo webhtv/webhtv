@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AutoCompleteTextView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -75,72 +76,74 @@ public final class LabCommandEditDialog {
         dialog.setOnShowListener(d -> {
             List<View> chain = new ArrayList<>();
             collectFocusChain(root, chain);
-            chain.add(dialog.getButton(AlertDialog.BUTTON_NEUTRAL));
-            chain.add(dialog.getButton(AlertDialog.BUTTON_NEGATIVE));
-            chain.add(dialog.getButton(AlertDialog.BUTTON_POSITIVE));
+            addToChain(chain, dialog.getButton(AlertDialog.BUTTON_NEUTRAL));
+            addToChain(chain, dialog.getButton(AlertDialog.BUTTON_NEGATIVE));
+            addToChain(chain, dialog.getButton(AlertDialog.BUTTON_POSITIVE));
             releaseVerticalKeys(chain);
-            if (!chain.isEmpty()) chain.get(0).requestFocus();
+            chain.get(0).requestFocus();
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String title = inputTitle.getText() == null ? "" : inputTitle.getText().toString().trim();
-            String desc = inputDesc.getText() == null ? "" : inputDesc.getText().toString().trim();
-            String cmd = inputCommand.getText() == null ? "" : inputCommand.getText().toString().trim();
-            if (title.isEmpty()) {
-                inputTitle.setError("请输入标题");
-                return;
-            }
-            if (cmd.isEmpty()) {
-                inputCommand.setError("请输入命令");
-                return;
-            }
-            saveCommand(activity, item, command, title, desc, cmd, switchAuto.isChecked(), vars);
-            if (onSaved != null) onSaved.run();
-            dialog.dismiss();
+                String title = inputTitle.getText() == null ? "" : inputTitle.getText().toString().trim();
+                String desc = inputDesc.getText() == null ? "" : inputDesc.getText().toString().trim();
+                String cmd = inputCommand.getText() == null ? "" : inputCommand.getText().toString().trim();
+                if (title.isEmpty()) {
+                    inputTitle.setError("请输入标题");
+                    return;
+                }
+                if (cmd.isEmpty()) {
+                    inputCommand.setError("请输入命令");
+                    return;
+                }
+                saveCommand(activity, item, command, title, desc, cmd, switchAuto.isChecked(), vars);
+                if (onSaved != null) onSaved.run();
+                dialog.dismiss();
             });
         });
         dialog.show();
     }
 
     /**
-     * 收集弹窗内所有可聚焦控件的自上而下顺序。
+     * 收集弹窗内可聚焦控件在布局中的先后顺序，供上下键按索引移动焦点。
      *
-     * <p>按几何位置搜索在可滚动的弹窗里不可靠：实测（emulator-5560）从「命令说明」按 DOWN
-     * 会在「删除」按钮与最后一行参数之间来回弹跳，上方参数行被跳过。改成静态顺序链后，
-     * 上下键只做索引前后移动，与实际排版一致。
+     * <p>顺序取自布局树而不是几何搜索，因为可滚动弹窗里 focusSearch 的结果取决于当前滚动位置。
      */
     private static void collectFocusChain(View view, List<View> chain) {
-        if (view instanceof EditText || view instanceof MaterialSwitch) {
-            // 带变量的命令会把命令框 setFocusable(false)，留在链上会让 DOWN 停在一个
-            // 拿不到焦点的位置，看上去就是「按键没反应」。
-            if (view.getVisibility() == View.VISIBLE && view.isFocusable()) chain.add(view);
+        if (view.getVisibility() != View.VISIBLE) return;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) collectFocusChain(group.getChildAt(i), chain);
             return;
         }
-        if (view instanceof android.view.ViewGroup) {
-            android.view.ViewGroup group = (android.view.ViewGroup) view;
-            if (group.getVisibility() != View.VISIBLE) return;
-            for (int i = 0; i < group.getChildCount(); i++) collectFocusChain(group.getChildAt(i), chain);
-        }
+        // 带变量的命令会把命令框 setFocusable(false)，留在链上会让 DOWN 停在一个拿不到
+        // 焦点的位置，看上去就是「按键没反应」。
+        if (view.isFocusable()) chain.add(view);
+    }
+
+    /**
+     * 把弹窗按钮接到链尾。
+     *
+     * <p>「新建命令」没有「删除」按钮，{@code getButton} 返回 null；null 或不可见的按钮占了链槽，
+     * 上下键就会停在一个既看不见也拿不到焦点的位置。
+     */
+    private static void addToChain(List<View> chain, View button) {
+        if (button != null && button.getVisibility() == View.VISIBLE) chain.add(button);
     }
 
     /**
      * 让编辑弹窗里的控件把上下键让给显式焦点链。
      *
      * <p>可编辑文本会把上下键当光标键吃掉（单行框里毫无用处），遥控器又没有 TAB，
-     * 于是焦点停在第一个输入框就出不去。触摸模式下 {@code mInTouchMode} 为真时同样要吃键——
-     * 遥控器只是另一个输入设备，不能据此放弃拦截；左/右键保持原生光标行为不动。
+     * 于是焦点停在第一个输入框就出不去。左右键保持原生光标行为不动。
      */
     private static void releaseVerticalKeys(List<View> chain) {
         for (int i = 0; i < chain.size(); i++) {
             final int index = i;
-            View field = chain.get(i);
-            if (field == null) continue;
-            field.setOnKeyListener((v, keyCode, event) -> {
+            chain.get(i).setOnKeyListener((v, keyCode, event) -> {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN && keyCode != KeyEvent.KEYCODE_DPAD_UP) return false;
                 if (v instanceof AutoCompleteTextView && ((AutoCompleteTextView) v).isPopupShowing()) return false;
                 int target = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? index + 1 : index - 1;
                 if (target < 0 || target >= chain.size()) return true;
-                View next = chain.get(target);
-                if (next != null && next.getVisibility() == View.VISIBLE) next.requestFocus();
+                chain.get(target).requestFocus();
                 return true;
             });
         }
