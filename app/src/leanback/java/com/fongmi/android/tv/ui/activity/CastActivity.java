@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
 
@@ -32,17 +33,25 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.dialog.PlayerKernelDialog;
+import com.fongmi.android.tv.ui.dialog.ShooterSubtitleHelper;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
+import com.fongmi.android.tv.ui.dialog.SubtitlePickerDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.KeyUtil;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Traffic;
+import com.github.catvod.crawler.SpiderDebug;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 import org.jupnp.support.contentdirectory.DIDLParser;
 
+import java.io.File;
+import java.util.List;
+ 
 public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.Listener, TrackDialog.Listener {
 
     private ActivityCastBinding mBinding;
@@ -451,6 +460,64 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         App.post(this::hideControl, 100);
     }
 
+    @Override
+    public void onShooterClick() {
+        PlayerManager pm = service() == null ? null : player();
+        if (pm == null) return;
+        String url = pm.getUrl();
+        if (TextUtils.isEmpty(url)) return;
+        Notify.show("射手字幕：搜索中...");
+        Task.execute(() -> {
+            try {
+                List<ShooterSubtitleHelper.Candidate> items = ShooterSubtitleHelper.searchUrl(url);
+                App.post(() -> SubtitlePickerDialog.show(this, items, new SubtitlePickerDialog.Listener() {
+                    @Override public void onPick(ShooterSubtitleHelper.Candidate candidate) {
+                        applyShooterSubtitle(candidate);
+                    }
+                    @Override public void onEmpty() {
+                        Notify.show("射手字幕：未找到匹配字幕");
+                    }
+                }));
+            } catch (Exception e) {
+                SpiderDebug.log("ShooterSub", "search fail: " + e);
+                App.post(() -> Notify.show("射手字幕：搜索失败"));
+            }
+        });
+    }
+ 
+    private void applyShooterSubtitle(ShooterSubtitleHelper.Candidate candidate) {
+        Task.execute(() -> {
+            try {
+                File mediaFile = localFileFromPlayUrl(player().getUrl());
+                File destDir = mediaFile != null
+                        ? new File(mediaFile.getParent(), ".webhtv_subtitles")
+                        : new File(getCacheDir(), "shooter_subs");
+                File target = ShooterSubtitleHelper.download(candidate, destDir);
+                App.post(() -> {
+                    Sub sub = Sub.create(candidate.displayName, target.getAbsolutePath(), "zh", candidate.format);
+                    player().setSub(sub);
+                    Notify.show("射手字幕：已应用");
+                });
+            } catch (Exception e) {
+                SpiderDebug.log("ShooterSub", "download fail: " + e);
+                App.post(() -> Notify.show("射手字幕：下载失败"));
+            }
+        });
+    }
+ 
+    private File localFileFromPlayUrl(String url) {
+        if (TextUtils.isEmpty(url)) return null;
+        try {
+            String path = url;
+            if (path.startsWith("file://")) {
+                path = path.substring(7);
+                if (path.startsWith("//")) path = path.substring(1);
+                return new File(path);
+            }
+            return null;
+        } catch (Exception e) { return null; }
+    }
+ 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (KeyUtil.isMenuKey(event)) onToggle();

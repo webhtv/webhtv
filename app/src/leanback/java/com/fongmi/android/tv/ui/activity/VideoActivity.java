@@ -136,7 +136,9 @@ import com.fongmi.android.tv.ui.dialog.EpisodeListDialog;
 import com.fongmi.android.tv.ui.dialog.PanNetworkDiagnosticDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerKernelDialog;
 import com.fongmi.android.tv.ui.dialog.QuickSearchDialog;
+import com.fongmi.android.tv.ui.dialog.ShooterSubtitleHelper;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
+import com.fongmi.android.tv.ui.dialog.SubtitlePickerDialog;
 import com.fongmi.android.tv.ui.dialog.TitleDialog;
 import com.fongmi.android.tv.ui.dialog.TimerDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
@@ -5766,6 +5768,64 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         App.post(this::hideControl, 100);
     }
 
+    @Override
+    public void onShooterClick() {
+        PlayerManager pm = service() == null ? null : player();
+        if (pm == null) return;
+        String url = pm.getUrl();
+        if (TextUtils.isEmpty(url)) return;
+        Notify.show("射手字幕：搜索中...");
+        Task.execute(() -> {
+            try {
+                List<ShooterSubtitleHelper.Candidate> items = ShooterSubtitleHelper.searchUrl(url);
+                App.post(() -> SubtitlePickerDialog.show(this, items, new SubtitlePickerDialog.Listener() {
+                    @Override public void onPick(ShooterSubtitleHelper.Candidate candidate) {
+                        applyShooterSubtitle(candidate);
+                    }
+                    @Override public void onEmpty() {
+                        Notify.show("射手字幕：未找到匹配字幕");
+                    }
+                }));
+            } catch (Exception e) {
+                SpiderDebug.log("ShooterSub", "search fail: " + e);
+                App.post(() -> Notify.show("射手字幕：搜索失败"));
+            }
+        });
+    }
+ 
+    private void applyShooterSubtitle(ShooterSubtitleHelper.Candidate candidate) {
+        Task.execute(() -> {
+            try {
+                File mediaFile = localFileFromPlayUrl(player().getUrl());
+                File destDir = mediaFile != null
+                        ? new File(mediaFile.getParent(), ".webhtv_subtitles")
+                        : new File(getCacheDir(), "shooter_subs");
+                File target = ShooterSubtitleHelper.download(candidate, destDir);
+                App.post(() -> {
+                    Sub sub = Sub.create(candidate.displayName, target.getAbsolutePath(), "zh", candidate.format);
+                    player().setSub(sub);
+                    Notify.show("射手字幕：已应用");
+                });
+            } catch (Exception e) {
+                SpiderDebug.log("ShooterSub", "download fail: " + e);
+                App.post(() -> Notify.show("射手字幕：下载失败"));
+            }
+        });
+    }
+ 
+    private File localFileFromPlayUrl(String url) {
+        if (TextUtils.isEmpty(url)) return null;
+        try {
+            String path = url;
+            if (path.startsWith("file://")) {
+                path = path.substring(7);
+                if (path.startsWith("//")) path = path.substring(1);
+                return new File(path);
+            }
+            return null;
+        } catch (Exception e) { return null; }
+    }
+ 
     @Override
     public void onTimeChanged(long time) {
         if (isFinishing() || isDestroyed()) return;

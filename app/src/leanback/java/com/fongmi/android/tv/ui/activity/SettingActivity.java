@@ -60,7 +60,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private String[] titleLines;
     private String[] defaultLaunch;
     private String[] uiScale;
-    private static final int[] UI_SCALE_VALUES = {Setting.UI_SCALE_WIDE_COMFORT, Setting.UI_SCALE_FOLLOW_SYSTEM, Setting.UI_SCALE_STANDARD, Setting.UI_SCALE_COMPACT};
+    private static final int[] UI_SCALE_VALUES = {Setting.UI_SCALE_MILD_RELAXED, Setting.UI_SCALE_STANDARD, Setting.UI_SCALE_COMPACT, Setting.UI_SCALE_SMALLER};
 
     private static final int[][] FOCUS_GRID = {
         {R.id.vod, R.id.vodHome, R.id.vodHistory},

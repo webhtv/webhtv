@@ -60,6 +60,18 @@
             tools:visibility="visible" />
 
         <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/shooter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="射手字幕"
+            android:src="@drawable/ic_action_subtitle"
+            app:tint="@color/white_90"
+            android:visibility="gone"
+            tools:visibility="visible" />
+ 
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/offset"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

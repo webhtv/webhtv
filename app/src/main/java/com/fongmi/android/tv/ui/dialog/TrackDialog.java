@@ -75,6 +75,55 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         return !secondarySubtitle && type == C.TRACK_TYPE_TEXT && player.isVod();
     }
 
+    private boolean hasShooter() {
+        // 射手走文件特征哈希，三类 URL 都能跑：
+        //   1) file:// 本地路径
+        //   2) http(s)://127.0.0.1 / localhost / 局域网 IP 代理（含远程推送过来的 9978/file）
+        //   3) http(s)://CDN 直链视频（排除 m3u8/mpd/txt/html 等索引/清单/接口文件）
+        if (!hasChoose()) return false;
+        String url = player.getUrl();
+        if (url == null || url.isEmpty()) return false;
+        String lower = url.toLowerCase();
+        if (lower.startsWith("file://")) return true;
+        if (lower.startsWith("http://127.0.0.1")
+                || lower.startsWith("http://localhost")
+                || lower.matches("^https?://\\d{1,3}(\\.\\d{1,3}){3}(:\\d+)?/.*")) return true;
+        // 在线 CDN 直链：URL path 以视频容器扩展名结尾，且不是 HLS/DASH/API
+        if (lower.startsWith("http://") || lower.startsWith("https://")) {
+            String path = stripQuery(lower);
+            if (path == null) return false;
+            int slash = path.lastIndexOf('/');
+            String fileName = slash >= 0 ? path.substring(slash + 1) : path;
+            String ext = extension(fileName);
+            if (ext.isEmpty()) return false;
+            switch (ext) {
+                case "mp4": case "mkv": case "avi": case "mov": case "flv":
+                case "webm": case "wmv": case "mpg": case "mpeg": case "m4v":
+                case "m2ts": case "mts": case "3gp": case "rmvb": case "ts":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        return false;
+    }
+ 
+    private static String stripQuery(String url) {
+        int q = url.indexOf('?');
+        int h = url.indexOf('#');
+        int cut = url.length();
+        if (q >= 0) cut = Math.min(cut, q);
+        if (h >= 0) cut = Math.min(cut, h);
+        return url.substring(0, cut);
+    }
+ 
+    private static String extension(String fileName) {
+        if (fileName == null) return "";
+        int dot = fileName.lastIndexOf('.');
+        if (dot < 0 || dot == fileName.length() - 1) return "";
+        return fileName.substring(dot + 1);
+    }
+ 
     private boolean hasText() {
         return !secondarySubtitle && type == C.TRACK_TYPE_TEXT && player.haveTrack(type);
     }
@@ -107,6 +156,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         binding.offset.setOnClickListener(this::onOffset);
         binding.choose.setOnClickListener(this::onChoose);
         binding.subtitle.setOnClickListener(this::onSubtitle);
+        binding.shooter.setOnClickListener(this::onShooter);
     }
 
     private void refreshTrackList() {
@@ -120,6 +170,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         binding.offset.setVisibility(hasText() || hasAudio() ? View.VISIBLE : View.GONE);
         binding.choose.setVisibility(hasChoose() ? View.VISIBLE : View.GONE);
         binding.subtitle.setVisibility(hasText() ? View.VISIBLE : View.GONE);
+        binding.shooter.setVisibility(hasShooter() ? View.VISIBLE : View.GONE);
     }
 
     private String getTitle() {
@@ -141,6 +192,12 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         player.pause();
     }
 
+    private void onShooter(View view) {
+        Listener listener = (Listener) requireActivity();
+        App.post(listener::onShooterClick, 100);
+        dismiss();
+    }
+ 
     private void onSubtitle(View view) {
         Listener listener = (Listener) requireActivity();
         App.post(listener::onSubtitleClick, 100);
@@ -215,5 +272,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     public interface Listener {
 
         void onSubtitleClick();
+ 
+        default void onShooterClick() {}
     }
 }

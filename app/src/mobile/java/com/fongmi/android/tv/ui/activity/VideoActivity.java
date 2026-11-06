@@ -148,7 +148,9 @@ import com.fongmi.android.tv.ui.dialog.LutPanelDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerKernelDialog;
 import com.fongmi.android.tv.ui.dialog.QuickSearchDialog;
 import com.fongmi.android.tv.ui.dialog.ReceiveDialog;
+import com.fongmi.android.tv.ui.dialog.ShooterSubtitleHelper;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
+import com.fongmi.android.tv.ui.dialog.SubtitlePickerDialog;
 import com.fongmi.android.tv.ui.dialog.TitleDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.ui.dialog.VideoContentDialog;
@@ -6829,5 +6831,68 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mSuppressKaraokeResultAction = false;
         mKaraokeResultDialog = null;
         SpiderDebug.log("karaoke-result", "dismiss old window for configuration change");
+    }
+ 
+    /** 射手字幕按钮入口（由 TrackDialog 的射手按钮回调触发）。 */
+    @Override
+    public void onShooterClick() {
+        PlayerManager pm = service() == null ? null : player();
+        if (pm == null) return;
+        String url = pm.getUrl();
+        if (TextUtils.isEmpty(url)) return;
+        Notify.show("射手字幕：搜索中...");
+        Task.execute(() -> {
+            try {
+                List<ShooterSubtitleHelper.Candidate> items = ShooterSubtitleHelper.searchUrl(url);
+                App.post(() -> SubtitlePickerDialog.show(this, items, new SubtitlePickerDialog.Listener() {
+                    @Override public void onPick(ShooterSubtitleHelper.Candidate candidate) {
+                        applyShooterSubtitle(candidate);
+                    }
+                    @Override public void onEmpty() {
+                        Notify.show("射手字幕：未找到匹配字幕");
+                    }
+                }));
+            } catch (Exception e) {
+                SpiderDebug.log("ShooterSub", "search fail: " + e);
+                App.post(() -> Notify.show("射手字幕：搜索失败"));
+            }
+        });
+    }
+ 
+    private void applyShooterSubtitle(ShooterSubtitleHelper.Candidate candidate) {
+        Task.execute(() -> {
+            try {
+                File mediaFile = localFileFromPlayUrl(player().getUrl());
+                File destDir = mediaFile != null
+                        ? new File(mediaFile.getParent(), ".webhtv_subtitles")
+                        : new File(getCacheDir(), "shooter_subs");
+                File target = ShooterSubtitleHelper.download(candidate, destDir);
+                App.post(() -> {
+                    Sub sub = Sub.create(candidate.displayName, target.getAbsolutePath(), "zh", candidate.format);
+                    player().setSub(sub);
+                    Notify.show("射手字幕：已应用");
+                });
+            } catch (Exception e) {
+                SpiderDebug.log("ShooterSub", "download fail: " + e);
+                App.post(() -> Notify.show("射手字幕：下载失败"));
+            }
+        });
+    }
+ 
+    /** 从播放 URL 里解出本地文件（file://xxx 或代理 URL 都可能有真实路径）。 */
+    private File localFileFromPlayUrl(String url) {
+        if (TextUtils.isEmpty(url)) return null;
+        try {
+            String path = url;
+            if (path.startsWith("file://")) {
+                path = path.substring(7);
+                if (path.startsWith("//")) path = path.substring(1);
+                return new File(path);
+            }
+            // 代理 URL 形如 http://host:9978/file/tvbox/xxx.mp4 —— 没法安全还原绝对路径，返回 null
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
