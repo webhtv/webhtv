@@ -711,7 +711,9 @@
     <string name="cache_retention_forever">Forever</string>
     <string name="cache_total_limit_button">Total limit</string>
     <string name="cache_total_limit_title">Total cache limit</string>
-    <string name="cache_total_limit_summary">Total: %1$s</string>
+    <string name="cache_total_limit_summary">Total limit: %1$s</string>
+    <string name="cache_limit_title_exo">Playback cache limit</string>
+    <string name="cache_management_playback_budget">Playback cache %1$s · limit %2$s</string>
     <string name="cache_cleanup_confirm_title">Clean cache?</string>
     <string name="cache_cleanup_confirm_light">Remove expired EPG, temporary, and legacy cache data?</string>
     <string name="cache_cleanup_confirm_standard">Clean rebuildable modules such as images, lyrics, karaoke, and WebHome cache?\n\nFavorites, history, and settings are not affected.</string>

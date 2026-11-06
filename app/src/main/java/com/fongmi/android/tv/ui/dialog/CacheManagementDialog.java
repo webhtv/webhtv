@@ -40,6 +40,7 @@ import com.fongmi.android.tv.cache.CachePolicyStore;
 import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.cache.CacheSnapshot;
 import com.fongmi.android.tv.databinding.DialogCacheManagementBinding;
+import com.fongmi.android.tv.player.exo.MediaSourceFactory;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -437,9 +438,10 @@ public class CacheManagementDialog extends DialogFragment {
         if (binding == null || !isAdded()) return;
         long quota = snapshot.systemQuotaBytes();
         String total = FileUtil.byteCountToDisplaySize(snapshot.totalBytes());
-        binding.summary.setText(quota > 0
+        String summary = quota > 0
                 ? getString(R.string.cache_management_summary_with_quota, total, FileUtil.byteCountToDisplaySize(quota))
-                : getString(R.string.cache_management_summary, total));
+                : getString(R.string.cache_management_summary, total);
+        binding.summary.setText(summary + "\n" + playbackBudgetLine(snapshot));
         if (resultLine != null) {
             binding.status.setText(resultLine);
             resultLine = null;
@@ -447,6 +449,19 @@ public class CacheManagementDialog extends DialogFragment {
                 ? getString(R.string.cache_management_scanned_at, new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date()))
                 : getString(R.string.cache_management_partial, snapshot.warnings().size()));
         renderModules(snapshot);
+    }
+
+    /**
+     * States where the playback cache sits and what bounds it.
+     *
+     * <p>Without this line the panel showed a total the largest module could not be judged
+     * against: the playback cache is sized by a capacity, not by a post-hoc cleanup, and the total
+     * limit only reaches it through that capacity.</p>
+     */
+    private String playbackBudgetLine(CacheSnapshot snapshot) {
+        return getString(R.string.cache_management_playback_budget,
+                FileUtil.byteCountToDisplaySize(snapshot.find(CacheModuleId.EXO).bytes()),
+                FileUtil.byteCountToDisplaySize(MediaSourceFactory.targetCapacityBytes()));
     }
 
     private void renderModules(@Nullable CacheSnapshot snapshot) {
@@ -559,7 +574,7 @@ public class CacheManagementDialog extends DialogFragment {
 
     private boolean supportsLimit(CacheModuleId id) {
         return switch (id) {
-            case GLIDE, LYRICS, KARAOKE, WEBHOME_EXT, EPG, PLUGIN_SCRIPTS, TEMP_FILES -> true;
+            case EXO, GLIDE, LYRICS, KARAOKE, WEBHOME_EXT, EPG, PLUGIN_SCRIPTS, TEMP_FILES -> true;
             default -> false;
         };
     }
@@ -571,9 +586,13 @@ public class CacheManagementDialog extends DialogFragment {
                     ? getString(R.string.cache_limit_unlimited)
                     : FileUtil.byteCountToDisplaySize(CacheLimitOptions.BYTES[index]);
         }
-        ChoiceDialog.showSingle(this, R.string.cache_limit_title,
+        ChoiceDialog.showSingle(this, id == CacheModuleId.EXO
+                        ? R.string.cache_limit_title_exo : R.string.cache_limit_title,
                 labels, CacheLimitOptions.indexOf(CachePolicyStore.getLimit(id)), which -> {
                     CachePolicyStore.putLimit(id, CacheLimitOptions.BYTES[which]);
+                    // The playback cache only converges when a player session ends, so a freshly
+                    // chosen limit would otherwise look ignored until the next playback.
+                    if (id == CacheModuleId.EXO) MediaSourceFactory.enforceCapacityNow();
                     refresh(true);
                 });
     }

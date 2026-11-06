@@ -28,6 +28,10 @@ import androidx.media3.extractor.ExtractorsFactory;
 import androidx.media3.extractor.ts.TsExtractor;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.cache.CacheCenter;
+import com.fongmi.android.tv.cache.CacheModuleId;
+import com.fongmi.android.tv.cache.CachePolicyStore;
+import com.fongmi.android.tv.cache.ExoCapacityBudget;
 import com.fongmi.android.tv.player.exo.ass.AssFontSet;
 import com.fongmi.android.tv.player.exo.ass.ExoAssSession;
 import com.fongmi.android.tv.player.cache.DiskCacheCapacityPolicy;
@@ -135,7 +139,21 @@ public class MediaSourceFactory implements MediaSource.Factory {
 
     private static DiskCacheCapacityPolicy.Decision resolveCapacity(File dir, long existingCacheBytes) {
         FileUtil.StorageSpace storage = FileUtil.getStorageSpace(dir);
-        return DiskCacheCapacityPolicy.resolve(storage.available(), PreloadSetting.getPreloadSizeBytes(PlayerSetting.EXO), existingCacheBytes, storage.availableBytes(), storage.totalBytes());
+        return DiskCacheCapacityPolicy.resolve(storage.available(), desiredCapacityBytes(), existingCacheBytes, storage.availableBytes(), storage.totalBytes());
+    }
+
+    /**
+     * The playback cache shares the total cache limit with every other module, so its capacity is
+     * what the total limit leaves over once the other modules are accounted for.
+     *
+     * <p>Before this, the capacity came from the preload setting alone, which made the total limit
+     * in the cache panel unable to bound the largest cache on the device.</p>
+     */
+    private static long desiredCapacityBytes() {
+        return ExoCapacityBudget.capacityBytes(
+                CachePolicyStore.getTotalLimitBytes(),
+                PreloadSetting.getPreloadSizeBytes(PlayerSetting.EXO),
+                CacheCenter.get().cachedOthersBytes(CacheModuleId.EXO));
     }
 
     private static long initialCapacityBytes(DiskCacheCapacityPolicy.Decision decision) {
@@ -151,6 +169,33 @@ public class MediaSourceFactory implements MediaSource.Factory {
     static synchronized long getPendingCacheCapacityBytes() {
         refreshPendingCacheCapacity();
         return CACHE_CAPACITY_STATE.pendingCapacityBytes();
+    }
+
+    /**
+     * The capacity the playback cache targets, for display.
+     *
+     * <p>Never scans the disk: the settings panel calls this on the UI thread. It reports the
+     * pending or actual capacity when a cache exists, otherwise it recomputes the same pure
+     * decision the next cache creation would use.</p>
+     */
+    public static synchronized long targetCapacityBytes() {
+        long pending = CACHE_CAPACITY_STATE.pendingCapacityBytes();
+        if (pending > 0) return pending;
+        long actual = CACHE_CAPACITY_STATE.actualCapacityBytes();
+        return actual > 0 ? actual : desiredCapacityBytes();
+    }
+
+    /**
+     * Applies a freshly configured limit without waiting for the next player release.
+     *
+     * <p>Refuses while any player session holds the cache: releasing a SimpleCache a running
+     * player is reading would break playback. That release path converges later instead.</p>
+     */
+    public static synchronized boolean enforceCapacityNow() {
+        DiskCacheCapacityPolicy.Decision decision = refreshPendingCacheCapacity();
+        if (!isReliable(decision) || !CACHE_CAPACITY_STATE.canReleasePending()) return false;
+        rebuildCacheLocked("limit-changed");
+        return true;
     }
 
     static synchronized ExoCacheWritePolicy.Decision getCacheWriteDecision() {
