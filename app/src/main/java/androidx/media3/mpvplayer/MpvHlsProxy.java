@@ -321,6 +321,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
 
     public synchronized void release() {
         clear();
+        boolean hadSession = started;
         try {
             if (started) stop();
         } finally {
@@ -329,7 +330,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
             if (cacheClient != null) cacheClient.close();
             cacheClient = null;
             started = false;
-            pruneToIdleBudget();
+            if (hadSession) pruneToIdleBudget();
         }
     }
 
@@ -1257,12 +1258,23 @@ public final class MpvHlsProxy extends NanoHTTPD {
      * deletes spans, so it never runs on the thread that is tearing the player down.</p>
      */
     private void pruneToIdleBudget() {
+        long totalLimitBytes = CachePolicyStore.getTotalLimitBytes();
+        // Without a total limit the idle budget equals the playback one, which the session already
+        // pruned to; walking the directory again would only repeat that work on every release.
+        if (totalLimitBytes <= 0) return;
         MpvHlsCacheCoordinator coordinator = cacheCoordinator;
-        long budget = PlaybackCacheBudget.capacityBytes(false,
-                CachePolicyStore.getTotalLimitBytes(),
+        long budget = PlaybackCacheBudget.capacityBytes(false, totalLimitBytes,
                 configuredCacheLimitBytes(),
                 CacheCenter.get().cachedOthersBytes(CacheModuleId.MPV_HLS));
-        new Thread(() -> coordinator.prune(budget), "mpv-hls-idle-prune").start();
+        Thread thread = new Thread(() -> {
+            try {
+                coordinator.prune(budget);
+            } catch (Throwable error) {
+                // An escaping error here would kill the process, and pruning is best-effort.
+                SpiderDebug.log(TAG, "idle-prune budget=%d error=%s", budget, error.getClass().getSimpleName());
+            }
+        }, "mpv-hls-idle-prune");
+        thread.start();
     }
 
     private long cacheBytes() {

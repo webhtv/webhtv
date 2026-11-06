@@ -604,7 +604,7 @@ Android `File.lastModified()` 可以用于“最近修改/最近使用”近似�
 - 路径：`Path.exoCache()`，即 `cacheDir/exo`
 - 创建：`MediaSourceFactory.getCache()`
 - 淘汰器：`LeastRecentlyUsedCacheEvictor`
-- 容量来源：`PreloadSetting.getPreloadSizeBytes(PlayerSetting.EXO)`
+- 容量来源：`PreloadSetting.getPreloadSizeBytes(PlayerSetting.EXO)`，再经 `PlaybackCacheBudget` 收敛：播放态只受该预加载设置（及其面板上限，见 §20.6）约束，空闲态还受 `总上限 - 其他模块占用` 约束；下限 `MIN_BUDGET_BYTES` 保证缓存始终可构造
 - 空间保护：`DiskCacheCapacityPolicy`
 - 重建：`CacheCapacityState` + `acquireCacheSession()` / `releaseCacheSession()`
 
@@ -1747,6 +1747,7 @@ bash scripts/build_arm64_debug_install.sh
 | §23.1 功能开关 | `cache_mgmt_enabled` 开关用于回滚 | 已实现 `CachePolicyStore.isManagementEnabled()`（默认开）；关闭时设置页恢复旧行为：只显示 `FileUtil.getCacheSize()`、单击执行旧的一键 `FileUtil.clearCache()`，长按沿用单击且不弹面板 | 开关是本次手势反转的唯一回滚通道（无 UI 入口，需写 Prefers）；关闭分支由静态审查覆盖（读取点 + `FileUtil.clearCache` 调用 + `onCacheManage` 回落） |
 | §11.2 插件上限自动淘汰 | 插件模块上限应能自动淘汰超限文件 | 插件项上限可配置并持久化，但**不参与自动淘汰**：`CachePolicyEngine.directCleanupStatus` 对 `PLUGIN_SCRIPTS` 恒返回 `NOT_ALLOWED`，UI 将插件「清理」按钮显示为「由模块管理」并禁用；`applyConfiguredLimits()` 也不淘汰插件文件 | 这是有意的安全决策：暂停/卸载运行中插件尚未实现，后台自动删除 jar/py/js 可能导致插件突然失效或播放回归（见 §P2C 记录）。设备实测确认：放入 80MB `cache/js/*.js` 并将插件上限设为 64MB 后执行深度清理，插件文件仍被保留（清理只释放其他模块的 8.7MB/56 文件），符合「宁可保留也不误删」的取向。若未来实现运行中插件暂停，再开放该项自动淘汰 |
 | §23.1 兼容入口 | 保留 `FileUtil.getCacheSize()` / `clearCache()` 直到功能稳定 | 两个方法仍保留在 `FileUtil` 中；设置页缓存行的**单击**现在以 `CacheCleanupMode.FULL` 复现拆分前的「一键全清」（`CacheManagementDialog.cleanEverything()`，journal `reason=settings_row`），**长按**才打开管理面板；功能开关关闭时单击仍走 `FileUtil.clearCache()` | 满足 §24 第 6 条「明确标注为兼容入口」；如需回滚到旧行为可直接接回调用方。2026-10-21 手势反转后，原「长按=兼容入口」的表述已失效并更新 |
+| §7 播放缓存上限 / §9.1 容量来源 | 播放缓存上限沿用播放器设置，不新建第二套 key；容量只由预加载设置决定 | 面板为播放缓存提供上限（`cache_mgmt_limit_exo`），它作为预加载设置之上的额外天花板（`PlaybackCacheBudget.ceilingBytes`，默认不限，故未设置时行为不变）；`总上限 - 其他模块占用` 只在空闲态介入容量（`PlaybackCacheBudget.capacityBytes(IDLE)`），播放态仍按预加载设置 | 两条都必要：没有前者，面板存下的上限无处生效（设置后播放缓存不变小）；没有后者，设备上最大的单个缓存不受总上限约束。播放态刻意不受总上限约束，否则会削掉正在读取的缓冲余量，代价体现为 seek 与重缓冲。空闲收敛由最后一个播放会话释放触发（EXO 重建 cache、MPV `prune`），另有 12 小时兜底 |
 
 上述偏离不影响 §20.1-§20.5 的功能与安全验收；如需回到设计原文的分模块档位、可选择触发条件或默认开启自动清理，应作为独立增量需求实施。
 

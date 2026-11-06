@@ -592,9 +592,26 @@ public class CacheManagementDialog extends DialogFragment {
                     CachePolicyStore.putLimit(id, CacheLimitOptions.BYTES[which]);
                     // The playback cache only converges when a player session ends, so a freshly
                     // chosen limit would otherwise look ignored until the next playback.
-                    if (id == CacheModuleId.EXO) MediaSourceFactory.enforceCapacityNow();
-                    refresh(true);
+                    if (id == CacheModuleId.EXO) applyPlaybackLimit();
+                    else refresh(true);
                 });
+    }
+
+    /**
+     * Applies the playback limit off the UI thread.
+     *
+     * <p>Converging rebuilds the SimpleCache, which loads its index and evicts every span above the
+     * new capacity. That is disk work and must not sit between the click and the next frame.</p>
+     */
+    private void applyPlaybackLimit() {
+        Thread worker = new Thread(() -> {
+            MediaSourceFactory.enforceCapacityNow();
+            App.post(() -> {
+                if (binding == null || !isAdded()) return;
+                refresh(true);
+            });
+        }, "exo-cache-apply");
+        worker.start();
     }
 
     private MaterialButton moduleButton(CacheModuleId id) {

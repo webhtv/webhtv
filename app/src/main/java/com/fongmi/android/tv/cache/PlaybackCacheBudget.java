@@ -39,6 +39,19 @@ public final class PlaybackCacheBudget {
         return capacityBytes(totalLimitBytes, preloadBytes, othersBytes, MIN_BUDGET_BYTES);
     }
 
+    /**
+     * The ceiling a user-configured playback limit applies to the preload setting.
+     *
+     * <p>The panel's playback row is the only place a user can bound a playback cache by hand, so
+     * the value it stores has to reach the capacity the player computes. It may only lower that
+     * ceiling: the unlimited default leaves the preload setting deciding on its own.</p>
+     */
+    public static long ceilingBytes(long preloadBytes, long userLimitBytes) {
+        long preload = Math.max(0, preloadBytes);
+        long limit = Math.max(0, userLimitBytes);
+        return limit > 0 ? Math.min(preload, limit) : preload;
+    }
+
     static long capacityBytes(long totalLimitBytes, long preloadBytes, long othersBytes, long floorBytes) {
         long preload = Math.max(0, preloadBytes);
         long total = Math.max(0, totalLimitBytes);

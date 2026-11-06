@@ -170,16 +170,29 @@ public class MediaSourceFactory implements MediaSource.Factory {
     /**
      * The ceiling for the requested phase.
      *
-     * <p>Playback answers to the preload setting alone so buffering, seeking and re-buffering keep
-     * the headroom the user configured. The total limit answers for the idle phase instead, where
-     * it is what makes the largest cache on the device converge as soon as playback ends.</p>
+     * <p>Playback answers to the preload setting so buffering, seeking and re-buffering keep the
+     * headroom the user configured. The total limit answers for the idle phase instead, where it is
+     * what makes the largest cache on the device converge as soon as playback ends.</p>
      */
     private static long desiredCapacityBytes(CapacityPhase phase) {
         return PlaybackCacheBudget.capacityBytes(
                 phase == CapacityPhase.PLAYBACK,
                 CachePolicyStore.getTotalLimitBytes(),
-                PreloadSetting.getPreloadSizeBytes(PlayerSetting.EXO),
+                playbackCeilingBytes(),
                 CacheCenter.get().cachedOthersBytes(CacheModuleId.EXO));
+    }
+
+    /**
+     * The preload ceiling, lowered by the playback limit the cache panel stores.
+     *
+     * <p>The panel row would otherwise persist a preference that no code reads: the capacity the
+     * player computes is the only thing that bounds this cache. An unset limit reports zero and
+     * leaves the preload setting deciding alone.</p>
+     */
+    private static long playbackCeilingBytes() {
+        return PlaybackCacheBudget.ceilingBytes(
+                PreloadSetting.getPreloadSizeBytes(PlayerSetting.EXO),
+                CachePolicyStore.getLimit(CacheModuleId.EXO));
     }
 
     private static long initialCapacityBytes(DiskCacheCapacityPolicy.Decision decision) {

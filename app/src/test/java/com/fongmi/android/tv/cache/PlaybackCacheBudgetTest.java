@@ -56,4 +56,20 @@ public class PlaybackCacheBudgetTest {
         assertEquals(0, PlaybackCacheBudget.capacityBytes(128 * MB, -1, 0));
         assertEquals(128 * MB, PlaybackCacheBudget.capacityBytes(128 * MB, 2048 * MB, -5));
     }
+
+    @Test
+    public void panelLimitLowersThePreloadCeiling() {
+        assertEquals(128 * MB, PlaybackCacheBudget.ceilingBytes(2048 * MB, 128 * MB));
+    }
+
+    @Test
+    public void unlimitedPanelLimitKeepsThePreloadCeiling() {
+        assertEquals(2048 * MB, PlaybackCacheBudget.ceilingBytes(2048 * MB, 0));
+        assertEquals(2048 * MB, PlaybackCacheBudget.ceilingBytes(2048 * MB, -1));
+    }
+
+    @Test
+    public void panelLimitAboveThePreloadSettingChangesNothing() {
+        assertEquals(512 * MB, PlaybackCacheBudget.ceilingBytes(512 * MB, 1024 * MB));
+    }
 }
