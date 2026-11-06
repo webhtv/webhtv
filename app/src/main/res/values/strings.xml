@@ -2388,6 +2388,7 @@
     <string name="detail_expand">Read more</string>
     <string name="detail_collapse">Collapse</string>
     <string name="detail_flag">Line</string>
+    <string name="detail_plugin">Plugins</string>
     <string name="detail_quality">Quality</string>
     <string name="detail_play_now">Play now</string>
     <string name="detail_play_resume">Resume - %1$s</string>

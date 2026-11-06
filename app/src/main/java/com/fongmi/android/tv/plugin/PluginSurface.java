@@ -34,6 +34,15 @@ public final class PluginSurface {
     public static final String DETAIL = "detail";
     /** 播放页。 */
     public static final String PLAYBACK = "playback";
+    /**
+     * 全屏播放。**排他范围**：处于这个形态时，当前范围集合里只有它，不再包含
+     * {@link #PLAYBACK} 或 {@link #DETAIL}。
+     *
+     * <p>排他是这个值能成立的前提。若全屏时同时算作 playback，那么所有声明了
+     * {@code playback} 的插件都会照旧显示（豆瓣 chip 挡画面正是这个现象）；有了排他，
+     * "全屏默认干净、要显示必须显式声明 {@code fullscreen}"才成为默认行为。
+     */
+    public static final String FULLSCREEN = "fullscreen";
     /** 其余页面（设置、插件管理、缓存管理等）。 */
     public static final String OTHER = "other";
 
@@ -58,6 +67,86 @@ public final class PluginSurface {
             return OTHER;
         } catch (Throwable ignored) {
             return OTHER;
+        }
+    }
+
+    /**
+     * 当前页面是否处于「沉浸观看」态——此时插件入口应当整批隐藏。
+     *
+     * <p><b>为什么不复用 {@code Util.isFullscreen}。</b>那个方法在电视端恒为 {@code true}
+     * （{@code isLeanback() || ...}），拿它当隐藏条件会让 TV 上的插件入口永久消失。这里只
+     * 关心手机端的全屏播放：手机端有两种全屏实现，分别由两个页面自己声明。
+     *
+     * <p>判定一律走 {@link PluginHostedActivity} 这类页面自报，而不是宿主去查
+     * WindowInsets：查 insets 在渲染路径上可能抛，而且"系统栏不可见"与"用户在全屏看片"
+     * 并不等价（画中画、分屏下系统栏也可能不可见）。
+     */
+    public static boolean immersive(@Nullable Activity activity) {
+        if (activity == null) return false;
+        try {
+            if (activity instanceof ImmersiveAware aware) return aware.isImmersive();
+            return false;
+        } catch (Throwable ignored) {
+            // 判不出来按"不隐藏"处理：宁可多一个入口，也不要因为一次异常让插件静默消失。
+            return false;
+        }
+    }
+
+    /**
+     * 页面自报沉浸态的能力。
+     *
+     * <p>由宿主页面（{@code TmdbDetailActivity} 等）实现，而不是由插件层反射页面字段：
+     * 全屏与否只有页面自己知道得最准，插件层去猜一定会在某个形态上猜错。
+     */
+    public interface ImmersiveAware {
+
+        /** 当前是否处于沉浸观看态（全屏播放）。 */
+        boolean isImmersive();
+    }
+
+    /**
+     * 当前页面的**生效范围集合**。
+     *
+     * <p>为什么是集合而不是单值：全屏是排他的，但把"页面"与"形态"表达成同一维度后，
+     * 未来再加"分屏""画中画"之类的形态时，只需往集合里加元素，消费侧一行都不用改。
+     *
+     * <p>沉浸态下返回的集合里**只有** {@link #FULLSCREEN}——见该常量的说明。
+     */
+    @NonNull
+    public static Set<String> scopesOf(@Nullable Activity activity) {
+        if (activity == null) return Set.of(OTHER);
+        return scopesOf(of(activity), immersive(activity));
+    }
+
+    /**
+     * 纯函数的范围计算，供单测直接覆盖。
+     *
+     * <p>抽出来是因为真机之外拿不到 {@link ImmersiveAware}：判定逻辑若只长在
+     * {@code scopesOf(Activity)} 里，"全屏到底算不算排他"这条最关键的语义就永远测不到。
+     */
+    @NonNull
+    static Set<String> scopesOf(@NonNull String page, boolean immersive) {
+        return immersive ? Set.of(FULLSCREEN) : Set.of(page);
+    }
+
+    /**
+     * 槽位声明的生效范围里，是否有任何一个与当前范围集合相交。
+     *
+     * <p><b>空集返回 {@code true}</b>：这是与 {@link #matches} 完全一致的向后兼容语义
+     * （清单不写 {@code surfaces} = 全页显示），所以老插件在全屏下依然可见。想让入口在全屏
+     * 让位，就必须显式声明 {@code surfaces}，此时全屏集合里没有它声明的值，自然不显示。
+     */
+    public static boolean matchesAny(@Nullable Set<String> declared, @Nullable Set<String> active) {
+        try {
+            if (declared == null || declared.isEmpty()) return true;
+            if (active == null || active.isEmpty()) return false;
+            for (String scope : declared) {
+                if (scope != null && active.contains(scope)) return true;
+            }
+            return false;
+        } catch (Throwable ignored) {
+            // 与 matches 同一取舍：判定失败按"显示"处理，宁可多一个入口也不要让插件静默消失。
+            return true;
         }
     }
 

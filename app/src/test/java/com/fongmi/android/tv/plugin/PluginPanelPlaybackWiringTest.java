@@ -86,9 +86,52 @@ public class PluginPanelPlaybackWiringTest {
         assertTrue("三参重载必须继续转调四参", dialog.contains("show(activity, title, html, null);"));
         assertTrue(dialog.contains("WebViewUtil.configureBase(view, TAG);"));
         assertTrue(dialog.contains("WebViewUtil.configureHome(view);"));
-        assertTrue(dialog.contains("view.loadDataWithBaseURL(null, html == null"));
+        // 约定在加载态引入后收窄了：html 为 null 表示"等异步结果"，此时**不能**灌空 html，
+        // 否则加载中会先闪一个空白页。这里钉住"只有非加载态才 loadDataWithBaseURL"。
+        assertTrue("加载中不许灌空 html", dialog.contains("if (!loading) view.loadDataWithBaseURL(null, html"));
+        assertTrue("加载中必须可见地转圈",
+                dialog.contains("binding.pluginPanelLoading.setVisibility(loading ? View.VISIBLE : View.GONE)"));
+        assertTrue("加载中正文必须让位",
+                dialog.contains("view.setVisibility(loading ? View.INVISIBLE : View.VISIBLE)"));
         assertTrue("电视端焦点通道不许丢", dialog.contains("pluginPanelClose.setNextFocusDownId(R.id.pluginPanelWeb)"));
         assertTrue("电视端焦点通道不许丢", dialog.contains("pluginPanelWeb.setNextFocusUpId(R.id.pluginPanelClose)"));
+    }
+
+    /**
+     * 加载壳与结果回填的接线守卫。
+     *
+     * <p>这三条覆盖的正是用户报的三个症状：点击无反馈、连点叠面板、以及结果回来时串台。
+     * 都是纯 JVM 无法行为验证的部分（要真 FragmentManager 与 WebView），因此钉在源码接线上。
+     */
+    @Test
+    public void loadingShellIsOpenedBeforeThePluginRuns() throws Exception {
+        String controller = read("src", "main", "java", "com", "fongmi", "android", "tv", "plugin", "PluginController.java");
+        String action = methodBody(controller, "private void onSlotAction(String pluginId, String action)");
+
+        assertTrue("必须在动作派发之前开壳", action.contains("showLoadingPanel("));
+        assertTrue("开壳必须在 actions.execute 之前",
+                action.indexOf("showLoadingPanel(") < action.indexOf("actions.execute("));
+        assertTrue("结果回来必须填进已有的壳，而不是再开一个", action.contains("routeSlotResult(") && action.contains("token"));
+        assertTrue("进行中标记必须在 finally 里归还", action.contains("finally") && action.contains("pending.remove("));
+    }
+
+    @Test
+    public void repeatedClicksDoNotStackPanels() throws Exception {
+        String dialog = dialog();
+        String showLoading = methodBody(dialog, "public static String showLoading(");
+
+        assertTrue("已有面板必须复用而不是再开一个", showLoading.contains("find(activity)"));
+        assertTrue("复用时要换发新 token，旧结果才会失效", showLoading.contains("existing.token = token"));
+        assertTrue("复用分支必须先于 new PluginPanelDialog()",
+                showLoading.indexOf("existing.token = token") < showLoading.indexOf("new PluginPanelDialog()"));
+    }
+
+    @Test
+    public void emptyResultCannotLeaveASpinnerForever() throws Exception {
+        String dialog = dialog();
+
+        assertTrue("必须有撤销加载壳的入口", dialog.contains("public static void dismissLoading("));
+        assertTrue("撤销必须校验 token", methodBody(dialog, "public static void dismissLoading(").contains("token.equals(existing.token)"));
     }
 
     @Test

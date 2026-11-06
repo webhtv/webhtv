@@ -235,6 +235,9 @@ import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.player.lut.LutPreset;
 import com.fongmi.android.tv.player.lut.LutStore;
+import com.fongmi.android.tv.plugin.PluginController;
+import com.fongmi.android.tv.plugin.PluginHostEvents;
+import com.fongmi.android.tv.plugin.PluginSurface;
 import com.fongmi.android.tv.web.WebHomeInlineVodStore;
 import com.google.android.flexbox.FlexboxLayout;
 import com.google.android.material.button.MaterialButton;
@@ -281,7 +284,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.Listener, Clock.Callback, PlayerGesture.Listener, SubtitlePlaybackSession.Host, TmdbDetailHost {
+public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.Listener, Clock.Callback, PlayerGesture.Listener, SubtitlePlaybackSession.Host, TmdbDetailHost, PluginSurface.ImmersiveAware {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault());
     private static final int CHIP_STROKE_DP = 1;
@@ -10362,9 +10365,45 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         scheduleMobileInlineSideControlMarginUpdate();
     }
 
+    /**
+     * 页面自报沉浸态：本页是否处于全屏播放。
+     *
+     * <p>只认本页自己的 {@code inlineFullscreen} 字段——{@code Util.isFullscreen} 在电视端
+     * 恒为 true，拿它当判据会让 TV 上的插件入口永久消失。
+     *
+     * <p><b>电视端一律不算沉浸。</b>本页手机与电视共用，而电视上"播放页"本身就是全屏常态，
+     * 把内嵌播放器算成沉浸态会让插件入口在电视上永远不可用——那是把功能拿掉，不是沉浸。
+     * 手机才有"内嵌小窗 ⇄ 全屏"这个切换，隐藏的逻辑只对它成立。
+     *
+     * <p>画中画不算沉浸：{@code inlinePiPLayout} 与系统 PiP 下本页仍在内嵌形态与用户
+     * 交互，入口该留着。
+     */
+    @Override
+    public boolean isImmersive() {
+        if (Util.isLeanback()) return false;
+        return inlineFullscreen && !inlinePiPLayout && !isInPictureInPictureMode();
+    }
+
+    /** 页面形态变化后让插件入口重算一次，并把新形态广播给订阅者。 */
+    private void refreshPluginEntrances() {
+        try {
+            PluginController.get().refreshRender(this);
+        } catch (Throwable ignored) {
+            // 插件入口是可选增强：重算失败不该影响播放页。
+        }
+        if (Util.isLeanback()) return;
+        try {
+            PluginHostEvents.playbackFullscreen(this, inlineFullscreen);
+        } catch (Throwable ignored) {
+            // 事件是可选增强：广播失败同样不该影响播放页。
+        }
+    }
+
     private void enterInlineFullscreen() {
         if (inlineFullscreen || inlinePiPLayout || isInPictureInPictureMode()) return;
         inlineFullscreen = true;
+        // 进全屏后插件入口要整批消失：先重算再继续铺布局，避免芯片在全屏布局上闪一帧。
+        refreshPluginEntrances();
         updateDetailThemeButtonVisibility();
         requestedOrientation = getRequestedOrientation();
         // playerPanel 已提升到 root 层，全屏只需铺满整个 root，不做 reparent（避免 SurfaceView 销毁重建导致黑屏）。
@@ -10641,6 +10680,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         boolean suppressDisplay = suppressInlineDisplayForLeanbackFusionExit();
         prepareInlinePlayerTransition();
         inlineFullscreen = false;
+        // 退全屏后把插件入口装回来。必须在 inlineFullscreen 置回 false 之后调，否则
+        // attach 仍会认为处于沉浸态而继续不挂。
+        refreshPluginEntrances();
         setInlineLock(false);
         // 恢复 root 层内嵌尺寸，不再 reparent
         applyInlinePlayerEmbeddedLayout();

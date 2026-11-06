@@ -266,7 +266,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class VideoActivity extends PlaybackActivity implements Clock.Callback, CustomKeyDown.Listener, TrackDialog.Listener, ControlDialog.Listener, DanmakuDialog.Host, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, EpisodeGroupAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener, SubtitlePlaybackSession.Host, com.fongmi.android.tv.ui.novel.NovelReaderHost {
+public class VideoActivity extends PlaybackActivity implements Clock.Callback, CustomKeyDown.Listener, TrackDialog.Listener, ControlDialog.Listener, DanmakuDialog.Host, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, EpisodeGroupAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener, SubtitlePlaybackSession.Host, com.fongmi.android.tv.ui.novel.NovelReaderHost, com.fongmi.android.tv.plugin.PluginSurface.ImmersiveAware {
     /**
      * 用户拖拽 seek 时加载圈的最小可见时长。
      *
@@ -8569,6 +8569,36 @@ private void checkOrientation() {
     private void setFullscreen(boolean fullscreen) {
         Util.toggleFullscreen(this, this.fullscreen = fullscreen);
         updateFusionThemeButtonVisibility();
+        notifyPluginFullscreen();
+    }
+
+    /**
+     * 页面自报沉浸态：本页是否处于全屏播放。
+     *
+     * <p>画中画不算：PiP 下用户仍在与本页交互，入口该留着。
+     */
+    @Override
+    public boolean isImmersive() {
+        return fullscreen && !isInPictureInPictureMode();
+    }
+
+    /**
+     * 全屏形态变化后通知插件层：先重算入口可见性，再把新形态广播给订阅者。
+     *
+     * <p>挂在这里而不是 {@code enterFullscreen} / {@code exitFullscreen} 上：那两条只是入口，
+     * 短剧、旋转、PiP 恢复各自还有自己的路径，只有 {@code setFullscreen} 是所有变化的收口。
+     */
+    private void notifyPluginFullscreen() {
+        try {
+            com.fongmi.android.tv.plugin.PluginController.get().refreshRender(this);
+        } catch (Throwable ignored) {
+            // 插件入口是可选增强：重算失败不该影响播放页。
+        }
+        try {
+            com.fongmi.android.tv.plugin.PluginHostEvents.playbackFullscreen(this, fullscreen);
+        } catch (Throwable ignored) {
+            // 事件是可选增强：广播失败同样不该影响播放页。
+        }
     }
 
     private boolean isShortDramaSource() {

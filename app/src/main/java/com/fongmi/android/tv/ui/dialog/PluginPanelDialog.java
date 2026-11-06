@@ -3,11 +3,13 @@ package com.fongmi.android.tv.ui.dialog;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
@@ -33,6 +35,8 @@ public final class PluginPanelDialog extends BaseSideSheetDialog {
 
     private static final String TAG = "plugin-panel";
     private static final String ARG_RESUME_PARENT = "resumeParent";
+    /** 请求标识也要进 Bundle：旋屏重建走无参构造器，字段不会重放，重建实例会拿不到自己的 token。 */
+    private static final String ARG_TOKEN = "token";
 
     @Nullable
     private String title;
@@ -44,12 +48,119 @@ public final class PluginPanelDialog extends BaseSideSheetDialog {
     private WebView webView;
     @Nullable
     private Runnable onClosed;
+    /** 本次请求标识：用于把异步回来的结果配到打开它的那个面板上，防止串台。 */
+    @Nullable
+    private String token;
     private boolean resumeParent;
     private boolean parentResumed;
 
     /** 无收尾回调的入口：等价于四参版本传入 {@code null}。 */
     public static void show(@Nullable FragmentActivity activity, @Nullable String title, @Nullable String html) {
         show(activity, title, html, null);
+    }
+
+    /**
+     * 打开面板并先显示加载中，数据由随后的 {@link #fill} 填入。
+     *
+     * <p><b>为什么要先把面板打开。</b>插件一次调用最长 5 秒，豆瓣搜索+详情+短评通常 1~3 秒。
+     * 原先的实现是"结果回来才弹面板"，这段空白里用户点了 chip 看不到任何变化，会以为没点上，
+     * 于是连点——而那正好又叠加出多个面板。先开壳既给了即时反馈，也天然抑制了连点。
+     *
+     * <p>若同一页已有面板在显示，本方法复用那个实例（不新开第二个），把它切回加载态，
+     * 并换发一个新 token：旧 token 从此失效，上一次未完成的结果回来时会被丢弃。
+     *
+     * @return 本次请求的标识，交给 {@link #fill} 配对；{@code null} 表示面板没能打开
+     */
+    @Nullable
+    public static String showLoading(@Nullable FragmentActivity activity, @Nullable String title,
+            @Nullable Runnable onClosed) {
+        if (activity == null || activity.isFinishing()) return null;
+        String token = Long.toString(System.nanoTime());
+        PluginPanelDialog existing = find(activity);
+        if (existing != null) {
+            existing.token = token;
+            existing.fill(title, null);
+            return token;
+        }
+        if (activity.getSupportFragmentManager().isStateSaved()) return null;
+        PlaybackActivity playback = activity instanceof PlaybackActivity ? (PlaybackActivity) activity : null;
+        boolean resumeParent = playback != null && playback.pauseForOverlayPlayback();
+        PluginPanelDialog dialog = new PluginPanelDialog().bind(title, null, onClosed);
+        dialog.token = token;
+        Bundle args = new Bundle();
+        args.putBoolean(ARG_RESUME_PARENT, resumeParent);
+        args.putString(ARG_TOKEN, token);
+        dialog.setArguments(args);
+        try {
+            dialog.show(activity.getSupportFragmentManager(), TAG);
+        } catch (RuntimeException e) {
+            if (playback != null) playback.resumeAfterOverlayPlayback(resumeParent);
+            return null;
+        }
+        return token;
+    }
+
+    /**
+     * 把结果填进由 {@link #showLoading} 打开的那个面板。
+     *
+     * <p>token 不匹配就什么都不做：用户可能已经关掉面板、或又点了另一个 chip，
+     * 这时把上一次的结果灌进来等于串台。面板已不存在时同样返回。
+     */
+    public static void fill(@Nullable FragmentActivity activity, @Nullable String token, @Nullable String html) {
+        if (activity == null || token == null || html == null || html.isEmpty()) return;
+        PluginPanelDialog existing = find(activity);
+        if (existing == null || !token.equals(existing.token)) return;
+        existing.fill(null, html);
+    }
+
+    /**
+     * 撤销一个仍在等待结果的加载壳。
+     *
+     * <p>插件返回空（抓取失败、被隔离、运行时抛错）时必须走这里：留着转圈的面板比没有面板
+     * 更糟，用户会一直等一个永远不会来的结果。
+     */
+    public static void dismissLoading(@Nullable FragmentActivity activity, @Nullable String token) {
+        if (activity == null || token == null) return;
+        PluginPanelDialog existing = find(activity);
+        if (existing == null || !token.equals(existing.token)) return;
+        // 已有内容的面板不撤：那不是"等结果"的壳，是用户正在读的页面。
+        if (existing.html != null) return;
+        try {
+            existing.dismissAllowingStateLoss();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @Nullable
+    private static PluginPanelDialog find(@Nullable FragmentActivity activity) {
+        if (activity == null) return null;
+        try {
+            Fragment fragment = activity.getSupportFragmentManager().findFragmentByTag(TAG);
+            return fragment instanceof PluginPanelDialog dialog && dialog.isAdded() ? dialog : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * 更新面板内容。{@code html} 为 {@code null} 表示切回加载态。
+     *
+     * <p>视图尚未建好（面板刚 show、#{@code initView} 还没跑）时只更新字段，
+     * {@code initView} 会读到最新值。
+     */
+    private void fill(@Nullable String newTitle, @Nullable String html) {
+        if (newTitle != null) this.title = newTitle;
+        if (html != null) this.html = html;
+        DialogPluginPanelBinding current = binding;
+        if (current == null) return;
+        if (newTitle != null) current.pluginPanelTitle.setText(newTitle);
+        boolean loading = html == null;
+        current.pluginPanelLoading.setVisibility(loading ? View.VISIBLE : View.GONE);
+        current.pluginPanelWeb.setVisibility(loading ? View.INVISIBLE : View.VISIBLE);
+        if (!loading) {
+            WebView view = this.webView;
+            if (view != null) view.loadDataWithBaseURL(null, html, "text/html", "utf-8", null);
+        }
     }
 
     /**
@@ -149,6 +260,9 @@ public final class PluginPanelDialog extends BaseSideSheetDialog {
         // 新实例知道自己还欠一次「恢复播放」。
         Bundle args = getArguments();
         resumeParent = args != null && args.getBoolean(ARG_RESUME_PARENT, false);
+        // 旋屏重建后字段不重放，token 只能从 Bundle 取回；否则重建实例的 token 为 null，
+        // 结果回来时比不中，面板会永远停在加载态。
+        if (token == null && args != null) token = args.getString(ARG_TOKEN);
         if (binding == null) return;
         binding.pluginPanelTitle.setText(title == null || title.isEmpty() ? getString(R.string.plugin_panel_title) : title);
         binding.pluginPanelClose.setOnClickListener(view -> dismiss());
@@ -156,7 +270,11 @@ public final class PluginPanelDialog extends BaseSideSheetDialog {
         webView = view;
         WebViewUtil.configureBase(view, TAG);
         WebViewUtil.configureHome(view);
-        view.loadDataWithBaseURL(null, html == null ? "" : html, "text/html", "utf-8", null);
+        // html 为 null 表示"还等着异步结果"：先把壳显示出来并转圈，等 fill() 再灌正文。
+        boolean loading = html == null;
+        binding.pluginPanelLoading.setVisibility(loading ? View.VISIBLE : View.GONE);
+        view.setVisibility(loading ? View.INVISIBLE : View.VISIBLE);
+        if (!loading) view.loadDataWithBaseURL(null, html, "text/html", "utf-8", null);
         // 面板是独立窗口：遥控器的方向键只看得到这个窗口里的控件，找不到任何"下一个"就会卡住。
         // 显式给出关闭按钮 ↔ 正文之间的上下通道，方向键才既出得去又回得来。
         if (Util.isLeanback()) {

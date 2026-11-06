@@ -14,6 +14,8 @@ import com.fongmi.android.tv.utils.Util;
 import com.google.gson.JsonObject;
 
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -41,6 +43,15 @@ public final class PluginController {
     private final PluginUiPresenter presenter;
     private final ExecutorService actions;
     private volatile Handler main;
+
+    /**
+     * 正在跑的 panel 动作，键是 {@code pluginId + '\0' + action}。
+     *
+     * <p>存在的唯一理由是抑制连点：面板槽位在动作发起时就把壳弹出来，若用户以为自己没点中
+     * 而继续点，第二次点击会再开一个面板、再跑一遍插件（最长 5 秒的 JS 调用）。动作一回来
+     * 就从这里移除，所以它是「进行中」而不是「已点过」的集合。
+     */
+    private final Set<String> pending = ConcurrentHashMap.newKeySet();
 
     private volatile Activity current;
 
@@ -70,10 +81,48 @@ public final class PluginController {
         Activity activity = current;
         String activityName = activity == null ? "" : activity.getClass().getSimpleName();
         String payload = buildActionPayload(pluginId, activityName);
+        // 面板槽位先把壳弹出来并显示加载中，再让插件在后台跑：插件单次调用最长 5 秒，
+        // 这段空白里若什么都不显示，用户会以为没点上而连点，进而叠出多个面板。
+        String key = pendingKey(pluginId, action);
+        String token = showLoadingPanel(activity, pluginId, action, key);
         actions.execute(() -> {
-            String result = host.action(pluginId, action, payload);
-            routeSlotResult(activity, pluginId, action, result);
+            try {
+                String result = host.action(pluginId, action, payload);
+                routeSlotResult(activity, pluginId, action, result, token);
+            } finally {
+                // 「进行中」必须在动作结束时立刻归还，否则一次失败会让这颗入口永久失效。
+                pending.remove(key);
+            }
         });
+    }
+
+    private static String pendingKey(String pluginId, String action) {
+        return pluginId + '\u0000' + action;
+    }
+
+    /**
+     * panel 槽位在动作发起时先开壳；其余槽位没有面板可开，返回 {@code null}。
+     *
+     * <p>只对 panel 生效：toolbar / floating 的产物是 Toast 预览，提前开面板反而会弹一个
+     * 永远等不到内容的空壳。
+     *
+     * <p>点击来自控件监听器，恒在主线程；非主线程直接不开壳（宁缺一个加载态，也不跨线程碰视图）。
+     */
+    @Nullable
+    private String showLoadingPanel(@Nullable Activity activity, String pluginId, String action, String key) {
+        PluginHost.PluginSlot slot = host.slotOfAction(pluginId, action);
+        if (slot == null || !"panel".equalsIgnoreCase(slot.slot().slot())) return null;
+        // 同一动作正在跑时不再开第二个：连点只会让插件重复跑一遍，界面还多一个面板。
+        // 注意这里不登记 key——登记已由调用方在开壳之前完成，失败时由调用方归还。
+        if (!pending.add(key)) return null;
+        if (!(activity instanceof FragmentActivity fragment) || !isMainThread()) {
+            pending.remove(key);
+            return null;
+        }
+        String token = PluginPanelDialog.showLoading(fragment, slot.slot().label(),
+                () -> presenter().focusLastClicked());
+        if (token == null) pending.remove(key);
+        return token;
     }
 
     /**
@@ -100,36 +149,41 @@ public final class PluginController {
      * 它属于面板还是提示由**槽位声明**决定——同一段 html 在 floating 上弹提示、
      * 在 panel 上开面板，是有意的可配置行为，不是运行时猜测。
      */
-    private void routeSlotResult(@Nullable Activity origin, String pluginId, String action, @Nullable String result) {
+    private void routeSlotResult(@Nullable Activity origin, String pluginId, String action,
+            @Nullable String result, @Nullable String token) {
         PluginHost.PluginSlot slot = host.slotOfAction(pluginId, action);
         if (slot != null && "panel".equalsIgnoreCase(slot.slot().slot())) {
-            showPanel(origin, slot.slot().label(), result);
+            fillPanel(origin, token, slot.slot().label(), result);
             return;
         }
         showPreview(result);
     }
 
     /**
-     * 打开插件面板。
+     * 把异步结果填进已经开好的面板。
      *
-     * <p>结果为空时**什么都不做**：一个面板槽位返回空串，通常意味着插件抓取失败，
-     * 此时弹一个空白侧滑面板比没有任何反应更让人困惑。失败应当由插件自己
-     * 返回 html 里的错误文案来表达。
+     * <p><b>空结果必须显式收尾。</b>结果为空（插件抓取失败、被隔离、或运行时抛错）时，
+     * 那个一直转圈的面板不能就这么留着——用户会永远等下去。此时让插件自己表达失败更好，
+     * 但它这次没给任何 html，只能由宿主撤销这个壳。
+     *
+     * <p>token 由 {@link PluginPanelDialog#fill} 校验：用户可能已经关掉面板或点了别的入口，
+     * 把这次的结果灌进去就是串台。
      */
-    private void showPanel(@Nullable Activity origin, @Nullable String title, @Nullable String html) {
-        if (html == null || html.isEmpty()) return;
+    private void fillPanel(@Nullable Activity origin, @Nullable String token, @Nullable String title,
+            @Nullable String html) {
         Handler handler = mainHandler();
         if (handler == null) return;
         handler.post(() -> {
-            // 只开在"发起点击的那一页"上：JS 回来时最长已过 5 秒，用户完全可能已经翻到下一页，
-            // 把上一页的评论面板盖到新页面上，正是本项目反复要避免的"串台"。
             if (origin == null || origin != current || origin.isFinishing()) return;
             if (!(origin instanceof FragmentActivity fragment)) return;
             try {
-                // 关闭时把焦点还给刚才那颗入口 chip：电视端不然会丢焦点，用户得重新按方向键回来。
-                PluginPanelDialog.show(fragment, title, html, () -> presenter().focusLastClicked());
+                if (html == null || html.isEmpty()) {
+                    PluginPanelDialog.dismissLoading(fragment, token);
+                    return;
+                }
+                PluginPanelDialog.fill(fragment, token, html);
             } catch (Throwable ignored) {
-                // 面板是可选增强：开不出来也不能影响宿主页面。
+                // 面板是可选增强：填不进去也不能影响宿主页面。
             }
         });
     }
@@ -211,6 +265,21 @@ public final class PluginController {
     public void onActivityResumed(Activity activity) {
         if (activity == null) return;
         current = activity;
+        renderCurrent();
+    }
+
+    /**
+     * 页面形态变化后重算入口可见性（全屏进出、分屏切换等）。
+     *
+     * <p><b>为什么必须有一个独立入口。</b>宿主页面把方向与尺寸变化都声明进了
+     * {@code configChanges}，系统不会重建 Activity，{@link #onActivityResumed} 也就不会
+     * 再被调用；而 {@link PluginUiPresenter#attach} 在沉浸态下会选择"整批不挂"。缺了这个
+     * 入口，chip 一旦隐藏就再也不会回来——那比一直显示更糟。
+     *
+     * <p>只对"当前页"生效：形态变化发生在哪一页，就该只重算哪一页。
+     */
+    public void refreshRender(@Nullable Activity activity) {
+        if (activity == null || activity != current) return;
         renderCurrent();
     }
 

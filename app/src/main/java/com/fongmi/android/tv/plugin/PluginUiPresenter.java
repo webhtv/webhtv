@@ -12,6 +12,7 @@ import com.fongmi.android.tv.R;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 插件 UI 槽位渲染器：把清单声明的槽位变成真实控件，并把点击路由回插件。
@@ -79,6 +80,11 @@ public final class PluginUiPresenter {
     private final List<PluginHost.PluginSlot> fallbacks;
     /** 被我们改过 {@code nextFocusDown} 的既有控件及其原值，{@link #detach} 时原样还回去。 */
     private final List<FocusLink> focusLinks;
+    /** 本次挂载点亮的「插件」行标题与滚动容器；{@link #detach} 靠它们收回 GONE。 */
+    @Nullable
+    private View pluginHeader;
+    @Nullable
+    private View pluginScroll;
     private OnSlotAction onSlotAction;
     /** 最近一次被点击的入口控件，供面板关闭后归还焦点。 */
     @Nullable
@@ -125,7 +131,9 @@ public final class PluginUiPresenter {
     public void attach(@Nullable Activity activity, @Nullable List<PluginHost.PluginSlot> slots, boolean leanback) {
         detach();
         if (activity == null || slots == null || slots.isEmpty()) return;
-        String surface = PluginSurface.of(activity);
+        // 生效范围按集合算：全屏时集合里只有 fullscreen，声明了 detail/playback 的入口自然落选。
+        // 这里**不再**提前 return——那会让"声明了 fullscreen 的插件"也一起消失。
+        Set<String> scopes = PluginSurface.scopesOf(activity);
         ViewGroup decor = PluginFloatingDock.decorOf(activity);
         if (decor == null) return;
         LinearLayout toolbar = toolbarContainer(activity);
@@ -133,7 +141,7 @@ public final class PluginUiPresenter {
             Landing landing = landingOf(entry);
             if (landing == Landing.NONE) continue;
             // 先过滤再碰视图：这一页不该出现的入口，连控件都不建。
-            if (!PluginSurface.matches(entry.slot().surfaces(), surface)) continue;
+            if (!PluginSurface.matchesAny(entry.slot().surfaces(), scopes)) continue;
             switch (landing) {
                 case TOOLBAR -> {
                     if (toolbar != null) {
@@ -162,6 +170,9 @@ public final class PluginUiPresenter {
             ViewGroup parent = view.getParent() instanceof ViewGroup group ? group : null;
             if (parent != null) parent.removeView(view);
         }
+        // 标题行与滚动容器跟着一起收：布局里它们是 GONE 起步、由挂载时点亮的，这里不还回去，
+        // 用户卸载插件后详情页就会永远留着一行只有「插件」二字的空标题。
+        hidePluginRowChrome();
         attached.clear();
         fallbacks.clear();
         // 撤掉焦点链：控制条里那些控件是宿主自己的，改过的 nextFocusDown 必须还原。
@@ -216,11 +227,21 @@ public final class PluginUiPresenter {
     @Nullable
     private static LinearLayout toolbarContainer(Activity activity) {
         View control = activity.findViewById(R.id.control);
-        if (!(control instanceof ViewGroup controlGroup)) return null;
-        View action = controlGroup.findViewById(R.id.action);
-        ViewGroup scope = action instanceof ViewGroup group ? group : controlGroup;
-        View container = scope.findViewById(R.id.container);
-        return container instanceof LinearLayout linear ? linear : null;
+        if (control instanceof ViewGroup controlGroup) {
+            View action = controlGroup.findViewById(R.id.action);
+            ViewGroup scope = action instanceof ViewGroup group ? group : controlGroup;
+            View container = scope.findViewById(R.id.container);
+            if (container instanceof LinearLayout linear) return linear;
+        }
+        // 沉浸融合播放器（TmdbDetailActivity 的内嵌播放器）不叫 control：它的控制条是
+        // playerControls → playerBottom → playerActionRow 里那一排按钮。这套 id 只在
+        // activity_tmdb_detail.xml 里存在，所以按容器反查而不是按页面类型分支。
+        View actionRow = activity.findViewById(R.id.playerActionRow);
+        if (actionRow instanceof ViewGroup row && row.getChildCount() > 0) {
+            View buttons = row.getChildAt(0);
+            if (buttons instanceof LinearLayout linear) return linear;
+        }
+        return null;
     }
 
     /**
@@ -248,9 +269,18 @@ public final class PluginUiPresenter {
         View previous = lastFocusableChild(container);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMarginStart(PluginChipFactory.dp(container.getContext(), 8));
-        container.addView(chip, params);
-        if (previous != null) {
+        // 融合播放器那一排按钮在横滚容器里，本身就比屏幕宽（实测末尾按钮落在 x≈2900，
+        // 屏幕只有 1920 宽），追加到末尾等于挂在看不见的地方。这一排改成插到第一个：
+        // 它是最左端，直接可点，也不用先横滚。
+        boolean prepend = isFusionActionRow(container);
+        if (prepend) {
+            params.setMarginEnd(PluginChipFactory.dp(container.getContext(), 8));
+            container.addView(chip, 0, params);
+        } else {
+            params.setMarginStart(PluginChipFactory.dp(container.getContext(), 8));
+            container.addView(chip, params);
+        }
+        if (previous != null && !prepend) {
             // 没有"上一个 chip"时连 id 都不发：这颗 chip 不参与任何跳转，不该凭空多出一个
             // 可被布局保存/恢复机制认领的 id。
             chip.setId(View.generateViewId());
@@ -261,7 +291,19 @@ public final class PluginUiPresenter {
             focusLinks.add(new FocusLink(previous, previous.getNextFocusDownId()));
             previous.setNextFocusDownId(chip.getId());
         }
+        if (previous != null && prepend) {
+            // 插在最前面时，续的是"新 chip → 原第一个"这条向下的路径。
+            chip.setId(View.generateViewId());
+            if (previous.getId() == View.NO_ID) previous.setId(View.generateViewId());
+            chip.setNextFocusDownId(previous.getId());
+        }
         attached.add(chip);
+    }
+
+    /** 容器是不是沉浸融合播放器的那一排控制按钮（它们的父级是横滚容器 playerActionRow）。 */
+    private static boolean isFusionActionRow(View container) {
+        return container.getParent() instanceof View
+                && ((View) container.getParent()).getId() == R.id.playerActionRow;
     }
 
     /**
@@ -295,15 +337,84 @@ public final class PluginUiPresenter {
      */
     private void addPanelEntry(ViewGroup decor, Activity activity, PluginHost.PluginSlot entry, boolean leanback,
             @Nullable LinearLayout toolbar) {
-        if (leanback && toolbar != null) {
-            addToolbarChip(toolbar, entry);
+        if (leanback) {
+            // 电视端一页可能同时存在两个入口位置，而**同一个页面会在两者之间切换形态**：
+            //  - 详情区那条「插件」行：详情/内嵌态看得到；
+            //  - 播放器控制条：全屏播放态看得到（详情行此时已被顶出屏幕）。
+            //
+            // 两侧都挂，而不是靠"详情区是否出屏"去猜当前形态：判据在 attach 那一刻拿到的往往是
+            // 上一形态的布局，猜错就会让某个形态下入口整个消失（实测过：详情态正常、一切全屏就没了）。
+            // 不可见的那一侧本来就 GONE 或被顶出屏幕，挂着不产生任何视觉重复，形态切换也不需要
+            // 谁去重算——这正是"不依赖时序"的做法。
+            boolean placed = false;
+            ViewGroup row = pluginRow(activity);
+            if (row != null) {
+                addPluginRowChip(row, activity, entry);
+                placed = true;
+            }
+            if (toolbar != null) {
+                addToolbarChip(toolbar, entry);
+                placed = true;
+            }
+            if (!placed) PluginFloatingDock.addFocusableFloating(this, decor, activity, entry);
             return;
         }
-        if (!leanback) {
-            PluginFloatingDock.addFloating(this, decor, activity, entry, false);
-            return;
-        }
-        PluginFloatingDock.addFocusableFloating(this, decor, activity, entry);
+        PluginFloatingDock.addFloating(this, decor, activity, entry, false);
+    }
+
+    /**
+     * 详情页的「插件」行容器。
+     *
+     * <p>找不到就返回 {@code null}，调用方回退到浮标：这条行只存在于详情页布局里，首页、
+     * 设置页等没有它，不能在那些页面凭空造一个。
+     */
+    /**
+     * 取详情页的「插件」行容器。
+     *
+     * <p><b>为什么收 ViewGroup 而不是 LinearLayout。</b>手机布局用的是 {@code LinearLayout}，
+     * 电视布局用的是 {@code androidx.appcompat.widget.LinearLayoutCompat}——后者继承
+     * {@code ViewGroup} 而**不是** {@code LinearLayout}。早先按 LinearLayout 判类型，
+     * 电视详情页就会返回 null，插件行永远不被点亮：布局明明在、视图树里也看得见，
+     * 代码却当它不存在。chip 只用到 addView，ViewGroup 足够。
+     */
+    @Nullable
+    private static ViewGroup pluginRow(Activity activity) {
+        View row = activity.findViewById(R.id.pluginRow);
+        return row instanceof ViewGroup group ? group : null;
+    }
+
+    /**
+     * 往「插件」行追加一颗 chip，并让标题行与滚动容器一起现身。
+     *
+     * <p>为什么在这里控制可见性而不是让布局常显：没有插件时那一行必须完全不存在，否则详情页
+     * 会多出一块空白和一行只有标题的占位——那是把"没装插件"变成视觉噪音。
+     */
+    private void addPluginRowChip(ViewGroup row, Activity activity, PluginHost.PluginSlot entry) {
+        TextView chip = PluginChipFactory.create(this, row.getContext(), entry, PluginChipFactory.Surface.ROW);
+        // 行容器可能是 LinearLayout 也可能是 LinearLayoutCompat，两者都认 LinearLayout.LayoutParams
+        // （Compat 沿用同一套 LayoutParams），所以这里不必按具体类分支。
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMarginEnd(PluginChipFactory.dp(row.getContext(), 10));
+        row.addView(chip, params);
+        attached.add(chip);
+        View header = activity == null ? null : activity.findViewById(R.id.pluginHeader);
+        View scroll = activity == null ? null : activity.findViewById(R.id.pluginScroll);
+        // 记住容器本身而不是行：detach 时行多半已经不在树上，靠它反查会拿不到人。
+        pluginHeader = header;
+        pluginScroll = scroll;
+        if (header != null) header.setVisibility(View.VISIBLE);
+        if (scroll != null) scroll.setVisibility(View.VISIBLE);
+    }
+
+    /** 把「插件」行的标题与滚动容器收回 GONE；没有用过这一行时什么都不做。 */
+    private void hidePluginRowChrome() {
+        View header = pluginHeader;
+        View scroll = pluginScroll;
+        pluginHeader = null;
+        pluginScroll = null;
+        if (header != null) header.setVisibility(View.GONE);
+        if (scroll != null) scroll.setVisibility(View.GONE);
     }
 
     /**

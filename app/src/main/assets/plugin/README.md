@@ -38,6 +38,7 @@ webhtv.request(...)     // 受控 HTTP 请求（需 net.request 权限）
 | `playback.playing` | `{"activity":"VideoActivity","playing":"true"}` | `plugin.events` |
 | `playback.state` | `{"activity":"VideoActivity","state":"3"}` | `plugin.events` |
 | `playback.pause` / `playback.resume` | `{"activity":"VideoActivity"}` | `plugin.events` |
+| `playback.fullscreen` | `{"activity":"VideoActivity","fullscreen":"true"}` | `plugin.events` |
 | `episode.changed` | `{"activity":"VideoActivity","episode":"{...}"}` | `plugin.data.episode` |
 
 > `ui.contentShown` 被多个页面共用（首页、文件、历史、收藏、详情、播放），
@@ -55,6 +56,8 @@ webhtv.request(...)     // 受控 HTTP 请求（需 net.request 权限）
 - `state` 是 Media3 `Player.STATE_*` 的十进制字符串（1 idle / 2 buffering / 3 ready / 4 ended）。
 - `playback.pause` / `playback.resume` 挂的是**播放页 `onPause` / `onResume`（页面可见性）**；
   后台播放、画中画、跳转都可能让播放继续而页面已不可见。要播放器语义请订阅 `playback.playing`。
+- `playback.fullscreen` 的 `fullscreen` 只有 `"true"` / `"false"`，进全屏与退全屏各发一次。
+  它**只来自手机端**：电视上播放页本身就是全屏常态，没有这个切换，因此电视端不会发这个事件。
 - 所有事件在没有订阅者时**零行为**：宿主先问一句"有人听吗"，再决定是否构造 payload。
 
 ## 4. 清单示例
@@ -100,7 +103,19 @@ App **不再内置任何面板/联网插件**，本目录下只剩一个示例�
 | --- | --- |
 | 不写这个键 | 空集 = **所有页面都显示**（早期清单的默认行为，不会因为升级而消失） |
 | `home` / `detail` / `playback` / `other` | 只在对应页面显示，可多选 |
+| `fullscreen` | **只在该页进入全屏播放时显示** |
 | 宿主不认识的值（含拼错） | 永不显示——不报错，也不拒绝整份清单 |
+
+**`fullscreen` 是排他的。** 进入全屏后，当前生效范围集合里只有 `fullscreen`，不再包含
+`playback` 或 `detail`。所以：
+
+- 只写了 `["detail","playback"]` 的插件（例如豆瓣短评），进全屏后**自动隐藏**、退出全屏自动回来；
+- 想在"内嵌小窗 + 全屏"两种形态都显示，写成 `["playback","fullscreen"]`；
+- 只在全屏用，写 `["fullscreen"]`；
+- 不写 `surfaces` 的老清单在任何形态都显示（向后兼容约定不变）。
+
+这条规则只对**手机端**成立：电视上播放页本身就是全屏常态，没有"内嵌 ⇄ 全屏"这个切换，
+`fullscreen` 在电视端不会出现。需要感知全屏进出的无界面逻辑，请订阅 `playback.fullscreen` 事件。
 
 至多 8 个元素、单元素至多 16 字符；比对前统一转小写，写 `"Detail"` 与写 `"detail"` 等价。
 

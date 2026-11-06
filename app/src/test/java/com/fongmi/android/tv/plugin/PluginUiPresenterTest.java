@@ -120,4 +120,48 @@ public class PluginUiPresenterTest {
         // 这条只验证判不出东西时不抛、统一落到 other。
         assertEquals(PluginSurface.OTHER, PluginSurface.of(null));
     }
+
+    // ---- 全屏范围 ----
+
+    /**
+     * 全屏是**排他**的：进入沉浸态后生效范围里只剩 fullscreen。
+     *
+     * <p>这条是全屏隐藏能成立的前提。若全屏时集合里仍含 playback，所有声明 playback 的
+     * 插件都会照旧显示——也就是用户报的"全屏后豆瓣 chip 还在"。
+     */
+    @Test
+    public void immersiveScopeReplacesPageScope() {
+        assertEquals(Set.of(PluginSurface.FULLSCREEN), PluginSurface.scopesOf(PluginSurface.PLAYBACK, true));
+        assertEquals(Set.of(PluginSurface.FULLSCREEN), PluginSurface.scopesOf(PluginSurface.DETAIL, true));
+        // 非沉浸态保持原页面，不能顺手把其他页面也改掉。
+        assertEquals(Set.of(PluginSurface.PLAYBACK), PluginSurface.scopesOf(PluginSurface.PLAYBACK, false));
+        assertEquals(Set.of(PluginSurface.DETAIL), PluginSurface.scopesOf(PluginSurface.DETAIL, false));
+    }
+
+    /** 只声明 detail/playback 的插件（豆瓣短评就是这种）在全屏下必须落选。 */
+    @Test
+    public void playbackScopedEntranceIsHiddenInFullscreen() {
+        Set<String> active = PluginSurface.scopesOf(PluginSurface.PLAYBACK, true);
+        assertFalse(PluginSurface.matchesAny(Set.of(PluginSurface.DETAIL, PluginSurface.PLAYBACK), active));
+        assertFalse(PluginSurface.matchesAny(Set.of(PluginSurface.PLAYBACK), active));
+    }
+
+    /** 显式声明 fullscreen 的插件在全屏下要能显示，否则这个能力等于不存在。 */
+    @Test
+    public void fullscreenScopedEntranceIsShownInFullscreen() {
+        Set<String> active = PluginSurface.scopesOf(PluginSurface.PLAYBACK, true);
+        assertTrue(PluginSurface.matchesAny(Set.of(PluginSurface.FULLSCREEN), active));
+        assertTrue(PluginSurface.matchesAny(Set.of(PluginSurface.PLAYBACK, PluginSurface.FULLSCREEN), active));
+        // 只在全屏用的入口，退回内嵌小窗后应当消失。
+        assertFalse(PluginSurface.matchesAny(Set.of(PluginSurface.FULLSCREEN),
+                PluginSurface.scopesOf(PluginSurface.PLAYBACK, false)));
+    }
+
+    /** 空集仍是"全页显示"：老清单不会因为这次改动在全屏下凭空消失。 */
+    @Test
+    public void undeclaredSurfacesStayVisibleInFullscreen() {
+        Set<String> active = PluginSurface.scopesOf(PluginSurface.PLAYBACK, true);
+        assertTrue(PluginSurface.matchesAny(Set.of(), active));
+        assertTrue(PluginSurface.matchesAny(null, active));
+    }
 }
