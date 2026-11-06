@@ -128,8 +128,10 @@
 
 - 功能提交：`db272c65817`（feat(plugin): 全屏排他范围、电视插件行与面板加载壳）
 - 合并提交：`e61bdfacfa2`（merge origin/beta `13050a007ba`）
-- 修复提交：本轮（两轮评审修复，含新增 2 个测试文件与本文档）
-- recovery tag / PR：见提交后的交付记录
+- 修复提交：`a72a4b4f22b5`（fix(plugin): 按三轮评审修复全屏范围、电视插件行与面板加载壳缺陷）
+- recovery tag：`recovery/PLUGIN-01-P11-tv-row-fullscreen/20261106100520-db272c658172`、`recovery/C120-BETA-MERGE-DEV4-20261106/20261106100836-e61bdfacfa25`、`recovery/C120-R1-fix-review/20261106164507-a72a4b4f22b5`（均已推送）
+- PR：https://github.com/Silent1566/webhtv/pull/533 （`dev4` → `beta`）
+- 推送后拉取：`origin/beta` tip 仍为 `13050a007ba`，`git rev-list --left-right --count dev4...origin/beta` = `3 0`（beta 已全部合入，无新提交需要再合并）
 - 回滚方式：修复提交可 `git revert <sha>` 单独撤回；整任务可 `git revert e61bdfacfa2` 回到合并前 `db272c65817`
 
 ## 9. 遗留与下一步
