@@ -9,6 +9,17 @@ public class ExoCapacityBudgetTest {
     private static final long MB = 1024L * 1024L;
 
     @Test
+    public void playbackKeepsThePreloadCeilingAndIgnoresTheTotalLimit() {
+        assertEquals(2048 * MB, ExoCapacityBudget.capacityBytes(true, 128 * MB, 2048 * MB, 900 * MB));
+        assertEquals(64 * MB, ExoCapacityBudget.capacityBytes(false, 128 * MB, 2048 * MB, 900 * MB));
+    }
+
+    @Test
+    public void playbackCapacityNeverGoesNegative() {
+        assertEquals(0, ExoCapacityBudget.capacityBytes(true, 128 * MB, -1, 0));
+    }
+
+    @Test
     public void unlimitedTotalKeepsPreloadSetting() {
         assertEquals(2048 * MB, ExoCapacityBudget.capacityBytes(0, 2048 * MB, 0));
         assertEquals(2048 * MB, ExoCapacityBudget.capacityBytes(0, 2048 * MB, 900 * MB));

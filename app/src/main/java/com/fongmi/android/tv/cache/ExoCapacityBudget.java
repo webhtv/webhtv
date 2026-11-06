@@ -17,6 +17,18 @@ public final class ExoCapacityBudget {
      * means "unlimited" and leaves the preload setting untouched, which keeps the previous
      * behaviour for every user who never opened the cache panel.</p>
      */
+    /**
+     * The capacity for one phase of the cache lifetime.
+     *
+     * <p>Playback is deliberately not bounded by the total limit: shrinking the cache while a
+     * player reads it trades buffering headroom, seek range and re-buffering risk for disk savings
+     * the user cannot see until playback stops. The total limit applies while nothing plays, which
+     * is also when the panel reports the number.</p>
+     */
+    public static long capacityBytes(boolean playing, long totalLimitBytes, long preloadBytes, long othersBytes) {
+        return playing ? Math.max(0, preloadBytes) : capacityBytes(totalLimitBytes, preloadBytes, othersBytes);
+    }
+
     public static long capacityBytes(long totalLimitBytes, long preloadBytes, long othersBytes) {
         return capacityBytes(totalLimitBytes, preloadBytes, othersBytes, MIN_BUDGET_BYTES);
     }

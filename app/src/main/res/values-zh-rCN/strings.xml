@@ -711,7 +711,7 @@
     <string name="cache_total_limit_title">总缓存上限</string>
     <string name="cache_total_limit_summary">总上限：%1$s</string>
     <string name="cache_limit_title_exo">播放缓存上限</string>
-    <string name="cache_management_playback_budget">播放缓存 %1$s · 上限 %2$s</string>
+    <string name="cache_management_playback_budget">播放缓存 %1$s（退出播放后收至 %2$s）</string>
     <string name="cache_cleanup_confirm_title">确认清理缓存？</string>
     <string name="cache_cleanup_confirm_light">清理过期节目单、临时文件和遗留缓存？</string>
     <string name="cache_cleanup_confirm_standard">清理图片、歌词、K 歌和 WebHome 等可重建缓存？\n\n收藏、历史和设置不会受影响。</string>
