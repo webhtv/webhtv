@@ -39,6 +39,57 @@ public class LabTvFocusSourceTest {
             "src/main/res/drawable/selector_lab_icon_btn.xml"
     };
 
+    @Test
+    public void commandEditorBuildsTheFocusChain() throws Exception {
+        String editor = stripComments(read("src/main/java/com/fongmi/android/tv/lab/LabCommandEditDialog.java"));
+        String show = methodBody(editor, "dialog.setOnShowListener");
+        assertTrue("the dialog must build an explicit focus chain", show.contains("collectFocusChain(root, chain);"));
+        assertTrue("dialog buttons are the tail of that chain",
+                show.contains("addToChain(chain, dialog.getButton(AlertDialog.BUTTON_POSITIVE));"));
+        assertTrue("the chain must take over the vertical keys", show.contains("releaseVerticalKeys(chain);"));
+        assertTrue("the first chain entry owns the initial focus", show.contains("chain.get(0).requestFocus();"));
+        // 「新建命令」不会 setNeutralButton，getButton 返回 null；直接 add 会让 null 占一个链槽，
+        // 上下键停在那里被静默吞掉，取消/添加按钮按不到。
+        assertFalse("a missing dialog button must not occupy a chain slot",
+                show.contains("chain.add(dialog.getButton("));
+    }
+
+    @Test
+    public void commandEditorReleasesVerticalDpadKeys() throws Exception {
+        String editor = stripComments(read("src/main/java/com/fongmi/android/tv/lab/LabCommandEditDialog.java"));
+        String navigate = methodBody(editor, "private static void releaseVerticalKeys");
+        assertTrue("DOWN must move the chain forward", navigate.contains("KeyEvent.KEYCODE_DPAD_DOWN"));
+        assertTrue("UP must move the chain backward", navigate.contains("KeyEvent.KEYCODE_DPAD_UP"));
+        assertTrue("the chain index decides the next target", navigate.contains("requestFocus();"));
+        assertTrue("autocomplete popup must keep native arrow selection", navigate.contains("isPopupShowing()"));
+        // 触摸模式下文本控件同样吃掉上下键，把触摸模式当跳过条件会让焦点在弹窗里出不去。
+        assertFalse("touch mode must not disable the vertical-key escape", navigate.contains("isInTouchMode()"));
+        // 链式索引移动取代几何搜索：focusSearch 在可滚动弹窗里取决于当前滚动位置。
+        assertFalse("geometric focus search must not drive the editor chain", navigate.contains("focusSearch("));
+
+        String collect = methodBody(editor, "private static void collectFocusChain");
+        assertTrue("an unfocusable field must not occupy a chain slot", collect.contains("view.isFocusable()"));
+        assertTrue("a hidden row must not occupy a chain slot", collect.contains("getVisibility() != View.VISIBLE"));
+        // 参数行是 TextInputEditText / MaterialAutoCompleteTextView / MaterialSwitch，
+        // 按具体类型白名单收集会漏掉其中几类。
+        assertFalse("the chain must not filter by concrete control type", collect.contains("instanceof EditText"));
+        assertFalse("a switch row must stay reachable through the chain", collect.contains("instanceof MaterialSwitch"));
+    }
+
+    /**
+     * 编辑弹窗的焦点顺序只由 {@code LabCommandEditDialog} 的焦点链决定。
+     *
+     * <p>布局上的 nextFocus* 会被链里的上下键拦截完全覆盖，两套机制并存时改错一处也不会有测试察觉。
+     */
+    @Test
+    public void commandEditorDoesNotDeclareNextFocus() throws Exception {
+        String layout = stripComments(read("src/main/res/layout/dialog_add_command.xml"));
+        assertTrue("the editor layout must still be the one under review",
+                layout.contains("android:id=\"@+id/inputCommand\""));
+        assertFalse("the editor focus order is owned by the chain, not by nextFocus*",
+                layout.contains("android:nextFocus"));
+    }
+
     /**
      * 周期刷新不能再整表重建列表。
      *
