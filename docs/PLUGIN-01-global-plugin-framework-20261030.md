@@ -1818,10 +1818,29 @@ GET m.douban.com /rexxar/api/v2/movie/35517044/interests  200    0ms cache   (x3
 2. 面板壳复用同一实例时旧内容仍留在字段里，靠 token 与加载态遮住；退出加载态后不回到旧内容。
 3. 手机详情页布局里同样有三件套 id，但手机走悬浮入口，这三件套在手机变体上恒为 GONE。
 
-### 24.7 下一步
+### 24.7 三步评审后的追加修复（2026-11-06）
 
-1. 面板复用路径的空结果收尾需要一条回归锁（当前只有首次开壳路径被测试覆盖）。
-2. 电视端焦点环人工验收延续 §22.8 遗留项。
+P11 落地后经过三轮独立评审（正确性/生命周期、规格接线、回归风险、增量），必修项全部修完并各自带回归锁：
+
+| 追加修复 | 内容 |
+| --- | --- |
+| 面板复用后空结果撤不掉壳 | `fill` 切回加载态时无条件清 `this.html`，`dismissLoading` 的"已有内容"守卫因此才成立 |
+| Bundle 体积上限 | `title`/`html` 进 arguments 以支持真实重建（进程回收恢复、density/fontScale/locale），但正文超过 `MAX_PERSISTED_HTML_CHARS = 32768` 时不写正文、只写互斥标记；重建时若确无内容可恢复则主动关面板，绝不冒 `TransactionTooLargeException` 也不留永久转圈 |
+| 连点抑制失效 | 判定提到动作派发之前，`pending` 的登记与归还出自同一次派发；线程池拒绝时归还 key 并撤壳 |
+| 开不出壳时结果被丢弃 | `token == null` 且结果非空时退化为直接开一个有内容的面板 |
+| 结果侧回查槽位 | `panel` 与 `label` 在派发侧定死随 token 传递，插件卸载/清单变化不再把 panel 结果掉进预览分支 |
+| PiP 判据与重算 | 两页新增 `inPip` 快照字段（回调形参写、`initView` 用平台状态写初值），`isImmersive()` 读快照；`TmdbDetailActivity` 的重算移到大屏布局翻转之后、每条 PiP 路径各一次 |
+| 融合控制条焦点 | prepend 的 `nextFocusDown` 改指原第一个可聚焦子视图（原指末尾＝屏幕外） |
+| 电视端 `detail` 不可达 | 三参 `scopesOf` 让电视 `playback` 同时算 `detail`+`playback` |
+| 详情行 chip 焦点观感 | `rowBackground(context, focused)` + 焦点监听，未聚焦外观与旧实现逐像素等同 |
+
+验证：双 flavour 编译；leanback 插件 28 个套件（`PluginPanelLoadingShellTest` 10 例、`PluginFullscreenWiringTest` 7 例、`PluginUiPresenterTest` 22 例、`PluginRowRenderTest` 4 例）与 mobile 插件全量 + `lab` + `TmdbDetailActivityLayoutTest`(132) 全绿；5 组变异探针确认回归锁非空转，还原后文件逐字节相同。
+
+### 24.8 下一步
+
+1. 电视端焦点环与 PiP 小窗 chip 遮挡需真机验收（延续 §22.8 遗留项）。
+2. `PluginSurface.matches` 与 `matchesAny` 双实现并存，前者生产已无调用点，可清理。
+3. `PluginPanelDialog.onClosed`（焦点归还回调）未持久化；`fillPanel` 在 `token == null` 且结果为空时无反馈。
 
 ---
 

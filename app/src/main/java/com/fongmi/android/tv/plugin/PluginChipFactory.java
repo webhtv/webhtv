@@ -79,10 +79,12 @@ final class PluginChipFactory {
             chip.setPadding(dp(context, 12), dp(context, 6), dp(context, 12), dp(context, 6));
         } else if (surface == Surface.ROW) {
             // 与线路芯片同族：应用表面底色 + 焦点环 + 可聚焦，但背景代码化以跨 flavor 可用。
-            chip.setBackground(rowBackground(context));
+            chip.setBackground(rowBackground(context, false));
             chip.setFocusable(true);
             chip.setFocusableInTouchMode(true);
             chip.setPadding(dp(context, 20), dp(context, 10), dp(context, 20), dp(context, 10));
+            // 详情行是电视端的主要遥控器落点：背景静态时"选中"完全看不出来，必须跟着焦点换一份。
+            chip.setOnFocusChangeListener((view, focused) -> view.setBackground(rowBackground(context, focused)));
         } else {
             chip.setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10));
             chip.setBackground(ringBackground(context));
@@ -118,12 +120,15 @@ final class PluginChipFactory {
      * {@code activity_tmdb_detail.xml}，引用它会让 mobile 变体直接编译不过（实际发生过）。
      * 代码绘制跨 flavor 可用，描边色仍取主题的 {@link ThemeController#focusRingColor}，
      * 因此深浅色都能跟随。
+     *
+     * <p>未聚焦时与旧实现逐像素相同（{@code 0xB3101820} 底 + 1dp 描边），详情页常态观感不变；
+     * 聚焦时提亮底色并加粗到 2dp，让电视端"选中了"这件事一眼可见。
      */
-    static GradientDrawable rowBackground(Context context) {
+    static GradientDrawable rowBackground(Context context, boolean focused) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(0xB3101820);
+        drawable.setColor(focused ? 0xE0182430 : 0xB3101820);
         drawable.setCornerRadius(dp(context, 8));
-        drawable.setStroke(dp(context, 1), ThemeController.focusRingColor(context));
+        drawable.setStroke(dp(context, focused ? 2 : 1), ThemeController.focusRingColor(context));
         return drawable;
     }
 

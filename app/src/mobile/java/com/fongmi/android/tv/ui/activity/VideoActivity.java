@@ -458,6 +458,18 @@ private int mAudioBackgroundRandomNonce;
     private List<String> mBroken;
     private History mHistory;
     private boolean fullscreen;
+    /**
+     * 本页当前的画中画状态。
+     *
+     * <p>两个写点，各有分工：{@code onPictureInPictureModeChanged} 用形参写（回调是唯一能保证
+     * 事件顺序的地方），{@code initView} 用 {@code isInPictureInPictureMode()} 写初值——进程在
+     * 画中画中被回收后恢复不会再走一次回调，字段停在 {@code false} 会把恢复中的小窗当全屏。
+     *
+     * <p><b>为什么消费侧读字段而不是现场问平台。</b>不是为了绕开回调时序（平台在派发前已写好
+     * 该状态，回调里问也是新值），而是为了让"这一次形态变更"只有一个快照：判据在重算入口与
+     * 发事件之间必须看到同一个值，现场再问一次就可能取到别的时点。
+     */
+    private boolean inPip;
     private boolean initAuto;
     private boolean autoMode;
     private boolean revealManualSearch;
@@ -1598,6 +1610,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         initializeRuntimeDetailMode();
         mTmdbDetailTimeout = this::showTmdbDetailFallback;
         super.initView(savedInstanceState);
+        // 初始值必须来自平台真实状态：进程在画中画里被回收后重建时不会再走一次回调，
+        // 字段留在默认 false 就会把恢复中的 PiP 短暂当成全屏。
+        inPip = isInPictureInPictureMode();
         applyPlaybackOverlay();
         mRestoringConfigurationPlayback = savedInstanceState != null;
         ViewCompat.setOnApplyWindowInsetsListener(mBinding.getRoot(), (v, insets) -> setStatusBar(insets));
@@ -8575,18 +8590,22 @@ private void checkOrientation() {
     /**
      * 页面自报沉浸态：本页是否处于全屏播放。
      *
-     * <p>画中画不算：PiP 下用户仍在与本页交互，入口该留着。
+     * <p>画中画不算：PiP 下用户仍在与本页交互，入口该留着。判断读 {@link #inPip} 这个快照，
+     * 让"重算入口"与"广播事件"看到同一份形态，而不是各自去问一次平台。
      */
     @Override
     public boolean isImmersive() {
-        return fullscreen && !isInPictureInPictureMode();
+        return fullscreen && !inPip;
     }
 
     /**
      * 全屏形态变化后通知插件层：先重算入口可见性，再把新形态广播给订阅者。
      *
      * <p>挂在这里而不是 {@code enterFullscreen} / {@code exitFullscreen} 上：那两条只是入口，
-     * 短剧、旋转、PiP 恢复各自还有自己的路径，只有 {@code setFullscreen} 是所有变化的收口。
+     * 短剧、旋转、PiP 恢复各自还有自己的路径，只有 {@code setFullscreen} 与 PiP 回调是所有变化的收口。
+     *
+     * <p>广播值取 {@link #isImmersive()} 而不是裸 {@code fullscreen}：入口的隐藏判据就是它。
+     * 两处取不同值会让画中画期间事件报「全屏」而入口仍然可见，声明与行为脱钩。
      */
     private void notifyPluginFullscreen() {
         try {
@@ -8595,7 +8614,7 @@ private void checkOrientation() {
             // 插件入口是可选增强：重算失败不该影响播放页。
         }
         try {
-            com.fongmi.android.tv.plugin.PluginHostEvents.playbackFullscreen(this, fullscreen);
+            com.fongmi.android.tv.plugin.PluginHostEvents.playbackFullscreen(this, isImmersive());
         } catch (Throwable ignored) {
             // 事件是可选增强：广播失败同样不该影响播放页。
         }
@@ -10006,6 +10025,9 @@ private void checkOrientation() {
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        inPip = isInPictureInPictureMode;
+        // 判据已随形参翻转：本页只依赖 fullscreen 与 inPip，这里一次重算就够。
+        notifyPluginFullscreen();
         updateFusionThemeButtonVisibility();
         if (!isFullscreen()) setVideoView(isInPictureInPictureMode);
         if (isInPictureInPictureMode) {

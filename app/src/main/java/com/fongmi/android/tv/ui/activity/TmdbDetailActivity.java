@@ -434,6 +434,18 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean autoPlayed;
     private boolean defaultPlaybackLaunchPending;
     private boolean inlineFullscreen;
+    /**
+     * 本页当前的画中画状态。
+     *
+     * <p>两个写点，各有分工：{@code onPictureInPictureModeChanged} 用形参写（回调是唯一能保证
+     * 事件顺序的地方），{@code initView} 用 {@code isInPictureInPictureMode()} 写初值——进程在
+     * 画中画中被回收后恢复不会再走一次回调，字段停在 {@code false} 会把恢复中的小窗当全屏。
+     *
+     * <p><b>为什么消费侧读字段而不是现场问平台。</b>不是为了绕开回调时序（平台在派发前已写好
+     * 该状态，回调里问也是新值），而是为了让"这一次形态变更"只有一个快照：本页 PiP 回调里
+     * 还要先翻转内嵌布局再重算入口，中途现场再问一次就会与已算过的值分叉。
+     */
+    private boolean inPip;
     private boolean inlineShortDramaMode;
     /**
      * 用户在内嵌全屏里显式选过的方向（旋转按钮）。非 {@code UNSPECIFIED} 表示用户已表态：
@@ -762,6 +774,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inflateMobileInlineControl();
         initModeController();
         super.initView(savedInstanceState);
+        // 初始值必须来自平台真实状态：进程在画中画里被回收后重建时不会再走一次回调，
+        // 字段留在默认 false 就会把恢复中的 PiP 短暂当成全屏。
+        inPip = isInPictureInPictureMode();
         tmdbConfig = TmdbConfig.effectiveCurrent();
         tmdbCredentialScope = SubscriptionTmdbCredentialStore.currentScope();
         initialTmdbItem = getIntentTmdbItem();
@@ -10403,15 +10418,21 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
      * 手机才有"内嵌小窗 ⇄ 全屏"这个切换，隐藏的逻辑只对它成立。
      *
      * <p>画中画不算沉浸：{@code inlinePiPLayout} 与系统 PiP 下本页仍在内嵌形态与用户
-     * 交互，入口该留着。
+     * 交互，入口该留着。PiP 判断读 {@link #inPip} 这个快照——本页 PiP 回调要先把内嵌布局
+     * 翻转再重算入口，判据若现场问平台，两次取值可能落在翻转前后不同的时点。
      */
     @Override
     public boolean isImmersive() {
         if (Util.isLeanback()) return false;
-        return inlineFullscreen && !inlinePiPLayout && !isInPictureInPictureMode();
+        return inlineFullscreen && !inlinePiPLayout && !inPip;
     }
 
-    /** 页面形态变化后让插件入口重算一次，并把新形态广播给订阅者。 */
+    /**
+     * 页面形态变化后让插件入口重算一次，并把新形态广播给订阅者。
+     *
+     * <p>广播值取 {@link #isImmersive()} 而不是裸 {@code inlineFullscreen}：入口隐藏判据就是它，
+     * 两处取不同值会让画中画期间事件报「全屏」而入口仍可见。
+     */
     private void refreshPluginEntrances() {
         try {
             PluginController.get().refreshRender(this);
@@ -10420,7 +10441,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         }
         if (Util.isLeanback()) return;
         try {
-            PluginHostEvents.playbackFullscreen(this, inlineFullscreen);
+            PluginHostEvents.playbackFullscreen(this, isImmersive());
         } catch (Throwable ignored) {
             // 事件是可选增强：广播失败同样不该影响播放页。
         }
@@ -11467,17 +11488,26 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        inPip = isInPictureInPictureMode;
         updateDetailThemeButtonVisibility();
-        if (!isInlinePlayerMode()) return;
+        if (!isInlinePlayerMode()) {
+            // 非内嵌形态没有布局翻转，判据只随 inPip 变：这里算一次即可。
+            refreshPluginEntrances();
+            return;
+        }
         if (isInPictureInPictureMode) {
             hideInlineControls();
             hideInlineGestureOverlays();
             // 内嵌卡片状态进入 PiP（含 Android 12+ autoEnter / 手势回桌面）必须铺满窗口，
             // 否则小窗里显示的是整页缩放（卡片圆角、描边、背景图都露出来）。全屏时布局已铺满，enterInlinePiPLayout 内部自带 guard。
             enterInlinePiPLayout();
+            // 布局翻转之后才重算：isImmersive() 读 inlinePiPLayout，早算会拿到旧形态。
+            refreshPluginEntrances();
             return;
         }
         exitInlinePiPLayout();
+        // 同上：先把内嵌布局还回去，再让插件入口按终态重算。
+        refreshPluginEntrances();
         updateInlineButtons(service() != null && player() != null && !player().isEmpty() && player().isPlaying());
         updateInlineDisplayPanel();
         updateDetailThemeButtonVisibility();

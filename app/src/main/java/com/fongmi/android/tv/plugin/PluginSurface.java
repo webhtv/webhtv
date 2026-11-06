@@ -105,28 +105,31 @@ public final class PluginSurface {
     }
 
     /**
-     * 当前页面的**生效范围集合**。
+     * 纯函数的范围计算，供单测直接覆盖。
+     *
+     * <p>抽出来是因为真机之外拿不到 {@link ImmersiveAware}：判定逻辑若只长在读取 Activity 的
+     * 那一层里，"全屏到底算不算排他"这条最关键的语义就永远测不到。
      *
      * <p>为什么是集合而不是单值：全屏是排他的，但把"页面"与"形态"表达成同一维度后，
      * 未来再加"分屏""画中画"之类的形态时，只需往集合里加元素，消费侧一行都不用改。
      *
-     * <p>沉浸态下返回的集合里**只有** {@link #FULLSCREEN}——见该常量的说明。
+     * <p><b>电视端为什么把 playback 同时算成 detail。</b>电视端没有独立的详情页：详情与播放
+     * 同在一个 {@code VideoActivity} 里（插件行就挂在 {@code activity_video.xml} 上），类名不含
+     * Detail，{@link #of(Activity)} 只能把它判成 {@code playback}。若这里仍按单一页面算，清单里
+     * {@code surfaces:["detail"]} 的插件在电视上就永远没有入口——手机端出现、电视端消失，而电视端
+     * 的详情插件行恰好收不到它们。这一页同时算 detail 与 playback，才能与手机端两页的语义对齐。
      */
     @NonNull
-    public static Set<String> scopesOf(@Nullable Activity activity) {
-        if (activity == null) return Set.of(OTHER);
-        return scopesOf(of(activity), immersive(activity));
+    static Set<String> scopesOf(@NonNull String page, boolean immersive, boolean leanback) {
+        if (immersive) return Set.of(FULLSCREEN);
+        if (leanback && PLAYBACK.equals(page)) return Set.of(DETAIL, PLAYBACK);
+        return Set.of(page);
     }
 
-    /**
-     * 纯函数的范围计算，供单测直接覆盖。
-     *
-     * <p>抽出来是因为真机之外拿不到 {@link ImmersiveAware}：判定逻辑若只长在
-     * {@code scopesOf(Activity)} 里，"全屏到底算不算排他"这条最关键的语义就永远测不到。
-     */
+    /** 两参重载：等价于非电视端（单页面语义），既有测试与调用方按它表达"这一页是什么"。 */
     @NonNull
     static Set<String> scopesOf(@NonNull String page, boolean immersive) {
-        return immersive ? Set.of(FULLSCREEN) : Set.of(page);
+        return scopesOf(page, immersive, false);
     }
 
     /**
