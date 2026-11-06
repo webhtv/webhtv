@@ -286,6 +286,19 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault());
     private static final int CHIP_STROKE_DP = 1;
     private static final int CHIP_MAX_WIDTH_DP = 240;
+    /**
+     * 芯片内边距，必须按 dp 换算后写入。
+     *
+     * 这里曾经直接写 {@code setPadding(24, 12, 24, 12)}——那是像素而不是 dp，于是同一份
+     * 代码在不同密度上得到不同内边距：320dpi（2x）上 24px=12dp 正常，280dpi（1.75x）上
+     * 24px≈13.7dp 偏大，480dpi（3x）上 24px 只有 8dp，文字就贴到描边上——这正是用户反馈的
+     * 「按钮边框包不住文本」，且只在部分密度设备上复现。
+     * 取值与同类芯片（{@code shape_video_item} 为画面按钮声明的 12dp/8dp 内边距）一致，
+     * 各密度下表现相同。本芯片背景来自 materialButtonOutlinedStyle 的 MaterialShapeDrawable，
+     * 与 {@code selector_video_item} 无关，12dp/8dp 只是取值对齐。
+     */
+    private static final int CHIP_PADDING_H_DP = 12;
+    private static final int CHIP_PADDING_V_DP = 8;
     private static final int PHOTO_PRELOAD_RADIUS = 2;
     /** 自动匹配消歧时同时最多在途的候选详情请求数。 */
     private static final int DISAMBIGUATION_CONCURRENCY = 3;
@@ -13542,13 +13555,15 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         button.setMinimumHeight(0);
         button.setInsetTop(0);
         button.setInsetBottom(0);
+        button.setInsetLeft(0);
+        button.setInsetRight(0);
         button.setMaxWidth(ResUtil.dp2px(CHIP_MAX_WIDTH_DP));
         button.setEllipsize(TextUtils.TruncateAt.MARQUEE);
         button.setMarqueeRepeatLimit(-1);
         button.setHorizontallyScrolling(true);
         button.setSingleLine(true);
         button.setTextColor(getColor(android.R.color.white));
-        button.setPadding(24, 12, 24, 12);
+        applyChipPadding(button);
         FlexboxLayout.LayoutParams params = new FlexboxLayout.LayoutParams(FlexboxLayout.LayoutParams.WRAP_CONTENT, FlexboxLayout.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, 0, 12, 12);
         button.setLayoutParams(params);
@@ -13575,6 +13590,14 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         button.setSelected(!Util.isLeanback() || selected || focused);
         button.setStrokeWidth(focused ? focusRingWidthPx() : ResUtil.dp2px(selected ? 2 : CHIP_STROKE_DP));
         button.setStrokeColor(ColorStateList.valueOf(focused ? focusStroke() : (selected ? colors.accent : colors.line)));
+        // 描边/底色只改 MaterialShapeDrawable，不会重写 View padding（material 1.14.0 里只有
+        // setInsets/updateButtonShape/loadFromAttributes 会调动它），所以这里无需再回写内边距。
+    }
+
+    private void applyChipPadding(MaterialButton button) {
+        int horizontal = ResUtil.dp2px(CHIP_PADDING_H_DP);
+        int vertical = ResUtil.dp2px(CHIP_PADDING_V_DP);
+        button.setPadding(horizontal, vertical, horizontal, vertical);
     }
 
     private void styleMetaChips() {

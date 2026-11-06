@@ -2,8 +2,11 @@ package com.fongmi.android.tv.lab;
 
 import android.app.Activity;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.AutoCompleteTextView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -70,23 +73,80 @@ public final class LabCommandEditDialog {
             });
         }
         AlertDialog dialog = builder.create();
-        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String title = inputTitle.getText() == null ? "" : inputTitle.getText().toString().trim();
-            String desc = inputDesc.getText() == null ? "" : inputDesc.getText().toString().trim();
-            String cmd = inputCommand.getText() == null ? "" : inputCommand.getText().toString().trim();
-            if (title.isEmpty()) {
-                inputTitle.setError("请输入标题");
-                return;
-            }
-            if (cmd.isEmpty()) {
-                inputCommand.setError("请输入命令");
-                return;
-            }
-            saveCommand(activity, item, command, title, desc, cmd, switchAuto.isChecked(), vars);
-            if (onSaved != null) onSaved.run();
-            dialog.dismiss();
-        }));
+        dialog.setOnShowListener(d -> {
+            List<View> chain = new ArrayList<>();
+            collectFocusChain(root, chain);
+            addToChain(chain, dialog.getButton(AlertDialog.BUTTON_NEUTRAL));
+            addToChain(chain, dialog.getButton(AlertDialog.BUTTON_NEGATIVE));
+            addToChain(chain, dialog.getButton(AlertDialog.BUTTON_POSITIVE));
+            releaseVerticalKeys(chain);
+            chain.get(0).requestFocus();
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                String title = inputTitle.getText() == null ? "" : inputTitle.getText().toString().trim();
+                String desc = inputDesc.getText() == null ? "" : inputDesc.getText().toString().trim();
+                String cmd = inputCommand.getText() == null ? "" : inputCommand.getText().toString().trim();
+                if (title.isEmpty()) {
+                    inputTitle.setError("请输入标题");
+                    return;
+                }
+                if (cmd.isEmpty()) {
+                    inputCommand.setError("请输入命令");
+                    return;
+                }
+                saveCommand(activity, item, command, title, desc, cmd, switchAuto.isChecked(), vars);
+                if (onSaved != null) onSaved.run();
+                dialog.dismiss();
+            });
+        });
         dialog.show();
+    }
+
+    /**
+     * 收集弹窗内可聚焦控件在布局中的先后顺序，供上下键按索引移动焦点。
+     *
+     * <p>顺序取自布局树而不是几何搜索，因为可滚动弹窗里 focusSearch 的结果取决于当前滚动位置。
+     */
+    private static void collectFocusChain(View view, List<View> chain) {
+        if (view.getVisibility() != View.VISIBLE) return;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) collectFocusChain(group.getChildAt(i), chain);
+            return;
+        }
+        // 带变量的命令会把命令框 setFocusable(false)，留在链上会让 DOWN 停在一个拿不到
+        // 焦点的位置，看上去就是「按键没反应」。
+        if (view.isFocusable()) chain.add(view);
+    }
+
+    /**
+     * 把弹窗按钮接到链尾。
+     *
+     * <p>「新建命令」没有「删除」按钮，{@code getButton} 返回 null；null 或不可见的按钮占了链槽，
+     * 上下键就会停在一个既看不见也拿不到焦点的位置。
+     */
+    private static void addToChain(List<View> chain, View button) {
+        if (button != null && button.getVisibility() == View.VISIBLE) chain.add(button);
+    }
+
+    /**
+     * 让编辑弹窗里的控件把上下键让给显式焦点链。
+     *
+     * <p>可编辑文本会把上下键当光标键吃掉（单行框里毫无用处），遥控器又没有 TAB，
+     * 于是焦点停在第一个输入框就出不去。左右键保持原生光标行为不动。
+     */
+    private static void releaseVerticalKeys(List<View> chain) {
+        for (int i = 0; i < chain.size(); i++) {
+            final int index = i;
+            chain.get(i).setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN && keyCode != KeyEvent.KEYCODE_DPAD_UP) return false;
+                if (v instanceof AutoCompleteTextView && ((AutoCompleteTextView) v).isPopupShowing()) return false;
+                int target = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? index + 1 : index - 1;
+                if (target < 0 || target >= chain.size()) return true;
+                chain.get(target).requestFocus();
+                return true;
+            });
+        }
     }
 
     private static void saveCommand(Activity activity, LabModels.Item item, LabModels.Command command, String name, String description, String commandText, boolean autoExecute, Map<String, String> vars) {

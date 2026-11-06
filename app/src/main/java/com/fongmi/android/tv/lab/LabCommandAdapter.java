@@ -105,10 +105,14 @@ public final class LabCommandAdapter extends RecyclerView.Adapter<LabCommandAdap
         holder.btnAction.setOnClickListener(v -> {
             if (listener != null) listener.onAction(item, command);
         });
-        holder.itemView.setOnLongClickListener(v -> {
+        // 遥控器上焦点落在右侧「运行」按钮时按键事件只发给它，itemView 的长按收不到，
+        // 所以两个 View 共用同一个长按监听器：按住 OK 到长按阈值进编辑，短按仍是运行/停止。
+        View.OnLongClickListener longPress = v -> {
             if (listener != null) listener.onLongPress(item, command);
             return true;
-        });
+        };
+        holder.itemView.setOnLongClickListener(longPress);
+        holder.btnAction.setOnLongClickListener(longPress);
     }
 
     @Override
