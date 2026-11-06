@@ -31,7 +31,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.cache.CacheCenter;
 import com.fongmi.android.tv.cache.CacheModuleId;
 import com.fongmi.android.tv.cache.CachePolicyStore;
-import com.fongmi.android.tv.cache.ExoCapacityBudget;
+import com.fongmi.android.tv.cache.PlaybackCacheBudget;
 import com.fongmi.android.tv.player.exo.ass.AssFontSet;
 import com.fongmi.android.tv.player.exo.ass.ExoAssSession;
 import com.fongmi.android.tv.player.cache.DiskCacheCapacityPolicy;
@@ -175,7 +175,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
      * it is what makes the largest cache on the device converge as soon as playback ends.</p>
      */
     private static long desiredCapacityBytes(CapacityPhase phase) {
-        return ExoCapacityBudget.capacityBytes(
+        return PlaybackCacheBudget.capacityBytes(
                 phase == CapacityPhase.PLAYBACK,
                 CachePolicyStore.getTotalLimitBytes(),
                 PreloadSetting.getPreloadSizeBytes(PlayerSetting.EXO),

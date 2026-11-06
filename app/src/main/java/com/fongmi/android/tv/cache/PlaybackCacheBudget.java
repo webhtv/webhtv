@@ -1,22 +1,19 @@
 package com.fongmi.android.tv.cache;
 
-public final class ExoCapacityBudget {
+/**
+ * Splits one total cache limit between the playback cache and every other cache module.
+ *
+ * <p>Both players answer to the same rule: Exo sizes its SimpleCache capacity with it and MPV
+ * prunes its HLS disk cache with it, so the arithmetic lives here instead of in either engine.</p>
+ */
+public final class PlaybackCacheBudget {
 
-    /** Keeps SimpleCache constructible when the other modules already exceed the total limit. */
+    /** Keeps a disk cache constructible when the other modules already exceed the total limit. */
     public static final long MIN_BUDGET_BYTES = 64L * 1024L * 1024L;
 
-    private ExoCapacityBudget() {
+    private PlaybackCacheBudget() {
     }
 
-    /**
-     * The total limit is one budget shared by every cache module, so the playback cache may only
-     * use what the other modules leave over.
-     *
-     * <p>The preload setting stays the ceiling: a user who configured a 2 GiB preload does not
-     * want a larger cache just because the total limit was raised above it. A zero total limit
-     * means "unlimited" and leaves the preload setting untouched, which keeps the previous
-     * behaviour for every user who never opened the cache panel.</p>
-     */
     /**
      * The capacity for one phase of the cache lifetime.
      *
@@ -29,6 +26,15 @@ public final class ExoCapacityBudget {
         return playing ? Math.max(0, preloadBytes) : capacityBytes(totalLimitBytes, preloadBytes, othersBytes);
     }
 
+    /**
+     * The idle capacity: the total limit is one budget shared by every cache module, so the
+     * playback cache may only use what the other modules leave over.
+     *
+     * <p>The configured size stays a ceiling: a user who configured a 2 GiB preload does not want a
+     * larger cache just because the total limit was raised above it. A zero total limit means
+     * "unlimited" and leaves that configured size untouched, which keeps the previous behaviour for
+     * every user who never opened the cache panel.</p>
+     */
     public static long capacityBytes(long totalLimitBytes, long preloadBytes, long othersBytes) {
         return capacityBytes(totalLimitBytes, preloadBytes, othersBytes, MIN_BUDGET_BYTES);
     }
