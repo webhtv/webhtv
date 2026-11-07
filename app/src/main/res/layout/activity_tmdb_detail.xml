@@ -514,6 +514,41 @@
                     </LinearLayout>
 
                     <LinearLayout
+                        android:id="@+id/pluginHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="22dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/pluginTitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/detail_plugin"
+                            android:textColor="@android:color/white"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <HorizontalScrollView
+                        android:id="@+id/pluginScroll"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:clipToPadding="false"
+                        android:scrollbars="none"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:id="@+id/pluginRow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+
+                    <LinearLayout
                         android:id="@+id/flagHeader"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1529,6 +1564,11 @@
                             android:id="@+id/playerRepeat"
                             style="@style/Control"
                             android:text="@string/play_repeat" />
+
+                        <!--
+                            插件 chip 追加在这排末尾（由 PluginUiPresenter 动态 addView），
+                            所以这里只留一个空位标记，不预置按钮。
+                        -->
 
                     </LinearLayout>
                 </HorizontalScrollView>

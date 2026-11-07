@@ -51,7 +51,10 @@ public final class PluginCapabilityRegistry {
                     PluginEventBus.EVENT_PLAYBACK_PLAYING,
                     PluginEventBus.EVENT_PLAYBACK_STATE,
                     PluginEventBus.EVENT_PLAYBACK_PAUSE,
-                    PluginEventBus.EVENT_PLAYBACK_RESUME)),
+                    PluginEventBus.EVENT_PLAYBACK_RESUME,
+                    // 全屏态是纯生命周期信号，payload 只有一个布尔值，不含剧集业务数据，
+                    // 因此由 plugin.events 覆盖即可，不需要 plugin.data.episode。
+                    PluginEventBus.EVENT_PLAYBACK_FULLSCREEN)),
             // 剧集身份变化（episode.changed）的 payload 携带片名/集号等业务数据，它是一条
             // 业务数据事件而非纯生命周期信号，因此只由 plugin.data.episode 覆盖——只持
             // plugin.events 的插件收不到它。真正由两条能力共同覆盖的是 ui.contentShown：
