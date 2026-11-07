@@ -17,11 +17,43 @@ public final class LangUtil {
     private static final String TAG_HANT = "zh-Hant";
 
     public static String[] getPreferredTextLanguages() {
+        return getPreferredTextLanguages(null);
+    }
+
+    /**
+     * 用户设置的优先语言优先于设备语言。
+     *
+     * <p>自动字幕匹配按 {@code preferredLanguage} 排序候选，若播放器选轨只看设备语言，
+     * 用户选的「简体中文」在最关键的一步就不起作用。空值回落到设备语言，
+     * 未设置该偏好的用户行为完全不变。
+     */
+    public static String[] getPreferredTextLanguages(String preferredLanguage) {
+        String setting = normalize(preferredLanguage);
+        if (!setting.isEmpty() && !"any".equals(setting) && !"all".equals(setting)) {
+            String script = chineseScriptTag(setting);
+            String primary = primarySubtag(setting);
+            return script == null ? unique(primary) : unique(script, primary);
+        }
         Locale locale = Locale.getDefault();
         String tag = locale.toLanguageTag();
         String language = locale.getLanguage();
         if (!isChinese(locale)) return tag.equals(language) ? new String[]{language} : unique(tag, language);
         return tag.equals(language) ? unique(getChineseScript(locale), language) : unique(tag, getChineseScript(locale), language);
+    }
+
+    /** 返回设置值对应的中文字形标签，非中文返回 null。 */
+    private static String chineseScriptTag(String normalized) {
+        if (normalized.startsWith("zhhans") || normalized.startsWith("zh-hans")
+                || normalized.equals("chs") || normalized.equals("sc")) return TAG_HANS;
+        if (normalized.startsWith("zhhant") || normalized.startsWith("zh-hant")
+                || normalized.startsWith("zhtw") || normalized.startsWith("zh-tw")
+                || normalized.equals("cht") || normalized.equals("tc")) return TAG_HANT;
+        return null;
+    }
+
+    private static String primarySubtag(String normalized) {
+        int separator = normalized.indexOf('-');
+        return separator > 0 ? normalized.substring(0, separator) : normalized;
     }
 
     public static int getPreferredTextLanguageScore(String languageTag) {

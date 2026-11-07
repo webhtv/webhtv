@@ -471,7 +471,7 @@ public class ExoUtil {
                                 ? TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
                                 : TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED)
                         .build());
-        builder.setPreferredTextLanguages(LangUtil.getPreferredTextLanguages());
+        builder.setPreferredTextLanguages(LangUtil.getPreferredTextLanguages(Setting.getSubtitlePreferredLanguage()));
         ExoTunnelingPolicy.Decision tunneling = getTunnelingDecision(decode, tunnelingFallbackAttempted);
         builder.setTunnelingEnabled(tunneling.enabled());
         if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-tunnel", "requested=%s enabled=%s reason=%s decode=%d render=%d lut=%s fallback=%s", PlayerSetting.isTunnel(), tunneling.enabled(), tunneling.reason(), decode, PlayerSetting.getRender(), LutSetting.isEnabled(), tunnelingFallbackAttempted);

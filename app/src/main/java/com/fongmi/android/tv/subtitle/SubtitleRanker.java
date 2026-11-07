@@ -100,6 +100,32 @@ public final class SubtitleRanker {
         return normalize(value);
     }
 
+    /**
+     * 把字幕源给出的语言描述收敛成合法的 BCP-47 标签。
+     *
+     * <p>字幕源常返回「简体中文」「默认」这类自然语言描述。它们进不了 Media3 的
+     * 语言匹配，选轨时等同于「语言未知」，于是用户设置的简体中文偏好在最关键
+     * 的一步失效。无法识别的一律返回空串，让播放器按未知语言处理，
+     * 而不是拿一个非法标签去比较。
+     */
+    public static String normalizeLanguageTag(String language) {
+        if (SubtitleStrings.isEmpty(language)) return "";
+        String lower = language.trim().toLowerCase(Locale.ROOT);
+        if (lower.startsWith("zhhans") || lower.startsWith("zh-hans") || lower.startsWith("zh-cn")
+                || lower.startsWith("zh-sg") || lower.equals("chs") || lower.equals("sc")
+                || lower.contains("简")) return "zh-Hans";
+        if (lower.startsWith("zhhant") || lower.startsWith("zh-hant") || lower.startsWith("zh-tw")
+                || lower.startsWith("zh-hk") || lower.startsWith("zh-mo") || lower.equals("cht")
+                || lower.equals("tc") || lower.contains("繁")) return "zh-Hant";
+        if (lower.startsWith("zh") || lower.contains("中文") || lower.contains("中字") || lower.contains("国语")
+                || lower.contains("國語") || lower.contains("双语") || lower.contains("雙語")
+                || lower.equals("默认") || lower.equals("默認") || lower.equals("default")) return "zh";
+        if (lower.startsWith("en") || lower.contains("英文") || lower.contains("英语") || lower.contains("英語")) return "en";
+        if (lower.startsWith("ja") || lower.equals("jp") || lower.contains("日文") || lower.contains("日语")) return "ja";
+        if (lower.startsWith("ko") || lower.equals("kr") || lower.contains("韩文") || lower.contains("韩语")) return "ko";
+        return "";
+    }
+
     private String normalizeLanguageCode(String value) {
         String normalized = normalize(value).replace("traditional", "hant").replace("simplified", "hans");
         if (SubtitleStrings.isEmpty(normalized)) return "zh";

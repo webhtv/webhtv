@@ -142,6 +142,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -303,6 +304,9 @@ public class PlayerManager implements ParseCallback {
     private boolean mpvAutoOutputEvaluationScheduled;
     private boolean mpvAutoOutputProbeGaveUp;
     private boolean mpvExplicitSubtitlePreference;
+    private Sub pendingSubtitleApply;
+    private boolean pendingSubtitleSelectionIssued;
+    private Consumer<Boolean> subtitleApplyListener;
     private boolean mpvAutoGpuPinnedForSession;
     private boolean mpvAutoVulkanPinnedForItem;
     private boolean mpvAutoVulkanDisabledForItem;
@@ -1276,7 +1280,27 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setSub(Sub sub) {
-        if (sub == null || spec == null) return;
+        setSub(sub, false);
+    }
+
+    /**
+     * 挂载外挂字幕。
+     *
+     * <p>{@code expectSelected} 为真时，重启后必须确认这条字幕真的成了当前选中轨，
+     * 否则通过 {@code subtitleApplyListener} 回报失败。自动匹配过去只检查「调用过
+     * setSub」，而 setSub 只给 Media3 打 SELECTION_FLAG_DEFAULT 就等待自动选轨，
+     * 语言标签不合法或残留的禁用轨都会让选轨落空，界面却已经提示「已匹配」。
+     */
+    public void setSub(Sub sub, boolean expectSelected) {
+        if (sub == null || spec == null) {
+            if (expectSelected) notifySubtitleApplyResult(false);
+            return;
+        }
+        if (expectSelected) {
+            pendingSubtitleApply = sub;
+            pendingSubtitleSelectionIssued = false;
+            armSubtitleApplyTimeout();
+        }
         Track.delete(getKey(), C.TRACK_TYPE_TEXT);
         engine.resetTrack(C.TRACK_TYPE_TEXT);
         spec.setSub(sub);
@@ -1291,6 +1315,110 @@ public class PlayerManager implements ParseCallback {
         } else {
             restartCurrentItemWithState();
         }
+    }
+
+    /** 登记一次性回调：期待的字幕是否真的成为了当前选中轨。 */
+    public void setSubtitleApplyListener(Consumer<Boolean> listener) {
+        subtitleApplyListener = listener;
+    }
+
+    private void armSubtitleApplyTimeout() {
+        App.removeCallbacks(subtitleApplyTimeoutRunnable);
+        App.post(subtitleApplyTimeoutRunnable, Constant.TIMEOUT_PLAY);
+    }
+
+    private void notifySubtitleApplyResult(boolean applied) {
+        App.removeCallbacks(subtitleApplyTimeoutRunnable);
+        pendingSubtitleApply = null;
+        pendingSubtitleSelectionIssued = false;
+        Consumer<Boolean> listener = subtitleApplyListener;
+        subtitleApplyListener = null;
+        if (listener != null) listener.accept(applied);
+    }
+
+    /**
+     * 轨道就绪后把待校验的外挂字幕选成当前轨道，并回报真实结果。
+     *
+     * <p>复用 TrackDialog 手动选轨用的同一套 override 通道：DEFAULT flag 只表达偏好，
+     * 真正选中必须有一个显式 override。所以这里能定位到轨道就显式选中；
+     * 定位不到则不虚报，回报 flag 自动选轨此刻的真实结果。
+     *
+     * <p>刻意不写 Track 表：外挂字幕的轨道 id 是运行时产生的，记下来下次起播会指向
+     * 一条不存在的轨道。字幕的跨集记忆由宿主侧的 SubtitleSource 负责。
+     */
+    /**
+     * 轨道就绪后把待校验的外挂字幕选成当前轨道，并在下一次轨道回调里复核真实结果。
+     *
+     * <p>复用 TrackDialog 手动选轨用的同一套 override 通道：DEFAULT flag 只表达偏好，
+     * 真正选中必须有一个显式 override。所以这里能定位到轨道就显式选中；
+     * 定位不到则不做 override，交给 flag 自动选轨并回报此刻的真实状态。
+     *
+     * <p>显式选轨在 Media3 是异步生效的，因此下发后不立即报成功，等下一轮轨道回调
+     * 读实际选中项再回报——否则又变成「调用过就算成功」，正是本次要修的缺陷。
+     *
+     * <p>刻意不写 Track 表：外挂字幕的轨道 id 是运行时产生的，记下来下次起播会指向
+     * 一条不存在的轨道。字幕的跨集记忆由宿主侧的 SubtitleSource 负责。
+     */
+    private void resolvePendingSubtitleApply() {
+        Sub target = pendingSubtitleApply;
+        if (target == null) return;
+        if (pendingSubtitleSelectionIssued) {
+            notifySubtitleApplyResult(isSubtitleSelected(target));
+            return;
+        }
+        Track track = findTrackForSub(target);
+        if (track == null) {
+            notifySubtitleApplyResult(isSubtitleSelected(target));
+            return;
+        }
+        pendingSubtitleSelectionIssued = true;
+        setTrack(Collections.singletonList(track));
+        armSubtitleApplyTimeout();
+    }
+
+    private final Runnable subtitleApplyTimeoutRunnable = () -> {
+        Sub target = pendingSubtitleApply;
+        if (target == null) return;
+        // 超时不再假设失败：读一次实际选中状态，确认不了才判未生效。
+        notifySubtitleApplyResult(isSubtitleSelected(target));
+    };
+
+    private Track findTrackForSub(Sub sub) {
+        if (sub == null || engine == null) return null;
+        Format selected = getSelectedFormat(getCurrentTracks(), C.TRACK_TYPE_TEXT);
+        Format match = findSubtitleFormat(engine.getCurrentTracks(), sub, selected);
+        if (match == null) return null;
+        return new Track(C.TRACK_TYPE_TEXT, describeSubtitleName(match, sub), PlayerHelper.describeFormat(match)).playerId(match.id);
+    }
+
+    private String describeSubtitleName(Format format, Sub sub) {
+        return TextUtils.isEmpty(format.label) ? sub.getName() : format.label;
+    }
+
+    static Format findSubtitleFormat(Tracks tracks, Sub sub, Format selectedFallback) {
+        if (tracks == null || tracks.isEmpty() || sub == null) return null;
+        List<Format> candidates = new ArrayList<>();
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_TEXT) continue;
+            for (int i = 0; i < group.length; i++) candidates.add(group.getTrackFormat(i));
+        }
+        if (candidates.isEmpty()) return null;
+        for (Format format : candidates) {
+            if (!TextUtils.isEmpty(format.label) && TextUtils.equals(format.label, sub.getName()) && mimeMatches(sub, format)) return format;
+        }
+        for (Format format : candidates) {
+            if (TextUtils.isEmpty(format.label) && mimeMatches(sub, format) && languageMatches(sub, format)) return format;
+        }
+        if (selectedFallback != null && candidates.contains(selectedFallback) && mimeMatches(sub, selectedFallback)) return selectedFallback;
+        return candidates.size() == 1 ? candidates.get(0) : null;
+    }
+
+    private boolean isSubtitleSelected(Sub sub) {
+        if (sub == null || engine == null) return false;
+        Tracks tracks = getCurrentTracks();
+        Format selected = getSelectedFormat(tracks, C.TRACK_TYPE_TEXT);
+        if (selected == null) return false;
+        return findSubtitleFormat(tracks, sub, selected) == selected;
     }
 
     /**
@@ -8742,6 +8870,9 @@ public void resetTrack(int type) {
                 callback.onTracksChanged();
                 initTrack = true;
             }
+            // 放在 initTrack 守卫之外：显式选轨会再次触发本回调，而那时 initTrack 已是
+            // true。留在守卫内会让「选轨已下发」永远等不到复核，最终只能靠超时兜底。
+            if (pendingSubtitleApply != null) resolvePendingSubtitleApply();
             markStartupCompletion(player != null && player.getPlaybackState() == Player.STATE_READY, tracks);
             publishPlaybackTelemetry();
             applyLutForCurrentItem();
