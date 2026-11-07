@@ -260,6 +260,10 @@ public class CacheManagementDialog extends DialogFragment {
                 CacheLimitOptions.indexOf(CachePolicyStore.getTotalLimitBytes()), which -> {
                     CachePolicyStore.putTotalLimitBytes(CacheLimitOptions.BYTES[which]);
                     updatePolicyButtons();
+                    // The idle budget is derived from the total limit, so the summary line would
+                    // keep promising the previous "shrinks to" figure. Converging here is what the
+                    // new total asks for; during playback the release path converges it instead.
+                    applyPlaybackLimit();
                 });
     }
 
