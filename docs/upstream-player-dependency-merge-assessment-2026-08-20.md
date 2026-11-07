@@ -5098,3 +5098,12 @@ C3 的触发来源主要是 media `990abc2368fd74779f525ee345734470659f3d53`（`
 - 验证：`app` 双 flavor arm64 Debug Java 编译 `BUILD SUCCESSFUL`；定向单测 633 例 / 1 skipped / 0 失败；全量 leanback 单测 4492 例 / 3 skipped / 8 失败，8 例在合并前基线独立 worktree 中逐条复现（失败名 `diff` 无差异）⇒ 0 新增失败；`git diff --check` 与冲突标记扫描为空。
 - 未执行：设备端 `exo-frame` / `exo-frame-timing` / 输入侧计数读数（X7 Ultra 未连接）。
 - 下一动作：PR #478 合并后，下一轮任务开头合并 `origin/beta` 的最新 tip（已前进到 `d72134c5aa`，与本轮 0 路径交集）。
+
+## 检查点 65：2026-11-07 C120 dev2 合并上游播放缓存上限（Silent1566）
+
+- 基线：`dev2@85afd14593`（已快进 `origin/dev2`，含 PR #531 的 lab 焦点链修复）；目标：`webhtv/webhtv:Silent1566@47454687f5`，merge-base `15e8f6af48`（C93 已合并的上游 tip）。增量 4 个提交 / 12 路径 `+396 −33`，`git cherry` 四行全 `+` 且 `PlaybackCacheBudget.java` 在 dev2 不存在 ⇒ 确属新代码，非重复。
+- 内容：`ff960e1072` 播放缓存受总上限约束并修正面板「Total:」误导文案；`2303a8b9bc` 总量上限仅在播放结束后生效；`900e58341c` MPV HLS 缓存空闲收敛；`47454687f5` 上限接入 EXO 容量计算并修正评审缺陷（`PlaybackCacheBudget.ceilingBytes` 作为预加载设置之上的额外天花板，默认不限故老用户行为不变）。
+- 冲突 1 处：`CacheManagementDialog.java` 双方同位置插入（上游新增 `applyPlaybackLimit()` / 本地 `applyFocusRing()` 实测因果注释），解决为两侧全保留，本地语义描边通道不回退到已删除的 `selector_cache_button_focus`；其余 8 路径自动合并。
+- 验证：`:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.cache.*"` 88 例 / 0 失败（16 suite 含 `PlaybackCacheBudgetTest`）；`:app:compileLeanbackArm64_v8aDebugJavaWithJavac` BUILD SUCCESSFUL；冲突标记扫描为空；三语 `cache_management_playback_budget` 占位符一致。
+- 未执行：设备端实测（面板播放缓存行文案、退出播放后 EXO 目录实际收缩、选上限后即时收敛），本机无连接设备。
+- 下一动作：本任务闭环；`dev2` 仅落本地未推送。下一轮任务开头先合并 `origin/beta` / `origin/dev2` 最新 tip。
