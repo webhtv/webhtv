@@ -38,6 +38,7 @@ webhtv.request(...)     // 受控 HTTP 请求（需 net.request 权限）
 | `playback.playing` | `{"activity":"VideoActivity","playing":"true"}` | `plugin.events` |
 | `playback.state` | `{"activity":"VideoActivity","state":"3"}` | `plugin.events` |
 | `playback.pause` / `playback.resume` | `{"activity":"VideoActivity"}` | `plugin.events` |
+| `playback.fullscreen` | `{"activity":"VideoActivity","fullscreen":"true"}` | `plugin.events` |
 | `episode.changed` | `{"activity":"VideoActivity","episode":"{...}"}` | `plugin.data.episode` |
 
 > `ui.contentShown` 被多个页面共用（首页、文件、历史、收藏、详情、播放），
@@ -55,6 +56,15 @@ webhtv.request(...)     // 受控 HTTP 请求（需 net.request 权限）
 - `state` 是 Media3 `Player.STATE_*` 的十进制字符串（1 idle / 2 buffering / 3 ready / 4 ended）。
 - `playback.pause` / `playback.resume` 挂的是**播放页 `onPause` / `onResume`（页面可见性）**；
   后台播放、画中画、跳转都可能让播放继续而页面已不可见。要播放器语义请订阅 `playback.playing`。
+- `playback.fullscreen` 的 `fullscreen` 只有 `"true"` / `"false"`，进全屏与退全屏各发一次。
+  取值与入口隐藏判据**同一份口径**：**画中画不算全屏**（PiP 下用户仍在与本页交互，入口保留），
+  所以进入/退出画中画也会各发一次——处于全屏时进 PiP 发 `"false"`、退出 PiP 发 `"true"`；
+  本来就不是全屏的，进/出 PiP 发出的仍是 `"false"`。
+- 这个事件**手机端才有**：手机播放页与手机内嵌播放的详情页都是发送方；电视上播放页本身就是全屏常态，
+  没有"内嵌 ⇄ 全屏"这个切换，电视端不发这个事件（与 §5 `surfaces` 里 `fullscreen` 的适用范围一致）。
+  订阅方不要用 `activity` 名字去推形态，进/退画中画时同一页会连发两次。
+  手机端的**直播页、音频页、投屏页**不是这个事件的发送方（直播没有"内嵌 ⇄ 全屏"这个形态切换），
+  而本节上半部分的其它 `playback.*` 事件仍可能来自这些播放页——两者的发送方范围不同，不要混着推。
 - 所有事件在没有订阅者时**零行为**：宿主先问一句"有人听吗"，再决定是否构造 payload。
 
 ## 4. 清单示例
@@ -100,7 +110,28 @@ App **不再内置任何面板/联网插件**，本目录下只剩一个示例�
 | --- | --- |
 | 不写这个键 | 空集 = **所有页面都显示**（早期清单的默认行为，不会因为升级而消失） |
 | `home` / `detail` / `playback` / `other` | 只在对应页面显示，可多选 |
+| `fullscreen` | **只在该页进入全屏播放时显示** |
 | 宿主不认识的值（含拼错） | 永不显示——不报错，也不拒绝整份清单 |
+
+**`fullscreen` 是排他的。** 进入全屏后，当前生效范围集合里只有 `fullscreen`，不再包含
+`playback` 或 `detail`。所以：
+
+- 只写了 `["detail","playback"]` 的插件（例如豆瓣短评），进全屏后**自动隐藏**、退出全屏自动回来；
+- 想在"内嵌小窗 + 全屏"两种形态都显示，写成 `["playback","fullscreen"]`；
+- 只在全屏用，写 `["fullscreen"]`；
+- 不写 `surfaces` 的老清单在任何形态都显示（向后兼容约定不变）。
+
+这条规则只对**手机端**成立：电视上播放页本身就是全屏常态，没有"内嵌 ⇄ 全屏"这个切换，
+`fullscreen` 在电视端不会出现。需要感知全屏进出的无界面逻辑，请订阅 `playback.fullscreen` 事件。
+
+**电视端的 `detail` 与 `playback` 在同一页上等价。** 电视端没有独立的详情页：详情内容就在播放页里，
+宿主按类型把该页判为 `playback`（判据是 `instanceof PlaybackActivity`，类名只用来区分 `Detail` 与 `Home`），
+同时把这一页也算作 `detail`。电视端另有一个站点内容列表页（`VodActivity`），它既不是详情页也不是播放页，
+被判为 `other`，没有插件入口行。
+因此 `surfaces:["detail"]` 与 `surfaces:["playback"]` 在电视端落在同一页上，写哪一个都能显示；
+手机端两者才是两个不同的页面（`TmdbDetailActivity` 的详情页与播放页），不能互相替代。
+需要"只在详情页出现"的槽位请两个都写：`["detail","playback"]`——它在手机端覆盖详情与播放两页，
+在电视端覆盖那一页，语义一致。
 
 至多 8 个元素、单元素至多 16 字符；比对前统一转小写，写 `"Detail"` 与写 `"detail"` 等价。
 

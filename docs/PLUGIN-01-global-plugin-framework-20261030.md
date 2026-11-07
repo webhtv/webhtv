@@ -1766,3 +1766,91 @@ GET m.douban.com /rexxar/api/v2/movie/35517044/interests  200    0ms cache   (x3
 - **未解决风险**：见 §23.10 与 §22.7 的遗留项——page 整页槽位、py/html 运行时、订阅通道 `plugins[]`、清单 `targets[]` 与 `ui[].leanback` 覆盖块、`reservedNames`/`staged` 保护、插件设置页的审计查看/清理入口、电视端焦点环人工验收。
 - **回滚锚点**：`379fbcdd5aa`（合入 beta 后的基线）。本轮修复若已提交为一或数个提交，用 `git revert <sha>` 逐个撤回；未提交时直接 `git checkout -- <path>` 还原即可——本锚点只保证"回到合入 beta 时的状态"这件事有唯一确定的 commit。
 - **下一个动作**：按 §23.10 顺序取下一个尚未实施的项；开工前先确认 `docs/C117-beta-merge-review-dev4-20261103.md` 的遗留台账没有把它标成「已覆盖」。
+
+---
+
+## 24. P11：全屏排他范围、电视插件行与面板加载壳
+
+### 24.1 三条用户反馈与裁定
+
+| 反馈 | 根因 | 裁定 |
+| --- | --- | --- |
+| 电视详情页完全看不到插件区域 | 插件行只加在了手机布局 `activity_tmdb_detail.xml`，电视详情页用的是 `src/leanback/res/layout/activity_video.xml` | 电视布局补「插件」行（`pluginHeader` / `pluginScroll` / `pluginRow`），无插件时整行 GONE |
+| 全屏播放时豆瓣 chip 挡住画面 | `surfaces` 只有单值页面判定，全屏仍算 `playback` | 新增排他的 `fullscreen` 范围：沉浸态下生效集合**只有** `fullscreen` |
+| 点 chip 后 1–3 秒无反馈，用户连点叠出多个面板 | 原实现"结果回来才弹面板" | 面板先开壳转圈，结果按 token 回填；同一动作在跑时不再开第二个 |
+
+### 24.2 为什么全屏必须是排他的
+
+若全屏时集合仍含 `playback`，所有声明 `playback` 的插件照旧显示——判据本身失效。排他之后
+"全屏默认干净、要显示必须显式声明 `fullscreen`"成为默认行为，且老清单（不写 `surfaces`）
+依旧全页显示，向后兼容不破。
+
+判定走页面自报（`PluginSurface.ImmersiveAware`），不由插件层查 WindowInsets：查 insets 在渲染
+路径上可能抛，且"系统栏不可见"与"用户在全屏看片"不等价（PiP、分屏下系统栏也可能不可见）。
+`Util.isFullscreen` 在电视端恒为 `true`，拿它当隐藏判据会让 TV 入口永久消失，因此电视端页面
+`isImmersive()` 一律返回 `false`。
+
+### 24.3 为什么点击与结果要分两步
+
+插件一次调用最长 5 秒（`QuickJsPluginRuntime.CALL_TIMEOUT_MS`）。先开壳给即时反馈，既是体验也是
+防连点：`PluginController.pending` 是「进行中」集合而不是「已点过」的集合，动作一回来立即归还，
+一次失败不会让入口永久失效。结果用 token 配对回填：用户可能已关面板或点了别的入口，token 不匹配
+就丢弃，避免串台。插件返回空结果时必须显式撤销加载壳（`dismissLoading`），否则面板永远转圈。
+
+### 24.4 融合播放器那一排按钮为什么插到最前
+
+`playerActionRow` 里的按钮是横向滚动容器内的一排，实测末尾按钮落在 x≈2900 而屏幕只有 1920 宽，
+追加到末尾等于挂在看不见的地方。改为插到索引 0（最左端，直接可点），焦点链改成
+"新 chip → 原第一个"。
+
+### 24.5 验证
+
+| 项 | 结果 |
+| --- | --- |
+| 双变体 Java 编译 | `:app:compileMobileArm64_v8aDebugJavaWithJavac` / `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` BUILD SUCCESSFUL |
+| 插件单测（mobile） | `--tests 'com.fongmi.android.tv.plugin.*'` 25 个套件全部通过（含新增 `PluginUiPresenterTest` 4 例全屏范围用例） |
+| 插件单测（leanback） | 同上 26 个套件全部通过（含新增 `PluginRowRenderTest` 4 例真实渲染守卫） |
+| 既存环境失败 | mobile 全量跑的 `MpvFontConfigTest` / `MpvHlsCacheCoordinatorTest` 为 Windows 文件语义的既有失败（`docs/TV-FOCUS-PAIR-20261021.md:127` 等多处已用回退复现记录），与本改动无交集 |
+
+### 24.6 已知边界
+
+1. 电视端 `fullscreen` 范围不生效（电视播放页本身即全屏常态，没有"内嵌 ⇄ 全屏"切换）。
+2. 面板壳复用同一实例时旧内容仍留在字段里，靠 token 与加载态遮住；退出加载态后不回到旧内容。
+3. 手机详情页布局里同样有三件套 id，但手机走悬浮入口，这三件套在手机变体上恒为 GONE。
+
+### 24.7 三步评审后的追加修复（2026-11-06）
+
+P11 落地后经过三轮独立评审（正确性/生命周期、规格接线、回归风险、增量），必修项全部修完并各自带回归锁：
+
+| 追加修复 | 内容 |
+| --- | --- |
+| 面板复用后空结果撤不掉壳 | `fill` 切回加载态时无条件清 `this.html`，`dismissLoading` 的"已有内容"守卫因此才成立 |
+| Bundle 体积上限 | `title`/`html` 进 arguments 以支持真实重建（进程回收恢复、density/fontScale/locale），但正文超过 `MAX_PERSISTED_HTML_CHARS = 32768` 时不写正文、只写互斥标记；重建时若确无内容可恢复则主动关面板，绝不冒 `TransactionTooLargeException` 也不留永久转圈 |
+| 连点抑制失效 | 判定提到动作派发之前，`pending` 的登记与归还出自同一次派发；线程池拒绝时归还 key 并撤壳 |
+| 开不出壳时结果被丢弃 | `token == null` 且结果非空时退化为直接开一个有内容的面板 |
+| 结果侧回查槽位 | `panel` 与 `label` 在派发侧定死随 token 传递，插件卸载/清单变化不再把 panel 结果掉进预览分支 |
+| PiP 判据与重算 | 两页新增 `inPip` 快照字段（回调形参写、`initView` 用平台状态写初值），`isImmersive()` 读快照；`TmdbDetailActivity` 的重算移到大屏布局翻转之后、每条 PiP 路径各一次 |
+| 融合控制条焦点 | prepend 的 `nextFocusDown` 改指原第一个可聚焦子视图（原指末尾＝屏幕外） |
+| 电视端 `detail` 不可达 | 三参 `scopesOf` 让电视 `playback` 同时算 `detail`+`playback` |
+| 详情行 chip 焦点观感 | `rowBackground(context, focused)` + 焦点监听，未聚焦外观与旧实现逐像素等同 |
+
+验证：双 flavour 编译；leanback 插件 28 个套件（`PluginPanelLoadingShellTest` 10 例、`PluginFullscreenWiringTest` 7 例、`PluginUiPresenterTest` 22 例、`PluginRowRenderTest` 4 例）与 mobile 插件全量 + `lab` + `TmdbDetailActivityLayoutTest`(132) 全绿；5 组变异探针确认回归锁非空转，还原后文件逐字节相同。
+
+### 24.8 下一步
+
+1. 电视端焦点环与 PiP 小窗 chip 遮挡需真机验收（延续 §22.8 遗留项）。
+2. `PluginSurface.matches` 与 `matchesAny` 双实现并存，前者生产已无调用点，可清理。
+3. `PluginPanelDialog.onClosed`（焦点归还回调）未持久化；`fillPanel` 在 `token == null` 且结果为空时无反馈。
+
+---
+
+## Recovery anchor · 恢复锚点（2026-11-06）
+
+- **目标**：P11（全屏排他范围 / 电视插件行 / 面板加载壳 / 融合控制条插入位置）在 `dev4` 落地，并与 `origin/beta` 最新代码合并后保持可评审、可回滚。
+- **验收标准**：双 flavour Java 编译通过；`--tests 'com.fongmi.android.tv.plugin.*'` 在两变体全绿；插件包内每个文件 ≤500 行。
+- **当前文件/符号**：`PluginSurface`（`FULLSCREEN` / `ImmersiveAware` / `scopesOf` / `matchesAny`）、`PluginUiPresenter`（`pluginRow` 挂载、`hidePluginRowChrome`、融合控制条 prepend）、`PluginPanelDialog`（`showLoading` / `fill` / `dismissLoading` / token）、`PluginController`（`pending` 去重、`refreshRender`）、`PluginHostEvents.playbackFullscreen`、`PluginEventBus.EVENT_PLAYBACK_FULLSCREEN`。
+- **已完成动作与结果**：见 §24.5；双 flavour 编译 + 两变体插件单测全绿。
+- **未验证的工作区改动**：无（本节文字随同一提交落盘）。
+- **未解决风险**：§24.6 第 2 条（面板复用路径的空结果收尾缺少回归锁）。
+- **回滚锚点**：`060bf8110d5`（合入 beta 前的 `dev4` 基线）；本阶段改动为单一提交，可用 `git revert <sha>` 整体撤回。
+- **下一个动作**：合并 `origin/beta` 最新代码并复评，随后推送 `dev4` 与开 PR → `beta`。

@@ -2337,6 +2337,7 @@
     <string name="detail_expand">展开</string>
     <string name="detail_collapse">收起</string>
     <string name="detail_flag">线路</string>
+    <string name="detail_plugin">插件</string>
     <string name="detail_quality">画质</string>
     <string name="detail_play_now">立即播放</string>
     <string name="detail_play_resume">继续播放 - %1$s</string>
