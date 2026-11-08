@@ -152,7 +152,47 @@ acceptance：已post→pending换片→drain、A→B→A同URL、逆序完成、
 
 run 1/3，自检完成：15/15 最终测试、双端 Java 编译、scope/diff/checkpoint通过，索引字节不变。剩余 Mobile/设备 gate 已明确交父，不冒称行为验证。下一步仅执行 task_guard finish 原子提交与立即 tag，然后把精确 code hash/tag 写忽略 report 发父；不追加自引用 docs commit、不 push、不删除工作树。
 
+## F2 / run 2/3 — Mobile decode 异步替换（2026-11-08 Asia/Shanghai）
+
+### 根因与证据
+
+- 父独立 review 指认并在本会话亲自复核：`app/src/mobile/.../VideoActivity.refreshAndSwitchDecode`（约 3963-3992）是真实异步 replacement 入口（Task.execute→SiteApi.playerContent→App.post→`switchDecodeWithResult`），但它在发出刷新请求前没有撤销当前自动弹幕 token。旧 auto HTTP 已 `App.post` 而刷新结果未回、播放 trace 未变时，旧 token 的 ownership 条件仍全部成立，旧弹幕会应用到新解码会话。`switchDecodeWithResult` 成功后也未用刷新后 Result 做 spider-first 判断重新接纳。
+- run1 只覆盖了 Leanback `toggleDecode` 同步路径，Mobile 异步替换未覆盖，故这是真实合同缺口，不是设计变更。
+- 同类入口核查（同一缺陷类，一次修）：Mobile `refreshAndSwitchPlayerKernel` 前置已有 invalidation 与 after-trace 重接纳；quality `onItemClick(Result)`、`setParse`、`consumePendingPlaybackResult`→`setPlayer` 都经 `startPlayer` override 失效；`getPlayer`/`getDetail` 已失效。仅 decode refresh 漏，修完后 Mobile 无同类遗漏。
+- **R1 已知未修风险（父裁定，本批不修）**：kernel-refresh 晚回时按“当前 episode”建立新 auto token，属于 baseline start 归属问题，只记录不扩范围。
+
+### RED → GREEN
+
+- 测试路线：Mobile 无 Robolectric 依赖、不得改 build.gradle，且两台设备为 x86_64 而 flavor 为 ARM，不能安装候选 App。因此用**真实共享业务 seam**：testLeanback 在运行时用已有 JDK 编译并按源码位置抽取 Mobile 生产文件中真实的 `AutoDanmakuToken`/`invalidateAutoDanmaku`/`ownsAutoDanmaku`/`searchAutoDanmaku`/`renewAutoDanmaku`/`refreshAndSwitchDecode`/`switchDecodeWithResult` 源码文本，桥接到真实 Leanback Activity 实例（真实 PlayerManager/PlaybackService/PlaybackTrace/isOwner/PlaybackActivity 生命周期）、真实 MockWebServer HTTP、真实 `DanmakuApi`、真实 `App.post` 主队列、真实 `setDanmaku` 记录消费者。业务判断全部来自 Mobile 源码本体，不复制、不 mock 新守卫、不加生产 test-only 分支；仅隔离无关 UI/持久化与 native 末端 prepare/rebuild/parse-execute，且 `toggleDecode`/`switchDecode` 的隔离仅是替换 native 解码重建，仍调用真实 `beginPlaybackTrace` 生成真实新 trace。
+- 业务 RED：`C-TV-ASYNC-RESULT-OWNERSHIP-MOBILE-red1.log` / `-red1.xml.log`，1 test / 1 failure —— `Mobile decode HTTP is pending: posted old auto result must not apply expected:<0> but was:<1>`。旧实现下已 post 的旧结果在 Mobile decode 刷新 pending 窗口实际应用 1 次。此前 red 日志（javax.tools 在 Android 编译单元不可见、bean.Config/Class 命名歧义、seam 字段重复）都是 fixture 编译缺口，不算业务 RED。
+- 最小 GREEN：`-green4.log` / `-green4.xml.log`，Mobile 定向 4 tests / 0 failure。
+- 最终聚焦回归：`-final2.log`，退出 0，`:app:testLeanbackArm64_v8aDebugUnitTest` **20 tests（API 2 + Activity 18）/ 0 failure / 0 error / 0 skipped**，原始 XML `-final2-DanmakuApiOwnershipTest.xml.log`、`-final2-VideoDanmakuOwnershipTest.xml.log`；同轮 `:app:compileMobileArm64_v8aDebugJavaWithJavac` 与 `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` 均成功。
+
+### 生产改动（同一文件，最小）
+
+1. `refreshAndSwitchDecode`：在 `Task.execute` 发出刷新请求前捕获旧 token 到还原槽并 `invalidateAutoDanmaku()`（清 token、cancel 自己的 auto Call），关闭“已 post 旧结果 + 刷新 pending”窗口。
+2. `switchDecodeWithResult` 成功分支：读取被本调用更新的 after trace，`switchDecode(...)` 后按**刷新后的 fresh Result**调用 `searchAutoDanmaku(result, manager, beforeTrace)`，因此 spider-first/站点弹幕判断基于 fresh 结果——旧 Result 站点弹幕为空而 fresh 有时不会预发 auto HTTP。
+3. `switchDecodeWithResult` 失败 fallback：保持原 `toggleDecode()` 行为，并把旧 token 还原到 ownership 槽，使同一媒体在 trace 变化后只恢复一次 owned 查询（不沿用旧结果）。
+4. `invalidateAutoDanmaku` 现在同时清空还原槽，因此任何更新的替换入口（getPlayer/getDetail/setPlayer/setParse/kernel refresh/startPlayer）都会作废仍挂起的 decode 还原令牌，晚到的 fallback 不能复活旧 token。
+5. 未改 DanmakuApi、Leanback、PlayerManager、controller、loader、owner、source、proxy、native、依赖或 build.gradle。
+
+### 新增覆盖（testLeanback，同一测试文件，未新增文件/依赖）
+
+- `mobileDecodeRefreshRejectsAlreadyPostedResultBeforeTraceChanges`（F2 第(1)点，业务 RED 原始案例）
+- `mobileFreshDecodeUsesFreshSpiderFirstResultRatherThanOldEmptySiteList`（F2 第(2)点：冻结旧空表不预发；请求计数仍 1）
+- `mobileAcceptedFreshDecodeQueriesAndAppliesItsNewSessionOnce`（成功接纳后新 trace 查询一次并 apply）
+- `mobileFailedDecodeFallbackCanRestoreSameMediaAutoQueryOnlyOnce`（fallback 保留 toggleDecode、同媒体只恢复一次、同 trace 不重发）
+- `mobileLateDecodeFallbackCannotReviveTokenAfterAnotherReplacement`（新替换后挂起还原令牌必须作废）
+
+### 未验 / 边界
+
+- 仍是 **Mobile 真实 Activity 布局与真设备 consumer 未测**：没有 Robolectric mobile 依赖，未安装/替换用户 App，两台 emulator 均 x86_64 而候选为 ARM。本 return 用真实 Mobile 源码 seam + 真实 Mobile 生产编译证明归属合同，不声明真机解码切换、PiP/后台音频或完整 native 重建链通过。
+- R1（kernel-refresh 晚回 token 归属）按父裁定不修，仅风险记录。
+- 本 return 未重跑父已 fresh 通过的 9 类 94 项联合验证；只跑本任务两个测试类与双端编译，父将自行复跑联合验证。
+
 ## 最终集成归档 — 2026-11-08
+
+本节记录 run1 集成结果；下文 F2/run2 为其后的独立返工，不把 94 项基线通过冒称 F2 已通过。
 
 - 用户已批准本任务窄适配，原始代码提交及恢复点在合并历史保留，不重写。
 - 代码/修复提交：`1425d0118975ed9412cb85a688a8de9f0f6b3c10`

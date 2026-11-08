@@ -289,6 +289,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private final String mDanmakuOwnerTag = "auto-danmaku-" + java.util.UUID.randomUUID();
     private AutoDanmakuToken mAutoDanmaku;
     private okhttp3.Call mAutoDanmakuCall;
+    private AutoDanmakuToken mDecodeRestoreToken;
     private boolean mDanmakuRetired;
 
     private static final class AutoDanmakuToken {
@@ -314,6 +315,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     private void invalidateAutoDanmaku() {
         mAutoDanmaku = null;
+        mDecodeRestoreToken = null;
         if (mAutoDanmakuCall != null) mAutoDanmakuCall.cancel();
         mAutoDanmakuCall = null;
     }
@@ -3971,6 +3973,9 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         String episode = getEpisode().getUrl();
         MediaMetadata metadata = buildMetadata();
         decodeSwitchRefreshing = true;
+        AutoDanmakuToken restore = mAutoDanmaku;
+        invalidateAutoDanmaku();
+        mDecodeRestoreToken = restore;
         setNextDecodeText();
         setDecodeSwitchPending(true);
         mClock.setCallback(null);
@@ -3994,9 +3999,15 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private void switchDecodeWithResult(Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
         decodeSwitchRefreshing = false;
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
+            mAutoDanmaku = mDecodeRestoreToken;
+            mDecodeRestoreToken = null;
             player().toggleDecode();
         } else {
+            mDecodeRestoreToken = null;
+            PlayerManager danmakuManager = player();
+            String beforeTrace = danmakuManager.getPlaybackTraceId();
             player().switchDecode(result, getHistoryKey(), metadata, isUseParse(), position, speed, repeat);
+            searchAutoDanmaku(result, danmakuManager, beforeTrace);
         }
         setR1Callback();
         setDecodeSwitchPending(false);
