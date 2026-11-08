@@ -286,6 +286,79 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private PlayerOsdController mOsd;
     private CustomKeyDown mKeyDown;
     private List<String> mBroken;
+    private final String mDanmakuOwnerTag = "auto-danmaku-" + java.util.UUID.randomUUID();
+    private AutoDanmakuToken mAutoDanmaku;
+    private okhttp3.Call mAutoDanmakuCall;
+    private boolean mDanmakuRetired;
+
+    private static final class AutoDanmakuToken {
+        final PlaybackService binding;
+        final PlayerManager manager;
+        final Result result;
+        final String trace, key, url, episodeName, episodeUrl, flag, name;
+
+        AutoDanmakuToken(PlaybackService binding, PlayerManager manager, Result result,
+                         String key, Episode episode, String flag, String name) {
+            this.binding = binding;
+            this.manager = manager;
+            this.result = result;
+            this.trace = manager.getPlaybackTraceId();
+            this.key = key;
+            this.url = result.getRealUrl();
+            this.episodeName = episode.getName();
+            this.episodeUrl = episode.getUrl();
+            this.flag = flag;
+            this.name = name;
+        }
+    }
+
+    private void invalidateAutoDanmaku() {
+        mAutoDanmaku = null;
+        if (mAutoDanmakuCall != null) mAutoDanmakuCall.cancel();
+        mAutoDanmakuCall = null;
+    }
+
+    private boolean ownsAutoDanmaku(AutoDanmakuToken token) {
+        return token != null && token == mAutoDanmaku && !mDanmakuRetired
+                && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect()
+                && service() == token.binding && service() != null && player() == token.manager && isOwner()
+                && TextUtils.equals(token.key, getHistoryKey())
+                && TextUtils.equals(token.url, token.result.getRealUrl())
+                && TextUtils.equals(token.episodeName, getEpisode().getName())
+                && TextUtils.equals(token.episodeUrl, getEpisode().getUrl())
+                && TextUtils.equals(token.flag, getEpisodePlayFlag(getFlag(), getEpisode()));
+    }
+
+    private void searchAutoDanmaku(Result result, PlayerManager manager, String beforeTrace) {
+        if (service() == null || player() != manager || mDanmakuRetired || isRedirect() || isPlaybackExiting()
+                || !isOwner() || isFinishing() || isDestroyed()) return;
+        String trace = manager.getPlaybackTraceId();
+        if (com.fongmi.android.tv.player.PlaybackTrace.NONE.equals(trace) || TextUtils.equals(beforeTrace, trace)
+                || !DanmakuApi.canAutoSearch(result.getDanmaku())) return;
+        AutoDanmakuToken token = new AutoDanmakuToken(service(), manager, result, getHistoryKey(), getEpisode(),
+                getEpisodePlayFlag(getFlag(), getEpisode()), mHistory.getVodName());
+        mAutoDanmaku = token;
+        mAutoDanmakuCall = DanmakuApi.searchOwned(token.name, token.episodeName, mDanmakuOwnerTag, item -> {
+            if (ownsAutoDanmaku(token) && TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) {
+                token.manager.setDanmaku(item);
+            }
+        });
+    }
+
+    private void renewAutoDanmaku() {
+        AutoDanmakuToken token = mAutoDanmaku;
+        if (!ownsAutoDanmaku(token) || TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) return;
+        invalidateAutoDanmaku();
+        searchAutoDanmaku(token.result, token.manager, token.trace);
+    }
+
+    @Override
+    protected void startPlayer(String key, Result result, boolean useParse, long timeout,
+                               MediaMetadata metadata, long startPositionMs) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
+        super.startPlayer(key, result, useParse, timeout, metadata, startPositionMs);
+    }
     private History mHistory;
     private boolean fullscreen;
     private boolean initAuto;
@@ -1235,6 +1308,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void getDetail() {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
         detailStartTime = System.currentTimeMillis();
         detailHealthRecorded = false;
         SpiderDebug.log("video-flow", "detail start key=%s id=%s name=%s", getKey(), getId(), getName());
@@ -1242,6 +1317,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void getDetail(Vod item) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
         revealManualSearch = false;
         if (!isAutoMode()) mViewModel.stopSearch();
         saveHistory();
@@ -1355,6 +1432,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void getPlayer(Flag flag, Episode episode) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
         mBinding.control.title.setText(getString(R.string.detail_title, mBinding.name.getText(), episode.getName()));
         playerStartTime = System.currentTimeMillis();
         beginPlayHealth();
@@ -1375,6 +1454,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void setPlayer(Result result) {
+        invalidateAutoDanmaku();
         if (isFinishing() || isDestroyed()) return;
         if (service() == null) {
             mPendingPlayerResult = result;
@@ -1395,9 +1475,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         }
         updateAudioStageText();
         mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
-        List<Danmaku> siteDanmakus = result.getDanmaku();
+        PlayerManager danmakuManager = player();
+        String beforeTrace = danmakuManager.getPlaybackTraceId();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
-        if (DanmakuApi.canAutoSearch(siteDanmakus)) DanmakuApi.search(mHistory.getVodName(), getEpisode().getName(), player()::setDanmaku);
+        searchAutoDanmaku(result, danmakuManager, beforeTrace);
     }
 
     private boolean consumePendingPlaybackResult() {
@@ -1490,6 +1571,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void setParse(Parse item) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
         VodConfig.get().setParse(item);
         notifyItemChanged(mBinding.control.parse, mParseAdapter);
     }
@@ -3999,6 +4082,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         String flag = currentFlag.getFlag();
         String episode = currentEpisode.getUrl();
         MediaMetadata metadata = buildMetadata();
+        invalidateAutoDanmaku();
         playerKernelSwitchRefreshing = true;
         mClock.setCallback(null);
         SpiderDebug.log("video-flow", "switch player refresh start type=%d key=%s flag=%s episode=%s", nextType, key, flag, episode);
@@ -4034,7 +4118,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
             Notify.show(result != null && result.hasMsg() ? result.getMsg() : getString(R.string.error_play_url));
         } else {
+            PlayerManager danmakuManager = player();
+            String beforeTrace = danmakuManager.getPlaybackTraceId();
             player().switchPlayer(type, result, getHistoryKey(), metadata, isUseParse(), position, speed, repeat);
+            searchAutoDanmaku(result, danmakuManager, beforeTrace);
         }
         setPlayerKernel();
         setDecode();
@@ -5781,6 +5868,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     @Override
     protected void onStateChanged(int state) {
+        if (state == Player.STATE_READY) renewAutoDanmaku();
         debugPlaybackControl("stateChanged=" + state);
         debugLyricsLoop("stateChanged=" + state, true);
         switch (state) {
@@ -6564,6 +6652,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     @Override
     protected void onDestroy() {
+        mDanmakuRetired = true;
+        invalidateAutoDanmaku();
         if (mCustomButtonPlayer != null) {
             mCustomButtonPlayer.removeCustomButtonStateListener(mCustomButtonStateListener);
             mCustomButtonPlayer = null;
