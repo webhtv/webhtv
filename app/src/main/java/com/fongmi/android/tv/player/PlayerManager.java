@@ -1337,16 +1337,6 @@ public class PlayerManager implements ParseCallback {
     }
 
     /**
-     * 轨道就绪后把待校验的外挂字幕选成当前轨道，并回报真实结果。
-     *
-     * <p>复用 TrackDialog 手动选轨用的同一套 override 通道：DEFAULT flag 只表达偏好，
-     * 真正选中必须有一个显式 override。所以这里能定位到轨道就显式选中；
-     * 定位不到则不虚报，回报 flag 自动选轨此刻的真实结果。
-     *
-     * <p>刻意不写 Track 表：外挂字幕的轨道 id 是运行时产生的，记下来下次起播会指向
-     * 一条不存在的轨道。字幕的跨集记忆由宿主侧的 SubtitleSource 负责。
-     */
-    /**
      * 轨道就绪后把待校验的外挂字幕选成当前轨道，并在下一次轨道回调里复核真实结果。
      *
      * <p>复用 TrackDialog 手动选轨用的同一套 override 通道：DEFAULT flag 只表达偏好，
@@ -1388,10 +1378,24 @@ public class PlayerManager implements ParseCallback {
         Format selected = getSelectedFormat(getCurrentTracks(), C.TRACK_TYPE_TEXT);
         Format match = findSubtitleFormat(engine.getCurrentTracks(), sub, selected);
         if (match == null) return null;
-        return new Track(C.TRACK_TYPE_TEXT, describeSubtitleName(match, sub), PlayerHelper.describeFormat(match)).playerId(match.id);
+        return selectionTrack(match, sub);
     }
 
-    private String describeSubtitleName(Format format, Sub sub) {
+    /**
+     * 构造一条「要选中的字幕轨」。
+     *
+     * <p>{@code Track.selected} 默认是 false，而 Exo 的 {@code TrackUtil.setTrackSelection}
+     * 只对 {@code isSelected()} 为真的轨道写选中索引：漏掉这一位会得到空索引 override，
+     * 等价于把字幕组整个清空——界面表现为「关闭字幕」被选中，正是自动匹配后
+     * 字幕不进画面的直接原因。MPV 侧同理由 {@code hasRequestedSubtitle} 依赖该标志。
+     */
+    static Track selectionTrack(Format format, Sub sub) {
+        Track track = new Track(C.TRACK_TYPE_TEXT, describeSubtitleName(format, sub), PlayerHelper.describeFormat(format)).playerId(format.id);
+        track.setSelected(true);
+        return track;
+    }
+
+    private static String describeSubtitleName(Format format, Sub sub) {
         return TextUtils.isEmpty(format.label) ? sub.getName() : format.label;
     }
 

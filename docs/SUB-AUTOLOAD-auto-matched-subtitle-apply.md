@@ -141,3 +141,59 @@ public boolean apply(Host host, Sub sub) {
 
 - `PlayerManager` 的两阶段复核依赖播放器在选轨后再次回调 `onTracksChanged`。MPV 与 Exo 都会被 `setTrack` 触发轨道刷新；若某内核不回调，15s 后按实际状态判定，提示可能延迟但不能说谎。
 - 手动搜索路径（`resolveManual`）仍走原来的同步 `apply`，未纳入两阶段复核。它不在用户本次反馈的范围内，改动会扩大风险面。
+
+## 7. 设备复测：显式选轨没有生效（本次修复）
+
+### 7.1 症状
+
+首次修复后设备复测：自动匹配确实命中（字幕出现在字幕列表里，即 `spec.setSub` 生效了），但选中项仍是「关闭字幕」，画面没有字幕——即 6.1 节设计的显式选轨实际没生效。
+
+### 7.2 根因
+
+`findTrackForSub` 构造选轨用的 `Track` 时漏了 `selected` 标志：
+
+```java
+return new Track(C.TRACK_TYPE_TEXT, name, PlayerHelper.describeFormat(match)).playerId(match.id);
+//                                        ↑ Track.selected 默认 false
+```
+
+而 `TrackUtil.setTrackSelection` 只对 `isSelected()` 为真的轨道写选中索引：
+
+```java
+if (track.isSelected()) selectedIndexMapByType.put(type, info.trackIndex);
+...
+Integer selectedIndex = selectedIndexMapByType.get(type);
+List<Integer> indices = selectedIndex != null ? List.of(selectedIndex) : List.of();
+builder.setOverrideForType(new TrackSelectionOverride(mediaGroup, indices));
+```
+
+`selected=false` 于是 `indices = List.of()` —— 空索引 override，等价于把整个字幕组清空。这与截图完全一致：`TrackDialog.addDisableTrack` 判定「没有轨道被选中」后高亮「关闭字幕」。
+
+手动选轨不受影响，因为 `TrackAdapter` 走 `item.toggle()` 会置 `selected=true`。这就是「手动正常、自动不行」的确切分界。
+
+同一处还有连带影响：`setTrack` 里 `mpvExplicitSubtitlePreference = hasRequestedSubtitle(tracks)` 同样依赖 `isSelected()`，MPV 的输出模式判定也跟着错。
+
+### 7.3 修复
+
+抽出可测的静态工厂，显式置位：
+
+```java
+static Track selectionTrack(Format format, Sub sub) {
+    Track track = new Track(C.TRACK_TYPE_TEXT, describeSubtitleName(format, sub),
+            PlayerHelper.describeFormat(format)).playerId(format.id);
+    track.setSelected(true);
+    return track;
+}
+```
+
+`findTrackForSub` 改为调用它。顺带清掉了一处重复的 javadoc 块。
+
+### 7.4 验证
+
+- 新增 `PlayerManagerTest` 两个用例：`selectionTrack_isMarkedSelectedSoTheOverrideSelectsIt`、`selectionTrack_fallsBackToSubtitleNameWhenFormatHasNoLabel`。
+- 反向插桩：删掉 `track.setSelected(true)` → 两个用例立即失败，随后还原。
+- `PlayerManagerTest` + `subtitle.*` + `TrackUtilTest` 在 leanback 与 mobile 两个变体均全绿。
+
+### 7.5 教训
+
+6.3 节的单测全部是替身测试，只覆盖到 `SubtitlePlaybackSession` 的语义，没有覆盖 `PlayerManager` 真正下发给引擎的 `Track` 对象。缺陷正好落在两者之间的缝隙里。凡是「构造命令对象」的地方，都应把对象的必要字段做成可断言的值，而不是留给设备去发现。

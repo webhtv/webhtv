@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
@@ -13,6 +14,7 @@ import androidx.media3.common.Tracks;
 
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Sub;
+import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.player.engine.PlaySpec;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -231,6 +233,39 @@ public class PlayerManagerTest {
         Sub manual = Sub.create("Manual", "/tmp/manual.srt", "zh-Hans", MimeTypes.APPLICATION_SUBRIP);
 
         assertSame(manual, PlayerManager.findSelectedSubtitleSub(List.of(manual), Tracks.EMPTY));
+    }
+
+    @Test
+    public void selectionTrack_isMarkedSelectedSoTheOverrideSelectsIt() {
+        // 设备实测：自动匹配命中后字幕出现在列表里，但「关闭字幕」仍高亮。
+        // 原因是这里构造的 Track 没置 selected，Exo 的 setTrackSelection 只对
+        // isSelected() 为真的轨道写选中索引，空索引 override 等于清空字幕组。
+        Sub sub = Sub.create("战狼2.2017.4K.HDR.H265.简体 雅黑 灰.ass", "/tmp/zhanlang2.ass", "zh-Hans", MimeTypes.TEXT_SSA);
+        Format format = new Format.Builder()
+                .setLabel("战狼2.2017.4K.HDR.H265.简体 雅黑 灰.ass")
+                .setLanguage("zh-Hans")
+                .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .build();
+
+        Track track = PlayerManager.selectionTrack(format, sub);
+
+        assertTrue("选轨用的 Track 必须是 selected，否则 override 会清空字幕组", track.isSelected());
+        assertFalse(track.isDisabled());
+        assertEquals(C.TRACK_TYPE_TEXT, track.getType());
+    }
+
+    @Test
+    public void selectionTrack_fallsBackToSubtitleNameWhenFormatHasNoLabel() {
+        Sub sub = Sub.create("匹配字幕.ass", "/tmp/sub.ass", "zh-Hans", MimeTypes.TEXT_SSA);
+        Format format = new Format.Builder()
+                .setLanguage("zh-Hans")
+                .setSampleMimeType(MimeTypes.TEXT_SSA)
+                .build();
+
+        Track track = PlayerManager.selectionTrack(format, sub);
+
+        assertEquals("匹配字幕.ass", track.getName());
+        assertTrue(track.isSelected());
     }
 
     @Test
