@@ -7,7 +7,9 @@ import android.content.Context;
 import android.os.StatFs;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.player.exo.MediaSourceFactory;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Prefers;
 
 import java.io.File;
@@ -90,6 +92,10 @@ public final class CacheScheduler {
         // cancels the platform job. Every tick must therefore re-read the switch, otherwise turning
         // auto cleanup off would still delete cache at the next periodic/limit tick.
         if (!CachePolicyStore.isAutoCleanupEnabled()) return;
+        // Warm the snapshot: the capacity budget reads module sizes from it, and an absent snapshot
+        // would hand the playback cache the whole total limit.
+        CacheCenter.get().requestSnapshot(true, ignored -> {
+        });
         trigger("startup", null);
         enforceTotalLimit();
     }
@@ -107,19 +113,37 @@ public final class CacheScheduler {
         if (now - Prefers.getLong(KEY_LAST_LIMIT_MS, 0L) < LIMIT_INTERVAL_MS) return;
         Prefers.put(KEY_LAST_LIMIT_MS, now);
         CacheCleanupManager.applyConfiguredLimits();
+        // The playback cache converges on its own when the last player session is released; this is
+        // the backstop for a device that keeps a player alive for days.
+        MediaSourceFactory.enforceCapacityNow();
         enforceTotalLimit();
     }
 
+    /**
+     * Runs the total-limit pass only when the automatic plan can actually lower the total.
+     *
+     * <p>The automatic plan never touches the playback caches, Glide, WebHome raw or unclassified
+     * cache. When everything above the limit sits in those modules, cleaning would report success
+     * every twelve hours while the number never moves, so the pass is skipped instead of repeating
+     * an action that cannot converge.</p>
+     */
     private void enforceTotalLimit() {
         long configured = CachePolicyStore.getTotalLimitBytes();
         if (configured <= 0) return;
         long effective = CacheTotalLimitPolicy.effectiveLimit(configured,
                 CacheCenter.get().systemQuotaBytes());
-        if (!CacheTotalLimitPolicy.overLimit(totalCacheBytes(), effective)) return;
+        CacheSnapshot snapshot = scanQuietly();
+        if (snapshot == null) return;
+        if (!CacheTotalLimitPolicy.overLimit(snapshot.totalBytes(), effective)) return;
+        if (!canReclaimBelow(snapshot, effective)) {
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("cache-scheduler", "total-limit skipped reason=unreclaimable effectiveLimit=%d totalBytes=%d", effective, snapshot.totalBytes());
+            return;
+        }
         CacheCleanupManager.execute(automaticPlan(CacheCleanupMode.LIGHT), "total-limit", first -> {
             if (PlaybackService.isRunning()) return;
             executor.execute(() -> {
-                if (!CacheTotalLimitPolicy.overLimit(totalCacheBytes(), effective)) return;
+                CacheSnapshot after = scanQuietly();
+                if (after == null || !CacheTotalLimitPolicy.overLimit(after.totalBytes(), effective)) return;
                 CacheCleanupManager.execute(automaticPlan(CacheCleanupMode.STANDARD),
                         "total-limit", ignored -> {
                         });
@@ -127,11 +151,27 @@ public final class CacheScheduler {
         });
     }
 
-    private long totalCacheBytes() {
+    /**
+     * Whether removing every automatically cleanable module could bring the total under the limit.
+     *
+     * <p>If the modules the plan may not touch already exceed the limit, no automatic run can pass
+     * it, so this is the guard that stops the pass from burning a full inventory and a journal
+     * record every twelve hours for nothing.</p>
+     */
+    private boolean canReclaimBelow(CacheSnapshot snapshot, long effective) {
+        long unclaimable = 0;
+        for (CacheMeasurement module : snapshot.modules()) {
+            if (CachePolicyEngine.allowsAutomatic(module.id())) continue;
+            unclaimable += Math.max(0, module.bytes());
+        }
+        return unclaimable <= effective;
+    }
+
+    private CacheSnapshot scanQuietly() {
         try {
-            return new CacheInventory(App.get()).scan().totalBytes();
+            return new CacheInventory(App.get()).scan();
         } catch (Throwable ignored) {
-            return 0;
+            return null;
         }
     }
 
