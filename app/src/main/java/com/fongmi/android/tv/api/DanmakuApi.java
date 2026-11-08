@@ -37,18 +37,22 @@ public class DanmakuApi {
         String url = DanmakuSetting.getValidApiUrl();
         if (TextUtils.isEmpty(url)) return null;
         OkHttp.cancel(TAG);
+        return newCall(name, episode, url, TAG);
+    }
+
+    private static Call newCall(String name, String episode, String url, String tag) {
         name = Trans.t2s(false, name);
         episode = Trans.t2s(false, episode);
         try {
             if (url.contains("{name}") || url.contains("{episode}")) {
-                return OkHttp.newCall(url.replace("{name}", Uri.encode(name)).replace("{episode}", Uri.encode(episode)), TAG);
+                return OkHttp.newCall(url.replace("{name}", Uri.encode(name)).replace("{episode}", Uri.encode(episode)), tag);
             } else {
                 url = getSearchUrl(url);
                 if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "search name=%s episode=%s %s", name, episode, DanmakuUrlPolicy.logSummary(url));
                 ArrayMap<String, String> params = new ArrayMap<>();
                 params.put("name", name);
                 params.put("episode", episode);
-                return OkHttp.newCall(url, OkHttp.toBody(params), TAG);
+                return OkHttp.newCall(url, OkHttp.toBody(params), tag);
             }
         } catch (IllegalArgumentException e) {
             return null;
@@ -82,6 +86,17 @@ public class DanmakuApi {
 
     public static void search(String name, String episode, Consumer<Danmaku> found) {
         Call call = newCall(name, episode);
+        enqueue(call, found);
+    }
+
+    public static Call searchOwned(String name, String episode, String ownerTag, Consumer<Danmaku> found) {
+        String url = DanmakuSetting.getValidApiUrl();
+        Call call = TextUtils.isEmpty(url) ? null : newCall(name, episode, url, ownerTag);
+        enqueue(call, found);
+        return call;
+    }
+
+    private static void enqueue(Call call, Consumer<Danmaku> found) {
         if (call == null) return;
         call.enqueue(new Callback() {
             @Override

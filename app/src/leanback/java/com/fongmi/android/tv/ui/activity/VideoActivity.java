@@ -259,6 +259,79 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private CustomKeyDownVod mKeyDown;
     private SiteViewModel mViewModel;
     private List<String> mBroken;
+    private final String mDanmakuOwnerTag = "auto-danmaku-" + java.util.UUID.randomUUID();
+    private AutoDanmakuToken mAutoDanmaku;
+    private okhttp3.Call mAutoDanmakuCall;
+    private boolean mDanmakuRetired;
+
+    private static final class AutoDanmakuToken {
+        final PlaybackService binding;
+        final PlayerManager manager;
+        final Result result;
+        final String trace, key, url, episodeName, episodeUrl, flag, name;
+
+        AutoDanmakuToken(PlaybackService binding, PlayerManager manager, Result result,
+                         String key, Episode episode, String flag, String name) {
+            this.binding = binding;
+            this.manager = manager;
+            this.result = result;
+            this.trace = manager.getPlaybackTraceId();
+            this.key = key;
+            this.url = result.getRealUrl();
+            this.episodeName = episode.getName();
+            this.episodeUrl = episode.getUrl();
+            this.flag = flag;
+            this.name = name;
+        }
+    }
+
+    private void invalidateAutoDanmaku() {
+        mAutoDanmaku = null;
+        if (mAutoDanmakuCall != null) mAutoDanmakuCall.cancel();
+        mAutoDanmakuCall = null;
+    }
+
+    private boolean ownsAutoDanmaku(AutoDanmakuToken token) {
+        return token != null && token == mAutoDanmaku && !mDanmakuRetired
+                && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect()
+                && service() == token.binding && service() != null && player() == token.manager && isOwner()
+                && TextUtils.equals(token.key, getHistoryKey())
+                && TextUtils.equals(token.url, token.result.getRealUrl())
+                && TextUtils.equals(token.episodeName, getEpisode().getName())
+                && TextUtils.equals(token.episodeUrl, getEpisode().getUrl())
+                && TextUtils.equals(token.flag, getEpisodePlayFlag(getFlag(), getEpisode()));
+    }
+
+    private void searchAutoDanmaku(Result result, PlayerManager manager, String beforeTrace) {
+        if (service() == null || player() != manager || mDanmakuRetired || isRedirect() || isPlaybackExiting()
+                || !isOwner() || isFinishing() || isDestroyed()) return;
+        String trace = manager.getPlaybackTraceId();
+        if (com.fongmi.android.tv.player.PlaybackTrace.NONE.equals(trace) || TextUtils.equals(beforeTrace, trace)
+                || !DanmakuApi.canAutoSearch(result.getDanmaku())) return;
+        AutoDanmakuToken token = new AutoDanmakuToken(service(), manager, result, getHistoryKey(), getEpisode(),
+                getEpisodePlayFlag(getFlag(), getEpisode()), mHistory.getVodName());
+        mAutoDanmaku = token;
+        mAutoDanmakuCall = DanmakuApi.searchOwned(token.name, token.episodeName, mDanmakuOwnerTag, item -> {
+            if (ownsAutoDanmaku(token) && TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) {
+                token.manager.setDanmaku(item);
+            }
+        });
+    }
+
+    private void renewAutoDanmaku() {
+        AutoDanmakuToken token = mAutoDanmaku;
+        if (!ownsAutoDanmaku(token) || TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) return;
+        invalidateAutoDanmaku();
+        searchAutoDanmaku(token.result, token.manager, token.trace);
+    }
+
+    @Override
+    protected void startPlayer(String key, Result result, boolean useParse, long timeout,
+                               MediaMetadata metadata, long startPositionMs) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        super.startPlayer(key, result, useParse, timeout, metadata, startPositionMs);
+    }
     private History mHistory;
     private boolean fullscreen;
     private boolean initAuto;
@@ -1077,6 +1150,9 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void getDetail() {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        cancelKeySeek();
         detailStartTime = System.currentTimeMillis();
         detailHealthRecorded = false;
         SpiderDebug.log("video-flow", "detail start key=%s id=%s name=%s", getKey(), getId(), getName());
@@ -1084,6 +1160,9 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void getDetail(Vod item) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        cancelKeySeek();
         revealManualSearch = false;
         if (!isAutoMode()) mViewModel.stopSearch();
         saveHistory();
@@ -1179,6 +1258,9 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void getPlayer(Flag flag, Episode episode) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        cancelKeySeek();
         mBinding.widget.title.setText(getString(R.string.detail_title, mBinding.name.getText(), episode.getName()));
         playerStartTime = System.currentTimeMillis();
         beginPlayHealth();
@@ -1207,6 +1289,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void setPlayer(Result result) {
+        invalidateAutoDanmaku();
+        cancelKeySeek();
         if (isFinishing() || isDestroyed()) return;
         SpiderDebug.log("video-flow", "player finish cost=%dms useParse=%s multi=%s msg=%s", System.currentTimeMillis() - playerStartTime, result.shouldUseParse(), result.getUrl().isMulti(), result.getMsg());
         if (service() == null) {
@@ -1227,13 +1311,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         applyAudioQueueMetadata(getPlaybackEpisode());
         if (result.hasPosition()) mHistory.setPosition(result.getPosition());
         mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
-        List<Danmaku> siteDanmakus = result.getDanmaku();
+        PlayerManager danmakuManager = player();
+        String beforeTrace = danmakuManager.getPlaybackTraceId();
         mInitialPlaybackPosition = resolveInitialPlaybackPosition();
         SpiderDebug.log("video-flow", "startPlayer dispatch initialPosition=%d music=%s ijk=%s", mInitialPlaybackPosition, isMusicLike(), service() != null && player().isIjk());
         long start = System.currentTimeMillis();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
         SpiderDebug.log("video-flow", "startPlayer return cost=%dms sincePlayerStart=%dms", System.currentTimeMillis() - start, System.currentTimeMillis() - playerStartTime);
-        if (DanmakuApi.canAutoSearch(siteDanmakus)) DanmakuApi.search(mHistory.getVodName(), getEpisode().getName(), player()::setDanmaku);
+        searchAutoDanmaku(result, danmakuManager, beforeTrace);
     }
 
     private void recordDetailHealth(Result result, long cost) {
@@ -1435,6 +1520,9 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void setParse(Parse item) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        cancelKeySeek();
         VodConfig.get().setParse(item);
         notifyItemChanged(mBinding.control.parse, mParseAdapter);
     }
@@ -1525,6 +1613,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void exitFullscreen() {
+        cancelKeySeek();
         if (mAudioStageVisible) {
             mBinding.video.setForeground(null);
             mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
@@ -3091,12 +3180,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onNext(boolean notify) {
+        cancelKeySeek();
         Episode item = mEpisodeAdapter.getNext();
         if (!item.isSelected()) onItemClick(item);
         else if (notify) Notify.show(mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
     }
 
     private void onPrev(boolean notify) {
+        cancelKeySeek();
         Episode item = mEpisodeAdapter.getPrev();
         if (!item.isSelected()) onItemClick(item);
         else if (notify) Notify.show(mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
@@ -3267,12 +3358,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onReplay() {
+        cancelKeySeek();
         mHistory.setPosition(C.TIME_UNSET);
         if (player().isEmpty()) onRefresh();
         else player().setMediaItem();
     }
 
     private void onRefresh() {
+        cancelKeySeek();
         saveHistory();
         player().stop();
         player().clear();
@@ -3344,6 +3437,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void switchPlayerKernel(int type) {
+        cancelKeySeek();
         if (refreshAndSwitchPlayerKernel(type)) return;
         mClock.setCallback(null);
         clearLyrics();
@@ -3365,6 +3459,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         String flag = currentFlag.getFlag();
         String episode = currentEpisode.getUrl();
         MediaMetadata metadata = buildMetadata();
+        invalidateAutoDanmaku();
         playerKernelSwitchRefreshing = true;
         mClock.setCallback(null);
         clearLyrics();
@@ -3390,13 +3485,18 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
             Notify.show(result != null && result.hasMsg() ? result.getMsg() : getString(R.string.error_play_url));
         } else {
+            cancelKeySeek();
+            PlayerManager danmakuManager = player();
+            String beforeTrace = danmakuManager.getPlaybackTraceId();
             player().switchPlayer(type, result, getHistoryKey(), metadata, isUseParse(), position, speed, repeat);
+            searchAutoDanmaku(result, danmakuManager, beforeTrace);
         }
         setPlayerKernel();
         setDecode();
     }
 
     private void onDecode() {
+        cancelKeySeek();
         mClock.setCallback(null);
         clearLyrics();
         player().toggleDecode();
@@ -3424,6 +3524,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onToggle() {
+        cancelKeySeek();
         if (isVisible(mBinding.control.getRoot())) hideControl();
         else showControl(getFocus2());
     }
@@ -3484,6 +3585,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void showControl(View view) {
+        cancelKeySeek();
         if (mAudioStageVisible) {
             hideControl();
             hideInfo();
@@ -3500,6 +3602,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void hideControl() {
+        cancelKeySeek();
         mBinding.control.getRoot().setVisibility(View.GONE);
         updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(false);
@@ -5467,6 +5570,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         clearKaraokeState();
         player().resetTrack();
         player().reset();
+        cancelKeySeek();
         player().stop();
         showError(msg);
         startFlow();
@@ -5484,12 +5588,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     protected void onReclaim() {
+        cancelKeySeek();
         Result result = mViewModel.getPlayer().getValue();
         if (result != null) setPlayer(result);
     }
 
     @Override
     protected void onStateChanged(int state) {
+        if (state == Player.STATE_READY) renewAutoDanmaku();
         switch (state) {
             case Player.STATE_BUFFERING:
                 showProgress();
@@ -5509,6 +5615,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
+        if (!isPlaying && isPaused()) cancelKeySeek();
         syncKaraokePosition();
         checkAudioPlayImg(isPlaying);
         if (isPlaying) {
@@ -5786,21 +5893,25 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onPaused() {
+        cancelKeySeek();
         controller().pause();
     }
 
     private void onPlay() {
+        cancelKeySeek();
         if (mHistory != null && isEnded()) controller().seekTo(mHistory.getOpening());
         if (!player().isEmpty() && isIdle()) controller().prepare();
         controller().play();
     }
 
     private boolean onSeekBack() {
+        cancelKeySeek();
         controller().seekBack();
         return true;
     }
 
     private boolean onSeekForward() {
+        cancelKeySeek();
         controller().seekForward();
         return true;
     }
@@ -5962,15 +6073,33 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (dispatchDiscMenuKey(event)) return true;
+        if (KeyUtil.isActionDown(event) && (!isFullscreen() || isVisible(mBinding.control.getRoot()) || isVisible(mBinding.lutQuick) || (!KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event) && !KeyUtil.isBackKey(event)))) cancelKeySeek();
+        if (KeyUtil.isActionDown(event) && KeyUtil.isBackKey(event)) {
+            boolean preview = isVisible(mBinding.widget.center);
+            cancelKeySeek();
+            if (preview) mBinding.widget.center.setVisibility(View.VISIBLE);
+        }
+        if (dispatchDiscMenuKey(event)) {
+            cancelKeySeek();
+            return true;
+        }
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event) && mBinding.lutQuick.hideIfVisible()) return true;
         if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
         if (isFullscreen() && KeyUtil.isMenuKey(event)) onToggle();
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
         if (isVisible(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
-        if (dispatchOpeningEndingAdjust(event)) return true;
-        if (onEpisodeKey(event)) return true;
-        if (mAudioStageVisible && isGone(mBinding.control.getRoot()) && dispatchAudioStageKey(event)) return true;
+        if (dispatchOpeningEndingAdjust(event)) {
+            cancelKeySeek();
+            return true;
+        }
+        if (onEpisodeKey(event)) {
+            cancelKeySeek();
+            return true;
+        }
+        if (mAudioStageVisible && isGone(mBinding.control.getRoot()) && dispatchAudioStageKey(event)) {
+            cancelKeySeek();
+            return true;
+        }
         if (isFullscreen() && isGone(mBinding.control.getRoot()) && mKeyDown.hasEvent(event) && service() != null) return mKeyDown.onKeyDown(event);
         if (KeyUtil.isMediaFastForward(event)) return onSeekForward();
         if (KeyUtil.isMediaRewind(event)) return onSeekBack();
@@ -6226,6 +6355,26 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         return true;
     }
 
+    private void cancelKeySeek() {
+        if (mKeyDown != null) mKeyDown.cancelSeek();
+    }
+
+    @Override
+    public boolean canSeek() {
+        return service() != null && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect() && isOwner()
+                && !player().isEmpty();
+    }
+
+    @Override
+    public String getSeekSession() {
+        return service() == null ? com.fongmi.android.tv.player.PlaybackTrace.NONE : player().getPlaybackTraceId();
+    }
+
+    @Override
+    public void onSeekCancel() {
+        hideCenter();
+    }
+
     @Override
     public void onSeeking(long time) {
         mBinding.widget.center.setVisibility(View.VISIBLE);
@@ -6295,6 +6444,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     public void onCasted() {
+        cancelKeySeek();
         clearLyrics();
         clearKaraokeState();
         player().stop();
@@ -6325,6 +6475,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     protected void onStop() {
+        cancelKeySeek();
         super.onStop();
         if (mOsd != null) mOsd.stop();
         if (mKaraoke != null) mKaraoke.clear();
@@ -6339,6 +6490,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         } else if (isVisible(mBinding.control.getRoot())) {
             hideControl();
         } else if (isVisible(mBinding.widget.center)) {
+            cancelKeySeek();
             hideCenter();
         } else if (isFullscreen()) {
             exitFullscreen();
@@ -6364,6 +6516,9 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     protected void onDestroy() {
+        mDanmakuRetired = true;
+        invalidateAutoDanmaku();
+        cancelKeySeek();
         if (mCustomButtonPlayer != null) {
             mCustomButtonPlayer.removeCustomButtonStateListener(mCustomButtonStateListener);
             mCustomButtonPlayer = null;

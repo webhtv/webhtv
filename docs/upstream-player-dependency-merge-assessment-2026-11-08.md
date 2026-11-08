@@ -2,11 +2,11 @@
 
 ## Recovery anchor
 
-- 目标：评估记录基线之后全部 TV 增量，排除当前分支已有实现；不合并、不改生产代码/锁/二进制。本次授权仅评审、修订并提交推送本文，不授权候选功能实施。
+- 当前目标：评估记录基线之后全部 TV 增量已评估完毕；用户进一步批准其中 6 个源提交对应的 5 个窄适配单元，已在独立工作树实现、完成联合验证，并已合入本分支。不升级依赖/native、不改锁/二进制。
 - 本地：`Silent1566@47454687f504955775b398905ba09d73aeb9f20c`；原有 `app/.cxx/` 由 guard 保护（35 个脏路径）。
 - 上游冻结：`https://github.com/FongMi/TV`，`fongmi@4512b4c9f82534ff66acfde06ccdd68f35b074f0`，访问日期 2026-11-08。
 - 原记录基线：`1a19fee278fa2234da725d61a53bf59b69fe9127`；共同基点：`4573249cd6679c6becca9957f6a011bf6c4a5afd`。不是祖孙；旧侧 20 条、当前侧 154 条，不能把全部 154 条称为新功能。
-- 状态：本报告为源码级合入价值评估；全部当前侧差异有处置。候选不等于实施-ready，更不等于用户已授权实施。
+- 当前状态：下方台账为 154 条源码级评估；用户只授权首批 6 个源提交的选定不变量，其余候选/全部上游 hunk 未实施。首批代码、测试与任务文档已合入，单元与整批验证结果见文末归档。
 - 回滚锚点：上述本地 HEAD；实际实施应分别形成可回滚原子变更，不能整支 merge。当前评估仅新增本文及 `.git/` 内阅读/证据缓存。
 - 下一步 / Next action：优先按本文高价值窄适配簇补齐唯一任务文档、必需设计证据和风险比例验证，再实施；本次不启动任何实施。
 
@@ -520,3 +520,32 @@ Android ZIP/SAF/16KiB官方页读取受阻，当前无完整最佳实践通过�
 - 验证：本次复审已核对 154 条编号、完整 hash、标题及三组处置，冻结历史范围为旧侧 20 条、当前侧 154 条；最终文档检查使用 checkpoint 脚本，提交时由 task guard finish 校验保护路径、范围并创建恢复标签，结果在交付摘要报告。
 - 未做：候选功能实施、构建、设备/性能/ABI测量。本次仅授权评审修订后的文档提交、恢复标签及推送；assessment guard 在文档验证通过后通过 finish 关闭，不能把文档交付解释为任何功能已验收。
 - 下一步：选择一个高价值窄适配阶段，补齐唯一任务文档及必需设计/验证，不能直接整支merge。
+
+## 首批实施授权（2026-11-08）
+
+用户已在确认五个窄适配单元后明确说“开始吧”。仅实施下列六个源提交，不包含文件安全、认证大改、模块/WASM、插帧或依赖/native升级。原工作区未提交评估及app/.cxx保持原样，代码在独立工作树实现。
+
+| 唯一任务ID | 唯一任务文件 | 已批准边界 |
+| --- | --- | --- |
+| C-TV-STRM | [HTTP STRM](C-TV-STRM-http-pointer.md) | 有界首行解析、合法目标和HTTP失败原URL回退；不改Source/file/content语义 |
+| C-TV-PYTHON-CLEANUP | [初始化失败回收](C-TV-PYTHON-CLEANUP-failed-init.md) | 一次失败实例回收、失败不缓存、非nullfallback；不改整loader owner/runtime |
+| C-TV-PROXY-RESPONSE | [代理响应兼容](C-TV-PROXY-RESPONSE-compatibility.md) | 响应头/null/bytes规范；保留3/4/5项base64，不升级SDK/JNI |
+| C-TV-SEEK-OWNERSHIP | [TV seek所有权](C-TV-SEEK-OWNERSHIP-tv-keys.md) | 两条seek提交合为一单元、250ms不变、取消完整TV入口，不改变换台/音频/PiP |
+| C-TV-ASYNC-RESULT-OWNERSHIP | [弹幕查询所有权](C-TV-ASYNC-RESULT-OWNERSHIP-danmaku.md) | 双端当前会话校验，拒绝迟到回调，不迁controller/不取消新owner |
+
+本文为五任务索引；各任务自己的设计、实现、验收和回滚只写入上表唯一文件。进度与具体提交在最终集成后统一归档，不以源提交直接cherry-pick作为实施。
+
+## 最终集成归档 — 2026-11-08
+
+| 单元 | 原始代码/修复完整提交 | 单元测试结果 |
+| --- | --- | --- |
+| [C-TV-STRM](C-TV-STRM-http-pointer.md) | `38d2670e10eb69fa8c00c3bbd8df48b07d98f1db` | 16项定向测试通过；HTTP/Source公共链，不等于decoder实播 |
+| [C-TV-PYTHON-CLEANUP](C-TV-PYTHON-CLEANUP-failed-init.md) | `d3a7298d5f3a6f76f5f2a256d4fd6f02ff7cecef` → `c861fac058e89136a6a2be233262b532fb4ceee6` | 24项定向测试通过；F1诊断后备已修复且独立复审通过；原生资源归零未设备测 |
+| [C-TV-PROXY-RESPONSE](C-TV-PROXY-RESPONSE-compatibility.md) | `e81ae22a1cdc4d026d6d5ecbbb11b96ddc3e9103` → `93d2217d00156a672f47d1405bb97dac5471ba16` | 18项定向测试通过；测试source set修正后Mobile单测编译通过；QuickJS/Python完整native链未测 |
+| [C-TV-SEEK-OWNERSHIP](C-TV-SEEK-OWNERSHIP-tv-keys.md) | `dc5f1e60c4f96f88f5183cbf11b50bf97f2c6b65` | 21项真实输入/消费者测试和双端Java编译通过；完整设备生命周期未测 |
+| [C-TV-ASYNC-RESULT-OWNERSHIP](C-TV-ASYNC-RESULT-OWNERSHIP-danmaku.md) | `1425d0118975ed9412cb85a688a8de9f0f6b3c10` → `3e39a08eb900b92579e90a68782e5ce18d519b9d` → `4a4907c859f09468e7624a1803e9e68c4e446323` | 23项单元测试通过；F2/F3/F4复审ADDRESSED；Mobile真消费者/ARM设备未测；R1为已知未修风险 |
+
+- 采用私有分支no-commit集成merge保留各原始code commit和recovery tag，不复制/重写历史；联合验证通过后才原子提交集成状态。
+- 联合定向测试最终一次（代码末态 4a4907c8）：9类102项0失败/0错误/0跳过，Leanback/Mobile Debug Java及Mobile UnitTestJavaCompile通过；日志 tree reports/TV-SMALL-FIXES-FINAL-4a4907c8.log。整批判定为 Spec PASS / Quality approved（F2/F3/F4均ADDRESSED），R1列入已知未修风险。
+- 原工作区Silent1566及其app/.cxx和未提交旧评估报告保持原样；所有提交/tag仅本地，未推送/未安装候选。
+- 独立审查已路由并修复：失败诊断打印可逃逸(F1)；Robo测试错误放common导致Mobile单测编译回归。其它STRM保基线协议观察未扩大scope。
