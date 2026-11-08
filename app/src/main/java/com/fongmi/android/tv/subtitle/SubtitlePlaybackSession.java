@@ -128,7 +128,7 @@ public final class SubtitlePlaybackSession {
         if (SubtitleStrings.isEmpty(playbackKey)) return;
 
         SubtitleTrigger trigger = resolveTrigger(host);
-        SubtitleRequest request = requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), result, host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), trigger);
+        SubtitleRequest request = requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), result, host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), trigger, playbackDurationMs(host));
         if (request == null || SubtitleStrings.isEmpty(request.getPlayUrl())) {
             stop(host);
             return;
@@ -252,6 +252,14 @@ public final class SubtitlePlaybackSession {
     private SubtitleTrigger resolveTrigger(Host host) {
         if (!active) return SubtitleTrigger.AUTO_PLAY;
         return SubtitleStrings.equals(currentEpisodeMarker, episodeMarker(host.getSubtitleEpisode())) ? SubtitleTrigger.SOURCE_SWITCH : SubtitleTrigger.EPISODE_SWITCH;
+    }
+
+    /** 播放器已知的影片时长；未知或播放器不可用时返回 0，由排序逻辑跳过时长维度。 */
+    private long playbackDurationMs(Host host) {
+        PlayerManager player = host.getSubtitlePlayer();
+        if (player == null || player.isReleased()) return 0L;
+        long duration = player.getDuration();
+        return duration > 0 ? duration : 0L;
     }
 
     private boolean hasProvidedSubtitle(Result result) {

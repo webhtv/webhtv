@@ -29,6 +29,7 @@ public final class SubtitleRequest {
     private final TmdbEpisode tmdbEpisode;
     private final int seasonNumber;
     private final int episodeNumber;
+    private final long durationMs;
 
     private SubtitleRequest(Builder builder) {
         this.playbackKey = builder.playbackKey;
@@ -49,6 +50,7 @@ public final class SubtitleRequest {
         this.tmdbEpisode = builder.tmdbEpisode;
         this.seasonNumber = builder.seasonNumber;
         this.episodeNumber = builder.episodeNumber;
+        this.durationMs = builder.durationMs;
     }
 
     public static Builder builder() {
@@ -129,6 +131,44 @@ public final class SubtitleRequest {
         return episodeNumber;
     }
 
+    /** 当前播放影片时长；0 表示未知。 */
+    public long getDurationMs() {
+        return durationMs;
+    }
+
+    /**
+     * 补上影片时长。
+     *
+     * <p>时长只有播放器知道，而请求由可覆写的工厂方法构造，所以走一次复制，
+     * 不把时长塞进每个构造点。
+     */
+    public SubtitleRequest withDurationMs(long durationMs) {
+        return new SubtitleRequest(toBuilder().durationMs(durationMs));
+    }
+
+    private Builder toBuilder() {
+        return builder()
+                .playbackKey(playbackKey)
+                .siteKey(siteKey)
+                .siteName(siteName)
+                .vodId(vodId)
+                .vodName(vodName)
+                .vodRemarks(vodRemarks)
+                .vodYear(vodYear)
+                .episodeName(episodeName)
+                .playUrl(playUrl)
+                .playHeaders(playHeaders)
+                .preferredLanguage(preferredLanguage)
+                .trigger(trigger)
+                .allowTmdbLookup(allowTmdbLookup)
+                .manualOnly(manualOnly)
+                .tmdbItem(tmdbItem)
+                .tmdbEpisode(tmdbEpisode)
+                .seasonNumber(seasonNumber)
+                .episodeNumber(episodeNumber)
+                .durationMs(durationMs);
+    }
+
     public static final class Builder {
 
         private String playbackKey = "";
@@ -149,6 +189,7 @@ public final class SubtitleRequest {
         private TmdbEpisode tmdbEpisode;
         private int seasonNumber = -1;
         private int episodeNumber = -1;
+        private long durationMs;
 
         public Builder playbackKey(String playbackKey) {
             this.playbackKey = playbackKey == null ? "" : playbackKey;
@@ -237,6 +278,11 @@ public final class SubtitleRequest {
 
         public Builder episodeNumber(int episodeNumber) {
             this.episodeNumber = episodeNumber;
+            return this;
+        }
+
+        public Builder durationMs(long durationMs) {
+            this.durationMs = Math.max(0L, durationMs);
             return this;
         }
 

@@ -66,6 +66,7 @@ public final class SubtitleContextBuilder {
                 .canonicalTitle(canonicalTitle)
                 .originalTitle(originalTitle)
                 .year(year)
+                .durationMs(request.getDurationMs())
                 .seasonNumber(seasonNumber)
                 .episodeNumber(episodeNumber)
                 .episodeTitle(episodeTitle)
