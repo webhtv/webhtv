@@ -197,7 +197,9 @@ run 1/3，自检完成：15/15 最终测试、双端 Java 编译、scope/diff/ch
 - 用户已批准本任务窄适配，原始代码提交及恢复点在合并历史保留，不重写。
 - 代码/修复提交：`1425d0118975ed9412cb85a688a8de9f0f6b3c10`
 - 本地恢复 tag：`recovery/C-TV-ASYNC-RESULT-OWNERSHIP/20261108084316-1425d0118975`
-- 单元证据：15项API/Leanback实际Activity测试及双端Java编译通过；Mobile真消费者/ARM设备未测
+- 单元证据（末态）：DanmakuApiOwnershipTest 2 + VideoDanmakuOwnershipTest 21 = 23 项通过；最终联合验证 9 类 102 项 0 失败/0 错误/0 跳过，Leanback/Mobile Debug Java 与 Mobile UnitTestJavaCompile 通过；Mobile 真消费者/ARM 设备/解码实播未测
+- 整批复审后追加修复链（同一文档）：`3e39a08eb900b92579e90a68782e5ce18d519b9d`（F2：Mobile 解码切换请求前失效 + fresh Result/after-trace 重接纳；tag `recovery/C-TV-ASYNC-RESULT-OWNERSHIP-MOBILE/20261108101033-3e39a08eb900`）→ `4a4907c859f09468e7624a1803e9e68c4e446323`（F3/F4：restore 归属对象 + 统一终结 helper + 同 trace 仅在 Call 为空时补发一次；tag `recovery/C-TV-ASYNC-RESULT-OWNERSHIP-DECODE-RESTORE/20261108103714-4a4907c859f0`），复审 F2/F3/F4 均 ADDRESSED、Spec PASS、Quality approved
+- 已知未修风险（父裁定本批不扩范围）：R1 kernel-refresh A→B→A 晚回按当前 episode 建立新增 auto token，属 baseline start 归属问题的放大，需另立 controller/owner 阶段；其余 device/native/kernel 后端未验
 - 联合验证（2026-11-08 集成树 fresh）：9 类 94 项定向测试 0 失败/0 错误/0 跳过；Leanback Mobile arm64 Debug Java、Mobile UnitTestJavaCompile 编译通过；日志 `.codex/task-state/reports/TV-SMALL-FIXES-INTEGRATION-final.log`。整批仍不冒充 decoder 实播/设备/性能验收。
 - 回滚：针对本任务按上述代码链逆序git revert；合并历史保留真实来源，不reset原工作区或移动tag。
 
