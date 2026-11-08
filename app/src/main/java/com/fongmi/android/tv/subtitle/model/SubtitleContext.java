@@ -127,6 +127,15 @@ public final class SubtitleContext {
         return identity != null && identity.hasTmdbIdentity();
     }
 
+    public SubtitleContext withDurationMs(long durationMs) {
+        return builder().playbackKey(playbackKey).siteKey(siteKey).vodId(vodId)
+                .mediaType(mediaType).mediaPath(mediaPath).canonicalTitle(canonicalTitle)
+                .originalTitle(originalTitle).aliases(aliases).year(year).durationMs(durationMs)
+                .seasonNumber(seasonNumber).episodeNumber(episodeNumber).episodeTitle(episodeTitle)
+                .preferredLanguage(preferredLanguage).originalLanguage(originalLanguage)
+                .originCountry(originCountry).networkStream(networkStream).identity(identity).build();
+    }
+
     public static final class Builder {
 
         private String playbackKey = "";

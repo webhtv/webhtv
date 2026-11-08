@@ -307,6 +307,8 @@ public class PlayerManager implements ParseCallback {
     private Sub pendingSubtitleApply;
     private boolean pendingSubtitleSelectionIssued;
     private Consumer<Boolean> subtitleApplyListener;
+    /** 主线程观察到的最近一次已知总时长；未知或直播时为 0。 */
+    private volatile long lastKnownDurationMs;
     private boolean mpvAutoGpuPinnedForSession;
     private boolean mpvAutoVulkanPinnedForItem;
     private boolean mpvAutoVulkanDisabledForItem;
@@ -413,6 +415,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void release() {
+        resetKnownDuration();
         mediaSession.beforeRelease();
         PlayerSetting.clearActivePlayer();
         prepareSeq++;
@@ -439,6 +442,7 @@ public class PlayerManager implements ParseCallback {
         danmakuController = null;
         endPlaybackTelemetrySession("release");
         clearPlaybackAutoContext();
+        clearPendingSubtitleApply();
         ijkRuntimeTemporaryFallback = false;
         ijkRuntimeManualOverride = false;
         pendingIjkRuntimeFallbackReparse = false;
@@ -1159,8 +1163,9 @@ public class PlayerManager implements ParseCallback {
         return TextUtils.isEmpty(format.sampleMimeType) || TextUtils.isEmpty(sub.getFormat()) || TextUtils.equals(format.sampleMimeType, sub.getFormat());
     }
 
+    /** Media3 把轨道语言标签规范成小写 BCP-47，与字幕里的写法大小写不敏感地比较。 */
     private static boolean languageMatches(Sub sub, Format format) {
-        return TextUtils.isEmpty(format.language) || TextUtils.isEmpty(sub.getLang()) || TextUtils.equals(format.language, sub.getLang());
+        return TextUtils.isEmpty(format.language) || TextUtils.isEmpty(sub.getLang()) || format.language.equalsIgnoreCase(sub.getLang());
     }
 
     private static void append(StringBuilder builder, String name, String value) {
@@ -1263,6 +1268,30 @@ public class PlayerManager implements ParseCallback {
         this.durationFallback = durationFallback;
     }
 
+    /** 最近一次在主线程观察到的总时长；0 表示未知（直播或尚未就绪）。 */
+    public long getLastKnownDurationMs() {
+        return lastKnownDurationMs;
+    }
+
+    void resetKnownDuration() {
+        lastKnownDurationMs = 0L;
+    }
+
+    private void rememberDuration() {
+        if (player == null) return;
+        long duration = player.getDuration();
+        if (duration <= 0 && durationFallback != null) duration = fallbackDuration();
+        if (duration > 0) lastKnownDurationMs = duration;
+    }
+
+    private long fallbackDuration() {
+        try {
+            return durationFallback.getAsLong();
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
+
     private long resolveDuration() {
         long duration = getDuration();
         if (duration > 0) return duration;
@@ -1300,6 +1329,8 @@ public class PlayerManager implements ParseCallback {
             pendingSubtitleApply = sub;
             pendingSubtitleSelectionIssued = false;
             armSubtitleApplyTimeout();
+        } else {
+            clearPendingSubtitleApply();
         }
         Track.delete(getKey(), C.TRACK_TYPE_TEXT);
         engine.resetTrack(C.TRACK_TYPE_TEXT);
@@ -1322,56 +1353,89 @@ public class PlayerManager implements ParseCallback {
         subtitleApplyListener = listener;
     }
 
+    /** 超时调度；生产实现走 App 主线程队列，测试注入假实现以便驱动到期行为。 */
+    interface SubtitleApplyTimer {
+        void schedule(Runnable runnable, long delayMs);
+
+        void cancel(Runnable runnable);
+    }
+
+    private static final SubtitleApplyTimer APP_SUBTITLE_APPLY_TIMER = new SubtitleApplyTimer() {
+        @Override
+        public void schedule(Runnable runnable, long delayMs) {
+            App.removeCallbacks(runnable);
+            App.post(runnable, delayMs);
+        }
+
+        @Override
+        public void cancel(Runnable runnable) {
+            App.removeCallbacks(runnable);
+        }
+    };
+
+    private SubtitleApplyTimer subtitleApplyTimer;
+    private Runnable subtitleApplyTimeoutFallback;
+
+    private SubtitleApplyTimer subtitleApplyTimer() {
+        return subtitleApplyTimer == null ? APP_SUBTITLE_APPLY_TIMER : subtitleApplyTimer;
+    }
+
     private void armSubtitleApplyTimeout() {
-        App.removeCallbacks(subtitleApplyTimeoutRunnable);
-        App.post(subtitleApplyTimeoutRunnable, Constant.TIMEOUT_PLAY);
+        subtitleApplyTimer().schedule(subtitleApplyTimeoutRunnable(), Constant.TIMEOUT_PLAY);
+    }
+
+    /** 供 arm 与 cancel 复用的同一个 Runnable 实例；Unsafe 构造的测试实例没有初始化 final 字段。 */
+    private Runnable subtitleApplyTimeoutRunnable() {
+        if (subtitleApplyTimeoutRunnable != null) return subtitleApplyTimeoutRunnable;
+        if (subtitleApplyTimeoutFallback == null) subtitleApplyTimeoutFallback = this::onSubtitleApplyTimeout;
+        return subtitleApplyTimeoutFallback;
+    }
+
+    /** 丢弃「待确认字幕」的登记：它绑定的是当前 item 的轨道，换集/换源/release 后即失效。 */
+    void clearPendingSubtitleApply() {
+        subtitleApplyTimer().cancel(subtitleApplyTimeoutRunnable());
+        pendingSubtitleApply = null;
+        pendingSubtitleSelectionIssued = false;
+        subtitleApplyListener = null;
     }
 
     private void notifySubtitleApplyResult(boolean applied) {
-        App.removeCallbacks(subtitleApplyTimeoutRunnable);
-        pendingSubtitleApply = null;
-        pendingSubtitleSelectionIssued = false;
         Consumer<Boolean> listener = subtitleApplyListener;
-        subtitleApplyListener = null;
+        clearPendingSubtitleApply();
         if (listener != null) listener.accept(applied);
     }
 
+
     /**
-     * 轨道就绪后把待校验的外挂字幕选成当前轨道，并在下一次轨道回调里复核真实结果。
+     * 轨道就绪后把待校验的外挂字幕选成当前轨道，并复核真实结果。
      *
-     * <p>复用 TrackDialog 手动选轨用的同一套 override 通道：DEFAULT flag 只表达偏好，
-     * 真正选中必须有一个显式 override。所以这里能定位到轨道就显式选中；
-     * 定位不到则不做 override，交给 flag 自动选轨并回报此刻的真实状态。
-     *
-     * <p>显式选轨在 Media3 是异步生效的，因此下发后不立即报成功，等下一轮轨道回调
-     * 读实际选中项再回报——否则又变成「调用过就算成功」，正是本次要修的缺陷。
-     *
-     * <p>刻意不写 Track 表：外挂字幕的轨道 id 是运行时产生的，记下来下次起播会指向
-     * 一条不存在的轨道。字幕的跨集记忆由宿主侧的 SubtitleSource 负责。
+     * <p>只有确认选中才允许报到成功；定位不到目标轨道、或选中项还没变成目标，一律保持
+     * 登记，由下一次轨道回调或到期检查按真实状态收口。轨道表为空、或只到了别的轨道组，
+     * 都不能当作失败证据——那一刻的轨道信息本来就不完整。
      */
-    private void resolvePendingSubtitleApply() {
+    void resolvePendingSubtitleApply() {
         Sub target = pendingSubtitleApply;
-        if (target == null) return;
+        if (target == null || engine == null) return;
         if (pendingSubtitleSelectionIssued) {
-            notifySubtitleApplyResult(isSubtitleSelected(target));
+            if (isSubtitleSelected(target)) notifySubtitleApplyResult(true);
             return;
         }
         Track track = findTrackForSub(target);
-        if (track == null) {
-            notifySubtitleApplyResult(isSubtitleSelected(target));
-            return;
-        }
+        if (track == null) return;
         pendingSubtitleSelectionIssued = true;
-        setTrack(Collections.singletonList(track));
         armSubtitleApplyTimeout();
+        applyTrackSelection(Collections.singletonList(track));
+        if (pendingSubtitleApply == target && isSubtitleSelected(target)) notifySubtitleApplyResult(true);
     }
 
-    private final Runnable subtitleApplyTimeoutRunnable = () -> {
+    private final Runnable subtitleApplyTimeoutRunnable = this::onSubtitleApplyTimeout;
+
+    /** 到期不再假设失败：读一次实际选中状态，确认不了才判未生效。 */
+    void onSubtitleApplyTimeout() {
         Sub target = pendingSubtitleApply;
         if (target == null) return;
-        // 超时不再假设失败：读一次实际选中状态，确认不了才判未生效。
         notifySubtitleApplyResult(isSubtitleSelected(target));
-    };
+    }
 
     private Track findTrackForSub(Sub sub) {
         if (sub == null || engine == null) return null;
@@ -1410,11 +1474,8 @@ public class PlayerManager implements ParseCallback {
         for (Format format : candidates) {
             if (!TextUtils.isEmpty(format.label) && TextUtils.equals(format.label, sub.getName()) && mimeMatches(sub, format)) return format;
         }
-        for (Format format : candidates) {
-            if (TextUtils.isEmpty(format.label) && mimeMatches(sub, format) && languageMatches(sub, format)) return format;
-        }
-        if (selectedFallback != null && candidates.contains(selectedFallback) && mimeMatches(sub, selectedFallback)) return selectedFallback;
-        return candidates.size() == 1 ? candidates.get(0) : null;
+        // 无匹配 label 就无法确认外挂身份；选中标志、唯一候选或同 mime/语言均不足以证明。
+        return null;
     }
 
     private boolean isSubtitleSelected(Sub sub) {
@@ -1878,7 +1939,25 @@ public class PlayerManager implements ParseCallback {
         return SPEED_PRESETS[0];
     }
 
+    /**
+     * 用户/界面选轨入口。
+     *
+     * <p>字幕相关的手动选择优先于自动匹配：用户点了别的字幕或关掉字幕，就不能再被
+     * 后到的自动目标覆盖，所以这里先丢掉待确认登记。音轨/视轨选择不动字幕登记，
+     * 免得无关操作中断正在进行的字幕匹配。
+     */
     public void setTrack(List<Track> tracks) {
+        if (tracks != null && containsSubtitleTrack(tracks)) clearPendingSubtitleApply();
+        applyTrackSelection(tracks);
+    }
+
+    private static boolean containsSubtitleTrack(List<Track> tracks) {
+        for (Track track : tracks) if (track != null && track.getType() == C.TRACK_TYPE_TEXT) return true;
+        return false;
+    }
+
+    /** 内部选轨通道：不清待确认登记，自动匹配的两阶段确认依赖它。 */
+    private void applyTrackSelection(List<Track> tracks) {
         mpvExplicitSubtitlePreference = hasRequestedSubtitle(tracks);
         if (mpvExplicitSubtitlePreference && engine instanceof MpvPlayerEngine mpv) {
             mpv.retainSubtitleSurfaceForCurrentItem();
@@ -1988,6 +2067,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void clear() {
+        resetKnownDuration();
         prepareSeq++;
         if (engine != null) engine.cancelPendingPrepare();
         lutApplySeq++;
@@ -2000,6 +2080,8 @@ public class PlayerManager implements ParseCallback {
         // （DRM 不支持、阅读器路由、地址为空），登记会留在这里；不清掉的话
         // 会被后续某次无关起播（例如音频迷你播放器）取走并挂上。
         pendingRestoreSub = null;
+        // 切集换媒体后，上一条字幕的待确认登记与它的到期检查都不该再落地。
+        clearPendingSubtitleApply();
         clearPendingSwitchRestore();
         clearDanmaku("clear");
         lutAppliedForItem = false;
@@ -6204,6 +6286,8 @@ public void resetTrack(int type) {
     public void start(PlaySpec spec, long timeout, boolean playWhenReady, long positionMs) {
         mediaSession.begin(0L);
         endPlaybackTelemetrySession("replace-start");
+        resetKnownDuration();
+        clearPendingSubtitleApply();
         prepareIjkRuntimeForUserPlayback();
         clearPendingSwitchRestore();
         clearDanmaku("start");
@@ -6233,6 +6317,8 @@ public void resetTrack(int type) {
                       boolean playWhenReady, long positionMs) {
         mediaSession.begin(0L);
         endPlaybackTelemetrySession("replace-parse");
+        resetKnownDuration();
+        clearPendingSubtitleApply();
         prepareIjkRuntimeForUserPlayback();
         stopParse();
         clearPendingSwitchRestore();
@@ -8761,6 +8847,7 @@ public void resetTrack(int type) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "state=%s spec=%s", stateName(state), debugSpec());
             publishPlaybackAutoContext(state != Player.STATE_IDLE);
             if (state == Player.STATE_READY) {
+                rememberDuration();
                 cancelBufferingStallWatchdog();
                 completeMpvDirectFirstFrame(state);
                 manualPlayerSwitchPending = false;
@@ -8804,6 +8891,7 @@ public void resetTrack(int type) {
 
         @Override
         public void onTimelineChanged(@NonNull Timeline timeline, int reason) {
+            if (!timeline.isEmpty()) rememberDuration();
             if (isExo()) scheduleNetworkProtection(0);
             if (!(engine instanceof IjkPlayerEngine)) return;
             int index = player == null ? C.INDEX_UNSET : player.getCurrentMediaItemIndex();
@@ -8863,6 +8951,7 @@ public void resetTrack(int type) {
         @Override
         public void onTracksChanged(@NonNull Tracks tracks) {
             if (playbackTrackSequence < Long.MAX_VALUE) playbackTrackSequence++;
+            rememberDuration();
             publishPlaybackAutoContext(false);
             if (isExo()) scheduleNetworkProtection(0);
             if (!tracks.isEmpty() && !initTrack) {

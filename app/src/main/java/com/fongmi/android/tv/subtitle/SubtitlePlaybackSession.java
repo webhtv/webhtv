@@ -128,7 +128,7 @@ public final class SubtitlePlaybackSession {
         if (SubtitleStrings.isEmpty(playbackKey)) return;
 
         SubtitleTrigger trigger = resolveTrigger(host);
-        SubtitleRequest request = requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), result, host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), trigger, playbackDurationMs(host));
+        SubtitleRequest request = withDurationSource(requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), result, host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), trigger, playbackDurationMs(host)), host);
         if (request == null || SubtitleStrings.isEmpty(request.getPlayUrl())) {
             stop(host);
             return;
@@ -234,7 +234,7 @@ public final class SubtitlePlaybackSession {
     private SubtitleAsset withNormalizedLanguage(SubtitleAsset asset) {
         if (asset == null) return null;
         String normalized = SubtitleRanker.normalizeLanguageTag(asset.getLanguage());
-        if (SubtitleStrings.equals(normalized, asset.getLanguage())) return asset;
+        if (SubtitleStrings.isEmpty(normalized) || SubtitleStrings.equals(normalized, asset.getLanguage())) return asset;
         return new SubtitleAsset(asset.getUri(), asset.getLocalPath(), asset.getDisplayName(), normalized, asset.getMimeType(), asset.getSelectionFlag(), asset.isFromCache(), asset.getExpireAt());
     }
 
@@ -254,12 +254,28 @@ public final class SubtitlePlaybackSession {
         return SubtitleStrings.equals(currentEpisodeMarker, episodeMarker(host.getSubtitleEpisode())) ? SubtitleTrigger.SOURCE_SWITCH : SubtitleTrigger.EPISODE_SWITCH;
     }
 
+    /**
+     * 让请求在真正排序时还能补取时长。
+     *
+     * <p>来源只读播放器在主线程缓存的已知时长（{@code getLastKnownDurationMs} 是 volatile
+     * 字段，后台线程读取安全），不在 worker 里调用 {@code getDuration()} 触碰 Media3。
+     */
+    private SubtitleRequest withDurationSource(SubtitleRequest request, Host host) {
+        if (request == null) return null;
+        return request.withDurationSource(() -> knownDurationMs(host));
+    }
+
+    private long knownDurationMs(Host host) {
+        PlayerManager player = host.getSubtitlePlayer();
+        if (player == null || player.isReleased()) return 0L;
+        return player.getLastKnownDurationMs();
+    }
+
     /** 播放器已知的影片时长；未知或播放器不可用时返回 0，由排序逻辑跳过时长维度。 */
     private long playbackDurationMs(Host host) {
         PlayerManager player = host.getSubtitlePlayer();
         if (player == null || player.isReleased()) return 0L;
-        long duration = player.getDuration();
-        return duration > 0 ? duration : 0L;
+        return player.getLastKnownDurationMs();
     }
 
     private boolean hasProvidedSubtitle(Result result) {
@@ -274,7 +290,7 @@ public final class SubtitlePlaybackSession {
         if (active && currentRequest != null) return currentRequest;
         String playbackKey = host.getSubtitlePlaybackKey();
         if (SubtitleStrings.isEmpty(playbackKey)) return null;
-        return requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), host.getSubtitlePlaybackResult(), host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), SubtitleTrigger.MANUAL_SEARCH);
+        return withDurationSource(requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), host.getSubtitlePlaybackResult(), host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), SubtitleTrigger.MANUAL_SEARCH, playbackDurationMs(host)), host);
     }
 
     // 补建的请求需要登记为当前请求，回调里的 request == currentRequest 时效校验才能通过

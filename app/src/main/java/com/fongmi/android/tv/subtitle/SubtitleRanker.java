@@ -8,8 +8,20 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class SubtitleRanker {
+
+    private static final Pattern SEASON_EPISODE = Pattern.compile("(?i)s(\\d{1,2})\\s*e(\\d{1,3})");
+    private static final Pattern RELEASE_METADATA = Pattern.compile(
+            "^(?:(?:19\\d{2}|20\\d{2})(?=[^\\p{L}\\p{N}]|(?:720|1080|2160)p|$)"
+                    + "|(?:720|1080|2160)p?|[48]k|s\\d{1,2}e\\d{1,3}"
+                    + "|ass|ssa|srt|vtt|sup|sub|idx|bluray|blu|bdrip|brrip|web|webrip|webdl"
+                    + "|hdr|sdr|hevc|avc|h264|h265|x264|x265|dts|aac|truehd|ddp|proper|repack"
+                    + "|extended|remastered|director|uncut|eng|english|chinese|chs|cht|zh|en"
+                    + "|简中|繁中|简体|繁体|简繁|中文|中英|中字|双语|国语|粤语|英语|字幕|导演剪辑版|加长版|未删减|特效)"
+                    + "(?=[^\\p{L}\\p{N}]|$)", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     public List<SubtitleCandidate> rank(List<SubtitleCandidate> candidates, SubtitleContext context) {
         List<SubtitleCandidate> ranked = new ArrayList<>();
@@ -30,12 +42,81 @@ public final class SubtitleRanker {
      */
     public SubtitleCandidate pickBest(List<SubtitleCandidate> ranked, SubtitleContext context) {
         if (ranked == null || ranked.isEmpty()) return null;
-        SubtitleCandidate best = ranked.get(0);
-        // 标题完全没出现在候选里说明这条字幕不是这部片子的，分数再高也不能挂
-        if (titleScore(context, normalize(best.getDisplayName() + " " + best.getReleaseInfo())) <= 0) return null;
         int threshold = threshold(context, ranked.size());
-        if (best.getScore() < threshold) return null;
-        return best;
+        for (SubtitleCandidate candidate : ranked) {
+            // 身份优先：先跳过不是同一部作品的候选，再谈分数。否则一条续集/别的片子的
+            // 高分会把真正对得上的那条低分字幕挡住，用户看到的就是「匹配错了」。
+            if (!identifiesWork(candidate, context)) continue;
+            if (candidate.getScore() < threshold) continue;
+            return candidate;
+        }
+        return null;
+    }
+
+    /**
+     * 这条候选是否就是 context 所描述的那个作品。
+     *
+     * <p>相似度不是身份：编辑距离相近可以是另一部片子，包含关系可以是续集
+     * （《流浪地球》与《流浪地球2》）。所以这里要求两件事同时成立：
+     * 候选里确实出现了某个已知作品名，且紧随其后的不是「作品本身之外」的续集序号
+     * ——「战狼2.2017.1080p」这种年份/版本后缀、原名与别名都属于同一部作品。
+     *
+     * <p>季集则单独判断：候选明确标了别的季/集就是别的条目；未知季集不算冲突。
+     */
+    private boolean identifiesWork(SubtitleCandidate candidate, SubtitleContext context) {
+        if (!identifiesTitle(candidate, context)) return false;
+        return !conflictsWithEpisode(candidate, context);
+    }
+
+    private boolean identifiesTitle(SubtitleCandidate candidate, SubtitleContext context) {
+        String text = candidate.getDisplayName() + " " + candidate.getReleaseInfo();
+        for (String title : candidateTitles(context)) {
+            Matcher matcher = titlePattern(title).matcher(text);
+            while (matcher.find()) {
+                String rest = text.substring(matcher.end()).replaceFirst("^[^\\p{L}\\p{N}]+", "");
+                if (rest.isEmpty() || isReleaseMetadata(rest)) return true;
+                for (String alias : candidateTitles(context)) {
+                    Matcher alternate = titlePattern(alias).matcher(rest);
+                    if (alternate.lookingAt()) {
+                        String afterAlias = rest.substring(alternate.end()).replaceFirst("^[^\\p{L}\\p{N}]+", "");
+                        if (afterAlias.isEmpty() || isReleaseMetadata(afterAlias)) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private Pattern titlePattern(String title) {
+        String value = normalize(title);
+        StringBuilder regex = new StringBuilder("(?<![\\p{L}\\p{N}])");
+        for (int i = 0; i < value.length(); i++) {
+            if (i > 0) regex.append("[^\\p{L}\\p{N}]*");
+            regex.append(Pattern.quote(value.substring(i, i + 1)));
+        }
+        return Pattern.compile(regex.toString(), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    }
+
+    private boolean isReleaseMetadata(String value) {
+        return RELEASE_METADATA.matcher(value).find();
+    }
+
+    /** 候选明确标出的季/集与 context 明确标出的不一致时，拒绝自动应用。 */
+    private boolean conflictsWithEpisode(SubtitleCandidate candidate, SubtitleContext context) {
+        int season = context.getSeasonNumber();
+        int episode = context.getEpisodeNumber();
+        if (season > 0 && candidate.getSeasonNumber() > 0 && candidate.getSeasonNumber() != season) return true;
+        if (episode > 0 && candidate.getEpisodeNumber() > 0 && candidate.getEpisodeNumber() != episode) return true;
+        if (season <= 0 && episode <= 0) return false;
+        String haystack = candidate.getDisplayName() + " " + candidate.getReleaseInfo();
+        Matcher matcher = SEASON_EPISODE.matcher(haystack);
+        while (matcher.find()) {
+            int candidateSeason = Integer.parseInt(matcher.group(1));
+            int candidateEpisode = Integer.parseInt(matcher.group(2));
+            if (season > 0 && candidateSeason != season) return true;
+            if (episode > 0 && candidateEpisode != episode) return true;
+        }
+        return false;
     }
 
     private SubtitleCandidate score(SubtitleCandidate candidate, SubtitleContext context) {
@@ -95,7 +176,7 @@ public final class SubtitleRanker {
     private void addTitle(List<String> titles, String value) {
         if (SubtitleStrings.isEmpty(value)) return;
         String trimmed = value.trim();
-        if (trimmed.isEmpty() || normalizedContains(titles, trimmed)) return;
+        if (trimmed.isEmpty() || normalize(trimmed).isEmpty() || normalizedContains(titles, trimmed)) return;
         titles.add(trimmed);
     }
 

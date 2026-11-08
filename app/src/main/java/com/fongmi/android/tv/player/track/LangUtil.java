@@ -21,18 +21,17 @@ public final class LangUtil {
     }
 
     /**
-     * 用户设置的优先语言优先于设备语言。
-     *
-     * <p>自动字幕匹配按 {@code preferredLanguage} 排序候选，若播放器选轨只看设备语言，
-     * 用户选的「简体中文」在最关键的一步就不起作用。空值回落到设备语言，
-     * 未设置该偏好的用户行为完全不变。
+     * 显式语言设置优先于设备语言；空值回落到设备语言。
+     * 默认值 zh 表示「中文优先 + 设备字形」，zh-Hans / zh-Hant 表示明确指定字形。
      */
     public static String[] getPreferredTextLanguages(String preferredLanguage) {
         String setting = normalize(preferredLanguage);
         if (!setting.isEmpty() && !"any".equals(setting) && !"all".equals(setting)) {
             String script = chineseScriptTag(setting);
             String primary = primarySubtag(setting);
-            return script == null ? unique(primary) : unique(script, primary);
+            if (script != null) return unique(script, primary);
+            if (LANGUAGE_CHINESE.equals(primary) && primary.equals(setting)) return unique(getChineseScript(Locale.getDefault()), primary);
+            return unique(primary);
         }
         Locale locale = Locale.getDefault();
         String tag = locale.toLanguageTag();

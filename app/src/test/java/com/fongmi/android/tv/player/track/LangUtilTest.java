@@ -3,6 +3,7 @@ package com.fongmi.android.tv.player.track;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -41,5 +42,40 @@ public class LangUtilTest {
         // 设置项里的「不限制」不是语言标签，必须回落设备语言而不是被当成 zh
         assertEquals(List.of(LangUtil.getPreferredTextLanguages()), List.of(LangUtil.getPreferredTextLanguages("any")));
         assertEquals(List.of(LangUtil.getPreferredTextLanguages()), List.of(LangUtil.getPreferredTextLanguages("all")));
+    }
+
+    @Test
+    public void preferredTextLanguages_defaultChineseFirstKeepsDeviceTraditionalScript() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.TAIWAN);
+            assertEquals(List.of("zh-Hant", "zh"), List.of(LangUtil.getPreferredTextLanguages("zh")));
+        } finally {
+            Locale.setDefault(previous);
+        }
+    }
+
+    @Test
+    public void preferredTextLanguages_defaultChineseFirstKeepsDeviceSimplifiedScript() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.US);
+            assertEquals(List.of("zh-Hans", "zh"), List.of(LangUtil.getPreferredTextLanguages("zh")));
+        } finally {
+            Locale.setDefault(previous);
+        }
+    }
+
+    @Test
+    public void preferredTextLanguages_explicitScriptWinsOverDeviceScript() {
+        Locale previous = Locale.getDefault();
+        try {
+            // 显式指定字形时不能被设备字形覆盖：zh-TW 设备选「简体中文」仍要 zh-Hans 优先
+            Locale.setDefault(Locale.TAIWAN);
+            assertEquals(List.of("zh-Hans", "zh"), List.of(LangUtil.getPreferredTextLanguages("zh-Hans")));
+            assertEquals(List.of("zh-Hant", "zh"), List.of(LangUtil.getPreferredTextLanguages("zh-Hant")));
+        } finally {
+            Locale.setDefault(previous);
+        }
     }
 }
