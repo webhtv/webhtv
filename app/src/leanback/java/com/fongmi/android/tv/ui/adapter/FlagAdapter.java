@@ -121,6 +121,10 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Flag item = mItems.get(position);
         holder.binding.text.setText(item.getShow());
+        // selected 只是跑马灯开关（selector_video_item 的 state_selected 无描边）；
+        // 「当前播放线路」的绿色 2dp tvCurrentRing 描边走 state_activated，
+        // 见 selector_video_item.xml 顶部的统一规范注释。
+        holder.binding.text.setActivated(item.isSelected());
         holder.binding.text.setSelected(item.isSelected());
         holder.binding.text.setNextFocusDownId(nextFocusDown);
         holder.binding.text.setOnKeyListener(keyListener);

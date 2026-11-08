@@ -71,6 +71,11 @@ public class EpgParser {
         Log.i(TAG, "start done elapsed=" + (System.currentTimeMillis() - t0) + "ms");
     }
 
+    public static boolean clearCache() {
+        Path.clear(Path.epg());
+        return true;
+    }
+
     private static String cacheFileName(String url) {
         String name = UrlUtil.path(url);
         if (!name.isEmpty()) return name;

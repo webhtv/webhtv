@@ -70,12 +70,24 @@ public final class AlistSubscriptionImporter {
                 result.updated++;
                 continue;
             }
+            // 不复活墓碑：用户在本端已取消追更，订阅导入只更新已有活行，不新建。
+            if (isTombstoned(candidate, now)) continue;
             Following item = toFollowing(candidate, now);
             FollowingSource source = toSource(item, candidate, now);
             FollowingStore.saveNew(item, source);
             result.created++;
         }
         return result;
+    }
+
+    /** 候选命中墓碑行（同 identityKey 或同 TMDB 身份）时跳过创建。 */
+    static boolean isTombstoned(Candidate candidate, long now) {
+        if (candidate.tmdbId > 0) {
+            String seriesKey = "tmdb:" + FollowingIdentity.normalizeMediaType(candidate.mediaType()) + ":" + candidate.tmdbId;
+            if (FollowingStore.findAny(FollowingIdentity.identityKey(seriesKey, candidate.season)) != null) return true;
+        }
+        String seriesKey = "alist:" + FollowingIdentity.normalize(candidate.title) + ":s" + candidate.season;
+        return FollowingStore.findAny(FollowingIdentity.identityKey(seriesKey, candidate.season)) != null;
     }
 
     static Candidate parseCandidate(JsonElement element) {

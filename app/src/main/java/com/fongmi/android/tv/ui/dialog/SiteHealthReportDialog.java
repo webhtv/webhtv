@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -7,6 +8,7 @@ import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.text.format.DateFormat;
+import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -22,6 +24,9 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.AdBlockStatsStore;
 import com.fongmi.android.tv.databinding.DialogSiteHealthReportBinding;
 import com.fongmi.android.tv.setting.SiteHealthStore;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeEditorUi;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -54,24 +59,47 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        if (getDialog() == null) return;
-        Window window = getDialog().getWindow();
-        if (window == null) return;
+        Dialog dialog = getDialog();
+        if (dialog == null || dialog.getWindow() == null) return;
+        Window window = dialog.getWindow();
+        configureWindow(window);
+        // The window can be laid out before the platform reports its system-bar insets, in which
+        // case the first sizing falls back to the display bounds and the footer's cancel button
+        // ends up under the navigation bar. Re-sizing when the real insets arrive is what makes
+        // the fix independent of that ordering.
+        DialogSafeArea.follow(requireActivity(), window, () -> configureWindow(window));
+        binding.close.requestFocus();
+    }
+
+    /**
+     * Sizes the dialog window from the system-bar-safe area instead of the raw display.
+     *
+     * <p>{@link ResUtil#getScreenHeight} returns the whole display, so a window sized from it is
+     * taller than the area the window manager actually offers a floating dialog: the window is
+     * centred in the bar-safe area and its last row - the fixed-height cancel button - is painted
+     * under the navigation bar and clipped. {@link DialogSafeArea} resolves that area for every
+     * dialog in this package; the gutter stays the existing 16dp portrait / 24dp landscape value
+     * so television geometry is unchanged.
+     */
+    private void configureWindow(Window window) {
         WindowManager.LayoutParams params = window.getAttributes();
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
         int margin = ResUtil.dp2px(ResUtil.isLand(requireContext()) ? 24 : 16);
-        params.width = Math.max(1, ResUtil.getScreenWidth(requireContext()) - margin * 2);
-        params.height = Math.max(1, ResUtil.getScreenHeight(requireContext()) - margin * 2);
+        ThemeDialogLayout.Area area = DialogSafeArea.area(requireActivity(), window);
+        params.width = ThemeDialogLayout.width(area.width(), margin);
+        params.height = ThemeDialogLayout.height(area.height(), margin);
+        // Gravity.CENTER centres the window inside the bar-safe area; an explicit params.x/y
+        // offset is re-clamped by the window manager and is deliberately not set.
+        params.gravity = Gravity.CENTER;
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
-        binding.close.requestFocus();
     }
 
     @Override
@@ -253,7 +281,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         header.setOrientation(LinearLayoutCompat.HORIZONTAL);
         root.addView(header, new LinearLayoutCompat.LayoutParams(LinearLayoutCompat.LayoutParams.MATCH_PARENT, LinearLayoutCompat.LayoutParams.WRAP_CONTENT));
 
-        MaterialTextView title = text(row.siteName, 16, R.color.black, Typeface.BOLD);
+        MaterialTextView title = text(row.siteName, 16, ThemeController.current().colorOnSurface(), Typeface.BOLD);
         header.addView(title, new LinearLayoutCompat.LayoutParams(0, LinearLayoutCompat.LayoutParams.WRAP_CONTENT, 1));
 
         MaterialTextView status = text(statusLabel(row.status), 13, statusColor(row.status), Typeface.BOLD);
@@ -262,7 +290,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         statusParams.setMargins(0, 0, dp(8), 0);
         header.addView(status, statusParams);
 
-        MaterialTextView toggle = text("+", 16, R.color.black_50, Typeface.BOLD);
+        MaterialTextView toggle = text("+", 16, ThemeController.current().colorOnSurfaceVariant(), Typeface.BOLD);
         toggle.setGravity(android.view.Gravity.CENTER);
         header.addView(toggle, new LinearLayoutCompat.LayoutParams(dp(20), LinearLayoutCompat.LayoutParams.WRAP_CONTENT));
 
@@ -301,7 +329,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         blockParams.setMargins(0, dp(8), 0, 0);
         root.addView(block, blockParams);
 
-        MaterialTextView label = text(stageText(labelRes, stage), 13, R.color.black_80, Typeface.NORMAL);
+        MaterialTextView label = text(stageText(labelRes, stage), 13, ThemeController.current().colorOnSurface(), Typeface.NORMAL);
         block.addView(label, new LinearLayoutCompat.LayoutParams(LinearLayoutCompat.LayoutParams.MATCH_PARENT, LinearLayoutCompat.LayoutParams.WRAP_CONTENT));
 
         ProgressBar progress = new ProgressBar(requireContext(), null, android.R.attr.progressBarStyleHorizontal);
@@ -316,8 +344,10 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         long blocked = AdBlockStatsStore.getSiteBlockedCount(row.siteKey);
         int playCount = row.playAttempts;
         // 始终显示播放与广告拦截比值（即使为 0，让用户知道该功能在工作）
-        int colorRes = blocked > 0 ? R.color.site_health_warn : R.color.black_80;
-        MaterialTextView view = text(getString(R.string.site_health_report_ad_blocked, playCount, blocked), 13, colorRes, Typeface.NORMAL);
+        int color = blocked > 0
+                ? readableOnPanel(ResUtil.getColor(R.color.site_health_warn))
+                : ThemeController.current().colorOnSurface();
+        MaterialTextView view = text(getString(R.string.site_health_report_ad_blocked, playCount, blocked), 13, color, Typeface.NORMAL);
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(LinearLayoutCompat.LayoutParams.MATCH_PARENT, LinearLayoutCompat.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, 0);
         view.setLayoutParams(params);
@@ -347,7 +377,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         addRecentError(block, R.string.site_health_stage_parse, row.parse);
         addRecentError(block, R.string.site_health_stage_play, row.play);
         if (block.getChildCount() > 0) {
-            MaterialTextView title = text(getString(R.string.site_health_report_recent_errors), 12, R.color.black_70, Typeface.BOLD);
+            MaterialTextView title = text(getString(R.string.site_health_report_recent_errors), 12, ThemeController.current().colorOnSurfaceVariant(), Typeface.BOLD);
             block.addView(title, 0);
         }
         block.addView(clearButton(row));
@@ -388,7 +418,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     }
 
     private void showClearConfirmation(int titleRes, CharSequence message, Runnable action) {
-        AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_Dialog)
                 .setTitle(titleRes)
                 .setMessage(message)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -413,18 +443,24 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     }
 
     private MaterialTextView metaText(String value) {
-        MaterialTextView view = text(value, 12, R.color.black_60, Typeface.NORMAL);
+        MaterialTextView view = text(value, 12, ThemeController.current().colorOnSurfaceVariant(), Typeface.NORMAL);
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(LinearLayoutCompat.LayoutParams.MATCH_PARENT, LinearLayoutCompat.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(6), 0, 0);
         view.setLayoutParams(params);
         return view;
     }
 
-    private MaterialTextView text(String value, int sp, int colorRes, int style) {
+    /**
+     * The report body is generated in code, so its text cannot inherit a theme attribute the way
+     * the dialog XML does. It must use the resolved semantic roles instead: the panel is a dark
+     * surface in dark mode, and a hard-coded translucent black made every generated row
+     * unreadable there (the XML title, which uses {@code ?attr/colorOnSurface}, stayed legible).
+     */
+    private MaterialTextView text(String value, int sp, int color, int style) {
         MaterialTextView view = new MaterialTextView(requireContext());
         view.setText(value);
         view.setTextSize(sp);
-        view.setTextColor(ResUtil.getColor(colorRes));
+        view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);
         return view;
     }
@@ -463,12 +499,22 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     }
 
     private int statusColor(SiteHealthStore.Status status) {
-        return switch (status) {
-            case GOOD -> R.color.site_health_good;
-            case BAD -> R.color.site_health_bad;
-            case WARN -> R.color.site_health_warn;
-            default -> R.color.black_50;
+        int color = switch (status) {
+            case GOOD -> ResUtil.getColor(R.color.site_health_good);
+            case BAD -> ResUtil.getColor(R.color.site_health_bad);
+            case WARN -> ResUtil.getColor(R.color.site_health_warn);
+            default -> ThemeController.current().colorOnSurfaceVariant();
         };
+        return readableOnPanel(color);
+    }
+
+    /**
+     * The status/ad colours are tuned for a light panel. On a dark panel a mid-tone amber or green
+     * can fall below 4.5:1, so fall back to black/white by contrast - the same rule the theme
+     * editor uses for values it draws over a themed surface.
+     */
+    private int readableOnPanel(int color) {
+        return ThemeEditorUi.readable(color, ThemeController.current().colorSurfaceContainerHigh());
     }
 
     private int dp(int value) {

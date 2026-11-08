@@ -13,5 +13,5 @@
     app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
     app:maxHeight="352dp"
     app:spanCount="3"
-    tools:itemCount="9"
+    tools:itemCount="11"
     tools:listitem="@layout/adapter_home_menu" />

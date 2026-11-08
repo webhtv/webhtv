@@ -21,7 +21,7 @@
             android:includeFontPadding="false"
             android:maxLines="1"
             android:text="@string/ai_recommendation_info_title"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="18sp"
             android:textStyle="bold" />
 
@@ -38,7 +38,7 @@
             android:maxWidth="150dp"
             android:paddingStart="9dp"
             android:paddingEnd="9dp"
-            android:textColor="#174EA6"
+            android:textColor="@color/fixed_light_accent"
             android:textSize="10sp"
             android:textStyle="bold"
             tools:text="智能推荐" />
@@ -50,10 +50,10 @@
         android:id="@+id/summaryCard"
         android:layout_height="100dp"
         android:layout_marginTop="6dp"
-        app:cardBackgroundColor="#F7F9FC"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
         app:cardCornerRadius="13dp"
         app:cardElevation="0dp"
-        app:strokeColor="#DCE3EC"
+        app:strokeColor="?attr/colorOutlineVariant"
         app:strokeWidth="1dp">
 
         <androidx.appcompat.widget.LinearLayoutCompat
@@ -66,20 +66,20 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="52dp"
                 android:layout_height="80dp"
-                app:cardBackgroundColor="#1C2530"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="0dp"
-                app:strokeColor="#C7CED8"
+                app:strokeColor="?attr/colorOutlineVariant"
                 app:strokeWidth="1dp">
 
                 <ImageView
                     android:id="@+id/poster"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="#1C2530"
+                    android:background="?attr/colorSurfaceContainerHigh"
                     android:contentDescription="@null"
                     android:scaleType="centerCrop"
-                    tools:src="@color/black" />
+                    tools:src="?attr/colorSurfaceContainerLow" />
 
             </com.google.android.material.card.MaterialCardView>
 
@@ -98,7 +98,7 @@
                     android:ellipsize="end"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="18sp"
                     android:textStyle="bold"
                     tools:text="指环王3：王者无敌" />
@@ -119,7 +119,7 @@
                         android:ellipsize="end"
                         android:includeFontPadding="false"
                         android:maxLines="1"
-                        android:textColor="#5F6368"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="11sp"
                         tools:text="电影 · 2003-12-17" />
 
@@ -132,7 +132,7 @@
                         android:includeFontPadding="false"
                         android:maxLines="1"
                         android:maxWidth="110dp"
-                        android:textColor="#7A8088"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="9sp"
                         android:visibility="gone"
                         tools:text="US · EN"
@@ -148,7 +148,7 @@
                     android:ellipsize="end"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#6A7078"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="9sp"
                     android:visibility="gone"
                     tools:text="主演：伊利亚·伍德、维果·莫腾森"
@@ -175,7 +175,7 @@
                         android:minWidth="62dp"
                         android:paddingStart="7dp"
                         android:paddingEnd="7dp"
-                        android:textColor="#986600"
+                        android:textColor="@color/webhtv_color_warning"
                         android:textSize="10sp"
                         android:textStyle="bold"
                         tools:text="TMDB 8.5" />
@@ -191,7 +191,7 @@
                         android:minWidth="58dp"
                         android:paddingStart="7dp"
                         android:paddingEnd="7dp"
-                        android:textColor="#287D46"
+                        android:textColor="@color/fixed_light_success"
                         android:textSize="10sp"
                         android:textStyle="bold"
                         tools:text="豆瓣 9.3" />
@@ -206,7 +206,7 @@
                     android:ellipsize="end"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#8A9098"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="9sp"
                     tools:text="TMDB 条目 #122 · 豆瓣评分已匹配" />
 
@@ -243,10 +243,10 @@
                 android:id="@+id/overviewCard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="#FFFFFF"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                 app:cardCornerRadius="10dp"
                 app:cardElevation="0dp"
-                app:strokeColor="#DCE3EC"
+                app:strokeColor="?attr/colorOutlineVariant"
                 app:strokeWidth="1dp">
 
                 <androidx.appcompat.widget.LinearLayoutCompat
@@ -264,7 +264,7 @@
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
                         android:text="@string/recommendation_overview_label"
-                        android:textColor="#30343B"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="10sp"
                         android:textStyle="bold" />
 
@@ -275,7 +275,7 @@
                         android:layout_marginTop="4dp"
                         android:includeFontPadding="false"
                         android:lineSpacingExtra="2dp"
-                        android:textColor="#5F6368"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:focusable="false"
                         android:focusableInTouchMode="false"
                         android:textSize="11sp"
@@ -291,10 +291,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:visibility="gone"
-                app:cardBackgroundColor="#FFF9ED"
+                app:cardBackgroundColor="@color/webhtv_color_warning_container"
                 app:cardCornerRadius="10dp"
                 app:cardElevation="0dp"
-                app:strokeColor="#F2D28D"
+                app:strokeColor="@color/webhtv_color_warning"
                 app:strokeWidth="1dp"
                 tools:visibility="visible">
 
@@ -313,7 +313,7 @@
                         android:layout_height="wrap_content"
                         android:includeFontPadding="false"
                         android:text="@string/ai_recommendation_reason_label"
-                        android:textColor="#7A5100"
+                        android:textColor="@color/webhtv_color_warning"
                         android:textSize="10sp"
                         android:textStyle="bold" />
 
@@ -324,7 +324,7 @@
                         android:layout_marginTop="4dp"
                         android:includeFontPadding="false"
                         android:lineSpacingExtra="2dp"
-                        android:textColor="#6E5A31"
+                        android:textColor="@color/webhtv_color_on_warning_container"
                         android:focusable="false"
                         android:focusableInTouchMode="false"
                         android:textSize="11sp"
@@ -347,7 +347,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/notInterested"
-            style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+            style="@style/Widget.WebHTV.Button.Outlined"
             android:layout_width="wrap_content"
             android:layout_height="36dp"
             android:focusable="true"
@@ -382,6 +382,8 @@
             android:textColor="@color/dialog_primary_button_text"
             android:textSize="13sp"
             app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container"
             app:cornerRadius="8dp" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>

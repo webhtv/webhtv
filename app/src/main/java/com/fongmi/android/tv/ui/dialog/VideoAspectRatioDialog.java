@@ -15,8 +15,8 @@ import androidx.fragment.app.FragmentActivity;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.VideoAspectMode;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Util;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
@@ -63,7 +63,7 @@ public final class VideoAspectRatioDialog {
         container.setPadding(dp(activity, 20), dp(activity, 8), dp(activity, 20), 0);
         container.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.aspect_ratio_title)
                 .setMessage(R.string.aspect_ratio_hint)
                 .setView(container)

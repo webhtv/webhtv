@@ -218,6 +218,14 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
     }
 
     @Override
+    public void onLongPress(Class item) {
+        if (item == null || mAdapter.indexOf(item) != mBinding.pager.getCurrentItem()) return;
+        invalidatePendingFocusRequests();
+        FolderFragment fragment = getFragment();
+        if (fragment != null) fragment.resetFilter();
+    }
+
+    @Override
     public void onCategoryContentHorizontalEdge(Class item, int contentRow, boolean towardEnd) {
         int position = mAdapter.indexOf(item);
         int target = position + (towardEnd ? 1 : -1);

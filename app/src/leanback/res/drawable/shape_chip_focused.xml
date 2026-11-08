@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「视频层」方角芯片（播放页解析线路 chip，宿主 view_control_vod.xml 是叠加在视频画面
+    上的透明控制条）的统一焦点环。
+
+    环宽：@dimen/webhtv_focus_ring_width（与播放页其余按钮、当前态同宽）。
+
+    环色：?attr/tvPlayerRing（叠在固定深色玻璃/视频上的控件族）。宿主是播放页控制条
+    （view_control_vod.xml 的透明控制条叠在固定深靛玻璃面板上），所以不能用
+    ?attr/tvFocusRing：浅色表 FOCUS 深蓝画在这块玻璃上只有 1.83:1（dev1 实机实测，
+    焦点环看不见）。tvPlayerRing 因此是派生色：浅色表由 ThemeResolver 在固定玻璃背景上
+    夹取到 ≥3:1，深色表直接取与应用表面焦点环同值的近白（深色宿主上都可读），
+    于是播放页只剩一种高亮色，不再出现「应用表面近白 + 视频层灰蓝」并存
+    （用户报告 2026-10-11「存在多个不同颜色的高亮效果」）。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
@@ -11,7 +25,7 @@
         android:top="8dp" />
 
     <stroke
-        android:width="1.5dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvPlayerRing" />
 
 </shape>

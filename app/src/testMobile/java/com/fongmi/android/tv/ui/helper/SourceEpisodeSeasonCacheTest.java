@@ -4,10 +4,13 @@ import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.utils.TmdbEpisodeSorter;
 
 import org.junit.Test;
 
+import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
@@ -59,6 +62,33 @@ public class SourceEpisodeSeasonCacheTest {
         cache.clear();
 
         assertEquals(4, cache.resolve(flag));
+    }
+
+    @Test
+    public void resolvingSeasonUsesSnapshotWhileSorterReplacesEpisodes() {
+        Flag flag = flag(Episode.create("第2集", "url-2"), Episode.create("第1集", "url-1"));
+        AtomicBoolean first = new AtomicBoolean(true);
+        SourceEpisodeSeasonCache cache = new SourceEpisodeSeasonCache(episode -> {
+            if (first.compareAndSet(true, false)) TmdbEpisodeSorter.sort(flag);
+            return 2;
+        });
+
+        assertEquals(2, cache.resolve(flag));
+        assertEquals(List.of("第1集", "第2集"), List.of(
+                flag.getEpisodes().get(0).getName(), flag.getEpisodes().get(1).getName()));
+    }
+
+    @Test
+    public void sortingDoesNotInvalidateAnExistingEpisodeIterator() {
+        Flag flag = flag(Episode.create("第2集", "url-2"), Episode.create("第1集", "url-1"));
+        Iterator<Episode> iterator = flag.getEpisodes().iterator();
+        assertEquals("第2集", iterator.next().getName());
+
+        TmdbEpisodeSorter.sort(flag);
+
+        assertEquals("第2集", iterator.next().getName());
+        assertEquals(List.of("第1集", "第2集"), List.of(
+                flag.getEpisodes().get(0).getName(), flag.getEpisodes().get(1).getName()));
     }
 
     @Test

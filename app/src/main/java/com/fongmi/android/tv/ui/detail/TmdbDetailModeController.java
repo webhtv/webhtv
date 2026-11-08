@@ -63,6 +63,21 @@ public interface TmdbDetailModeController {
      */
     boolean shouldAutoPlay();
 
+    /** Whether this mode uses the cinema presentation style. */
+    default boolean isCinemaStyle() {
+        return false;
+    }
+
+    /** Whether this is the immersive fusion mode. */
+    default boolean isFusionMode() {
+        return false;
+    }
+
+    /** Whether this is the direct-play detail mode. */
+    default boolean isPlayerMode() {
+        return false;
+    }
+
     /** Whether this mode owns an in-process playback service connection. */
     boolean shouldBindPlaybackService();
 

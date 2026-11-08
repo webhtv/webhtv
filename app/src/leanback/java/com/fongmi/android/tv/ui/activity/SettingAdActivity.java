@@ -2,59 +2,29 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Bundle;
-import android.text.InputType;
-import android.view.Gravity;
+import android.util.TypedValue;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.TextView;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AlertDialog;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
-import com.fongmi.android.tv.ad.audio.AdAudioRuleSnapshot;
-import com.fongmi.android.tv.ad.audio.AdAudioRuleStore;
-import com.fongmi.android.tv.ad.audio.AdAudioSetting;
-import com.fongmi.android.tv.ad.audio.AdSkipPolicyController;
-import com.fongmi.android.tv.ad.audio.ProbeRuleDownloader;
-import com.fongmi.android.tv.ad.audio.ProbeRuleStore;
-import com.fongmi.android.tv.ad.audio.SpeechAdConfig;
-import com.fongmi.android.tv.ad.audio.SpeechAdSetting;
 import com.fongmi.android.tv.api.config.ImportedAdRuleCandidateStore;
 import com.fongmi.android.tv.api.config.RuleConfig;
 import com.fongmi.android.tv.api.config.UserAdRuleStore;
 import com.fongmi.android.tv.databinding.ActivitySettingAdBinding;
-import com.fongmi.android.tv.server.Server;
-import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.setting.Setting;
-import com.fongmi.android.tv.subtitle.RealtimeSubtitleSpeechRecognitionFactory;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.AdBlockStatsDialog;
 import com.fongmi.android.tv.ui.dialog.AdRuleManageDialog;
-import com.fongmi.android.tv.ui.dialog.LightDialog;
-import com.fongmi.android.tv.utils.Notify;
-import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.crawler.SpiderDebug;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-
-import java.util.Locale;
 
 public class SettingAdActivity extends BaseActivity {
 
     private ActivitySettingAdBinding mBinding;
     private String[] introSkipMode;
-    private volatile AdAudioRuleSnapshot adAudioSnapshot = AdAudioRuleStore.get().current();
-    private volatile long probeRevision;
-    private volatile int probeRuleCount;
-    private final ActivityResultLauncher<String[]> adAudioRulePicker =
-            registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::importAdAudioRules);
-    private final ActivityResultLauncher<String[]> speechAdRulePicker =
-            registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::importSpeechAdRules);
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingAdActivity.class));
@@ -74,8 +44,6 @@ public class SettingAdActivity extends BaseActivity {
         mBinding.adblock.requestFocus();
         introSkipMode = getResources().getStringArray(R.array.select_auto_skip_intro_outro);
         setText();
-        loadAdAudioRules();
-        loadProbeRules();
     }
 
     @Override
@@ -84,37 +52,8 @@ public class SettingAdActivity extends BaseActivity {
         mBinding.aiAdDetection.setOnClickListener(this::setAiAdDetection);
         mBinding.adRuleManage.setOnClickListener(view -> AdRuleManageDialog.create().show(this, this::setText));
         mBinding.adBlockStats.setOnClickListener(view -> AdBlockStatsDialog.create(this).show());
-        mBinding.adAudioFingerprint.setOnClickListener(this::toggleAdAudioFingerprint);
-        mBinding.adAudioFingerprint.setOnLongClickListener(this::manageAdAudioRules);
-        mBinding.adAudioAutoSkip.setOnClickListener(this::toggleAdAudioAutoSkip);
-        mBinding.probeRuleSource.setOnClickListener(this::editProbeRuleSource);
-        mBinding.probeRuleRefresh.setOnClickListener(this::refreshProbeRules);
-        mBinding.speechAdEnabled.setOnClickListener(this::toggleSpeechAdEnabled);
-        mBinding.speechAdKeywords.setOnClickListener(this::editSpeechAdKeywords);
-        mBinding.speechAdRules.setOnClickListener(this::manageSpeechAdRules);
-        mBinding.speechAdBuiltin.setOnClickListener(this::toggleSpeechAdBuiltin);
-        mBinding.speechAdSkipSeconds.setOnClickListener(this::editSpeechAdSkipSeconds);
-        mBinding.speechAdSkipMode.setOnClickListener(this::selectSpeechAdSkipMode);
         mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
         mBinding.introSkipKinds.setOnClickListener(view -> IntroSkipKinds.show(this, this::setText));
-    }
-
-    /** 规则文件要读盘并完整解析，放后台线程，取回后再刷新摘要。 */
-    private void loadAdAudioRules() {
-        Task.execute(() -> {
-            adAudioSnapshot = AdAudioRuleStore.get().load();
-            runOnUiThread(this::setText);
-        });
-    }
-
-    private void loadProbeRules() {
-        Task.execute(() -> {
-            ProbeRuleStore store = ProbeRuleStore.get();
-            AdAudioRuleSnapshot snapshot = store.load();
-            probeRuleCount = snapshot.ruleSet().rules().size();
-            probeRevision = store.revision();
-            runOnUiThread(this::setText);
-        });
     }
 
     private void setText() {
@@ -125,19 +64,6 @@ public class SettingAdActivity extends BaseActivity {
         safeSet("adRuleManage", mBinding.adRuleManageText, () -> getString(R.string.ad_rule_count_with_pending,
                 UserAdRuleStore.load().size() + RuleConfig.get().getDefaultRules().size(),
                 ImportedAdRuleCandidateStore.pending().size()));
-        safeSet("adAudioFingerprint", mBinding.adAudioFingerprintText, this::getAdAudioFingerprintText);
-        safeSet("adAudioAutoSkip", mBinding.adAudioAutoSkipText, () -> getSwitch(AdAudioSetting.isAutoSkipEnabled()));
-        safeSet("probeRuleSource", mBinding.probeRuleSourceText, this::getProbeRuleSourceText);
-        safeSet("probeRuleRefresh", mBinding.probeRuleRefreshText, this::getProbeRuleRefreshText);
-        SpeechAdConfig speech = SpeechAdSetting.snapshot();
-        SpeechAdSetting.RuleSnapshot speechRules = SpeechAdSetting.ruleSnapshot();
-        safeSet("speechAdEnabled", mBinding.speechAdEnabledText, () -> getSpeechAdEnabledText(speech));
-        safeSet("speechAdKeywords", mBinding.speechAdKeywordsText, () -> getString(R.string.speech_ad_keyword_count, speech.keywords().values().size()));
-        safeSet("speechAdRules", mBinding.speechAdRulesText, () -> getSpeechAdRulesText(speechRules));
-        safeSet("speechAdBuiltin", mBinding.speechAdBuiltinText, () -> getSpeechAdBuiltinText(speechRules));
-        safeSet("speechAdSkipSeconds", mBinding.speechAdSkipSecondsText, () -> getString(R.string.speech_ad_skip_seconds_value, speech.skipSeconds()));
-        safeSet("speechAdSkipMode", mBinding.speechAdSkipModeText, () -> speech.mode() == AdSkipPolicyController.Mode.AUTO
-                ? getString(R.string.speech_ad_skip_mode_auto) : getString(R.string.speech_ad_skip_mode_prompt));
         safeSet("autoSkipIntroOutro", mBinding.autoSkipIntroOutroText, () -> introSkipMode[Setting.getIntroSkipMode()]);
         safeSet("introSkipKinds", mBinding.introSkipKindsText, IntroSkipKinds::summary);
     }
@@ -147,7 +73,22 @@ public class SettingAdActivity extends BaseActivity {
     }
 
     private void safeSet(String name, TextView view, TextSupplier supplier) {
-        safeRun(name, () -> view.setText(supplier.get()), () -> setError(view));
+        safeRun(name, () -> setSummary(view, supplier.get()), () -> setError(view));
+    }
+
+    /**
+     * 写入取值摘要，并把颜色复位到常规壁纸前景色。
+     *
+     * <p>复位这一步是必需的：{@link #setError} 会把同一个 TextView 染成错误色，而这些摘要
+     * 全部**复用同一个控件**——不复位的话，某一行失败一次之后，即使后续刷新成功，
+     * 它也会一直显示为红色。
+     */
+    private void setSummary(TextView view, CharSequence text) {
+        if (view == null) return;
+        view.setText(text);
+        view.setTextColor(themeColor(R.attr.webhtvColorOnWallpaper));
+        // 撤掉错误底材：错误态是"临时"的，刷新成功必须完全回到原样（这些 TextView 原本没有背景）。
+        view.setBackground(null);
     }
 
     private void safeRun(String name, Runnable action, Runnable fallback) {
@@ -163,8 +104,32 @@ public class SettingAdActivity extends BaseActivity {
         }
     }
 
+    /**
+     * 内联错误：设计文档 §9.9 要求错误态有「错误色」。
+     *
+     * <p>不能直接用 {@code ?attr/colorError}：那是跟随调色板的角色，浅色表的深红
+     * （{@code #B3261E}）压在深色壁纸行色带上实测只有 1.06:1，完全不可读。这里用与壁纸
+     * 同族的 {@code ?attr/webhtvColorOnWallpaperError}（同一底材实测 4.05–4.50:1）。
+     *
+     * <p>底材：错误色直接画在行色带上只有 4.05–4.50:1，略低于正文门槛 4.5:1，而继续调色无解
+     * （要达标就得接近纯白，错误色随之失去语义）。因此这里同时换上一块**实心深底**
+     * （{@code @drawable/shape_error_value}），核算为 8.84:1，稳过门槛。
+     *
+     * <p>如实记录：该取值在行色带最亮处是 4.05:1，**略低于正文门槛 4.5:1**。这是底材
+     * （中亮度壁纸）决定的取舍，理由与替代方案见 {@code values/webhtv_tokens.xml} 的同名条目
+     * 与 docs/TV-ERROR-STATE-20261012.md §7。
+     */
     private void setError(TextView view) {
-        if (view != null) view.setText(R.string.error_config_get);
+        if (view == null) return;
+        view.setText(R.string.error_config_get);
+        view.setTextColor(themeColor(R.attr.webhtvColorOnWallpaperError));
+        view.setBackgroundResource(R.drawable.shape_error_value);
+    }
+
+    /** 解析主题属性里的颜色值；未赋值时返回 0（透明）。 */
+    private int themeColor(int attr) {
+        TypedValue value = new TypedValue();
+        return getTheme().resolveAttribute(attr, value, true) ? value.data : 0;
     }
 
     private interface TextSupplier {
@@ -184,397 +149,6 @@ public class SettingAdActivity extends BaseActivity {
     private void setAutoSkipIntroOutro(View view) {
         Setting.putIntroSkipMode((Setting.getIntroSkipMode() + 1) % introSkipMode.length);
         setText();
-    }
-
-    private String getAdAudioFingerprintText() {
-        String enabled = getSwitch(AdAudioSetting.isEnabled());
-        AdAudioRuleSnapshot snapshot = adAudioSnapshot;
-        if (snapshot == null || snapshot.hasError()) {
-            return enabled + " · " + getString(R.string.setting_ad_audio_rule_error);
-        }
-        int count = snapshot.ruleSet().rules().size();
-        if (count == 0) return enabled + " · " + getString(R.string.setting_ad_audio_no_rules);
-        return enabled + " · " + getString(R.string.setting_ad_audio_rule_count, count, snapshot.version());
-    }
-
-    private void toggleAdAudioFingerprint(View view) {
-        AdAudioSetting.setEnabled(!AdAudioSetting.isEnabled());
-        notifyAdAudioRuntime();
-        setText();
-    }
-
-    private void toggleAdAudioAutoSkip(View view) {
-        AdAudioSetting.setAutoSkipEnabled(!AdAudioSetting.isAutoSkipEnabled());
-        notifyAdAudioRuntime();
-        setText();
-    }
-
-    private boolean manageAdAudioRules(View view) {
-        new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.setting_ad_audio_title)
-                .setItems(new String[]{
-                        getString(R.string.setting_ad_audio_import),
-                        getString(R.string.setting_ad_audio_clear)
-                }, (dialog, which) -> {
-                    if (which == 0) {
-                        adAudioRulePicker.launch(new String[]{"application/json", "text/json"});
-                    } else {
-                        confirmClearAdAudioRules();
-                    }
-                })
-                .setNegativeButton(R.string.dialog_negative, null)
-                .show();
-        return true;
-    }
-
-    private void importAdAudioRules(Uri uri) {
-        if (uri == null) return;
-        Task.execute(() -> {
-            String message;
-            try {
-                adAudioSnapshot = AdAudioRuleStore.get().importUri(getContentResolver(), uri);
-                message = getString(R.string.setting_ad_audio_imported,
-                        adAudioSnapshot.ruleSet().rules().size(), adAudioSnapshot.version());
-            } catch (Exception e) {
-                message = getString(R.string.setting_ad_audio_import_failed);
-            }
-            String result = message;
-            runOnUiThread(() -> {
-                if (!canSetText()) return;
-                Notify.show(result);
-                notifyAdAudioRuntime();
-                setText();
-            });
-        });
-    }
-
-    private void confirmClearAdAudioRules() {
-        new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.setting_ad_audio_clear)
-                .setMessage(R.string.setting_ad_audio_clear_confirm)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> Task.execute(() -> {
-                    try {
-                        adAudioSnapshot = AdAudioRuleStore.get().clear();
-                        runOnUiThread(() -> {
-                            if (!canSetText()) return;
-                            Notify.show(R.string.setting_ad_audio_clear_done);
-                            notifyAdAudioRuntime();
-                            setText();
-                        });
-                    } catch (RuntimeException e) {
-                        runOnUiThread(() -> Notify.show(R.string.setting_ad_audio_import_failed));
-                    }
-                }))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .show();
-    }
-
-    private String getProbeRuleSourceText() {
-        String url = AdAudioSetting.getProbeRuleUrl();
-        if (url.isEmpty()) return getString(R.string.setting_ad_probe_source_off);
-        if (url.equals(AdAudioSetting.DEFAULT_PROBE_RULE_URL)) return getString(R.string.setting_ad_probe_source_default);
-        return url;
-    }
-
-    private String getProbeRuleRefreshText() {
-        if (probeRevision <= 0L) return getString(R.string.setting_ad_probe_never);
-        return getString(R.string.setting_ad_probe_revision, probeRevision, probeRuleCount);
-    }
-
-    private void editProbeRuleSource(View view) {
-        EditText input = new EditText(this);
-        input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        input.setText(AdAudioSetting.getProbeRuleUrl());
-        input.setSelection(input.length());
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.setting_ad_probe_source)
-                .setMessage(R.string.setting_ad_probe_source_hint)
-                .setView(input)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
-            String value = input.getText().toString().trim();
-            // 空串表示关闭社区规则源；规则不签名，传输层是唯一保障，因此只收 https。
-            if (!value.isEmpty() && !value.toLowerCase(Locale.ROOT).startsWith("https://")) {
-                Notify.show(R.string.setting_ad_probe_url_invalid);
-                return;
-            }
-            AdAudioSetting.setProbeRuleUrl(value);
-            setText();
-            dialog.dismiss();
-        }));
-        dialog.show();
-        LightDialog.apply(dialog);
-    }
-
-    private void refreshProbeRules(View view) {
-        mBinding.probeRuleRefreshText.setText(R.string.setting_ad_probe_refreshing);
-        boolean started = ProbeRuleDownloader.refreshNow(new ProbeRuleDownloader.Callback() {
-            @Override
-            public void onSuccess(AdAudioRuleSnapshot snapshot) {
-                if (!canSetText()) return;
-                Notify.show(snapshot.hasRules()
-                        ? getString(R.string.setting_ad_probe_refreshed, snapshot.version(), snapshot.ruleSet().rules().size())
-                        : getString(R.string.setting_ad_probe_unchanged, 0));
-                notifyAdAudioRuntime();
-                loadProbeRules();
-            }
-
-            @Override
-            public void onFailure(Throwable error) {
-                if (!canSetText()) return;
-                Notify.show(getString(R.string.setting_ad_probe_failed, String.valueOf(error.getMessage())));
-                setText();
-            }
-
-            @Override
-            public void onDisabled() {
-                if (!canSetText()) return;
-                Notify.show(R.string.setting_ad_probe_source_disabled);
-                setText();
-            }
-        });
-        // 已有刷新在跑时不会有回调，这里必须自己复位，否则文本永远停在「正在刷新」。
-        if (!started) setText();
-    }
-
-    private String getSpeechAdEnabledText(SpeechAdConfig speech) {
-        String text = getSwitch(speech.enabled());
-        if (speech.enabled() && !RealtimeSubtitleSpeechRecognitionFactory.isSelectedModelReady()) {
-            text += " · " + getString(R.string.speech_ad_model_not_ready);
-        }
-        return text;
-    }
-
-    private void toggleSpeechAdEnabled(View view) {
-        SpeechAdSetting.setEnabled(!SpeechAdSetting.snapshot().enabled());
-        notifyAdAudioRuntime();
-        setText();
-    }
-
-    private String getSpeechAdRulesText(SpeechAdSetting.RuleSnapshot snapshot) {
-        if (snapshot.hasError()) return getString(R.string.speech_ad_rules_error, snapshot.error());
-        if (snapshot.rules().isEmpty()) return getString(R.string.speech_ad_rules_none);
-        return getString(R.string.speech_ad_rules_summary,
-                snapshot.rules().rules().size(), getSpeechAdRuleSourceText(snapshot));
-    }
-
-    private String getSpeechAdBuiltinText(SpeechAdSetting.RuleSnapshot snapshot) {
-        int count = Math.max(snapshot.builtinRules().rules().size(), SpeechAdSetting.builtinRuleCount());
-        return getString(R.string.speech_ad_builtin_value,
-                getSwitch(snapshot.builtinEnabled()), count);
-    }
-
-    private String getSpeechAdRuleSourceText(SpeechAdSetting.RuleSnapshot snapshot) {
-        boolean hasCustom = !snapshot.customRules().isEmpty();
-        boolean hasBuiltin = snapshot.builtinEnabled() && !snapshot.builtinRules().isEmpty();
-        if (hasCustom && hasBuiltin) return getString(R.string.speech_ad_rules_source_combined);
-        if (hasBuiltin) return getString(R.string.speech_ad_rules_source_builtin);
-        if (snapshot.source() == SpeechAdSetting.RuleSource.IMPORTED) {
-            return getString(R.string.speech_ad_rules_source_imported);
-        }
-        if (snapshot.source() == SpeechAdSetting.RuleSource.USER) {
-            return getString(R.string.speech_ad_rules_source_user);
-        }
-        return getString(R.string.speech_ad_rules_source_none);
-    }
-
-    private void manageSpeechAdRules(View view) {
-        new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.speech_ad_rules_manage)
-                .setItems(new String[]{
-                        getString(R.string.speech_ad_rules_edit),
-                        getString(R.string.speech_ad_rules_import),
-                        getString(R.string.speech_ad_rules_clear),
-                        getString(R.string.speech_ad_rules_view_builtin)
-                }, (dialog, which) -> {
-                    if (which == 0) editSpeechAdRules();
-                    else if (which == 1) speechAdRulePicker.launch(new String[]{"text/plain", "text/*"});
-                    else if (which == 2) confirmClearSpeechAdRules();
-                    else showBuiltinSpeechAdRules();
-                })
-                .setNegativeButton(R.string.dialog_negative, null)
-        .show();
-    }
-
-    private void showBuiltinSpeechAdRules() {
-        try {
-            new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                    .setTitle(R.string.speech_ad_rules_view_builtin)
-                    .setMessage(SpeechAdSetting.builtinRulesText())
-                    .setPositiveButton(R.string.dialog_positive, null)
-                    .show();
-        } catch (RuntimeException error) {
-            Notify.show(getString(R.string.speech_ad_rules_error, SpeechAdSetting.safeError(error)));
-        }
-    }
-
-    private void editSpeechAdRules() {
-        EditText input = new EditText(this);
-        input.setGravity(Gravity.TOP | Gravity.START);
-        input.setMinLines(8);
-        input.setMaxLines(16);
-        input.setSingleLine(false);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        input.setText(SpeechAdSetting.customRulesText());
-        input.setSelection(input.length());
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.speech_ad_rules_edit)
-                .setView(input)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
-            try {
-                String text = input.getText().toString();
-                if (text.trim().isEmpty()) SpeechAdSetting.clearRules();
-                else SpeechAdSetting.setRulesText(text, SpeechAdSetting.RuleSource.USER);
-                Notify.show(R.string.speech_ad_rules_saved);
-                notifyAdAudioRuntime();
-                setText();
-                dialog.dismiss();
-            } catch (RuntimeException error) {
-                input.setError(SpeechAdSetting.safeError(error));
-                input.requestFocus();
-            }
-        }));
-        dialog.show();
-        LightDialog.apply(dialog);
-    }
-
-    private void importSpeechAdRules(Uri uri) {
-        if (uri == null) return;
-        Task.execute(() -> {
-            boolean imported = false;
-            String message;
-            try {
-                SpeechAdSetting.importUri(getContentResolver(), uri);
-                imported = true;
-                message = getString(R.string.speech_ad_rules_imported,
-                        SpeechAdSetting.ruleSnapshot().customRules().rules().size());
-            } catch (Exception error) {
-                message = getString(R.string.speech_ad_rules_import_failed,
-                        SpeechAdSetting.safeError(error));
-            }
-            final boolean success = imported;
-            String result = message;
-            runOnUiThread(() -> {
-                if (success) notifyAdAudioRuntime();
-                if (!canSetText()) return;
-                Notify.show(result);
-                setText();
-            });
-        });
-    }
-
-    private void confirmClearSpeechAdRules() {
-        new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.speech_ad_rules_clear)
-                .setMessage(R.string.speech_ad_rules_clear_confirm)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
-                    SpeechAdSetting.clearRules();
-                    Notify.show(R.string.speech_ad_rules_clear_done);
-                    notifyAdAudioRuntime();
-                    setText();
-                })
-                .setNegativeButton(R.string.dialog_negative, null)
-                .show();
-    }
-
-    private void toggleSpeechAdBuiltin(View view) {
-        try {
-            SpeechAdSetting.setBuiltinEnabled(!SpeechAdSetting.isBuiltinEnabled());
-            notifyAdAudioRuntime();
-        } catch (RuntimeException error) {
-            Notify.show(getString(R.string.speech_ad_rules_error, SpeechAdSetting.safeError(error)));
-        }
-        setText();
-    }
-
-    private void editSpeechAdKeywords(View view) {
-        SpeechAdConfig speech = SpeechAdSetting.snapshot();
-        EditText input = new EditText(this);
-        input.setGravity(Gravity.TOP | Gravity.START);
-        input.setMinLines(4);
-        input.setMaxLines(8);
-        input.setSingleLine(false);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        input.setText(String.join("\n", speech.keywords().values()));
-        input.setSelectAllOnFocus(false);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.speech_ad_keywords)
-                .setView(input)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
-            SpeechAdSetting.setKeywords(input.getText().toString());
-            notifyAdAudioRuntime();
-            setText();
-            dialog.dismiss();
-        }));
-        dialog.show();
-        LightDialog.apply(dialog);
-    }
-
-    private void editSpeechAdSkipSeconds(View view) {
-        EditText input = new EditText(this);
-        input.setInputType(InputType.TYPE_CLASS_NUMBER);
-        input.setSelectAllOnFocus(true);
-        input.setText(String.valueOf(SpeechAdSetting.snapshot().skipSeconds()));
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.speech_ad_skip_seconds)
-                .setView(input)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
-            String value = input.getText().toString().trim();
-            try {
-                int seconds = Integer.parseInt(value);
-                if (seconds < 1 || seconds > 120) throw new NumberFormatException();
-                SpeechAdSetting.setSkipSeconds(seconds);
-                notifyAdAudioRuntime();
-                setText();
-                dialog.dismiss();
-            } catch (NumberFormatException error) {
-                input.setError(getString(R.string.speech_ad_skip_seconds_invalid));
-                input.requestFocus();
-            }
-        }));
-        dialog.show();
-        LightDialog.apply(dialog);
-    }
-
-    private void selectSpeechAdSkipMode(View view) {
-        SpeechAdConfig speech = SpeechAdSetting.snapshot();
-        String[] modes = {
-                getString(R.string.speech_ad_skip_mode_prompt),
-                getString(R.string.speech_ad_skip_mode_auto)
-        };
-        int checked = speech.mode() == AdSkipPolicyController.Mode.AUTO ? 1 : 0;
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.speech_ad_skip_mode)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setSingleChoiceItems(modes, checked, (shown, which) -> {
-                    SpeechAdSetting.setMode(which == 1
-                            ? AdSkipPolicyController.Mode.AUTO
-                            : AdSkipPolicyController.Mode.PROMPT);
-                    notifyAdAudioRuntime();
-                    setText();
-                    shown.dismiss();
-                })
-                .create();
-        dialog.show();
-        LightDialog.apply(dialog);
-    }
-
-    private void notifyAdAudioRuntime() {
-        PlaybackService service = Server.get().getService();
-        if (service == null || service.player() == null || service.player().isReleased()) return;
-        service.player().reloadAdAudioSettings();
     }
 
     @Override

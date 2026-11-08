@@ -21,6 +21,8 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 
 import okhttp3.Response;
 
@@ -45,8 +47,8 @@ public final class NodeBundle {
     private static final long MAX_ENTRY_BYTES = 32L * 1024L * 1024L;
     private static final int MAX_METADATA_BYTES = 4096;
     private static final int MAX_SOURCE_KEY_BYTES = 16 * 1024;
-    /** 复用判定要抢在用户感知之前给结论，慢比错更难接受，所以比下载超时短得多。 */
-    private static final long METADATA_TIMEOUT_MS = 3_000L;
+    /** 元数据只是一行 md5；连接慢时允许短暂等待，但不能拖住缓存判定数十秒。 */
+    private static final long METADATA_TIMEOUT_MS = NodeRuntime.METADATA_TIMEOUT_MS;
 
     private static final java.util.Set<String> MEMBERS = new java.util.HashSet<>(java.util.Arrays.asList(
             "index.js", MARKER, "index.config.js", "index.config.js.md5"));
@@ -156,8 +158,9 @@ public final class NodeBundle {
             String key = sourceKey(url);
             return !TextUtils.isEmpty(key) && key.equals(servingKey);
         }
-        String bundleMd5 = remoteMd5(url);
-        String configMd5 = remoteMd5(configUrl(url));
+        String[] digests = remoteMd5Pair(url);
+        String bundleMd5 = digests[0];
+        String configMd5 = digests[1];
         String key = remoteSourceKey(url, bundleMd5, configMd5);
         if (!TextUtils.isEmpty(key)) return key.equals(servingKey);
         return installedIsRemoteOf(servingKey, url);
@@ -381,9 +384,10 @@ public final class NodeBundle {
     }
 
     private static String ensureRemote(File dir, String url) {
-        // 一次取齐校验值：来源键、缓存判定、下载校验全都用这两个值，避免重复请求。
-        String expectedBundle = remoteMd5(url);
-        String expectedConfig = remoteMd5(configUrl(url));
+        // 一次取齐校验值：两个独立的小响应并行获取，避免 bundle 和 config 的网络延迟串行叠加。
+        String[] digests = remoteMd5Pair(url);
+        String expectedBundle = digests[0];
+        String expectedConfig = digests[1];
         String key = remoteSourceKey(url, expectedBundle, expectedConfig);
         // 两个校验值缺任何一个都算不出完整身份，此时只能靠已装好的缓存服务，不能下载未校验内容。
         if (TextUtils.isEmpty(key)) return ensureRemoteOffline(dir, url);
@@ -482,9 +486,45 @@ public final class NodeBundle {
         return "猫源校验值不可用，本地缓存也不完整，无法安全启动：" + url;
     }
 
+    private static String[] remoteMd5Pair(String url) {
+        String[] result = new String[]{"", ""};
+        CountDownLatch done = new CountDownLatch(2);
+        AtomicReference<String> bundle = new AtomicReference<>("");
+        AtomicReference<String> config = new AtomicReference<>("");
+        Thread bundleThread = new Thread(() -> {
+            try {
+                bundle.set(remoteMd5(url));
+            } finally {
+                done.countDown();
+            }
+        }, "cat-md5-bundle");
+        Thread configThread = new Thread(() -> {
+            try {
+                config.set(remoteMd5(configUrl(url)));
+            } finally {
+                done.countDown();
+            }
+        }, "cat-md5-config");
+        bundleThread.start();
+        configThread.start();
+        try {
+            done.await(METADATA_TIMEOUT_MS + 500L, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        result[0] = bundle.get();
+        result[1] = config.get();
+        return result;
+    }
+
     private static String remoteMd5(String url) {
-        // 校验值只有 32 字节，但走默认 30s 超时会把复用判定拖成半分钟的黑屏。
-        try (Response response = OkHttp.newCall(OkHttp.client(METADATA_TIMEOUT_MS), md5Url(url), "node-bundle").execute()) {
+        okhttp3.OkHttpClient client = OkHttp.client().newBuilder()
+                .connectTimeout(METADATA_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .readTimeout(METADATA_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .writeTimeout(METADATA_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .callTimeout(METADATA_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .build();
+        try (Response response = OkHttp.newCall(client, md5Url(url), "node-bundle").execute()) {
             if (!response.isSuccessful() || response.body() == null) return "";
             if (response.body().contentLength() > MAX_METADATA_BYTES) return "";
             try (InputStream in = response.body().byteStream()) {
@@ -523,7 +563,7 @@ public final class NodeBundle {
 
     private static PreparedFile download(String url, File target, String expected) throws IOException {
         if (!isMd5(expected)) throw new IOException("bundle 校验值不可用");
-        try (Response response = OkHttp.newCall(url, "node-bundle").execute()) {
+        try (Response response = OkHttp.newCall(OkHttp.client(NodeRuntime.TRANSFER_TIMEOUT_MS), url, "node-bundle").execute()) {
             if (!response.isSuccessful() || response.body() == null) throw new IOException("bundle 下载失败 HTTP " + response.code());
             try (InputStream in = response.body().byteStream()) {
                 String actual = copyAndDigest(in, target);

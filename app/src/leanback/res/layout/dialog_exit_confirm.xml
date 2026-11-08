@@ -25,7 +25,7 @@
             android:gravity="center"
             android:includeFontPadding="false"
             android:text="!"
-            android:textColor="#174EA6"
+            android:textColor="?attr/colorPrimary"
             android:textSize="24sp"
             android:textStyle="bold" />
 
@@ -42,7 +42,7 @@
                 android:layout_height="wrap_content"
                 android:singleLine="true"
                 android:text="@string/exit_confirm_title"
-                android:textColor="#202124"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="22sp"
                 android:textStyle="bold"
                 tools:text="退出应用" />
@@ -54,7 +54,7 @@
                 android:layout_marginTop="8dp"
                 android:lineSpacingExtra="4dp"
                 android:text="@string/exit_confirm_message"
-                android:textColor="#5F6368"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="14sp"
                 tools:text="应用将关闭，播放和后台服务也会停止。" />
 
@@ -67,7 +67,7 @@
         android:layout_height="1dp"
         android:layout_marginTop="22dp"
         android:layout_marginBottom="18dp"
-        android:background="#E8EDF5" />
+        android:background="?attr/colorSurfaceContainer" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
@@ -125,7 +125,7 @@
             android:gravity="center"
             android:singleLine="true"
             android:text="@string/exit_confirm_positive"
-            android:textColor="#FFFFFF"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="15sp"
             android:textStyle="bold" />
 

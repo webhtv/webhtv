@@ -19,7 +19,8 @@ public class ControlDialogOsdSettingsTest {
             "displayProgress",
             "displayMini",
             "displayTitle",
-            "displayParams"
+            "displayParams",
+            "displayMediaBadges"
     );
 
     private static final List<String> LIVE_DISPLAY_IDS = List.of(
@@ -63,8 +64,12 @@ public class ControlDialogOsdSettingsTest {
         assertMethodContains(activity, "private void showInlineDisplay()",
                 "DisplayDialog.showPlayerOsd", "inlineControlDialogDisplayChanged();");
         assertTrue("the shared player OSD dialog must expose playback parameters", dialogLayout.contains("@+id/display_params"));
+        assertTrue("the shared player OSD dialog must expose the media info badges toggle", dialogLayout.contains("@+id/display_media_badges"));
         assertMethodContains(dialog, "private void initPlayerOsdView()", "PlayerSetting.isOsdDiagnostics()");
         assertMethodContains(dialog, "private void initPlayerOsdEvent()", "PlayerSetting.putOsdDiagnostics");
+        assertMethodContains(dialog, "private void initPlayerOsdView()", "PlayerSetting.isDisplayMediaBadges()");
+        assertMethodContains(dialog, "private void initPlayerOsdEvent()", "Display.MEDIA_BADGES");
+        assertMethodContains(dialog, "private void setDisplay(TextView view, Display display)", "PlayerSetting.putDisplayMediaBadgesPersistent(selected);");
     }
 
     private static void assertControlDialogEmbedsOsdSettings(String flavor) throws Exception {

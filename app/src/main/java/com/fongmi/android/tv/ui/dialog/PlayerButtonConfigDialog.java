@@ -21,6 +21,9 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.AdapterPlayerButtonConfigBinding;
 import com.fongmi.android.tv.databinding.DialogPlayerButtonConfigBinding;
 import com.fongmi.android.tv.setting.PlayerButtonSetting;
+import com.fongmi.android.tv.theme.PlayerSettingsRowTheme;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -53,7 +56,7 @@ public class PlayerButtonConfigDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
@@ -63,8 +66,8 @@ public class PlayerButtonConfigDialog extends BaseAlertDialog {
         if (dialog == null) return;
         Window window = dialog.getWindow();
         if (window == null) return;
-        int screenWidth = ResUtil.getScreenWidth(requireContext());
-        int screenHeight = ResUtil.getScreenHeight(requireContext());
+        int screenWidth = DialogSafeArea.width(requireActivity(), window);
+        int screenHeight = DialogSafeArea.height(requireActivity(), window);
         boolean land = ResUtil.isLand(requireContext());
         WindowManager.LayoutParams params = window.getAttributes();
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -167,8 +170,8 @@ public class PlayerButtonConfigDialog extends BaseAlertDialog {
             holder.binding.up.setFocusable(position > 0);
             holder.binding.down.setEnabled(position < items.size() - 1);
             holder.binding.down.setFocusable(position < items.size() - 1);
-            holder.binding.root.setAlpha(1f);
-            holder.binding.name.setAlpha(item.visible() ? 1f : 0.55f);
+            PlayerSettingsRowTheme.apply(holder.binding.root, holder.binding.name, ThemeController.current(), item.visible());
+            PlayerSettingsRowTheme.applySwitch(holder.binding.visible, ThemeController.current());
             holder.binding.root.setOnClickListener(view -> toggle(holder.getBindingAdapterPosition(), R.id.visible));
             holder.binding.visible.setOnClickListener(view -> toggle(holder.getBindingAdapterPosition(), view.getId()));
             holder.binding.up.setOnClickListener(view -> move(-1, holder.getBindingAdapterPosition(), view.getId()));

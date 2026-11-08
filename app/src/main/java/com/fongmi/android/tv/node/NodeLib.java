@@ -143,7 +143,7 @@ public final class NodeLib {
     }
 
     private static String download(String url, File target, Progress progress) {
-        try (Response res = OkHttp.newCall(url, "node-lib").execute()) {
+        try (Response res = OkHttp.newCall(OkHttp.client(NodeRuntime.LIB_TRANSFER_TIMEOUT_MS), url, "node-lib").execute()) {
             if (!res.isSuccessful() || res.body() == null) return "下载失败 HTTP " + res.code();
             long total = res.body().contentLength();
             long done = 0;

@@ -37,6 +37,25 @@ public class MultiThreadProxyPlayerUiSourceTest {
         assertTrue(fusion.contains("detailActionView(R.id.multiThreadProxy, View.class).setOnClickListener"));
         assertTrue(fusion.contains("PlayerButtonSetting.MULTI_THREAD_PROXY, binding.playerMultiThreadProxy"));
         assertTrue(fusion.contains("player().reloadCurrentMediaItem()"));
+        // 回归：只登记 addActionButton 不足以让按钮可点，底部控制栏必须真正绑定点击监听器。
+        assertTrue(mobile.contains("mBinding.control.action.multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy));"));
+        assertTrue(leanback.contains("mBinding.control.action.multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy));"));
+        assertTrue(fusion.contains("playerMultiThreadProxy.setOnClickListener"));
+    }
+
+    @Test
+    public void multiThreadButtonIsHiddenByDefaultButStillUserConfigurable() throws Exception {
+        String catalog = read("main", "java", "com", "fongmi", "android", "tv", "setting", "PlayerButtonSetting.java");
+
+        assertTrue("多线程按钮必须在默认清单中标记为不显示",
+                catalog.contains("new Item(MULTI_THREAD_PROXY, R.string.multi_thread_proxy_button, false)"));
+        assertTrue("首次运行必须把默认不显示项写入隐藏偏好",
+                catalog.contains("Prefers.put(HIDDEN, join(hidden));"));
+        assertTrue("默认隐藏只能注入一次，之后以用户选择为准",
+                catalog.contains("if (Prefers.getBoolean(HIDDEN_SEEDED)) return hidden;")
+                        && catalog.contains("Prefers.put(HIDDEN_SEEDED, true);"));
+        assertTrue("重置播放器按钮必须同时清除默认隐藏注入标记", catalog.contains("Prefers.remove(HIDDEN_SEEDED);"));
+        assertTrue("用户仍可通过 putVisible 打开该按钮", catalog.contains("public static void putVisible(String id, boolean visible)"));
     }
 
     @Test

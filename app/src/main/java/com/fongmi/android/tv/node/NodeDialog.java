@@ -8,8 +8,8 @@ import android.view.View;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogNodeProgressBinding;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import java.util.Locale;
 
 /**
@@ -45,7 +45,7 @@ final class NodeDialog {
             if (dialog != null && dialog.isShowing()) return;
             try {
                 binding = DialogNodeProgressBinding.inflate(LayoutInflater.from(activity));
-                dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+                dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                         .setTitle(R.string.node_title)
                         .setView(binding.getRoot())
                         // 允许退到后台：下载可能要一分钟以上，不该把用户锁在弹窗里

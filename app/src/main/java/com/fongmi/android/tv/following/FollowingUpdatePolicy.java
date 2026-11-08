@@ -50,6 +50,7 @@ public final class FollowingUpdatePolicy {
         item.nextAirSeason = Math.max(0, snapshot.nextAirSeason);
         item.nextAirEpisode = Math.max(0, snapshot.nextAirEpisode);
         item.nextAirAt = Math.max(0, snapshot.nextAirAt);
+        item.nextAirWeekday = Math.max(0, snapshot.nextAirWeekday);
         item.metadataUpdatedAt = snapshot.fetchedAt > 0 ? snapshot.fetchedAt : now;
         item.lastObservedEpisode = Math.max(item.lastObservedEpisode, releasedEpisode(item));
         item.failureCount = 0;

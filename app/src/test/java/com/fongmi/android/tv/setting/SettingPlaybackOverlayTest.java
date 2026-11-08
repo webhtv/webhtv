@@ -64,12 +64,14 @@ public class SettingPlaybackOverlayTest {
 
     private static void assertLeanbackPlayerAppliesOverlay(String source) {
         assertTrue(source.contains("applyPlaybackOverlay();"));
-        assertTrue(source.contains("mBinding.control.getRoot().setBackgroundResource(Setting.isPlaybackOverlayEnabled() ? R.drawable.shape_controller_scrim : R.color.transparent)"));
+        assertTrue(source.contains("mBinding.control.getRoot().setBackground(PlaybackMenuScrim.create(this))"));
+        assertTrue(source.contains("mBinding.control.getRoot().setBackgroundResource(R.color.transparent)"));
     }
 
     private static void assertPlayerAppliesOverlay(String source) {
         assertTrue(source.contains("mBinding.control.getRoot().setBackgroundResource(R.color.transparent)"));
-        assertTrue(source.contains("mBinding.control.bottom.setBackgroundResource(Setting.isPlaybackOverlayEnabled() ? R.drawable.shape_controller_scrim : R.color.transparent)"));
+        assertTrue(source.contains("mBinding.control.bottom.setBackground(PlaybackMenuScrim.create(this))"));
+        assertTrue(source.contains("mBinding.control.bottom.setBackgroundResource(R.color.transparent)"));
     }
 
     private static String read(Path path) throws Exception {

@@ -29,7 +29,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="评论"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -41,7 +41,7 @@
                 android:focusable="true"
                 android:padding="8dp"
                 android:src="@drawable/ic_setting_refresh"
-                app:tint="@color/white" />
+                app:tint="?attr/webhtvColorOnWallpaper" />
 
             <ImageView
                 android:id="@+id/close"
@@ -52,7 +52,7 @@
                 android:focusable="true"
                 android:padding="8dp"
                 android:src="@drawable/ic_audio_close"
-                app:tint="@color/white" />
+                app:tint="?attr/webhtvColorOnWallpaper" />
         </LinearLayout>
 
         <TextView
@@ -62,7 +62,7 @@
             android:layout_marginTop="2dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/white_60"
+            android:textColor="@color/webhtv_color_player_control_muted"
             android:textSize="12sp" />
 
         <LinearLayout
@@ -80,7 +80,7 @@
                 android:focusable="true"
                 android:gravity="center"
                 android:text="热门"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="13sp" />
 
             <TextView
@@ -93,7 +93,7 @@
                 android:focusable="true"
                 android:gravity="center"
                 android:text="最新"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="13sp" />
         </LinearLayout>
 
@@ -118,7 +118,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:textColor="@color/white_60"
+                android:textColor="@color/webhtv_color_player_control_muted"
                 android:textSize="14sp"
                 android:visibility="gone" />
 
@@ -127,7 +127,7 @@
                 android:layout_width="42dp"
                 android:layout_height="42dp"
                 android:layout_gravity="center"
-                android:indeterminateTint="@color/white"
+                android:indeterminateTint="?attr/webhtvColorOnWallpaper"
                 android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>

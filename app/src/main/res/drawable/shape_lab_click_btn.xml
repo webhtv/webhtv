@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 次级按钮（编辑/输出/取消等）：补 state_focused，遥控聚焦时必须可见。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
@@ -10,6 +11,15 @@
         <shape android:shape="rectangle">
             <corners android:radius="6dp"/>
             <solid android:color="@color/white_20"/>
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="6dp"/>
+            <solid android:color="#e67c4dff"/>
+            <stroke
+                android:width="2dp"
+                android:color="@color/white"/>
         </shape>
     </item>
     <item>

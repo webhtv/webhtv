@@ -1,7 +1,6 @@
 package com.fongmi.android.tv.ui.adapter;
 
 import android.content.res.ColorStateList;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,6 +15,7 @@ import com.fongmi.android.tv.databinding.AdapterSiteSwitchBinding;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.setting.SiteNameStore;
+import com.fongmi.android.tv.ui.helper.SiteDialogTheme;
 import com.github.catvod.crawler.SpiderDebug;
 
 import java.util.ArrayList;
@@ -199,10 +199,12 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
             super(binding.getRoot());
             this.actionBinding = binding;
             this.switchBinding = null;
-            binding.text.setGravity(Gravity.CENTER);
             binding.getRoot().setOnClickListener(v -> click());
             binding.getRoot().setOnLongClickListener(v -> longClick());
-            binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> binding.text.setSelected(hasFocus || isSelected()));
+            binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> {
+                binding.text.setSelected(hasFocus || isSelected());
+                SiteDialogTheme.updateSiteText(binding.text, hasFocus, isSelected());
+            });
             binding.getRoot().setOnKeyListener((v, keyCode, event) -> onKey(keyCode, event));
         }
 
@@ -210,10 +212,12 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
             super(binding.getRoot());
             this.actionBinding = null;
             this.switchBinding = binding;
-            binding.text.setGravity(Gravity.CENTER);
             binding.getRoot().setOnClickListener(v -> click());
             binding.getRoot().setOnLongClickListener(v -> longClick());
-            binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> binding.text.setSelected(hasFocus || isSelected()));
+            binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> {
+                binding.text.setSelected(hasFocus || isSelected());
+                SiteDialogTheme.updateSiteText(binding.text, hasFocus, isSelected());
+            });
             binding.getRoot().setOnKeyListener((v, keyCode, event) -> onKey(keyCode, event));
         }
 
@@ -225,11 +229,15 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
                 actionBinding.check.setChecked(getChecked(item));
                 actionBinding.text.setSelected(item.isSelected());
                 actionBinding.getRoot().setSelected(item.isSelected());
+                SiteDialogTheme.applySiteItem(actionBinding.getRoot(), actionBinding.text, actionBinding.check);
+                SiteDialogTheme.updateSiteText(actionBinding.text, actionBinding.getRoot().hasFocus(), item.isSelected());
             } else {
                 switchBinding.text.setText(item.getDisplayName());
                 switchBinding.health.setBackgroundTintList(ColorStateList.valueOf(SiteHealthStore.getColor(item)));
                 switchBinding.text.setSelected(item.isSelected());
                 switchBinding.getRoot().setSelected(item.isSelected());
+                SiteDialogTheme.applySiteItem(switchBinding.getRoot(), switchBinding.text, null);
+                SiteDialogTheme.updateSiteText(switchBinding.text, switchBinding.getRoot().hasFocus(), item.isSelected());
             }
         }
 

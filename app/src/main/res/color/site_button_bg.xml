@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Selected state (current site) -->
-    <item android:color="#1976D2" android:state_selected="true" />
+    <item android:color="?attr/colorPrimary" android:state_selected="true" />
     <!-- Focused/pressed states -->
-    <item android:color="#D2E3FC" android:state_focused="true" />
-    <item android:color="#D2E3FC" android:state_pressed="true" />
+    <item android:color="?attr/colorPrimaryContainer" android:state_focused="true" />
+    <item android:color="?attr/colorPrimaryContainer" android:state_pressed="true" />
     <!-- Default -->
-    <item android:color="#FFFFFF" />
+    <item android:color="?attr/colorOnSurface" />
 </selector>

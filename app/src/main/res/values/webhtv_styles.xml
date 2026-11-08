@@ -1,0 +1,280 @@
+<resources>
+    <!-- Single source of truth for Activity themes. Every Material color role that
+         layouts resolve through ?attr/color* must be mapped onto a webhtv token here,
+         otherwise the screen silently falls back to the Material baseline palette.
+         The flavour Theme.Base styles only inherit this theme and add window flags. -->
+    <style name="Theme.WebHTV" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/webhtv_color_primary</item>
+        <item name="colorOnPrimary">@color/webhtv_color_on_primary</item>
+        <item name="colorPrimaryContainer">@color/webhtv_color_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/webhtv_color_on_primary_container</item>
+        <item name="colorSecondary">@color/webhtv_color_secondary</item>
+        <item name="colorOnSecondary">@color/webhtv_color_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/webhtv_color_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/webhtv_color_on_secondary_container</item>
+        <item name="colorTertiary">@color/webhtv_color_tertiary</item>
+        <item name="colorOnTertiary">@color/webhtv_color_on_tertiary</item>
+        <item name="colorError">@color/webhtv_color_error</item>
+        <item name="colorOnError">@color/webhtv_color_on_error</item>
+        <item name="colorErrorContainer">@color/webhtv_color_error_container</item>
+        <item name="colorOnErrorContainer">@color/webhtv_color_on_error_container</item>
+        <item name="colorSurface">@color/webhtv_color_surface</item>
+        <item name="colorSurfaceDim">@color/webhtv_color_surface_dim</item>
+        <item name="colorSurfaceBright">@color/webhtv_color_surface_bright</item>
+        <item name="colorSurfaceContainerLowest">@color/webhtv_color_surface_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/webhtv_color_surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/webhtv_color_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/webhtv_color_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/webhtv_color_surface_container_highest</item>
+        <item name="colorOnSurface">@color/webhtv_color_on_surface</item>
+        <item name="colorSurfaceVariant">@color/webhtv_color_surface_container</item>
+        <item name="colorOnSurfaceVariant">@color/webhtv_color_on_surface_variant</item>
+        <item name="colorOutline">@color/webhtv_color_outline</item>
+        <item name="colorOutlineVariant">@color/webhtv_color_outline_variant</item>
+        <item name="colorSurfaceInverse">@color/webhtv_color_inverse_surface</item>
+        <item name="colorOnSurfaceInverse">@color/webhtv_color_inverse_on_surface</item>
+        <item name="colorPrimaryInverse">@color/webhtv_color_inverse_primary</item>
+        <item name="colorControlNormal">@color/webhtv_color_on_surface_variant</item>
+        <item name="colorControlActivated">@color/webhtv_color_primary</item>
+        <item name="colorOnBackground">@color/webhtv_color_on_surface</item>
+        <!--
+            Framework-level text roles. Material hard-references its own
+            m3_sys_color_* palette here, so without these mappings any widget built
+            from the Activity context (new TextView/Button/EditText) stays on
+            Material's colours and is invisible to ThemeBinder.
+        -->
+        <item name="android:textColorPrimary">@color/webhtv_text_primary</item>
+        <item name="android:textColorSecondary">@color/webhtv_text_secondary</item>
+        <item name="android:textColorTertiary">@color/webhtv_text_secondary</item>
+        <item name="android:textColorHint">@color/webhtv_text_secondary</item>
+        <item name="colorOnSurface_20">@color/webhtv_on_surface_20</item>
+        <item name="colorOnSurface_70">@color/webhtv_on_surface_70</item>
+        <item name="colorOnSurface_80">@color/webhtv_on_surface_80</item>
+        <item name="colorOnSurface_90">@color/webhtv_on_surface_90</item>
+        <item name="webhtvColorOnWallpaper">@color/webhtv_on_wallpaper</item>
+        <item name="webhtvColorOnWallpaperVariant">@color/webhtv_on_wallpaper_variant</item>
+        <item name="webhtvColorOnWallpaperError">@color/webhtv_color_on_wallpaper_error</item>
+        <!--
+            条目遮罩族：列表/按钮在「聚焦/按下」时压在同一块表面上的那层半透明深色，以及它上面的
+            文字色。两者此前只声明、从未赋值（审计发现的「只声明、没接线」之一），所以任何想用
+            ?attr/webhtvColorItemOverlay 的 drawable 都取不到值、会静默退化成透明。
+
+            默认取值与编译期一致：底色 = @color/black_40（#66000000），文字色 = 该表 onPrimary，
+            因此未改过主题时渲染字节不变。用户改「条目遮罩」槽位后，由 ThemeBinder 在运行时改写
+            shape_*_focused / shape_*_activated 的 solid（?attr/ 是编译期资源，不会自动重解析）。
+        -->
+        <item name="webhtvColorItemOverlay">@color/webhtv_color_item_overlay</item>
+        <item name="webhtvColorOnItemOverlay">@color/webhtv_color_on_item_overlay</item>
+    <!--
+        浮层 scrim。此前 webhtvColorScrim / webhtvColorOverlayDark / webhtvColorOverlayLight
+        三个属性都只声明、从未赋值（审计发现的「只声明、没接线」之一），所以任何想用它们的
+        布局都取不到值。这里先接上 overlay_dark：空态/错误态浮层需要它。
+
+        为什么需要：设计文档 §5.3 要求「图片上的文字必须有 scrim/gradient」、§5.4 要求
+        「所有内容表面必须有不透明或可控的 surface 层」。而空态/错误态的文字此前**直接压在
+        壁纸（一张图）上、没有任何 scrim**——那不只是对比度差一点，而是违反这两条。
+
+        实测（正文门槛 4.5:1，壁纸实机取样 L=0.1217/0.1476/0.2019）：
+        - 无 scrim、80% 白文字：4.61 / 4.08 / 3.30:1 → 平均与最亮处不达标；
+        - **纯白文字也无解**：最亮壁纸上限只有 4.17:1，即 4.5:1 物理上不可达；
+        - 加 20% 黑 scrim 后：6.02 / 5.43 / 4.53:1 → 全部达标。
+        overlay_dark 是 #52000000（≈32% 黑），比所需的 20% 更宽裕。
+    -->
+    <item name="webhtvColorOverlayDark">@color/webhtv_color_overlay_dark</item>
+        <item name="android:colorBackground">@color/webhtv_color_surface</item>
+        <item name="android:windowBackground">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">@color/webhtv_color_surface</item>
+        <item name="android:statusBarColor">@color/webhtv_color_surface</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.WebHTV.Dialog</item>
+        <!--
+            TV 焦点语义属性必须在基底主题上就绑定：BottomSheet 用的是 Material 的
+            bottomSheetDialogTheme，Alert 对话框用的是 Theme.Material3.DayNight.Dialog.Alert，
+            两者都不继承本主题。属性解析不到时 ?attr/tvPlayerRing 会静默退化成黑色/透明。
+        -->
+        <item name="tvFocusRing">@color/tv_item_focus_ring</item>
+        <item name="tvCurrentRing">@color/tv_item_current_ring</item>
+        <item name="tvNormalStroke">@color/tv_item_normal_stroke</item>
+        <item name="tvPlayerRing">@color/tv_player_focus_ring</item>
+        <item name="tvPlayerCurrentRing">@color/tv_player_current_ring</item>
+    </style>
+
+    <style name="Theme.WebHTV.Mobile" parent="Theme.WebHTV" />
+
+    <!--
+        TV 不再声明 isLightTheme：这里此前硬编码 false，使 TV 在任何配置下都被标记为深色主题，
+        与 mobile 的 DayNight 行为不一致，也是「TV 选浅色无效」的一半成因。
+        去掉后由父主题 Theme.Material3.DayNight.NoActionBar 按 values / values-night 解析，
+        与 Theme.WebHTV 的 token 选择保持同一套限定符规则。
+    -->
+    <style name="Theme.WebHTV.TV" parent="Theme.WebHTV" />
+
+    <style name="Theme.WebHTV.Dialog" parent="Theme.Material3.DayNight.Dialog.Alert">
+        <item name="android:windowNoTitle">true</item>
+        <item name="alertDialogStyle">@style/Widget.WebHTV.Dialog</item>
+        <item name="android:windowBackground">@color/webhtv_color_surface_container_high</item>
+        <item name="android:colorBackground">@color/webhtv_color_surface_container_high</item>
+        <item name="android:textColorPrimary">@color/webhtv_color_on_surface</item>
+        <item name="android:textColorSecondary">@color/webhtv_color_on_surface_variant</item>
+        <item name="android:textColorHint">@color/webhtv_color_on_surface_variant</item>
+        <item name="colorSurface">@color/webhtv_color_surface_container_high</item>
+        <item name="colorOnSurface">@color/webhtv_color_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/webhtv_color_on_surface_variant</item>
+        <item name="colorPrimary">@color/webhtv_color_primary</item>
+        <item name="colorOnPrimary">@color/webhtv_color_on_primary</item>
+        <item name="colorSecondaryContainer">@color/webhtv_color_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/webhtv_color_on_secondary_container</item>
+        <item name="colorError">@color/webhtv_color_error</item>
+        <item name="colorOnError">@color/webhtv_color_on_error</item>
+        <item name="colorErrorContainer">@color/webhtv_color_error_container</item>
+        <item name="colorOnErrorContainer">@color/webhtv_color_on_error_container</item>
+        <item name="colorSurfaceContainer">@color/webhtv_color_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/webhtv_color_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/webhtv_color_surface_container_highest</item>
+        <item name="colorSurfaceVariant">@color/webhtv_color_surface_container</item>
+        <item name="colorOutline">@color/webhtv_color_outline</item>
+        <item name="colorOutlineVariant">@color/webhtv_color_outline_variant</item>
+        <item name="colorControlNormal">@color/webhtv_color_on_surface_variant</item>
+        <item name="colorControlActivated">@color/webhtv_color_primary</item>
+        <!--
+            对话框主题必须自带 tv* 焦点语义属性。
+            它们原本只在 Theme.Base（= Theme.App）里绑定，而 Theme.WebHTV.Dialog 的父主题是
+            Theme.Material3.DayNight.Dialog.Alert、BottomSheet 的父主题是 Material 默认 overlay，
+            都不继承 Theme.WebHTV。属性解析不到时 ?attr/tvPlayerRing 会静默退化为黑色/透明，
+            用户报告「选中播放器看不出效果，好像是黑色的边框」就是这么来的（实机 + Robolectric 均复现）。
+        -->
+        <item name="tvFocusRing">@color/tv_item_focus_ring</item>
+        <item name="tvCurrentRing">@color/tv_item_current_ring</item>
+        <item name="tvNormalStroke">@color/tv_item_normal_stroke</item>
+        <item name="tvPlayerRing">@color/tv_player_focus_ring</item>
+        <item name="tvPlayerCurrentRing">@color/tv_player_current_ring</item>
+    </style>
+
+    <style name="ThemeOverlay.WebHTV.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">@color/webhtv_color_surface_container_high</item>
+        <item name="colorOnSurface">@color/webhtv_color_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/webhtv_color_on_surface_variant</item>
+        <item name="colorPrimary">@color/webhtv_color_primary</item>
+        <item name="colorOnPrimary">@color/webhtv_color_on_primary</item>
+        <item name="colorSecondaryContainer">@color/webhtv_color_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/webhtv_color_on_secondary_container</item>
+        <item name="colorError">@color/webhtv_color_error</item>
+        <item name="colorOnError">@color/webhtv_color_on_error</item>
+        <item name="colorErrorContainer">@color/webhtv_color_error_container</item>
+        <item name="colorOnErrorContainer">@color/webhtv_color_on_error_container</item>
+        <item name="colorSurfaceContainer">@color/webhtv_color_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/webhtv_color_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/webhtv_color_surface_container_highest</item>
+        <item name="colorSurfaceVariant">@color/webhtv_color_surface_container</item>
+        <item name="colorOutline">@color/webhtv_color_outline</item>
+        <item name="colorOutlineVariant">@color/webhtv_color_outline_variant</item>
+        <item name="colorControlNormal">@color/webhtv_color_on_surface_variant</item>
+        <item name="colorControlActivated">@color/webhtv_color_primary</item>
+        <item name="android:colorBackground">@color/webhtv_color_surface_container_high</item>
+        <item name="android:textColorPrimary">@color/webhtv_color_on_surface</item>
+        <item name="android:textColorSecondary">@color/webhtv_color_on_surface_variant</item>
+        <item name="android:textColorHint">@color/webhtv_color_on_surface_variant</item>
+        <item name="android:textCursorDrawable">@drawable/shape_cursor_dialog</item>
+        <item name="alertDialogStyle">@style/MaterialAlertDialog.WebHTV.Rounded</item>
+        <!-- 同上：overlay 也要能解析 tv* 焦点语义属性。 -->
+        <item name="tvFocusRing">@color/tv_item_focus_ring</item>
+        <item name="tvCurrentRing">@color/tv_item_current_ring</item>
+        <item name="tvNormalStroke">@color/tv_item_normal_stroke</item>
+        <item name="tvPlayerRing">@color/tv_player_focus_ring</item>
+        <item name="tvPlayerCurrentRing">@color/tv_player_current_ring</item>
+    </style>
+
+    <style name="Widget.WebHTV.Label">
+        <item name="android:textAppearance">@style/TextAppearance.WebHTV.BodyMedium</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="Widget.WebHTV.Label.Secondary">
+        <item name="android:textAppearance">@style/TextAppearance.WebHTV.LabelSmall</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <style name="Widget.WebHTV.Helper">
+        <item name="android:textAppearance">@style/TextAppearance.WebHTV.LabelSmall</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <style name="Widget.WebHTV.Button.Filled" parent="Widget.Material3.Button">
+        <item name="backgroundTint">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/colorOnPrimary</item>
+    </style>
+
+    <style name="Widget.WebHTV.Button.Tonal" parent="Widget.Material3.Button.TonalButton">
+        <item name="backgroundTint">?attr/colorSecondaryContainer</item>
+        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+    </style>
+
+    <style name="Widget.WebHTV.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="strokeColor">?attr/colorOutline</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.WebHTV.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+
+    <!--
+        Standalone dialog input.
+
+        Every caller applies this directly to a bare TextInputEditText - there is no
+        TextInputLayout container anywhere in the tree (dialog_tmdb_source,
+        dialog_ai_config, dialog_ai_prompt_config, dialog_group_rule_edit). So this must
+        be an edit-field style. Its former parent,
+        Widget.Material3.TextInputLayout.OutlinedBox, is a *container* style: it draws the
+        outline on the TextInputLayout, not on the field, and it sets up floating-label
+        space. Applied to the field itself it produced no border at all and squeezed the
+        text inside the fixed 44dp heights, which is the reported "input boxes are cut off
+        and no longer look like inputs".
+
+        The replacement mirrors what the rest of the tree already does for standalone
+        fields - dialog_ad_block_stats puts @drawable/selector_dialog_input on a bare
+        AppCompatEditText - and both drawables resolve their colours through theme attrs.
+    -->
+    <style name="Widget.WebHTV.Input">
+        <item name="android:background">@drawable/selector_dialog_input</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textColorHint">?attr/colorOnSurfaceVariant</item>
+        <item name="android:textCursorDrawable">@drawable/shape_cursor_dialog</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Widget.WebHTV.ListItem">
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:minHeight">@dimen/webhtv_size_button</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="Widget.WebHTV.Card" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">?attr/colorSurfaceContainer</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.WebHTV.Medium</item>
+    </style>
+
+    <style name="Widget.WebHTV.Dialog" parent="MaterialAlertDialog.Material3">
+        <item name="backgroundTint">?attr/colorSurfaceContainerHigh</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.WebHTV.ExtraLarge</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.WebHTV.ExtraLarge</item>
+    </style>
+
+    <style name="Widget.WebHTV.BottomSheet" parent="Widget.Material3.BottomSheet.Modal">
+        <item name="backgroundTint">?attr/colorSurfaceContainerHigh</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.WebHTV.ExtraLarge</item>
+    </style>
+
+    <style name="ThemeOverlay.WebHTV.Dialog.NoInset" parent="ThemeOverlay.WebHTV.Dialog">
+        <item name="alertDialogStyle">@style/MaterialAlertDialog.WebHTV.NoInset</item>
+    </style>
+
+    <style name="Widget.WebHTV.PlayerControl" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textColor">@color/webhtv_color_player_control</item>
+        <item name="iconTint">@color/webhtv_color_player_control</item>
+    </style>
+
+    <style name="Widget.WebHTV.SliderLabel" parent="Widget.MaterialComponents.Tooltip">
+        <item name="android:textAppearance">@style/TextAppearance.WebHTV.BodyMedium</item>
+        <item name="backgroundTint">@color/webhtv_color_primary</item>
+    </style>
+</resources>

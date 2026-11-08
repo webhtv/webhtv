@@ -4,7 +4,7 @@
     android:id="@+id/contentScroll"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="#F6F8FC"
+    android:background="?attr/colorSurfaceContainerLow"
     android:fillViewport="true">
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -19,10 +19,10 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardBackgroundColor="@color/white"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
             app:cardCornerRadius="18dp"
             app:cardElevation="0dp"
-            app:strokeColor="#D8E0EA"
+            app:strokeColor="?attr/colorOutlineVariant"
             app:strokeWidth="1dp">
 
             <androidx.appcompat.widget.LinearLayoutCompat
@@ -32,7 +32,7 @@
                 android:padding="16dp">
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingBottom="8dp"
@@ -40,7 +40,7 @@
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/nameInput"
-                    style="@style/Widget.WebHTV.LightDialog.Input"
+                    style="@style/Widget.WebHTV.Input"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:gravity="center_vertical"
@@ -54,7 +54,7 @@
                     android:selectAllOnFocus="false" />
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="14dp"
@@ -63,7 +63,7 @@
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/regexInput"
-                    style="@style/Widget.WebHTV.LightDialog.Input"
+                    style="@style/Widget.WebHTV.Input"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:gravity="center_vertical"
@@ -77,7 +77,7 @@
                     android:selectAllOnFocus="false" />
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Helper"
+                    style="@style/Widget.WebHTV.Helper"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="8dp"

@@ -1,0 +1,35 @@
+<!--
+    Text appearances must only reference attrs that a theme actually assigns.
+
+    These styles referenced the custom webhtvColorOnSurface / webhtvColorOnSurfaceVariant
+    attrs, which webhtv_attrs.xml declares but no theme ever assigns. Reading such an appearance makes TextView.readTextAppearance
+    resolve the attribute through TypedArray.getColorStateList, and an unassigned attr throws
+    UnsupportedOperationException inside the View constructor - so every dialog using
+    Widget.WebHTV.Label/Helper/SliderLabel crashed while inflating (reported as "clicking
+    TMDB data configuration kills the app", TmdbSourceDialog.show -> dialog_tmdb_source).
+    Theme.WebHTV maps the standard Material attrs to exactly the same tokens
+    (colorOnSurface -> @color/webhtv_color_on_surface,
+    colorOnSurfaceVariant -> @color/webhtv_color_on_surface_variant), so reference those.
+-->
+<resources>
+    <style name="TextAppearance.WebHTV.LabelSmall" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+    <style name="TextAppearance.WebHTV.BodyMedium" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+    <style name="TextAppearance.WebHTV.BodyLarge" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+    <style name="TextAppearance.WebHTV.TitleMedium" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+    <style name="TextAppearance.WebHTV.HeadlineSmall" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:textSize">24sp</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+</resources>

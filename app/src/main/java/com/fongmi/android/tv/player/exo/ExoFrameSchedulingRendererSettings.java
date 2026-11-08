@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.player.exo;
 
+import androidx.media3.common.C;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer;
 
@@ -51,5 +52,36 @@ final class ExoFrameSchedulingRendererSettings {
 
     boolean durationToProgressEnabled() {
         return durationToProgressEnabled;
+    }
+
+    /**
+     * One greppable line naming the frame-pacing values that actually reached the renderer factory.
+     *
+     * <p>Exported diagnostics carried no {@code perf_*} values before this, so a dropped-frame
+     * report could not be attributed to a configuration without asking the user to read the
+     * settings UI back. Joining these values into the player-build log turns "unknown" into an
+     * observation.
+     *
+     * <p>It proves only that the values were applied, never that playback looked smooth.
+     */
+    static String describe(
+            ExoFrameSchedulingExperimentPolicy.Decision decision,
+            String codecQueueMode,
+            boolean dynamicSchedulingEnabled,
+            long lateDropThresholdUs) {
+        ExoFrameSchedulingExperimentPolicy.Decision safeDecision = decision == null
+                ? ExoFrameSchedulingExperimentPolicy.stableDecision(false, false, false)
+                : decision;
+        ExoFrameSchedulingExperimentPolicy.RendererSettings renderer =
+                safeDecision.rendererSettings();
+        return "dynamicScheduling=" + dynamicSchedulingEnabled
+                + " codecQueue=" + codecQueueMode
+                + " decision=" + safeDecision.reason().label()
+                + " decisionUnit=" + safeDecision.sessionUnitId()
+                + " durationToProgress=" + renderer.durationToProgressEnabled()
+                + " earlySchedulingUs=" + renderer.earlySchedulingThresholdUs()
+                + " lateDropInputUs=" + (lateDropThresholdUs == C.TIME_UNSET
+                ? "unset" : String.valueOf(lateDropThresholdUs))
+                + " metricScope=settings-applied-only; not a smoothness measurement";
     }
 }

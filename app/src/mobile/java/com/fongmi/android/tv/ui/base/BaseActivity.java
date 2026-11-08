@@ -20,6 +20,7 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.audio.AudioMiniPlayer;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -46,10 +47,16 @@ public abstract class BaseActivity extends AppCompatActivity {
         enableEdgeToEdge();
         enableDynamicColor();
         super.onCreate(savedInstanceState);
-        setContentView(getBinding().getRoot());
+        ThemeController.applyFromPreferences(this);
+        // getBinding() inflates on every call, so resolve it once: the root that is set as
+        // content must be the same instance that initView()/initEvent() configure.
+        View content = getBinding().getRoot();
+        setContentView(content);
+        ThemeController.bindTheme(content);
         audioMiniPlayer = new AudioMiniPlayer(this);
         EventBus.getDefault().register(this);
         initView(savedInstanceState);
+        ThemeController.bindTheme(content);
         setBackCallback();
         initEvent();
     }
@@ -99,12 +106,11 @@ public abstract class BaseActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
         DisplayCutout cutout = ResUtil.getDisplay(this).getCutout();
         if (cutout == null) return;
-        int top = cutout.getSafeInsetTop();
+        // 切口必须按所在侧避让：把四边按位或后对称写进左右，会把竖屏的顶部切口高度变成左右内缩，
+        // 全屏时控制栏与底部菜单因此整体缩窄，左右露出画面黑边。
         int left = cutout.getSafeInsetLeft();
-        int right = cutout.getSafeInsetRight();
-        int bottom = cutout.getSafeInsetBottom();
-        int padding = left | right | top | bottom;
-        layout.setPadding(padding, 0, leftOnly ? 0 : padding, 0);
+        int right = leftOnly ? 0 : cutout.getSafeInsetRight();
+        layout.setPadding(left, 0, right, 0);
     }
 
     protected void noPadding(ViewGroup layout) {

@@ -39,13 +39,14 @@ import com.fongmi.android.tv.player.diagnostic.PanDiagnosticVerdict;
 import com.fongmi.android.tv.player.diagnostic.PanEndpoint;
 import com.fongmi.android.tv.player.diagnostic.PanEndpointParser;
 import com.fongmi.android.tv.player.diagnostic.PanNetworkDiagnosticRunner;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
+import com.fongmi.android.tv.ui.helper.TvFocusScale;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.tabs.TabLayout;
 
@@ -122,7 +123,7 @@ public final class PanNetworkDiagnosticDialog extends DialogFragment implements 
         contentScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         content = vertical(0);
         contentScroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        int screenHeight = ResUtil.getScreenHeight(requireContext());
+        int screenHeight = DialogSafeArea.height(requireContext());
         int contentHeight = Util.isLeanback()
                 ? Math.min(dp(460), Math.max(dp(400), screenHeight - dp(300)))
                 : Math.min(dp(560), Math.max(dp(350), screenHeight * 5 / 8));
@@ -135,7 +136,7 @@ public final class PanNetworkDiagnosticDialog extends DialogFragment implements 
         root.addView(resultFooter, footerParams);
         resolveEndpoint();
         showConfig();
-        Dialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(root).create();
+        Dialog dialog = new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(root).create();
         dialog.setCanceledOnTouchOutside(false);
         return dialog;
     }
@@ -442,7 +443,7 @@ public final class PanNetworkDiagnosticDialog extends DialogFragment implements 
 
     private void confirmHighThread(List<Integer> threads, long bytes) {
         int maxThreads = threads.get(threads.size() - 1);
-        new MaterialAlertDialogBuilder(requireContext(), R.style.ThemeOverlay_WebHTV_LightDialog)
+        new WebHtvAlertDialogBuilder(requireContext(), R.style.ThemeOverlay_WebHTV_Dialog)
                 .setTitle("确认高流量诊断")
                 .setMessage("将测试到 " + maxThreads + " 线程，预计流量上限约 " + PanNetworkDiagnosticRunner.formatBytes(bytes)
                         + "，已计入探测、预热、重复、直链对照、App DataSource、配对验证和各可重试阶段的一次瞬态断流重试。高线程可能增加耗电、内存占用，并触发源站或网盘限流、风控。")
@@ -914,7 +915,7 @@ public final class PanNetworkDiagnosticDialog extends DialogFragment implements 
         button.setStrokeColor(ColorStateList.valueOf(primary ? BLUE : Color.rgb(138, 180, 248)));
         button.setStrokeWidth(dp(1));
         button.setOnFocusChangeListener((v, focused) -> {
-            v.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f).setDuration(100).start();
+            TvFocusScale.applyCompact(v, focused);
             if (!primary) {
                 button.setTextColor(ColorStateList.valueOf(focused ? Color.WHITE : BLUE_DARK));
                 button.setBackgroundTintList(ColorStateList.valueOf(focused ? BLUE : Color.WHITE));

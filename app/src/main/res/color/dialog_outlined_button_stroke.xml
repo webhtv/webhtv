@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="#0B57D0" android:state_focused="true" />
-    <item android:color="#0B57D0" android:state_pressed="true" />
-    <item android:color="#C8CDD2" />
+    <item android:color="@color/webhtv_color_outline_variant" android:state_enabled="false" />
+    <item android:color="@color/webhtv_color_primary" android:state_focused="true" />
+    <item android:color="@color/webhtv_color_primary" android:state_pressed="true" />
+    <item android:color="@color/webhtv_color_outline" />
 </selector>

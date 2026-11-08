@@ -39,19 +39,26 @@ public class DialogRoundedCornerSourceTest {
 
     @Test
     public void materialDialogShapeUsesTheUnifiedTwentyTwoDpRadius() throws Exception {
-        String styles = Files.readString(Path.of("src/main/res/values/styles.xml"), StandardCharsets.UTF_8);
+        String styles = Files.readString(Path.of("src/main/res/values/styles.xml"), StandardCharsets.UTF_8)
+                .replace("\r\n", "\n");
         assertTrue("Material dialog shape should use the unified 22dp corner radius",
                 styles.contains("<style name=\"ShapeAppearance.WebHTV.Dialog\" parent=\"\">\n        <item name=\"cornerFamily\">rounded</item>\n        <item name=\"cornerSize\">22dp</item>\n    </style>"));
 
         String baseDialog = Files.readString(Path.of("src/main/java/com/fongmi/android/tv/ui/dialog/BaseAlertDialog.java"), StandardCharsets.UTF_8);
-        assertTrue("BaseAlertDialog builder should apply the unified rounded style",
-                baseDialog.contains("new MaterialAlertDialogBuilder(requireActivity(), R.style.MaterialAlertDialog_WebHTV_Rounded)"));
+        assertTrue("BaseAlertDialog must apply a theme overlay, not leak widget tint into the floating toolbar",
+                baseDialog.contains("new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog)"));
+
+        String themes = Files.readString(Path.of("src/main/res/values/webhtv_styles.xml"), StandardCharsets.UTF_8);
+        int overlayStart = themes.indexOf("<style name=\"ThemeOverlay.WebHTV.Dialog\"");
+        String overlay = themes.substring(overlayStart, themes.indexOf("</style>", overlayStart));
+        assertTrue("The overlay must keep the rounded panel style scoped to alertDialogStyle",
+                overlay.contains("<item name=\"alertDialogStyle\">@style/MaterialAlertDialog.WebHTV.Rounded</item>"));
 
         String mobileStyles = Files.readString(Path.of("src/mobile/res/values/styles.xml"), StandardCharsets.UTF_8);
         String leanbackStyles = Files.readString(Path.of("src/leanback/res/values/styles.xml"), StandardCharsets.UTF_8);
         assertTrue("Mobile theme should apply the unified rounded dialog overlay",
-                mobileStyles.contains("<item name=\"materialAlertDialogTheme\">@style/ThemeOverlay.WebHTV.LightDialog</item>"));
+                mobileStyles.contains("<item name=\"materialAlertDialogTheme\">@style/ThemeOverlay.WebHTV.Dialog</item>"));
         assertTrue("Leanback theme should apply the unified rounded dialog overlay",
-                leanbackStyles.contains("<item name=\"materialAlertDialogTheme\">@style/ThemeOverlay.WebHTV.LightDialog</item>"));
+                leanbackStyles.contains("<item name=\"materialAlertDialogTheme\">@style/ThemeOverlay.WebHTV.Dialog</item>"));
     }
 }

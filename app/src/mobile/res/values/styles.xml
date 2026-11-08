@@ -1,7 +1,18 @@
 <resources>
 
-    <style name="Theme.Base" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
-        <item name="materialAlertDialogTheme">@style/ThemeOverlay.WebHTV.LightDialog</item>
+    <style name="Theme.Base" parent="Theme.WebHTV.Mobile">
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.WebHTV.Dialog</item>
+        <!--
+            与 leanback 共用 selector_episode_card.xml，必须绑定同一组焦点语义属性，
+            否则手机端解析 ?attr/tvFocusRing 会因属性缺失而拿不到描边；
+            取值落在 Theme.WebHTV 里，自定义主题可覆写。
+        -->
+        <item name="tvFocusRing">@color/tv_item_focus_ring</item>
+        <item name="tvCurrentRing">@color/tv_item_current_ring</item>
+        <item name="tvNormalStroke">@color/tv_item_normal_stroke</item>
+        <!-- 与 leanback 共用同一批 drawable，必须绑定同一组属性（见 attrs.xml）。 -->
+        <item name="tvPlayerRing">@color/tv_player_focus_ring</item>
+        <item name="tvPlayerCurrentRing">@color/tv_player_current_ring</item>
         <item name="android:statusBarColor">@color/transparent</item>
         <item name="android:navigationBarColor">@color/transparent</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
@@ -22,7 +33,7 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
-        <item name="android:textColor">@color/yellow</item>
+        <item name="android:textColor">@color/player_control_text</item>
         <item name="android:textSize">14sp</item>
         <item name="android:padding">8dp</item>
     </style>
@@ -32,7 +43,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">13dp</item>
         <item name="android:layout_marginBottom">7dp</item>
-        <item name="android:textColor">@color/white_70</item>
+        <item name="android:textColor">@color/webhtv_color_player_control_muted</item>
         <item name="android:textSize">13sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -63,7 +74,7 @@
         <item name="android:shadowDx">0</item>
         <item name="android:shadowDy">2</item>
         <item name="android:shadowRadius">4</item>
-        <item name="android:textColor">@color/white</item>
+        <item name="android:textColor">@color/webhtv_color_player_control</item>
         <item name="android:textSize">12sp</item>
     </style>
 
@@ -76,7 +87,7 @@
         <item name="android:gravity">center</item>
         <item name="android:paddingTop">3dp</item>
         <item name="android:paddingBottom">3dp</item>
-        <item name="android:textColor">@color/white_80</item>
+        <item name="android:textColor">@color/webhtv_color_player_control_muted</item>
         <item name="android:textSize">11sp</item>
     </style>
 

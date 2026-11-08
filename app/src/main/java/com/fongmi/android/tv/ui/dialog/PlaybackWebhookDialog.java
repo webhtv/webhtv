@@ -28,6 +28,8 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogPlaybackWebhookBinding;
 import com.fongmi.android.tv.playback.PlaybackWebhookStore;
 import com.fongmi.android.tv.playback.WebhookConfig;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -91,7 +93,7 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
@@ -101,8 +103,8 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
         Window window = getDialog().getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
-        int screenWidth = ResUtil.getScreenWidth(requireContext());
-        int screenHeight = ResUtil.getScreenHeight(requireContext());
+        int screenWidth = DialogSafeArea.width(requireActivity(), window);
+        int screenHeight = DialogSafeArea.height(requireActivity(), window);
         boolean land = ResUtil.isLand(requireContext());
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
@@ -214,14 +216,14 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
         header.setOrientation(LinearLayoutCompat.HORIZONTAL);
         root.addView(header, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        MaterialTextView title = text(config.displayName(), 15, Color.BLACK, true);
+        MaterialTextView title = text(config.displayName(), 15, ThemeController.current().colorOnSurface(), true);
         header.addView(title, new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         MaterialTextView status = badge(status(config), statusColor(config));
         header.addView(status);
 
         addDetail(root, config.url);
         addDetail(root, meta(config));
-        if (config.suspended && !TextUtils.isEmpty(config.lastError)) addDetail(root, getString(R.string.playback_webhook_last_error, config.lastError), Color.parseColor("#B3261E"));
+        if (config.suspended && !TextUtils.isEmpty(config.lastError)) addDetail(root, getString(R.string.playback_webhook_last_error, config.lastError), ThemeController.current().colorError());
 
         LinearLayoutCompat actions = new LinearLayoutCompat(requireContext());
         actions.setGravity(Gravity.CENTER_VERTICAL);
@@ -431,9 +433,9 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
     }
 
     private int statusColor(WebhookConfig config) {
-        if (config.suspended) return Color.parseColor("#B3261E");
-        if (config.enabled && config.isUsable()) return Color.parseColor("#137333");
-        return Color.parseColor("#5F6368");
+        if (config.suspended) return ThemeController.current().colorError();
+        if (config.enabled && config.isUsable()) return ThemeController.current().colorSuccess();
+        return ThemeController.current().colorOnSurfaceVariant();
     }
 
     private WebhookConfig copy(WebhookConfig source) {
@@ -528,7 +530,7 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
         button.setMinimumHeight(dp(36));
         button.setPadding(dp(6), 0, dp(6), 0);
         ColorStateList bg = ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_bg : R.color.dialog_outlined_button_bg);
-        ColorStateList fg = danger ? ColorStateList.valueOf(Color.parseColor("#B3261E")) : ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_text : R.color.dialog_outlined_button_text);
+        ColorStateList fg = danger ? ColorStateList.valueOf(ThemeController.current().colorError()) : ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_text : R.color.dialog_outlined_button_text);
         button.setBackgroundTintList(bg);
         button.setTextColor(fg);
         if (!tonal) {
@@ -539,7 +541,7 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
     }
 
     private void addDetail(LinearLayoutCompat root, String value) {
-        addDetail(root, value, Color.parseColor("#5F6368"));
+        addDetail(root, value, ThemeController.current().colorOnSurfaceVariant());
     }
 
     private void addDetail(LinearLayoutCompat root, String value, int color) {
@@ -560,23 +562,40 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
         return view;
     }
 
+    /**
+     * The badge fill follows the palette so the outlined status chip stays legible in both
+     * tables; see {@code PlaybackRemoteSyncDialog.badge}.
+     */
     private MaterialTextView badge(String value, int color) {
         MaterialTextView view = text(value, 12, color, true);
         view.setGravity(Gravity.CENTER);
         view.setSingleLine(true);
         view.setPadding(dp(8), dp(3), dp(8), dp(3));
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor("#FFFFFF"));
+        drawable.setColor(ThemeController.current().colorSurfaceContainerLowest());
         drawable.setStroke(dp(1), color);
         drawable.setCornerRadius(dp(6));
         view.setBackground(drawable);
         return view;
     }
 
+    /**
+     * A suspended row is the one row that must read as "attention" rather than "normal", so
+     * it keeps a distinct fill - now the semantic error container ({@code #F9DEDC} day /
+     * {@code #93000A} night) instead of a fixed light pink that only worked in the day table.
+     * Its stroke is the paired {@code colorError}, as in {@code CustomCspDialog.rowBackground},
+     * so the cue survives for a viewer who cannot separate the two fills by hue: the fills
+     * differ by only 1.15:1 in the day table. Every other row takes the shared semantic
+     * hairline; see {@code ViewingRecordSyncDialog.rowBackground}.
+     */
     private GradientDrawable rowBackground(WebhookConfig config) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor(config.suspended ? "#FFF7F7" : "#F5F6F7"));
-        drawable.setStroke(dp(1), Color.parseColor(config.isUsable() ? "#DADCE0" : "#E2E5E8"));
+        drawable.setColor(config.suspended
+                ? ThemeController.current().colorErrorContainer()
+                : ThemeController.current().colorSurfaceContainerLow());
+        drawable.setStroke(dp(1), config.suspended
+                ? ThemeController.current().colorError()
+                : ThemeController.current().colorOutlineVariant());
         drawable.setCornerRadius(dp(6));
         return drawable;
     }

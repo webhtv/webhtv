@@ -36,7 +36,7 @@
             android:ellipsize="end"
             android:lineSpacingExtra="2dp"
             android:maxLines="2"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="16sp"
             tools:text="仙逆剧场版 神临之战" />
 
@@ -54,7 +54,7 @@
                 android:ellipsize="end"
                 android:maxWidth="112dp"
                 android:singleLine="true"
-                android:textColor="@color/white_60"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="12sp"
                 tools:text="咕噜 | APP" />
 
@@ -66,7 +66,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:singleLine="true"
-                android:textColor="@color/white_80"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="12sp"
                 tools:text="更新至146集" />
 

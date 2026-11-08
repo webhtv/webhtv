@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    自带主题色填充（primary / focus）的控件获得焦点时的统一边框环。
+
+    电视版焦点高亮只允许"边框环"这一种机制：此前这些按钮把焦点表达成填充色变化，
+    而填充色本身就是主题色（`webhtv_color_focus` == `webhtv_color_primary`），
+    焦点位置因此完全看不见。环色取填充色的配对 on-色，由主题解析器保证两者的对比度，
+    所以换任何主题、任何深浅模式，环都仍然清晰。
+
+    擦除态用全透明而不是移除描边：MaterialButton 的 strokeWidth 是常量，
+    只切换 strokeColor 的颜色值即可避免任何布局/测量变化。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/focus_ring_on_primary" android:state_focused="true" />
+    <item android:color="@color/focus_ring_on_primary" android:state_pressed="true" />
+    <item android:color="@android:color/transparent" />
+</selector>

@@ -1,16 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「Tab 条」的统一焦点态（MPV 配置管理、播放性能、更新设置、广告统计的 TabLayout）。
+
+    环宽唯一来源：@dimen/webhtv_focus_ring_width。此前写死 2dp，与电视端其余焦点环不一致，
+    是用户报告「边框粗细也貌似不一样」的同一族缺陷。
+
+    环色：?attr/tvFocusRing。此前焦点/按下两态写死 #1A73E8 / #E8F0FE / #D2E3FC，
+    整块不随主题走——用户改主题的「焦点色」槽时这些 Tab 纹丝不动。
+
+    为什么这里可以用主题环色，而 selector_ad_stats_item 必须用与调色板无关的深蓝：
+    判据是**宿主面板是否固定明暗**，不是「是不是 Tab」。
+    - selector_ad_stats_item 的宿主 shape_ad_stats_content 是固定浅色 #FAFBFC（两张表相同），
+      夜间表的浅蓝环压在上面只有约 1.6:1，所以它必须与调色板无关；
+    - 本文件的 4 个宿主都用 shape_shell_proxy_dialog = ?attr/colorSurfaceContainerHigh，
+      **随主题变**，所以环色也必须跟着变，否则就是「宿主变了、环没变」的错配。
+
+    实测（非文本 UI 门槛 3:1）：
+    - 写死 #1A73E8：浅色面板 3.69:1、深色面板 3.00:1（刚好卡在门槛上）；
+    - ?attr/tvFocusRing：浅色表 #0B57D0 5.23:1、深色表 #F5F7FF 12.63:1。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="#E8F0FE" />
+            <solid android:color="?attr/colorSurfaceContainerHighest" />
             <corners android:radius="8dp" />
-            <stroke android:width="2dp" android:color="#1A73E8" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="?attr/tvFocusRing" />
         </shape>
     </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="#D2E3FC" />
+            <solid android:color="?attr/colorSurfaceContainerHighest" />
             <corners android:radius="8dp" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="?attr/tvFocusRing" />
         </shape>
     </item>
     <item>

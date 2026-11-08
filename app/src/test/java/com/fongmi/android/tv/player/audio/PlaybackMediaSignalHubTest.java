@@ -89,14 +89,14 @@ public class PlaybackMediaSignalHubTest {
     public void captureLeaseIsReferenceCounted() {
         PlaybackMediaSignalHub hub = new PlaybackMediaSignalHub(4);
         PlaybackMediaSignalHub.CaptureLease first = hub.requestCapture(
-                PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO);
+                PlaybackMediaSignalHub.ConsumerKind.TEST);
         PlaybackMediaSignalHub.CaptureLease second = hub.requestCapture(
-                PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO);
-        assertTrue(hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+                PlaybackMediaSignalHub.ConsumerKind.TEST);
+        assertTrue(hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.TEST));
         first.close();
-        assertTrue(hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+        assertTrue(hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.TEST));
         second.close();
-        assertTrue(!hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+        assertTrue(!hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.TEST));
     }
 
     @Test

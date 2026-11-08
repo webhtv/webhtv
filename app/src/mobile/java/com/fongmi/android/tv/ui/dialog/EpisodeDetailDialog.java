@@ -26,12 +26,13 @@ import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.service.TmdbService;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.adapter.EpisodeStillAdapter;
 import com.fongmi.android.tv.ui.adapter.TmdbPersonAdapter;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
 import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
@@ -286,7 +287,7 @@ public class EpisodeDetailDialog {
         TextView photoTitle = view.findViewById(R.id.photoTitle);
         TextView guestsTitle = view.findViewById(R.id.guestsTitle);
 
-        int overlay = light ? 0x99F4F7FA : 0xB3000000;
+        int overlay = applyScrimOpacity(light ? 0x99F4F7FA : 0xB3000000, light);
         int panelColor = light ? 0xFFF4F7FA : 0xFF2A2A2A;
         int imageBg = light ? 0xFFE7EDF3 : 0xFF1A1A1A;
         int primary = light ? 0xFF12202D : 0xFFFFFFFF;
@@ -369,10 +370,23 @@ public class EpisodeDetailDialog {
         return Setting.resolveTmdbDetailLightTheme(Setting.getTmdbDetailTheme(), night == Configuration.UI_MODE_NIGHT_YES);
     }
 
+    /**
+     * Keeps this dialog's own scrim colour and lets the user drive only its alpha.
+     *
+     * <p>The shipped scrim is translucent white in light mode and translucent black in
+     * dark mode; the theme token is translucent black in both. Substituting the token
+     * was measured to invert the light-mode scrim from lightening to darkening, so the
+     * user's {@code scrimOpacity} is applied to the dialog's existing colour instead.
+     * An unset slot returns {@code base} untouched, keeping the default byte-identical.
+     */
+    private static int applyScrimOpacity(int base, boolean light) {
+        return ThemeController.applyScrimOpacity(base, ThemeController.configuredScrimOpacity(light));
+    }
+
     private static void showSimpleDialog(FragmentActivity activity, Episode episode,
                                          android.content.DialogInterface.OnDismissListener dismissListener) {
         // 标题放固定文案，源站文件名放可换行的正文，避免长名被单行标题截断
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+        androidx.appcompat.app.AlertDialog dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.detail_tmdb_empty)
                 .setMessage(episode.getName())
                 .setPositiveButton(R.string.dialog_negative, null)

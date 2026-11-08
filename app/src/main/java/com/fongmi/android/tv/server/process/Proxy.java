@@ -5,6 +5,7 @@ import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.impl.Process;
 import com.github.catvod.crawler.SpiderDebug;
 
+import java.io.ByteArrayInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -55,18 +56,32 @@ public class Proxy implements Process {
             SpiderDebug.log("proxy", "response object do=%s type=%s", params.get("do"), rs[0].getClass().getName());
             return response;
         }
-        if (rs.length < 3 || !(rs[0] instanceof Integer code) || !(rs[2] instanceof InputStream stream)) {
+        if (rs.length < 3 || !(rs[0] instanceof Integer code)) {
             SpiderDebug.log("proxy", "response invalid do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), rs.length > 0 ? rs[0] : null, rs.length > 1 ? rs[1] : null, rs.length > 2 ? rs[2] : null, rs.length > 3 ? rs[3] : null);
             return Nano.error(INVALID_RESPONSE);
         }
-        SpiderDebug.log("proxy", "response do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), code, rs[1], stream.getClass().getName(), rs.length > 3 ? rs[3] : null);
+        InputStream stream = rs[2] instanceof InputStream candidate ? candidate : null;
+        if (stream == null && !canResponseHaveEmptyBody(code)) {
+            SpiderDebug.log("proxy", "response invalid do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), code, rs[1], rs[2], rs.length > 3 ? rs[3] : null);
+            return Nano.error(INVALID_RESPONSE);
+        }
         Map<String, String> headers = headers(rs.length > 3 ? rs[3] : null);
-        stream = wrapStream(params, headers, stream);
-        Response response = NanoHTTPD.newChunkedResponse(toStatus(code), Objects.toString(rs[1], null), stream);
+        if (stream == null && (headers == null || header(headers, "Location") == null)) {
+            SpiderDebug.log("proxy", "response invalid do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), code, rs[1], rs[2], headers);
+            return Nano.error(INVALID_RESPONSE);
+        }
+        SpiderDebug.log("proxy", "response do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), code, rs[1], rs[2] == null ? "empty" : rs[2].getClass().getName(), rs.length > 3 ? rs[3] : null);
+
+        if (stream != null) stream = wrapStream(params, headers, stream);
+        Response response = NanoHTTPD.newChunkedResponse(toStatus(code), Objects.toString(rs[1], null), stream == null ? new ByteArrayInputStream(new byte[0]) : stream);
         addHeaders(response, headers);
         long rangeStart = ProxyRangeResponsePolicy.resolveStart(code, first(params.get("range"), params.get("Range")));
         if (rangeStart >= 0) response.addHeader(ProxyRangeResponsePolicy.HEADER_RANGE_START, String.valueOf(rangeStart));
         return response;
+    }
+
+    private static boolean canResponseHaveEmptyBody(int code) {
+        return code >= 300 && code < 400;
     }
 
     private static void addHeaders(Response response, Map<String, String> headers) {

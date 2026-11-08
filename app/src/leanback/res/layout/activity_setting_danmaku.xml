@@ -27,7 +27,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
                 android:text="@string/danmaku_load"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -35,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="end"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp"
                 tools:text="關" />
 
@@ -58,7 +58,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
                 android:text="@string/danmaku_api"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -68,7 +68,7 @@
                 android:ellipsize="middle"
                 android:gravity="end"
                 android:singleLine="true"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp"
                 tools:text="https://" />
 
@@ -91,7 +91,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
                 android:text="@string/danmaku_auto_load"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -99,7 +99,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="end"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp"
                 tools:text="關" />
 
@@ -122,7 +122,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
                 android:text="@string/danmaku_spider_first"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -130,7 +130,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="end"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp"
                 tools:text="關" />
 

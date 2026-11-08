@@ -8,11 +8,11 @@
     android:defaultFocusHighlightEnabled="false"
     android:focusable="true"
     android:stateListAnimator="@null"
-    app:cardBackgroundColor="#261C2833"
+    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
     app:cardCornerRadius="8dp"
     app:cardElevation="0dp"
     app:rippleColor="@android:color/transparent"
-    app:strokeColor="#1FFFFFFF"
+    app:strokeColor="?attr/colorOutlineVariant"
     app:strokeWidth="1dp">
 
     <LinearLayout
@@ -24,10 +24,10 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="72dp"
             android:layout_height="102dp"
-            app:cardBackgroundColor="#25313D"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
             app:cardCornerRadius="6dp"
             app:cardElevation="0dp"
-            app:strokeColor="#24FFFFFF"
+            app:strokeColor="?attr/colorOutlineVariant"
             app:strokeWidth="1dp">
 
             <androidx.appcompat.widget.AppCompatImageView
@@ -60,7 +60,7 @@
                 android:layout_marginTop="5dp"
                 android:lineSpacingExtra="2dp"
                 android:maxLines="2"
-                android:textColor="#99FFFFFF"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -69,7 +69,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="5dp"
                 android:maxLines="1"
-                android:textColor="#CFE8FF"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -81,7 +81,7 @@
                 android:ellipsize="end"
                 android:lineSpacingExtra="2dp"
                 android:maxLines="3"
-                android:textColor="#CCFFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>

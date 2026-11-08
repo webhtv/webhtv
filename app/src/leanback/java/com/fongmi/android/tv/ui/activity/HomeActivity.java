@@ -42,6 +42,7 @@ import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -59,6 +60,7 @@ import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -100,6 +102,7 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -132,13 +135,19 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private String webChromeMode = TV_NORMAL;
     private String webDefaultChromeMode = TV_FULL;
     private boolean webToolbarVisible = true;
+    private boolean toolbarRequestedVisible = true;
     private boolean loadingHomeCategory;
     private boolean skipNextVodConfigRefresh;
     private boolean pendingOpenVod; // 手动点击"点播"后等待数据加载完成再进分类页
     private boolean webConfirmKeyDown;
     private boolean webConfirmLongPress;
     private boolean mTypeSelectionFromTouch;
+    private boolean mPendingCategoryCleanup;
+    private boolean mPendingContentRefresh;
+    private boolean mPendingContentRefreshForceNative;
     private int focusGeneration;
+    private Runnable mPendingTypeUpdate;
+    private boolean mTypeUpdatePosted;
     private Runnable mPendingCategoryFocus;
     private final Runnable mTypeSwitch = this::switchType;
     private final Runnable mWebConfirmLongPress = this::triggerWebFocusedLongPress;
@@ -251,6 +260,76 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         });
     }
 
+    /**
+     * 类型栏的结构性修改（换 adapter 数据）在 RecyclerView 正在计算布局时必须让路：布局
+     * 过程中增删子 View 会让某个子 View 拿不到 ViewHolder，RecyclerView 随后在
+     * dispatchLayoutStep1 里崩溃。
+     *
+     * <p>这是类型栏结构性写入的唯一入口。本方法自己决定「立即执行」还是「入槽延后」，并且
+     * 两个分支都由本方法负责真正调用 {@code update}：调用方只允许写一句裸语句
+     * {@code runTypeMutation(...)}，不得再自己执行目标，也不得把本方法当成判定条件去决定
+     * 是否重复执行。（历史上它返回 boolean，于是非延后路径「方法内 run 一次 + 调用方再 run
+     * 一次」造成双执行，属于真缺陷，不是风格问题。）
+     *
+     * <p>单槽合并成立的前提是「写入均为整表替换」：槽位里只允许放整体覆盖 adapter 数据的
+     * 写入，后来的写入直接顶掉先前的，所以被顶掉的旧写入不需要单独执行，也不需要任何代际号。
+     *
+     * <p>延后不是一次性的：投递到下一帧动画时布局仍可能没结束，所以闭包必须像
+     * {@code BaseActivity#postRecyclerUpdate} 那样重新复查 {@link #isTypeLayoutBusy()}，
+     * 未就绪就把同一个 Runnable 再挂一帧。
+     *
+     * <p>排队语义是「单槽合并 + 必执行」，不是「代际号丢弃」：丢弃式代际号会让一次布局中的
+     * 写入被随后的焦点失效静默作废，类型栏就永久空白。这里的待写入只有一个槽位
+     * （{@link #mPendingTypeUpdate}），后来的写入直接覆盖先前的，因此旧写入不会盖掉新写入；
+     * 排队只允许存在一个 runner（{@link #mTypeUpdatePosted}），它执行时取出并执行槽位里的
+     * 最新写入，所以最新写入必然落地，不会变成无人执行的孤儿。丢弃只发生在一种情况下：
+     * 宿主正在结束或已销毁（{@code isFinishing() || isDestroyed()}）时，那时的 adapter
+     * 写入没有任何意义。
+     */
+    private void runTypeMutation(Runnable update) {
+        final RecyclerView view = mBinding.typeRecycler;
+        if (!isTypeLayoutBusy()) {
+            // 这次写入立刻落地，此前排队的那次已被它取代，必须清掉，否则旧数据会在下一帧
+            // 覆盖刚刚同步写入的新数据。
+            mPendingTypeUpdate = null;
+            update.run();
+            return;
+        }
+        // 单槽合并：后写者覆盖前者，这就是「旧不盖新」的全部实现，不需要任何代际号。
+        mPendingTypeUpdate = update;
+        // 同一时刻只允许一个 runner 在排队；已在排队时它执行时自然读到刚放进去的最新写入。
+        if (mTypeUpdatePosted) return;
+        mTypeUpdatePosted = true;
+        view.postOnAnimation(new Runnable() {
+            @Override
+            public void run() {
+                mTypeUpdatePosted = false;
+                // 宿主正在结束或已销毁：此时的 adapter 写入没有任何意义，丢弃是安全的。
+                if (!canDeferFragmentWork()) {
+                    mPendingTypeUpdate = null;
+                    return;
+                }
+                if (isTypeLayoutBusy()) {
+                    mTypeUpdatePosted = true;
+                    view.postOnAnimation(this);
+                    return;
+                }
+                // 取出并执行槽位里的最新写入：它必然被执行，不会被静默丢弃。
+                Runnable pending = mPendingTypeUpdate;
+                mPendingTypeUpdate = null;
+                if (pending != null) pending.run();
+            }
+        });
+    }
+
+    /**
+     * 布局忙碌判定：类型栏自己或内容行 recycler 正在算布局时，结构性写入都必须让路。
+     * 单点定义，避免同一个条件在守卫里出现两遍、改一处漏一处。
+     */
+    private boolean isTypeLayoutBusy() {
+        return mBinding.typeRecycler.isComputingLayout() || mBinding.recycler.isComputingLayout();
+    }
+
     private void scheduleTypeSwitch(int position) {
         mPendingTypePosition = position;
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
@@ -337,12 +416,19 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void showHomeContent() {
         invalidatePendingFocusRequests();
         mCurrentType = null;
+        // 分类页里的滚动隐藏是分类页的临时状态，不该跨内容模式留下来：否则在分类页往下滚过
+        // 再返回首页，记录下来的“不想显示”会让首页工具条一直藏着（CustomVerticalGridView
+        // 会把 typeRecycler 和 toolbar 一起藏掉并回调到这里）。
+        toolbarRequestedVisible = true;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
         mBinding.categoryContainer.setVisibility(View.GONE);
+        applyToolbarVisibility();
         if (mFolder != null && mFolder.isAdded() && !mFolder.isHidden()) {
             mFolder.clearContentFocusRequest();
             mFolder.setUserVisibleHint(false);
-            getSupportFragmentManager().beginTransaction().hide(mFolder).commit();
+            // 这条路径也会从选中监听（updateTypeRecyclerVisibility）进来，同样可能
+            // 落在已保存状态窗口里；本地可见性状态照旧清，事务则只在能提交时才提交。
+            if (canCommitFragmentTransaction()) getSupportFragmentManager().beginTransaction().hide(mFolder).commit();
         }
     }
 
@@ -380,6 +466,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         FolderFragment target = existing instanceof FolderFragment ? (FolderFragment) existing : FolderFragment.newInstance(getHome().getKey(), item);
         if (target == mFolder && target.isAdded() && !target.isHidden()) {
             mCurrentType = item;
+            applyToolbarVisibility();
             if (toggleFilter) updateFilter(item);
             return;
         }
@@ -402,6 +489,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         transaction.commit();
         mFolder = target;
         mCurrentType = item;
+        applyToolbarVisibility();
     }
 
     private void restoreTypeFocus(boolean keepTypeFocus, Class item) {
@@ -420,15 +508,59 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         clearCategoryContent();
     }
 
+    /**
+     * 宿主已保存状态、正在结束或已销毁时不能再提交 Fragment 事务。
+     *
+     * <p>首页的分类页重建由**进程级**单例 {@code VodConfig} 的加载回调驱动
+     * （{@code BaseConfig.loadConfig()} 用 {@code App.post(callback::success)} 投递），
+     * 回调与 Activity 生命周期无关：外观页改主题色/主题模式/UI 缩放都会
+     * {@code recreate()}，而配置加载可能在这个重建窗口里才返回。此前
+     * {@link #clearCategoryContent()} 无条件 {@code commit()}，于是这条延迟回调在
+     * 已保存状态上抛 {@code IllegalStateException: Can not perform this action after
+     * onSaveInstanceState} 并崩溃（见 docs/CRASH-FRAGMENT-STATE-20261022.md）。
+     *
+     * <p>判定条件与文件内既有的 4 处守卫（{@code switchType}、
+     * {@code focusCategoryButton}、{@code showCategoryContent}、
+     * {@code openCustomCsp}）保持一致。
+     */
+    private boolean canCommitFragmentTransaction() {
+        return !isFinishing() && !isDestroyed() && !getSupportFragmentManager().isStateSaved();
+    }
+
+    /**
+     * 宿主仍然存活、只是被保存了状态（例如配置回调在用户切走之后才返回）时，
+     * 被 {@link #canCommitFragmentTransaction()} 拒绝的工作要推迟到回到前台补做；
+     * 正在结束或已销毁的实例没有可恢复的宿主，直接丢弃。
+     */
+    private boolean canDeferFragmentWork() {
+        return !isFinishing() && !isDestroyed();
+    }
+
     private void clearCategoryContent() {
         invalidatePendingFocusRequests();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
-        mPendingTypePosition = -1;
+        // 换源时不需要额外作废上一站点在途的写入：清理本身是最后一次写入，单槽合并让
+        // 它直接覆盖先前排队的那次（后写者胜）。
+        clearStaleSiteTypes();
         mCurrentType = null;
         mFolder = null;
+        toolbarRequestedVisible = true;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
         mBinding.categoryContainer.setVisibility(View.GONE);
+        applyToolbarVisibility();
+        // 状态清理是纯内存赋值，与能否提交事务无关；这里必须已经丢弃 mFolder，
+        // 否则 isCurrentCategory() 会把一个即将消失的 Fragment 当成当前分类。
+        if (!canCommitFragmentTransaction()) {
+            // 这次移除不能丢：旧站点的分类页（含子 Fragment）会一直留在容器里，
+            // 等容器再次可见就会和新站点的页面叠加。
+            if (canDeferFragmentWork()) mPendingCategoryCleanup = true;
+            return;
+        }
+        removeCategoryFragments();
+    }
 
+    /** 移除所有已加入的分类页；调用方必须先通过 {@link #canCommitFragmentTransaction()}。 */
+    private void removeCategoryFragments() {
         FragmentTransaction transaction = null;
         for (Fragment fragment : getSupportFragmentManager().getFragments()) {
             if (!(fragment instanceof FolderFragment folder)) continue;
@@ -439,14 +571,47 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         if (transaction != null) transaction.commit();
     }
 
+    private void clearStaleSiteTypes() {
+        // Site switching starts asynchronously. Remove the old type row immediately so stale
+        // category buttons cannot be mistaken for the newly selected site during loading.
+        // 隐藏与选中的撤销是纯状态量，必须同步做完：延后它们会让旧分类按钮至少多活一帧，
+        // 期间它仍然可见、可聚焦，switchType() 还会按旧 adapter 判定并打开旧 Class。
+        mPendingTypePosition = -1;
+        mBinding.typeRecycler.setVisibility(View.GONE);
+        // 只有真正的结构性写入（adapter 换数据）需要让路：这条链路
+        // （clearCategoryContent ← syncCategorySite ← 站点切换）就是目标崩溃场景。
+        runTypeMutation(this::clearStaleTypeItems);
+    }
+
+    /** 清空旧站点的分类按钮；结构性修改只允许经 {@link #runTypeMutation(Runnable)} 这条守卫进入。 */
+    private void clearStaleTypeItems() {
+        mTypeAdapter.addAll(Collections.emptyList());
+    }
+
     private void updateToolbarVisibility(boolean visible) {
-        mBinding.toolbar.setVisibility(visible && webToolbarVisible ? View.VISIBLE : View.GONE);
+        toolbarRequestedVisible = visible;
+        applyToolbarVisibility();
+    }
+
+    /**
+     * 首页顶部工具条（logo + 站点名 + 时钟）只属于首页内容。
+     *
+     * <p>点播内联分类页要和关闭「默认加载点播」后 VodActivity 分类页保持一致：那边只有分类按钮行 +
+     * 内容容器，没有这条工具条（见 {@code app/src/leanback/res/layout/activity_vod.xml}），所以分类页
+     * 把工具条藏起来；分类按钮行照旧留在顶部，方向键还能继续切分类。首页里按最近一次滚动请求
+     * 恢复，切换内容模式时（离开或回到首页）这个请求会复位成显示。
+     */
+    private void applyToolbarVisibility() {
+        boolean show = toolbarRequestedVisible && webToolbarVisible && !isCategoryVisible();
+        mBinding.toolbar.setVisibility(show ? View.VISIBLE : View.GONE);
         syncNativeContentInset();
         syncWebOverlayLayout();
     }
 
     private void syncNativeContentInset() {
-        int top = isToolbarVisible() ? toolbarHeight() : 0;
+        // 工具条藏掉后首页内容贴到顶部；分类页的分类按钮行需要自己的留白，与 VodActivity 分类页一致。
+        // 三臂的单位都是 px（getPaddingTop/setPadding 和 toolbarHeight 都是 px），别在这里改成 dp。
+        int top = isToolbarVisible() ? toolbarHeight() : (isCategoryVisible() ? getResources().getDimensionPixelSize(R.dimen.webhtv_space_6) : 0);
         if (mBinding.nativeContent.getPaddingTop() == top) return;
         mBinding.nativeContent.setPadding(mBinding.nativeContent.getPaddingLeft(), top, mBinding.nativeContent.getPaddingRight(), mBinding.nativeContent.getPaddingBottom());
     }
@@ -503,9 +668,12 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         selector.addPresenter(Integer.class, new HeaderPresenter());
         selector.addPresenter(String.class, new ProgressPresenter());
         selector.addPresenter(Vod.class, new VodPresenter(this, Style.list()));
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16), VodPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16), FuncPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16, FocusHighlight.ZOOM_FACTOR_SMALL, HorizontalGridView.FOCUS_SCROLL_ALIGNED), HistoryPresenter.class);
+        // 首页三条卡片行统一读设计系统的 TV 卡片间距 token（§6「TV 横向间距 20dp」）。
+        // 此前是硬编码 16dp，而 webhtv_size_tv_card_gap 只声明、从未被引用。
+        int tvCardGap = ResUtil.dpOf(R.dimen.webhtv_size_tv_card_gap);
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap), VodPresenter.class);
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap), FuncPresenter.class);
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap, FocusHighlight.ZOOM_FACTOR_SMALL, HorizontalGridView.FOCUS_SCROLL_ALIGNED), HistoryPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
         mBinding.typeRecycler.setHorizontalSpacing(ResUtil.dp2px(16));
@@ -610,14 +778,60 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 showContent();
             }
 
+            /**
+             * 还没有配置任何内容源（重置应用、重装或恢复出厂后的首次启动）。
+             *
+             * <p>这不是失败：没有地址可请求、没有失败原因、重试也永远不会成功。改动前
+             * {@code BaseConfig} 把它当 {@code error("")} 抛出来，首页便显示「内容源加载失败 /
+             * 重试」——一个不存在的故障加一个点了没用的按钮。这里改走「未配置」状态：
+             * 不接管首页、直接进入内容态（导航恢复）；添加接口仍走既有的
+             * 「设置 → 点播」里的管理面板（`HistoryDialog` 的「添加」→ `ConfigDialog`）。
+             */
+            @Override
+            public void noConfig() {
+                SpiderDebug.log("startup", "no vod config configured");
+                skipNextVodConfigRefresh = true;
+                showNoConfig();
+            }
+
             @Override
             public void error(String msg) {
                 SpiderDebug.log("startup", "config load error cost=%sms msg=%s", System.currentTimeMillis() - App.time(), msg);
                 Notify.show(msg);
                 skipNextVodConfigRefresh = true;
-                showContent();
+                // 设计文档 §9.9：错误态要给出「错误色 + 原因 + 重试动作」。
+                // 改动前这里只弹一个会消失的吐司，然后 showContent() 留一个没有任何内容源的
+                // 空首页——用户既不知道原因，也没有重试入口。吐司保留（不删既有行为），
+                // 页面改为进入错误态。
+                showConfigError(msg);
             }
         };
+    }
+
+    /** 内容源加载失败：进入错误态，原因取服务端返回的 message，主动作是重新加载配置。 */
+    private void showConfigError(String msg) {
+        mBinding.progressLayout.showError(
+                R.string.error_config_load,
+                msg,
+                R.string.error_retry,
+                view -> {
+                    mBinding.progressLayout.showProgress();
+                    initConfig();
+                });
+    }
+
+    /**
+     * 还没有配置内容源：这不是失败，所以**不接管首页**。
+     *
+     * <p>点播/直播/设置这一行不是独立导航栏，而是首页列表的第一行（{@link #setFunc()}
+     * 往 {@code mFuncAdapter} 里填按钮）；一旦走 {@code progressLayout.showEmpty()}，
+     * {@code ProgressLayout} 会把内容视图整块 INVISIBLE，导航行跟着消失——新装用户只剩一个
+     * 「添加接口」按钮，连设置都进不去。因此这里照常进入内容态（导航恢复）；导航行仍只由
+     * {@code HomeButton.getVisibleButtons()} 构成，不再额外插入「添加接口」入口（添加接口走
+     * 既有的「设置 → 点播」管理面板）。
+     */
+    private void showNoConfig() {
+        showContent();
     }
 
     private void showContent() {
@@ -664,6 +878,16 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void getVideo(boolean forceNative) {
         syncCategorySite();
+        // 这次刷新打给的是一个已经过去（已保存状态）的窗口：重建后的实例会由
+        // initAfterFirstFrame → initConfig 自己加载。继续重排只会再撞一次事务守卫。
+        if (!canCommitFragmentTransaction()) {
+            // 没有重建、只是被保存了状态时这次刷新不能丢：回到前台（onResume）再补。
+            if (canDeferFragmentWork()) {
+                mPendingContentRefresh = true;
+                mPendingContentRefreshForceNative |= forceNative;
+            }
+            return;
+        }
         if (!forceNative && WebHomeTarget.canLoad(getHome())) {
             ensureWebView();
         }
@@ -703,14 +927,23 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void setTypes(Result result) {
         if (result.getTypes().isEmpty()) {
-            mTypeAdapter.addAll(java.util.Collections.emptyList());
-            mBinding.typeRecycler.setVisibility(View.GONE);
-            showHomeContent();
+            // 守卫自己负责执行或入槽；这里直接返回，绝不能自己再执行一次目标。
+            runTypeMutation(this::clearTypes);
             return;
         }
         List<Class> items = new ArrayList<>();
         if (Setting.isHomeVodAutoLoad()) items.add(createHomeType());
         items.addAll(result.getTypes());
+        runTypeMutation(() -> applyTypes(items));
+    }
+
+    private void clearTypes() {
+        mTypeAdapter.addAll(Collections.emptyList());
+        mBinding.typeRecycler.setVisibility(View.GONE);
+        showHomeContent();
+    }
+
+    private void applyTypes(List<Class> items) {
         mTypeAdapter.addAll(items);
         if (Setting.isHomeVodAutoLoad()) {
             mBinding.typeRecycler.setSelectedPosition(0);
@@ -833,7 +1066,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             performClearHistory();
             return;
         }
-        new androidx.appcompat.app.AlertDialog.Builder(this)
+        new WebHtvAlertDialogBuilder(this)
                 .setTitle(R.string.dialog_delete_record)
                 .setMessage(R.string.dialog_delete_global_history)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -887,6 +1120,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         switch (event.getType()) {
             case HOME:
                 setTitle();
+                dismissStateIfConfigured();
                 SpiderDebug.log("site-dialog", "home refresh start key=%s homePage=%s", getHome().getKey(), getHome().hasHomePage());
                 if (mWeb != null && mWeb.isVisible()) {
                     if (!mWeb.load(getHome(), true)) getVideo(true);
@@ -904,6 +1138,21 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 getHistory(true);
                 break;
         }
+    }
+
+    /**
+     * 状态浮层只会被「又一次启动 / 点重试」收掉，而配置可能在别的路径上变得可用：
+     * 恢复备份、远程指令切换接口、设置页切换接口、接收推送接口。这些路径发的是
+     * {@link RefreshEvent#home()} 而不是重新走 {@link #showContent()}，于是用户在这些页面上
+     * 操作完回到首页，首页仍顶着那张状态卡，**必须杀进程冷启动才恢复**。
+     *
+     * <p>这里把「配置真的可用了」当成收卡的唯一判据：HOME 刷新意味着首页马上会重新拉内容，
+     * 此时若还停在空态/错误态就直接收起，不依赖任何调用方记得收。
+     */
+    private void dismissStateIfConfigured() {
+        if (VodConfig.get().getSites().isEmpty()) return;
+        if (!mBinding.progressLayout.isEmpty() && !mBinding.progressLayout.isError()) return;
+        mBinding.progressLayout.showContent();
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -1047,6 +1296,12 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     @Override
+    public void onLongPress(Class item) {
+        if (item == null || item.isHome() || !isCurrentCategory(item)) return;
+        mFolder.resetFilter();
+    }
+
+    @Override
     public void onItemClick(Vod item) {
         if (item.isAction()) com.fongmi.android.tv.content.ActionCardHelper.handleAction(this, getHome().getKey(), item.getAction());
         else if (getHome().isIndex()) CollectActivity.start(this, item.getName());
@@ -1095,7 +1350,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     /**
-     * 执行 select_home_menu_key 中某一项对应的动作，下标 1..9（0 是「选项弹窗」自身，不会走到这里）。
+     * 执行 select_home_menu_key 中某一项对应的动作，下标 1..11（0 是「选项弹窗」自身，不会走到这里）。
      */
     @Override
     public void onHomeMenuItem(int index) {
@@ -1109,6 +1364,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             case 7 -> PushActivity.start(this, 3);
             case 8 -> KeepActivity.start(this);
             case 9 -> SettingActivity.start(this);
+            case 10 -> FollowingActivity.start(this, null);
+            case 11 -> openCustomCsp();
         }
     }
 
@@ -1143,10 +1400,18 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     public void setConfig(Config config) {
         if (config.getType() != 0) return;
         if (config.getUrl().startsWith("file")) {
-            PermissionUtil.requestFile(this, allGranted -> VodConfig.load(config, getCallback()));
+            PermissionUtil.requestFile(this, allGranted -> loadVodConfig(config));
         } else {
-            VodConfig.load(config, getCallback());
+            loadVodConfig(config);
         }
+    }
+
+    private void loadVodConfig(Config config) {
+        String previousVodUrl = VodConfig.getUrl();
+        VodConfig.load(config, getCallback());
+        if (!ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) return;
+        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+        if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
     }
 
     @Override
@@ -1256,6 +1521,21 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         refreshFollowingCount();
         syncTypeItems();
         resumeTypeSwitch();
+        resumeDeferredFragmentWork();
+    }
+
+    /** 回到前台后补做在「已保存状态」窗口里被推迟的分类页清理与首页内容刷新。 */
+    private void resumeDeferredFragmentWork() {
+        if (!canCommitFragmentTransaction()) return;
+        if (mPendingCategoryCleanup) {
+            mPendingCategoryCleanup = false;
+            removeCategoryFragments();
+        }
+        if (!mPendingContentRefresh) return;
+        mPendingContentRefresh = false;
+        boolean forceNative = mPendingContentRefreshForceNative;
+        mPendingContentRefreshForceNative = false;
+        getVideo(forceNative);
     }
 
     @Override

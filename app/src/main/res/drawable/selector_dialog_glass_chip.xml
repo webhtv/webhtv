@@ -8,11 +8,16 @@
             <padding android:left="14dp" android:top="8dp" android:right="14dp" android:bottom="8dp" />
         </shape>
     </item>
-    <item android:drawable="@drawable/shape_dialog_glass_chip_active" android:state_focused="true" android:state_selected="true" />
+    <!-- 焦点分支必须排在选中分支之前，且**不能**与选中共用 active drawable：
+         Android 取首个全匹配项；此前 focus 与 checked/activated/selected 五条全指向同一张
+         active 图，于是「焦点行」和「已选中行」渲染完全一致，遥控器上下键看不出光标在哪
+         （用户报告「TV 版本视轨/音轨没有焦点显示」，视轨还会整列浅灰）。
+         焦点改用相反色相的固定蓝（shape_dialog_glass_chip_focused），选中/勾选/激活仍是浅灰；
+         聚焦在「在播」那行时显示焦点蓝，移开立刻回到浅灰。 -->
+    <item android:drawable="@drawable/shape_dialog_glass_chip_focused" android:state_focused="true" />
     <item android:drawable="@drawable/shape_dialog_glass_chip_active" android:state_checked="true" />
     <item android:drawable="@drawable/shape_dialog_glass_chip_active" android:state_activated="true" />
     <item android:drawable="@drawable/shape_dialog_glass_chip_active" android:state_selected="true" />
-    <item android:drawable="@drawable/shape_dialog_glass_chip_active" android:state_focused="true" />
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="6dp" />

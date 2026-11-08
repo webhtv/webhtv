@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    实验室弹窗下拉列表项。
+
+    不能用 android.R.layout.simple_dropdown_item_1line：它由 ArrayAdapter 的 context 解析颜色，
+    而该 context 之前是 Activity（Theme.App.Lab，固定深色 → 白字），弹出面板却是日/夜双表，
+    浅色系统下实测「白字 + 浅色面板」≈1.19:1，配置源下拉根本看不清。
+
+    这里显式绑定语义 ?attr/colorOnSurface，配合 ArrayAdapter 使用弹窗主题上下文，
+    使 item 文字与面板来自同一张表。
+-->
+<com.google.android.material.textview.MaterialTextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/text1"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:ellipsize="end"
+    android:maxLines="1"
+    android:paddingStart="16dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="14dp"
+    android:textColor="?attr/colorOnSurface"
+    android:textSize="15sp" />

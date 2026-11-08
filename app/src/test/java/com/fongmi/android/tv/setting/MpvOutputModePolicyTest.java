@@ -25,10 +25,20 @@ public class MpvOutputModePolicyTest {
     }
 
     @Test
-    public void autoModeStaysOnGpuDuringSurfaceStabilityGuard() {
-        assertFalse(MpvPerformanceSetting.resolveSurfaceDirect(MpvPerformanceSetting.OUTPUT_AUTO, true, true, true, false));
+    public void autoModeEntersSurfaceDirectOnEligibleTv() {
+        assertTrue(MpvPerformanceSetting.resolveSurfaceDirect(MpvPerformanceSetting.OUTPUT_AUTO, true, true, true, false));
+    }
+
+    @Test
+    public void autoModeStillRefusesWhenAutoEligibilityOrTvOrHardwareIsMissing() {
         assertFalse(MpvPerformanceSetting.resolveSurfaceDirect(MpvPerformanceSetting.OUTPUT_AUTO, false, true, true, false));
         assertFalse(MpvPerformanceSetting.resolveSurfaceDirect(MpvPerformanceSetting.OUTPUT_AUTO, true, false, true, false));
+        assertFalse(MpvPerformanceSetting.resolveSurfaceDirect(MpvPerformanceSetting.OUTPUT_AUTO, true, true, false, false));
+    }
+
+    @Test
+    public void zeroCopyDeviceGuardStillBlocksAutoMode() {
+        assertFalse(MpvPerformanceSetting.resolveSurfaceDirect(MpvPerformanceSetting.OUTPUT_AUTO, true, true, true, true));
     }
 
     @Test

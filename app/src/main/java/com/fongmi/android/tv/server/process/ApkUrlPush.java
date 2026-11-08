@@ -68,6 +68,11 @@ public final class ApkUrlPush {
         return INSTANCE;
     }
 
+    /** Reports an in-flight APK URL transfer so cache cleanup can preserve its partial file. */
+    public static boolean isActive() {
+        return INSTANCE.active.get();
+    }
+
     StartResult start(String value, String sender) {
         HttpUrl url = ApkUrlPolicy.parse(value);
         if (!active.compareAndSet(false, true)) return StartResult.BUSY;

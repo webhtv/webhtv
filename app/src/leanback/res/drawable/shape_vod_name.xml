@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    卡片信息区（刷名 + 集数/备注两行）的承载色带。
+
+    取 40% 黑而不是原来的 20%：这块色带是卡片上唯一承载两行文字的表面，而壁纸本身
+    不受控，20% 时纯白只有 6.89:1，任何"次级色"都会被压到 4.5:1 以下——这正是此前
+    TV 卡片只能全用纯白、标题与集数行没有层级的原因。
+
+    抬到 40% 后，标题（纯白）升到 9.82:1，次级行（@color/webhtv_on_wallpaper_variant）
+    为 6.99:1，仍高于被替换掉的那个纯白取值，因此这是"既分层级、又不降低可读性"的改动。
+    代价是壁纸透出感略微减弱，已由用户确认接受。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
@@ -6,6 +17,6 @@
         android:bottomLeftRadius="8dp"
         android:bottomRightRadius="8dp" />
 
-    <solid android:color="@color/black_20" />
+    <solid android:color="@color/black_40" />
 
 </shape>

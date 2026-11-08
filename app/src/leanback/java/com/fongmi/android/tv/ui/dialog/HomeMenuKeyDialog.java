@@ -1,10 +1,10 @@
 package com.fongmi.android.tv.ui.dialog;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 
 public class HomeMenuKeyDialog {
 
@@ -12,7 +12,7 @@ public class HomeMenuKeyDialog {
         String[] items = activity.getResources().getStringArray(R.array.select_home_menu_key);
         int current = Setting.getHomeMenuKey();
 
-        new AlertDialog.Builder(activity)
+        new WebHtvAlertDialogBuilder(activity)
             .setTitle(R.string.setting_home_menu_key)
             .setSingleChoiceItems(items, current, (dialog, which) -> {
                 Setting.putHomeMenuKey(which);

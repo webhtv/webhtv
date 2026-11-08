@@ -1,0 +1,202 @@
+<resources>
+    <!-- Canonical semantic defaults. Keep in sync with ThemeTokens. -->
+    <color name="webhtv_color_primary">#0B57D0</color>
+    <color name="webhtv_color_on_primary">#FFFFFF</color>
+    <color name="webhtv_color_primary_container">#D3E3FD</color>
+    <color name="webhtv_color_on_primary_container">#041E49</color>
+    <color name="webhtv_color_secondary">#5B5F63</color>
+    <color name="webhtv_color_on_secondary">#FFFFFF</color>
+    <color name="webhtv_color_secondary_container">#DFE2E6</color>
+    <color name="webhtv_color_on_secondary_container">#191C1E</color>
+    <color name="webhtv_color_tertiary">#00639B</color>
+    <color name="webhtv_color_on_tertiary">#FFFFFF</color>
+    <color name="webhtv_color_error">#B3261E</color>
+    <color name="webhtv_color_on_error">#FFFFFF</color>
+    <color name="webhtv_color_error_container">#F9DEDC</color>
+    <color name="webhtv_color_on_error_container">#410E0B</color>
+    <color name="webhtv_color_success">#146C2E</color>
+    <color name="webhtv_color_on_success">#FFFFFF</color>
+    <color name="webhtv_color_success_container">#C4EED0</color>
+    <color name="webhtv_color_on_success_container">#00210B</color>
+    <color name="webhtv_color_warning">#7A5900</color>
+    <color name="webhtv_color_on_warning">#FFFFFF</color>
+    <color name="webhtv_color_warning_container">#FFDF9A</color>
+    <color name="webhtv_color_on_warning_container">#261A00</color>
+    <color name="webhtv_color_surface">#F8FAFD</color>
+    <color name="webhtv_color_surface_dim">#D8DAE0</color>
+    <color name="webhtv_color_surface_bright">#F8FAFD</color>
+    <color name="webhtv_color_surface_container_lowest">#FFFFFF</color>
+    <color name="webhtv_color_surface_container_low">#F2F3F9</color>
+    <color name="webhtv_color_surface_container">#ECEEF4</color>
+    <color name="webhtv_color_surface_container_high">#E7E8EF</color>
+    <color name="webhtv_color_surface_container_highest">#E1E2E9</color>
+    <color name="webhtv_color_on_surface">#1A1C1E</color>
+    <color name="webhtv_color_on_surface_variant">#44474F</color>
+    <!-- Alpha variants of webhtv_color_on_surface; keep the RGB in sync with the token. -->
+    <color name="webhtv_on_surface_20">#331A1C1E</color>
+    <color name="webhtv_on_surface_70">#B31A1C1E</color>
+    <color name="webhtv_on_surface_80">#CC1A1C1E</color>
+    <color name="webhtv_on_surface_90">#E61A1C1E</color>
+    <color name="webhtv_color_outline">#74777F</color>
+    <color name="webhtv_color_outline_variant">#C4C6CF</color>
+    <color name="webhtv_color_inverse_surface">#2F3033</color>
+    <color name="webhtv_color_inverse_on_surface">#F1F0F4</color>
+    <color name="webhtv_color_inverse_primary">#A8C7FA</color>
+    <color name="webhtv_color_scrim">#52000000</color>
+    <!--
+        播放页（视频层）环色。浅色表保留派生夹取后的取值：浅色 FOCUS 深蓝 #0B57D0 画在
+        固定深靛玻璃（#E62F315E→#CC303463）上只有 1.83:1，焦点环会看不见，所以这里不是
+        调色板原色，而是 ThemeResolver 在固定玻璃宿主上夹取到 ≥3:1（WCAG 2.2 SC 1.4.11
+        非文本门槛）的派生色。深色表不需要这层夹取，取与应用表面焦点环一致的近白
+        （见 values-night/webhtv_tokens.xml 与 ThemeResolver.PLAYER_RING_BACKDROPS）。
+    -->
+    <color name="webhtv_color_player_focus_ring">#447BF5</color>
+    <color name="webhtv_color_player_current_ring">#00A95A</color>
+    <color name="webhtv_color_shadow">#000000</color>
+    <color name="webhtv_color_focus">#0B57D0</color>
+    <color name="webhtv_color_player_control">#FFFFFF</color>
+    <color name="webhtv_color_player_control_muted">#CCFFFFFF</color>
+    <color name="webhtv_color_player_control_active">#FFD35C</color>
+    <color name="webhtv_color_player_scrim">#7A000000</color>
+    <color name="webhtv_color_health_good">#146C2E</color>
+    <color name="webhtv_color_health_warn">#7A5900</color>
+    <color name="webhtv_color_health_bad">#B3261E</color>
+    <color name="webhtv_color_overlay_light">#14FFFFFF</color>
+    <color name="webhtv_color_overlay_dark">#52000000</color>
+    <!--
+        条目遮罩：列表/按钮聚焦时压在封面与标题上的那层半透明深色，以及它上面的文字色。
+        #66000000 就是 @color/black_40 的取值（键盘键底、搜索框、输入框、shape_item_focused
+        等固定资源共用的同一个值），所以主题化之后默认外观与改动前完全一致——这是
+        「默认字节不变」在这两个新角色上的落点。文字色取本表 colorOnPrimary：遮罩本来就是
+        压在白字列表上的一层黑，白字正是它原本搭配的前景色。
+    -->
+    <color name="webhtv_color_item_overlay">#66000000</color>
+    <color name="webhtv_color_on_item_overlay">#FFFFFF</color>
+    <!--
+        Foreground for content drawn straight on the app wallpaper.
+
+        One ?attr/colorOnSurface cannot serve both mobile consumers: every mobile
+        activity paints a full-screen CustomWallView under its content and the built-in
+        walls are dark, while dialogs draw their text on a light panel. Whichever table
+        is compiled, one of the two loses: the light table left the settings rows
+        near-black on the wallpaper, the dark table turned dialog text light on a light
+        card. This role is the missing third value.
+
+        It is 0xFFFFFFFF in both palettes because the wallpaper is always dark, so it
+        needs no flavour or values-night override, and it matches the colour upstream
+        painted these rows with (@color/white) so the default appearance is unchanged.
+
+        The name deliberately avoids the webhtv_color_ prefix: ThemeTokens models the
+        Material role contract and ThemeContractTest freezes that contract at exactly
+        49 entries, so this is an extra non-role resource in the same family as
+        webhtv_on_surface_20/70/80/90 above.
+
+        ThemeBinder leaves it alone. The baseline palette assigns 0xFFFFFFFF to several
+        unrelated roles (onPrimary, onError, onSuccess, onWarning), whose active values
+        never agree, so ThemeColorIndex sees the value as shared and skips the rewrite.
+        ThemeBaseWiringTest freezes that property.
+    -->
+    <color name="webhtv_on_wallpaper">#FFFFFF</color>
+    <!--
+        Secondary foreground for content drawn straight on the app wallpaper.
+
+        Before this role the TV surface had exactly one wallpaper foreground
+        (webhtv_on_wallpaper = #FFFFFF), so every label, value and metadata line was
+        pure white and only font size separated a title from its own subtitle. The
+        reason was recorded in TvFocusRingContractTest: ?attr/colorOnSurfaceVariant
+        measured 1.35:1 on the dark card band, so the only readable choice was white.
+
+        The substrate is what made that true, so the fix is paired with it: the card
+        band (shape_vod_name) now paints 40% black instead of 20%, and 80% white on
+        that band measures 6.99:1 - higher than the 6.89:1 the flat white it replaces
+        measured on the old band. On the unchanged 20% band used by the settings rows
+        the same value still measures 5.12:1, so one role serves both hosts.
+
+        Both numbers assume the mid-dark built-in walls. A translucent band over an
+        arbitrary user wallpaper cannot be guaranteed globally; that residual risk is
+        the same one already recorded for the following-page panels (阶段 H2).
+
+        The name deliberately avoids the webhtv_color_ prefix for the same reason as
+        webhtv_on_wallpaper above: ThemeTokens models the Material role contract and
+        ThemeContractTest freezes that contract at exactly 49 entries.
+    -->
+    <color name="webhtv_on_wallpaper_variant">#CCFFFFFF</color>
+    <!--
+        卡片角标（进度 / 片源 / 年份）的底色。
+
+        这三个角标此前是 leanback 独有的裸十六进制（#177535 / #F44336 / #2196F3，
+        均带 0.7 透明度），既不在 token 体系内、也无法随主题变化；手机端早就是语义色
+        （bg_remark/bg_site/bg_year 分别取 ?attr/colorSecondaryContainer /
+        ?attr/colorErrorContainer / ?attr/colorSurfaceVariant），只有 TV 端落后。
+
+        更要紧的是透明度带来的可读性问题：角标上的文字恒为 ?attr/webhtvColorOnWallpaper
+        （纯白），而 0.7 的底色叠在**浅色海报**上会被提亮到白字只剩约 2.0–3.7:1。
+        海报内容不受控，所以这里改为**不透明**取值，使白字对比度与海报无关：
+
+            进度 #177535 → 5.78:1    片源 #C62828 → 5.62:1    年份 #1565C0 → 5.74:1
+
+        三者都刻意保持原有色相（绿/红/蓝各自承载一种语义），只把明度压到 4.5:1 门槛以下。
+        取值与明暗模式无关：角标画在海报上，与页面调色板无关。
+    -->
+    <color name="webhtv_color_badge_progress">#177535</color>
+    <color name="webhtv_color_badge_site">#C62828</color>
+    <color name="webhtv_color_badge_year">#1565C0</color>
+    <!--
+        壁纸页面上的「错误前景色」。
+
+        设计文档 §9.9 要求错误态有「错误色」。但不能直接用 ?attr/colorError：那是**跟随
+        调色板**的角色，浅色表的 #B3261E 压在深色壁纸上实测只有 1.23:1（对行色带 1.06:1），
+        完全不可读。深色表的 #FFB4AB 也只有 3.13:1 / 4.06:1。
+
+        本角色与 webhtv_on_wallpaper 同族：**与明暗模式无关**，因为壁纸在两种模式下都是深色。
+
+        取值 #FFDAD6（Material 3 深色表的 onErrorContainer），实机取样核算
+        （192.168.50.3:5561，1920×1080，280dpi；壁纸亮度 L=0.1217–0.2019 均值 0.1476，
+        行色带 L=0.1157–0.1506 均值 0.1306）：
+
+            对行色带  均值 4.50:1   最亮处 4.05:1
+            对壁纸    均值 4.11:1   最亮处 3.23:1
+
+        **用法边界（重要）**：它稳定满足的是**大字号**门槛 3:1（最差 3.23:1），因此可以放心
+        用在错误态标题上（§6.2 把空/错误态列为 Display 档）。用于**正文**时它落在
+        4.05–4.50:1——恰好压线到略低于正文门槛 4.5:1。
+
+        这是底材决定的、无法靠调色解决的取舍：壁纸/色带是中亮度（L≈0.13–0.15），任何带明显
+        红相的前景色若要达到 4.5:1 就必须接近纯白（L≥0.86，例如 #FFE9E4），那时"错误色"
+        在观感上已经与普通白字无异，失去语义。所以当前选择是**保留可辨识的红相**，
+        并把这个实测缺口如实记录，而不是假装它达标。
+
+        若产品要求正文严格达 AA，正确的修法是改底材（给错误行一块更暗的底）而不是继续调色，
+        见 docs/TV-ERROR-STATE-20261012.md §7。
+
+        残余风险：壁纸最亮处 L≈0.2019，此处连纯白也只有 4.17:1；半透明底叠在任意用户壁纸上
+        无法给出全局保证，与设计文档阶段 H2 记录的既有风险同源。
+    -->
+    <color name="webhtv_color_on_wallpaper_error">#FFDAD6</color>
+    <!--
+        错误取值文字的实心深色底。
+
+        设计文档 §9.9 要求错误态有「错误色」，而 TV-5 如实记录了一个缺口：壁纸/行色带是中
+        亮度（L≈0.13–0.15），#FFDAD6 画在其上只有 4.05–4.50:1，**略低于正文门槛 4.5:1**。
+        缺口无法靠继续调色解决（要达 4.5:1 就得接近纯白，那时错误色失去语义），
+        所以按 TV-5 §7.1 记录的修法**改底材**：给错误取值一块实心深底。
+
+        取 #4A3438（暖深灰），实心而非半透明——半透明的结果取决于下层色带，无法给出确定值。
+        核算：#FFDAD6（L=0.7626）对 #4A3438（L=0.0419）为 **8.84:1**，稳过正文门槛。
+
+        它只在错误态出现、成功时立即移除（见 SettingEnhanceActivity.setSummary / setError）。
+    -->
+    <color name="webhtv_color_error_value_bg">#4A3438</color>
+    <!--
+        电视端焦点缩放动画时长（毫秒）。
+
+        这是 TV 焦点缩放的**唯一时长来源**。改动前各站点各自写死 90 / 100 / 120 / 150ms，
+        同一个"聚焦"手势在不同列表里有四种手感。
+
+        时长与明暗模式无关，所以只声明在 values/：它和颜色不同，不是配色属性。
+        缩放的倍率不在这里——它由 ThemeTokens.focusScale() 提供（见 TvFocusScale），
+        原先此处另有一个恒不被读取的 <dimen name="webhtv_focus_scale">，属于同一语义的
+        第二份声明，已随本次统一删除。
+    -->
+    <integer name="webhtv_focus_scale_duration">150</integer>
+</resources>

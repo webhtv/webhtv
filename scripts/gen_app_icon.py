@@ -28,7 +28,7 @@ import argparse
 import os
 import time
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 GRAD_A = (0x25, 0x63, 0xEB)   # 左上 宝蓝
 GRAD_B = (0x4B, 0x93, 0xF8)   # 右下 亮蓝
@@ -239,19 +239,119 @@ def render(size, shape="rounded", fill=FILL_LEGACY, radius_ratio=0.22,
     return img.resize((size, size), Image.LANCZOS)
 
 
-def render_banner(w, h):
-    """Android TV banner 320x180：渐变底 + 左置字标，四周留安全边距。
+# --- TV 横幅（Android TV banner）---------------------------------------------
+# 官方规格 https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines
+#   * 16:9 位图，装进启动器磁贴；必须自带文字（本地化应用名）
+#   * 安全区四边各留 6.1%，超出部分可能被裁
+#   * 位图规格里 xhdpi 320x180 px 是【最小尺寸】（API<=25 的旧式兜底），
+#     不是目标尺寸
+# 这张图必须按密度分别生成：只给 default(drawable) 一张 320x180 的话，
+# xhdpi/xxhdpi/xxxhdpi 电视都会把它拉大 2~4 倍显示，边缘必然糊且有锯齿。
+#
+# 每档按 320x180 dp 出图（xhdpi 640x360，xxxhdpi 1280x720），即最小尺寸的
+# 2 倍。原因：启动器磁贴按 dp 画，1080p/xhdpi 电视要 640x360 px、4K 面板要
+# 1280x720 px；只按最小尺寸出图时启动器只能放大位图，字标就出锯齿（用户
+# 反馈"横屏图标分辨率不够、锯齿很严重"）。留 2 倍余量后启动器要么 1:1
+# 取用、要么缩小，两条路径都不会放大。
+BANNER_SAFE_PAD = 0.061
+BANNER_SIZES = [("mdpi", 320, 180), ("hdpi", 480, 270), ("xhdpi", 640, 360),
+                ("xxhdpi", 960, 540), ("xxxhdpi", 1280, 720)]
+BANNER_TEXT = "默影视"
+# 子集化后的 Noto Sans SC Bold，仅含 BANNER_TEXT 三个字形（3.6KB，OFL-1.1）。
+# 打包字体而非依赖系统字体：TV 盒子 ROM 常缺中文字形，缺字会渲染成豆腐块。
+# 重新生成：py -m fontTools.subset <NotoSansSC-Bold.otf> --text=默影视 \
+#   --layout-features= --desubroutinize --drop-tables+=GSUB,GPOS,GDEF,BASE \
+#   -o scripts/assets/NotoSansSC-Bold-brandmark.otf
+BANNER_FONT = "scripts/assets/NotoSansSC-Bold-brandmark.otf"
+BANNER_MARK_FILL = 0.92   # 字标图层内部填充比，仅决定绘制分辨率
+BANNER_TEXT_RATIO = 0.373  # 文字高 / O 直径
+BANNER_GAP_RATIO = 0.427   # 字标与文字的间距 / O 直径
+BANNER_MARK_VMAX = 0.62    # O 直径上限 / 安全区高，防窄横幅里顶到安全区边界
 
-    电视端图标会被放大显示且可能有 overscan，字标高度控制在 44% 左右。
+_font_cache = {}
+
+
+def _font(px):
+    if px not in _font_cache:
+        _font_cache[px] = ImageFont.truetype(
+            os.path.join(REPO, BANNER_FONT), px)
+    return _font_cache[px]
+
+
+def _tight(layer):
+    """裁到非透明 bbox；全透明返回原图（调用方按 0 尺寸处理）。"""
+    box = layer.getbbox()
+    return layer.crop(box) if box else layer
+
+
+def _render_mark(unit):
+    """按目标 O 直径 unit(px) 直接绘制字标并裁紧，不缩放，保住边缘锐度。
+
+    O 是字标里最高的元素（R_O_W > 1），所以裁紧后图层高度即 O 直径。
     """
-    bw, bh = w * SS, h * SS
-    # banner 是完整矩形不裁切，渐变按原样铺满
-    img = make_gradient(max(bw, bh)).resize((bw, bh), Image.LANCZOS)
-    # 以 banner 高度为画布渲染字标，再整体缩放贴入，保证上下留白对称
-    mark_box = int(bh * 0.62)
-    mark = draw_wordmark(mark_box, 0.92)
-    img.alpha_composite(mark, (int(bw * 0.075), int((bh - mark_box) / 2)))
-    return img.resize((w, h), Image.LANCZOS)
+    size = max(8, int(round(unit * R_TOTAL / (BANNER_MARK_FILL * R_O_W))))
+    return _tight(draw_wordmark(size, BANNER_MARK_FILL))
+
+
+def _render_text(target_h):
+    """渲染应用名，使其墨迹高度尽量接近 target_h 像素。
+
+    字体 px 与字形实际高度不成 1:1（CJK 字形在上下行里只占其中一段），
+    所以先量一次再按比例定字号；字号取整后高度会有亚像素偏差，
+    宽度亦然，因此布局一律以【实测墨迹尺寸】为准而非理论值。
+    """
+    probe = 256
+    tmp = Image.new("RGBA", (probe * (len(BANNER_TEXT) + 2), probe * 2), HOLE)
+    ImageDraw.Draw(tmp).text((probe, probe // 2), BANNER_TEXT,
+                             font=_font(probe), fill=WHITE)
+    got = _tight(tmp).height
+    if got <= 0:
+        raise ValueError(f"banner 文字渲染为空: {BANNER_TEXT!r}")
+    px = max(6, int(round(probe * target_h / got)))
+    out = Image.new("RGBA", (px * (len(BANNER_TEXT) + 2), px * 2), HOLE)
+    ImageDraw.Draw(out).text((px, px // 2), BANNER_TEXT,
+                             font=_font(px), fill=WHITE)
+    return _tight(out)
+
+
+def render_banner(w, h):
+    """Android TV banner：16:9，渐变底 + 左置 MO 字标 + 右置应用名。
+
+    字标与文字作为一组居中于官方安全区内。尺寸只在这个最终分辨率上求解：
+    先按安全区宽度解 O 直径，解出后实测真实宽度；若取整导致略宽于安全区，
+    就按比例回塑一次再解（最多两轮，必收敛），避免“理论刚好、实际超一点”。
+    全过程不缩放图层，边缘因此是干净的。
+    """
+    img = make_gradient(max(w, h)).resize((w, h), Image.LANCZOS)
+    safe_w = w * (1.0 - 2.0 * BANNER_SAFE_PAD)
+    safe_h = h * (1.0 - 2.0 * BANNER_SAFE_PAD)
+
+    # 字标高宽比与分辨率无关（两者同比例缩放），可直接由几何常量得出
+    a_mark = R_TOTAL / R_O_W
+    text_probe = _render_text(64)
+    a_text = text_probe.width / text_probe.height
+
+    unit = safe_w / (a_mark + BANNER_GAP_RATIO +
+                     BANNER_TEXT_RATIO * a_text)
+    unit = min(unit, safe_h * BANNER_MARK_VMAX)   # 窄横幅不顶到安全区
+
+    for _ in range(3):
+        mark = _render_mark(unit)
+        text = _render_text(BANNER_TEXT_RATIO * unit)
+        gap = BANNER_GAP_RATIO * unit
+        total = mark.width + gap + text.width
+        if total <= safe_w + 0.5:
+            break
+        unit *= safe_w / total
+
+    left = (w - total) / 2.0
+    if left + 0.5 < w * BANNER_SAFE_PAD:
+        raise ValueError(f"banner 内容越出安全区: left={left:.2f}")
+
+    img.alpha_composite(mark, (round(left), round((h - mark.height) / 2.0)))
+    img.alpha_composite(text, (round(left + mark.width + gap),
+                               round((h - text.height) / 2.0)))
+    return img
 
 
 def render_notification(size):
@@ -379,6 +479,9 @@ ADAPTIVE_XML = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 BANNER_XML = """<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 scripts/gen_app_icon.py 生成，请勿手工编辑 -->
+<!-- 保留：旧版方形横幅方案的 adaptive-icon 定义，现已不再写入磁盘
+     （见 _purge_banner_leftovers 的说明），仅作为设计记录。 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_banner_foreground" />
@@ -422,6 +525,20 @@ def save_text(text, rel):
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
     print(f"  {rel}")
+
+
+# 旧方形横幅方案的产物。mipmap-anydpi-v26/ic_banner.xml 在一个包含
+# v26 的配置里提供了 ic_banner，会捕获所有 API>=26 的 TV 而不看密度，
+# 把 manifest 对 @mipmap/ic_banner 的引用从新的密度位图上抢走；另两个
+# 是它的前景矢量与那张无人引用的 default 密度位图。
+def _purge_banner_leftovers():
+    for rel in ("app/src/leanback/res/mipmap-anydpi-v26/ic_banner.xml",
+                "app/src/leanback/res/drawable/ic_banner_foreground.xml",
+                "app/src/leanback/res/drawable/ic_banner.png"):
+        path = os.path.join(REPO, rel)
+        if os.path.exists(path):
+            os.remove(path)
+            print(f"  (removed) {rel}")
 
 
 def do_preview():
@@ -483,14 +600,18 @@ def do_write():
              format="PNG")
 
     print("[tv banner]")
-    # adaptive-icon 会强制按方形渲染，foreground 必须用方形视口，
-    # 否则 512x512 视口配 320x180 尺寸会把字标纵向压扁。
-    # 320x180 的真实横幅由下面的 ic_banner.png 承担（API < 26 及 TV 启动器）。
-    save_text(vector_wordmark(FILL_SAFE),
-              "app/src/leanback/res/drawable/ic_banner_foreground.xml")
-    save_text(BANNER_XML, "app/src/leanback/res/mipmap-anydpi-v26/ic_banner.xml")
-    save_img(render_banner(320, 180), "app/src/leanback/res/drawable/ic_banner.png",
-             format="PNG")
+    # 每个密度各出一张 16:9 位图，manifest 直接引用 @mipmap/ic_banner。
+    # 早前这里给的是「anydpi-v26 方形自适应图标 + drawable/ic_banner.png」：
+    # 启动器会把方形图塞进 16:9 磁贴（字标被裁、边缘发糊），而那张
+    # 320x180 位图既没被任何地方引用，又只落在 default 密度桶，
+    # 任何 xhdpi 以上的电视都会把它拉 2~4 倍显示。改为按密度分桶后
+    # 启动器才算 1:1 取用；本轮再把每档提到 320x180 dp（最小尺寸的 2 倍），
+    # 让 1080p 与 4K 磁贴都不必放大位图。
+    for name, w, h in BANNER_SIZES:
+        save_img(render_banner(w, h),
+                 f"app/src/leanback/res/mipmap-{name}/ic_banner.png",
+                 format="PNG")
+    _purge_banner_leftovers()
 
     # 以下三处并非启动器资源，但同样承载 App 形象。上一版重做图标时漏改，
     # 结果桌面已是 MO 字标、应用内标题栏和通知栏还是旧的立方体线框。

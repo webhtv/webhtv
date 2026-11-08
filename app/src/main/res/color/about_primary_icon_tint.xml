@@ -1,6 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    关于弹窗右下角齿轮图标的着色状态表。
+
+    这个文件此前是死代码：没有任何布局引用它，而 dialog_about.xml 直接写
+    `app:tint="?attr/colorOnPrimary"`。于是未聚焦的齿轮（背景全透明，直接贴在
+    colorSurfaceContainerHigh 面板上）用 on-primary 深蓝画在深色面板上——
+    夜间 #062E6F / #2A2F34 = 1.05:1，浅色 #FFFFFF / #E7E8EF = 1.22:1，
+    两种主题下图标都等于看不见。
+
+    正确配对是分状态的：
+      · 聚焦/按下：背景被 about_primary_icon_button 换成 colorPrimaryContainer
+        （2026-10-19 第二轮由 colorPrimary 翻转而来），图标取配对的
+        on-primary-container（夜间 #D3E3FD / #0842A0 = 7.04:1）。
+      · 常态：背景透明，图标直接落在弹窗面板上，必须取面板上的前景色
+        on-surface-variant（夜间 #C4C6D0 / #2A2F34 ≈ 7.93:1，实机已验证）。
+
+    两个分支各自与"它实际所处的背景"配对，因此换主题、换深浅模式都不失效。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="#FFFFFF" android:state_focused="true" />
-    <item android:color="#FFFFFF" android:state_pressed="true" />
-    <item android:color="#5F6368" />
+    <item android:color="?attr/colorOnPrimaryContainer" android:state_focused="true" />
+    <item android:color="?attr/colorOnPrimaryContainer" android:state_pressed="true" />
+    <item android:color="?attr/colorOnSurfaceVariant" />
 </selector>

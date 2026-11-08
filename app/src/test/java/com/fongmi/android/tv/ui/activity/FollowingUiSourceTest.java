@@ -5,11 +5,62 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
 public class FollowingUiSourceTest {
+
+    @Test
+    public void followingTvHeaderScrollsWithContent() throws Exception {
+        String layout = read("app/src/leanback/res/layout/activity_following.xml");
+
+        assertTrue(layout.contains("androidx.core.widget.NestedScrollView"));
+        assertTrue(layout.contains("android:nestedScrollingEnabled=\"false\""));
+        assertTrue(layout.contains("android:layout_height=\"wrap_content\""));
+    }
+
+    @Test
+    public void followingPageKeepsTvSafeTopInset() throws Exception {
+        String layout = read("app/src/main/res/layout/activity_following.xml");
+
+        assertTrue(layout.contains("android:paddingTop=\"28dp\""));
+        assertFalse(layout.contains("android:paddingTop=\"12dp\""));
+    }
+
+    @Test
+    public void mobileFollowingHeaderWrapsControlsAndKeepsSummaryVisible() throws Exception {
+        // Windows 检出（core.autocrlf=true）下工作区是 CRLF；断言里的多行片段用 \n，需先归一化。
+        String layout = read("app/src/mobile/res/layout/activity_following.xml").replace("\r\n", "\n");
+
+        assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
+        assertTrue(layout.contains("android:id=\"@+id/actions\""));
+        assertTrue(layout.contains("app:flexWrap=\"wrap\""));
+        assertTrue(layout.contains("android:id=\"@+id/summary\""));
+        assertTrue(layout.contains("android:layout_width=\"match_parent\"\n            android:layout_height=\"wrap_content\"\n            android:layout_marginTop=\"6dp\""));
+    }
+
+    @Test
+    public void mobileFollowingCardWrapsAllActionsInsteadOfClippingThem() throws Exception {
+        String layout = read("app/src/mobile/res/layout/item_following.xml");
+
+        assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
+        assertTrue(layout.contains("app:flexWrap=\"wrap\""));
+        assertTrue(layout.contains("app:justifyContent=\"flex_start\""));
+        assertTrue(layout.contains("app:layout_flexGrow=\"0\""));
+        assertTrue(layout.contains("app:layout_flexBasisPercent=\"@fraction/following_action_basis\""));
+        assertTrue(read("app/src/mobile/res/values/following_fractions.xml").contains(">30%<"));
+        assertTrue(read("app/src/mobile/res/values-sw600dp/following_fractions.xml").contains(">18%<"));
+        assertTrue(layout.indexOf("@+id/error") < layout.indexOf("com.google.android.flexbox.FlexboxLayout"));
+        assertFalse(layout.contains("HorizontalScrollView"));
+        assertFalse(layout.contains("app:justifyContent=\"center\""));
+        assertFalse(layout.contains("app:justifyContent=\"space_evenly\""));
+        assertFalse(layout.contains("app:justifyContent=\"space_around\""));
+        for (String id : List.of("nextSeason", "continuePlay", "check", "read", "notify", "sourceChange", "delete")) {
+            assertTrue(layout.contains("android:id=\"@+id/" + id + "\""));
+        }
+    }
 
     @Test
     public void mobileBottomNavigationPlacesFollowingBetweenLiveAndSettings() throws Exception {
@@ -40,12 +91,95 @@ public class FollowingUiSourceTest {
     }
 
     @Test
+    public void followingContinueUsesFlavorPlaybackRouterToPreserveSourceBinding() throws Exception {
+        String activity = read("app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java");
+        int method = activity.indexOf("public void onContinue(Following item, FollowingSource source)");
+        int end = activity.indexOf("public void onFollowNextSeason", method);
+        String body = activity.substring(method, end);
+
+        assertTrue(body.contains("VideoActivity.startFromFollowingHistory(this, history)"));
+        assertFalse(body.contains("VideoActivity.startFromHistory(this, history)"));
+        assertFalse(body.contains("TmdbDetailActivity.startFromHistory(this, history)"));
+
+        for (String path : List.of(
+                "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
+                "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java")) {
+            String video = read(path);
+            int route = video.indexOf("public static void startFromFollowingHistory(Activity activity, History item)");
+            int routeEnd = video.indexOf("public static void startFromHistory(Activity activity, History item)", route);
+            String routeBody = video.substring(route, routeEnd);
+            assertTrue(routeBody.contains("startFromHistory(activity, item)"));
+        }
+    }
+
+    @Test
     public void followingScreenExposesOfficialSourceAndUserStatesSeparately() throws Exception {
         String adapter = read("app/src/main/java/com/fongmi/android/tv/ui/adapter/FollowingAdapter.java");
         assertTrue(adapter.contains("following_official"));
+        assertTrue(adapter.contains("following_season_total"));
+        assertTrue(adapter.contains("following_series_total"));
+        assertTrue(adapter.contains("following_weekday"));
+        assertTrue(adapter.contains("R.array.following_weekdays"));
         assertTrue(adapter.contains("following_source"));
         assertTrue(adapter.contains("following_watched"));
         assertTrue(adapter.contains("following_unwatched"));
+    }
+
+    @Test
+    public void followingScreenFollowsTheGlobalWallpaperLikeOtherContentPages() throws Exception {
+        String activity = read("app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java");
+        assertTrue("追更页必须复用全局壁纸视图", activity.contains("new CustomWallView(this, null)"));
+        assertTrue("壁纸必须插在内容根视图之下", activity.contains("content.addView("));
+        assertTrue("壁纸必须早于页面初始化", activity.indexOf("addWallpaper();") < activity.indexOf("initView();"));
+
+        String layout = read("app/src/main/res/layout/activity_following.xml");
+        assertFalse("根布局必须保持透明，否则壁纸被整页盖住",
+                layout.contains("android:background=\"?attr/colorSurface\""));
+        assertTrue("顶栏必须使用与首页按钮同源的 20% 黑纱",
+                layout.contains("android:background=\"@drawable/shape_following_bar\""));
+        assertTrue("空态需要半透明面板承载文字",
+                layout.contains("android:background=\"@drawable/shape_following_panel\""));
+        assertTrue("空态图标不能再是无条件白色 tint",
+                layout.contains("android:tint=\"?attr/colorOnSurfaceVariant\""));
+
+        String item = read("app/src/main/res/layout/item_following.xml");
+        assertTrue("卡片必须改用半透明面板而不是不透明表面",
+                item.contains("app:cardBackgroundColor=\"@color/following_panel_bg\""));
+
+        String panel = read("app/src/main/res/color/following_panel_bg.xml");
+        assertTrue("浅色模式卡片面板必须半透明", panel.contains("android:alpha=\"0.60\""));
+        assertTrue("浅色模式卡片面板必须用语义浅色承载深色正文",
+                panel.contains("?attr/colorSurfaceContainerHigh"));
+
+        String bar = read("app/src/main/res/color/following_bar_bg.xml");
+        assertTrue("浅色模式顶栏必须半透明", bar.contains("android:alpha=\"0.45\""));
+        assertTrue("浅色模式顶栏必须用语义浅色", bar.contains("?attr/colorSurfaceContainerHigh"));
+
+        // 暗色模式必须回到与首页按钮同源的黑纱，否则深色模式下浅色面板会重新变成“贴板”。
+        String darkPanel = read("app/src/main/res/color-night/following_panel_bg.xml");
+        assertTrue("暗色模式卡片必须是低透明度黑纱",
+                darkPanel.contains("android:alpha=\"0.32\"") && darkPanel.contains("@color/black"));
+        String darkBar = read("app/src/main/res/color-night/following_bar_bg.xml");
+        assertTrue("暗色模式顶栏黑纱必须与首页按钮 black_20 对齐",
+                darkBar.contains("android:alpha=\"0.20\"") && darkBar.contains("@color/black"));
+
+        // 面板极性必须跟随模式，否则浅色深色会各坏一边。
+        assertFalse("浅色面板不能使用黑纱", panel.contains("@color/black"));
+        assertFalse("暗色面板不能使用浅色语义表面", darkPanel.contains("colorSurfaceContainerHigh"));
+    }
+
+    @Test
+    public void checkAllRefreshesEveryFollowingItemWithoutACountLimit() throws Exception {
+        String activity = read("app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java");
+        String coordinator = read("app/src/main/java/com/fongmi/android/tv/following/FollowingUpdateCoordinator.java");
+        String dao = read("app/src/main/java/com/fongmi/android/tv/following/FollowingDao.java");
+
+        assertTrue(activity.contains("for (Following item : items) success |= coordinator.checkNow(item.identityKey, true);"));
+        assertFalse(activity.contains("Math.min(5, items.size())"));
+        assertTrue(coordinator.contains("findDue(now)"));
+        assertFalse(coordinator.contains("BATCH_SIZE"));
+        assertTrue(dao.contains("ORDER BY next_check_at ASC\""));
+        assertFalse(dao.contains("LIMIT :limit"));
     }
 
     @Test
@@ -110,8 +244,37 @@ public class FollowingUiSourceTest {
     }
 
     @Test
+    public void followingReadStateIsManualAndSupportsMarkAllRead() throws Exception {
+        String activity = read("app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java");
+        String adapter = read("app/src/main/java/com/fongmi/android/tv/ui/adapter/FollowingAdapter.java");
+        String leanbackLayout = read("app/src/leanback/res/layout/activity_following.xml");
+        String mobileLayout = read("app/src/mobile/res/layout/activity_following.xml");
+        String strings = read("app/src/main/res/values-zh-rCN/strings.xml");
+
+        assertFalse(activity.contains("VISIBLE_READ_DELAY_MS"));
+        assertFalse(activity.contains("markVisibleReadNow"));
+        assertFalse(activity.contains("addOnScrollListener(new RecyclerView.OnScrollListener()"));
+        assertTrue(activity.contains("binding.readAll.setOnClickListener(view -> markAllRead())"));
+        assertTrue(activity.contains("adapter.markReadLocally(keys)"));
+        assertTrue(activity.contains("FollowingPlaybackBridge.markReadAllAsync(keys"));
+        assertTrue(adapter.contains("getItems()"));
+        assertTrue(leanbackLayout.contains("@+id/readAll"));
+        assertTrue(mobileLayout.contains("@+id/readAll"));
+        int checkId = leanbackLayout.indexOf("android:id=\"@+id/check\"");
+        int readAllId = leanbackLayout.indexOf("android:id=\"@+id/readAll\"", checkId);
+        int filterId = leanbackLayout.indexOf("android:id=\"@+id/filter\"", readAllId);
+        assertTrue(leanbackLayout.substring(checkId, readAllId).contains("android:nextFocusRight=\"@id/readAll\""));
+        assertTrue(leanbackLayout.substring(readAllId, filterId).contains("android:nextFocusLeft=\"@id/check\""));
+        assertTrue(leanbackLayout.substring(readAllId, filterId).contains("android:nextFocusRight=\"@id/filter\""));
+        assertTrue(leanbackLayout.substring(filterId).contains("android:nextFocusLeft=\"@id/readAll\""));
+        assertTrue(strings.contains("<string name=\"following_read_all\">全部已读</string>"));
+    }
+
+    @Test
     public void detailAndPlaybackScreensWireFollowingActionsOffTheMainThread() throws Exception {
         String detail = read("app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
+        // Windows 检出（core.autocrlf=true）下工作区是 CRLF，而断言里的多行片段用 \n：先归一化再比较。
+        String detailLf = detail.replace("\r\n", "\n");
         String store = read("app/src/main/java/com/fongmi/android/tv/following/FollowingStore.java");
         String header = read("app/src/main/res/layout/view_tmdb_header.xml");
         String mobile = read("app/src/mobile/res/layout/activity_video.xml")
@@ -122,6 +285,8 @@ public class FollowingUiSourceTest {
         String mobileActivity = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
         String leanbackActivity = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
         String followingActivity = read("app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java");
+        // 同上：多行片段断言必须先把 CRLF 归一化为 LF，否则 Windows 检出下会假失败。
+        String followingActivityLf = followingActivity.replace("\r\n", "\n");
         String followingAdapter = read("app/src/main/java/com/fongmi/android/tv/ui/adapter/FollowingAdapter.java");
         String strings = read("app/src/main/res/values-zh-rCN/strings.xml");
 
@@ -142,11 +307,37 @@ public class FollowingUiSourceTest {
         assertTrue(followingInitiallyGone(read("app/src/main/res/layout/view_tmdb_header.xml")));
         assertTrue(mobileActivity.contains("onFollowing()"));
         assertTrue(leanbackActivity.contains("onFollowing()"));
+        // 播放页的追更按钮是就地开关：已追更时再次点击必须立刻取消，绝不跳转追更页打断播放。
+        for (String playback : List.of(mobileActivity, leanbackActivity)) {
+            assertTrue(playback.contains("private void cancelFollowing(String identityKey)"));
+            assertTrue(playback.contains("FollowingPlaybackBridge.deleteAsync(identityKey"));
+            assertTrue(playback.contains("FollowingScheduler.cancelNext(this, identityKey)"));
+            assertTrue(playback.contains("Notify.show(R.string.following_canceled)"));
+            assertFalse(playback.contains("FollowingActivity.start(this, existing.identityKey)"));
+        }
+        assertTrue(strings.contains("<string name=\"following_canceled\">已取消追更</string>"));
+        // 详情页与播放页同源：点「已追更」必须就地取消并立即生效，绝不跳转追更页。
+        assertFalse(detail.contains("FollowingActivity.start"));
+        assertFalse(detail.contains("isInlineFollowingPlaybackSurface"));
+        assertTrue(detailLf.contains("if (isFollowed(existing)) {\n                // 详情页与播放页统一为就地开关：再次点击「已追更」立即取消，绝不跳转追更页。\n                cancelFollowing(identityKey);"));
+        assertTrue(detail.contains("private void cancelFollowing(String identityKey)"));
+        assertTrue(detail.contains("FollowingScheduler.cancelNext(this, identityKey)"));
+        assertTrue(detail.contains("FollowingPlaybackBridge.deleteAsync(identityKey"));
+        assertTrue(detail.contains("Notify.show(R.string.following_canceled)"));
+        // 取消落库成功后必须立刻刷新按钮：updateFollowingState 走 isFollowed，墓碑行视为未追更。
+        assertTrue(detailLf.contains("updateFollowingState();\n            FollowingPlaybackBridge.refreshUnreadCountAsync(null);\n            Notify.show(R.string.following_canceled);"));
+        // 详情页走 TMDB 身份迁移时 resolveTmdb 会为防复活故意返回墓碑行（C9 语义），
+        // 因此“已追更”判定必须排除墓碑，否则取消后按钮仍显示“已追更”且永远无法重新追更。
+        assertTrue(detail.contains("private boolean isFollowed(Following item)"));
+        assertTrue(detail.contains("return item != null && !item.isDeleted();"));
+        assertTrue(detail.contains("if (isFollowed(existing)) {"));
+        assertTrue(detail.contains("applyFollowingButtonState(true, isFollowed(item));"));
+        assertFalse(detail.contains("applyFollowingButtonState(true, item != null);"));
         assertTrue(followingActivity.contains("FollowingPlaybackBridge.deleteAsync"));
         assertFalse(followingActivity.contains("FollowingStore.delete(item.identityKey)"));
-        assertTrue(followingActivity.contains("Task.execute(() -> {\n            List<Following> items = FollowingStore.list();"));
-        assertTrue(followingActivity.contains("VISIBLE_READ_DELAY_MS"));
-        assertTrue(followingActivity.contains("markVisibleReadNow()"));
+        assertTrue(followingActivityLf.contains("Task.execute(() -> {\n            List<Following> items = FollowingStore.list();"));
+        assertFalse(followingActivity.contains("VISIBLE_READ_DELAY_MS"));
+        assertFalse(followingActivity.contains("markVisibleReadNow()"));
         assertTrue(followingAdapter.contains("item.hasUpdate && item.unwatchedCount > 0"));
         assertTrue(followingAdapter.contains("markReadLocally"));
         assertTrue(strings.contains("<string name=\"following_read\">标记已读</string>"));

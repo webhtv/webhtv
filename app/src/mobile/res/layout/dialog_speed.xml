@@ -15,9 +15,9 @@
         android:stepSize="0.5"
         android:valueFrom="2"
         android:valueTo="5"
-        app:haloColor="#1F1A73E8"
-        app:labelStyle="@style/Widget.WebHTV.LightDialogSliderLabel"
-        app:thumbColor="#1A73E8"
+        app:haloColor="?attr/colorPrimary"
+        app:labelStyle="@style/Widget.WebHTV.SliderLabel"
+        app:thumbColor="?attr/colorPrimary"
         app:tickVisible="false" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

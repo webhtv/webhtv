@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    卡片「进度」角标底色（绿）。语义与对比度依据见 webhtv_tokens.xml 的
+    webhtv_color_badge_progress。
+
+    这里刻意用直接的 @color 引用而不是 ?attr：角标画在海报上、前景恒为纯白，
+    可读性依赖"底色足够暗"这一点，做成可被主题改写的角色就等于放弃该保证。
+    不透明同样是刻意的——0.7 的透明底在浅色海报上会把白字压到 3.2:1 以下。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:alpha="0.7" android:color="#177535" />
+    <item android:color="@color/webhtv_color_badge_progress" />
 </selector>

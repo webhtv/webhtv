@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical"
-    android:background="#000000"
+    android:background="?attr/colorSurface"
     android:fitsSystemWindows="true"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -10,7 +10,7 @@
     <LinearLayout
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:background="#111111"
+        android:background="?attr/colorSurfaceContainerHigh"
         android:layout_width="match_parent"
         android:layout_height="40dp"
         android:paddingStart="2dp"
@@ -24,11 +24,11 @@
             android:layout_height="36dp"
             android:src="@drawable/ic_action_back"
             android:contentDescription="关闭"
-            app:tint="#888888" />
+            app:tint="?attr/colorOnSurfaceVariant" />
 
         <TextView
             android:textSize="13sp"
-            android:textColor="#999999"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:ellipsize="end"
             android:id="@+id/outputTitle"
             android:layout_width="0dp"
@@ -40,7 +40,20 @@
 
         <TextView
             android:textSize="13sp"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
+            android:gravity="center"
+            android:id="@+id/btnClear"
+            android:background="@drawable/shape_lab_click_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:text="清除"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:layout_marginStart="8dp" />
+
+        <TextView
+            android:textSize="13sp"
+            android:textColor="?attr/colorOnSurface"
             android:gravity="center"
             android:id="@+id/btnStop"
             android:background="@drawable/shape_lab_stop_btn"
@@ -67,7 +80,7 @@
 
             <TextView
                 android:textSize="12sp"
-                android:textColor="#aaffaa"
+                android:textColor="@color/webhtv_color_success"
                 android:id="@+id/outputText"
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
@@ -86,7 +99,7 @@
         android:orientation="horizontal"
         android:id="@+id/inputContainer"
         android:visibility="gone"
-        android:background="#111111"
+        android:background="?attr/colorSurfaceContainerHigh"
         android:paddingTop="4dp"
         android:paddingBottom="4dp"
         android:layout_width="match_parent"
@@ -96,7 +109,7 @@
 
         <TextView
             android:textSize="13sp"
-            android:textColor="#aaffaa"
+            android:textColor="@color/webhtv_color_success"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="$"
@@ -104,8 +117,8 @@
 
         <EditText
             android:textSize="13sp"
-            android:textColor="#eeeeee"
-            android:textColorHint="#444444"
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOutlineVariant"
             android:id="@+id/inputEdit"
             android:background="@android:color/transparent"
             android:layout_width="0dp"
@@ -125,6 +138,6 @@
             android:layout_height="38dp"
             android:src="@drawable/ic_action_send"
             android:contentDescription="发送"
-            app:tint="#aaffaa" />
+            app:tint="@color/webhtv_color_success" />
     </LinearLayout>
 </LinearLayout>

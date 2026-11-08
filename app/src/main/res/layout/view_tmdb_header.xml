@@ -17,7 +17,7 @@
     android:orientation="vertical"
     android:clipChildren="false"
     android:clipToPadding="false"
-    android:background="#0F141A">
+    android:background="?attr/colorSurfaceContainerLowest">
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/tmdbFusionInfoCard"
@@ -27,10 +27,10 @@
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp"
         android:visibility="gone"
-        app:cardBackgroundColor="#AFFFFFFF"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
         app:cardCornerRadius="20dp"
         app:cardElevation="0dp"
-        app:strokeColor="#33424B57"
+        app:strokeColor="?attr/colorOutlineVariant"
         app:strokeWidth="1dp"
         tools:visibility="visible">
 
@@ -45,7 +45,7 @@
                 android:layout_height="160dp"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
-                app:strokeColor="#30FFFFFF"
+                app:strokeColor="?attr/colorOutlineVariant"
                 app:strokeWidth="1dp">
 
                 <ImageView
@@ -71,7 +71,7 @@
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
                     android:maxLines="2"
-                    android:textColor="#12202D"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="28sp"
                     android:textStyle="bold"
                     tools:text="爱情有烟火" />
@@ -81,7 +81,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:textColor="#CC12202D"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="14sp"
                     tools:text="2026-06-15 · 评分 8.5" />
 
@@ -102,7 +102,7 @@
                     android:gravity="end"
                     android:maxLines="1"
                     android:maxWidth="220dp"
-                    android:textColor="#9912202D"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="12sp"
                     tools:text="站源：荐片[APP]" />
 
@@ -114,7 +114,7 @@
                     android:ellipsize="end"
                     android:lineSpacingExtra="3dp"
                     android:maxLines="5"
-                    android:textColor="#E612202D"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="13sp"
                     tools:text="投行小职员钱菲，原本沉浸在对人生的幸福规划中，但没想到，未婚夫汪若海选择了不再与她同行。" />
 
@@ -183,7 +183,7 @@
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
                     android:maxLines="2"
-                    android:shadowColor="#000000"
+                    android:shadowColor="@color/webhtv_color_shadow"
                     android:shadowDx="0"
                     android:shadowDy="2"
                     android:shadowRadius="6"
@@ -209,7 +209,7 @@
                         android:paddingTop="3dp"
                         android:paddingEnd="8dp"
                         android:paddingBottom="3dp"
-                        android:textColor="#0F141A"
+                        android:textColor="?attr/colorSurfaceContainerLowest"
                         android:textSize="13sp"
                         android:textStyle="bold"
                         android:visibility="gone"
@@ -224,7 +224,7 @@
                         android:layout_weight="1"
                         android:ellipsize="end"
                         android:maxLines="2"
-                        android:textColor="#C8D2DC"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="13sp"
                         tools:text="剧集 · 2023" />
 
@@ -237,7 +237,7 @@
                     android:layout_marginTop="6dp"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="#9AA7B4"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="12sp"
                     android:visibility="gone"
                     tools:text="剧情 · 动作 · 奇幻"
@@ -273,7 +273,7 @@
         android:ellipsize="end"
         android:lineSpacingMultiplier="1.2"
         android:maxLines="4"
-        android:textColor="#C8D2DC"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         android:visibility="gone"
         tools:text="王林是一个普通的少年……"
@@ -648,7 +648,7 @@
         android:ellipsize="end"
         android:lineSpacingExtra="2dp"
         android:maxLines="2"
-        android:textColor="#C8D2DC"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         android:visibility="gone"
         tools:text="推荐理由：同样兼具悬疑气质和强剧情推进，适合当前口味。"
@@ -721,7 +721,7 @@
         android:layout_marginBottom="4dp"
         android:alpha="0.5"
         android:text="@string/tmdb_powered_by"
-        android:textColor="#6B7785"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="10sp" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

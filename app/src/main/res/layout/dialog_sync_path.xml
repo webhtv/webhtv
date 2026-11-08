@@ -17,7 +17,7 @@
         android:layout_height="wrap_content"
         android:paddingBottom="8dp"
         android:text="@string/sync_paths_title"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -27,7 +27,7 @@
         android:layout_height="wrap_content"
         android:ellipsize="end"
         android:maxLines="2"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         tools:text="已选：TV、TVBox、TVData" />
 
@@ -49,7 +49,7 @@
             android:paddingEnd="8dp"
             android:text="@string/sync_paths_up"
             android:textColor="@color/dialog_text_button"
-            app:rippleColor="#1A1A73E8" />
+            app:rippleColor="?attr/colorOnSurfaceVariant" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/current"
@@ -60,7 +60,7 @@
             android:layout_weight="1"
             android:ellipsize="middle"
             android:singleLine="true"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="14sp"
             tools:text="/TV" />
 
@@ -75,7 +75,7 @@
             android:paddingEnd="8dp"
             android:text="@string/sync_paths_refresh"
             android:textColor="@color/dialog_text_button"
-            app:rippleColor="#1A1A73E8" />
+            app:rippleColor="?attr/colorOnSurfaceVariant" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -100,7 +100,7 @@
         android:gravity="center"
         android:padding="12dp"
         android:text="@string/sync_paths_empty"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         android:visibility="gone"
         tools:visibility="visible" />
@@ -121,7 +121,7 @@
             android:text="@string/login_state_confirm_pending"
             android:textColor="@color/dialog_text_button"
             android:visibility="gone"
-            app:rippleColor="#1A1A73E8" />
+            app:rippleColor="?attr/colorOnSurfaceVariant" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/reset"
@@ -131,7 +131,7 @@
             android:minWidth="0dp"
             android:text="@string/dialog_reset"
             android:textColor="@color/dialog_text_button"
-            app:rippleColor="#1A1A73E8" />
+            app:rippleColor="?attr/colorOnSurfaceVariant" />
 
         <Space
             android:layout_width="0dp"
@@ -148,7 +148,7 @@
             android:text="@string/dialog_negative"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
@@ -159,7 +159,9 @@
             android:minHeight="40dp"
             android:text="@string/dialog_positive"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

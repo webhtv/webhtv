@@ -37,13 +37,16 @@ class LiveBrowse {
 
     @NonNull
     static ImmutableList<MediaItem> getGroups() {
-        return liveHome().getGroups().stream().map(group -> BrowseTree.folder(LIVE_GROUP + group.getName(), group.getName())).collect(ImmutableList.toImmutableList());
+        // id 必须用与界面语言无关的身份名（Live.keep / 上次频道写的是同一套名字，且要能长期持久化），
+        // 标题才用界面语言下的展示名；两者混用会让繁体界面下的分组名不再翻译（Group.trans() 已只写 displayName）。
+        return liveHome().getGroups().stream().map(group -> BrowseTree.folder(LIVE_GROUP + group.getName(), group.getDisplayName())).collect(ImmutableList.toImmutableList());
     }
 
     @NonNull
     static ImmutableList<MediaItem> getChannels(@NonNull String parentId) {
+        // 浏览树 id 来自可持久化的身份名（Live.keep 会写同一套名字），但也兼容旧版本写入的译文名。
         String groupName = parentId.substring(LIVE_GROUP.length());
-        Group group = liveHome().getGroups().stream().filter(item -> item.getName().equals(groupName)).findFirst().orElse(null);
+        Group group = liveHome().getGroups().stream().filter(item -> item.matchesName(groupName)).findFirst().orElse(null);
         if (group == null) {
             liveCountMap.put(groupName, 0);
             return ImmutableList.of();

@@ -58,7 +58,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -157,8 +156,26 @@ public class ExoPlayerEngine implements PlayerEngine {
             App.removeCallbacks(tunnelingWatchdogRunnable);
             cancelTunnelingProgressWatchdog();
             cancelDecoderRuntimeStableWindow();
+            logPlaybackError(error);
         }
     };
+
+    /**
+     * 失败原因必须无条件进 logcat：release 构建里 SpiderDebug 默认关闭，直播排障
+     * （EXO 落到黑屏、随后被降级到其它内核）时曾拿不到 errorCode 与 cause 链。
+     */
+    private static void logPlaybackError(PlaybackException error) {
+        StringBuilder chain = new StringBuilder();
+        int depth = 0;
+        for (Throwable t = error.getCause(); t != null && depth++ < 8 && chain.length() < 512;
+             t = t.getCause() == t ? null : t.getCause()) {
+            if (chain.length() > 0) chain.append(" <- ");
+            chain.append(t.getClass().getSimpleName());
+            if (t.getMessage() != null) chain.append('(').append(t.getMessage().replace('\n', ' ')).append(')');
+        }
+        android.util.Log.e("TV-exo-error", "code=" + error.getErrorCodeName() + " message=" + error.getMessage()
+                + " causeChain=" + chain, error);
+    }
 
     public ExoPlayerEngine(int decode, Player.Listener listener) {
         this(decode, listener, null, null);
@@ -694,12 +711,12 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean isLive() {
-        return player.getDuration() < TimeUnit.MINUTES.toMillis(1) || player.isCurrentMediaItemLive();
+        return TimelineStreamKindPolicy.isLive(player.getDuration(), player.isCurrentMediaItemLive());
     }
 
     @Override
     public boolean isVod() {
-        return player.getDuration() > TimeUnit.MINUTES.toMillis(1) && !player.isCurrentMediaItemLive();
+        return TimelineStreamKindPolicy.isVod(player.getDuration(), player.isCurrentMediaItemLive());
     }
 
     @Override
@@ -1014,6 +1031,23 @@ public class ExoPlayerEngine implements PlayerEngine {
         });
     }
 
+    /**
+     * One-shot recovery for a standard offload output that accepted payload but was never consumed.
+     *
+     * <p>The generic startup timeout can only switch the decode mode or the kernel, and neither of
+     * those changes the output mode that is actually failing, so this has to run before it. The
+     * configuration stays disabled for this engine, which keeps the next selection on the PCM path.
+     */
+    public boolean recoverStalledOffloadOutputWithPcm() {
+        if (player == null || spec == null) return false;
+        if (!compressedAudioDirectPolicy.requestOffloadStallRecovery()) return false;
+        PlaybackTrace.log(
+                "player-engine",
+                getPlaybackTraceId(),
+                "offload output accepted payload without consuming it; restarted current item with PCM");
+        return requestPcmFallback();
+    }
+
     private boolean requestPcmFallback() {
         if (pcmFallbackInProgress.get()
                 || pcmFallbackScheduledAttempt.get() == audioOutputAttemptGeneration) {
@@ -1222,7 +1256,8 @@ public class ExoPlayerEngine implements PlayerEngine {
                 format,
                 secure,
                 analytics.droppedFrames(),
-                PlaybackAnalyticsListener.getFrameTimingSnapshot().codecErrorCount());
+                PlaybackAnalyticsListener.getFrameTimingSnapshot().codecErrorCount(),
+                PlaybackAnalyticsListener.playTimeMs());
     }
 
     private ExoDecoderRuntimeSession.Evidence decoderRuntimeEvidence(
@@ -1239,7 +1274,8 @@ public class ExoPlayerEngine implements PlayerEngine {
                 failure.format(),
                 secure,
                 analytics.droppedFrames(),
-                PlaybackAnalyticsListener.getFrameTimingSnapshot().codecErrorCount());
+                PlaybackAnalyticsListener.getFrameTimingSnapshot().codecErrorCount(),
+                PlaybackAnalyticsListener.playTimeMs());
     }
 
     private static boolean isSecureDecoderName(String decoderName) {

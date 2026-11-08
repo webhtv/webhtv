@@ -62,6 +62,11 @@ public class VodPlayerUiController {
                     public String getTitle() {
                         return host.osdTitle();
                     }
+
+                    @Override
+                    public boolean isFullscreen() {
+                        return host.isFullscreen();
+                    }
                 },
                 chrome.osdMiniSp
         );

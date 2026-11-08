@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    字幕工具栏按钮的按下态。与 shape_subtitle_focused.xml 同族同尺寸
+    （8dp 圆角矩形、唯一宽度 token、?attr/tvPlayerRing），保证焦点↔按下切换不跳动。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
+    android:shape="rectangle">
 
-    <solid android:color="@color/white_20" />
+    <solid android:color="@color/white_30" />
+
+    <corners android:radius="8dp" />
 
     <stroke
-        android:width="1.5dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvPlayerRing" />
 
 </shape>

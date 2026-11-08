@@ -90,6 +90,44 @@ public class TmdbImageSelector {
         return url.replaceFirst("/(w\\d+|h\\d+|original)/", "/original/");
     }
 
+    /**
+     * 把 TMDB 图片地址换成官方档位（如 {@code w500}）；非 TMDB {@code /t/p/} 路径原样返回。
+     * <p>
+     * 只使用官方 OAS 声明过的档位：poster {@code w92/w154/w185/w342/w500/w780/original}、
+     * backdrop {@code w300/w780/w1280/original}、still {@code w92/w185/w300/original}。
+     * 代理包装线路（wsrv/itv666）把原始地址放在 query 里，包含 {@code /t/p/} 时同样可替换；
+     * 编码过或无法识别时返回原地址，宁可不优化也不破图。
+     */
+    public static String tierUrl(String url, String size) {
+        if (isEmpty(url) || isEmpty(size)) return isEmpty(url) ? "" : url;
+        int marker = url.indexOf("/t/p/");
+        if (marker < 0) return url;
+        int sizeStart = marker + "/t/p/".length();
+        int sizeEnd = url.indexOf('/', sizeStart);
+        if (sizeEnd <= sizeStart) return url;
+        return url.substring(0, sizeStart) + size.trim() + url.substring(sizeEnd);
+    }
+
+    /** 详情页 rail 的海报缩略图档位（实测原图 1,187,694B → w500 85,680B）。 */
+    public static String posterTier(String url) {
+        return tierUrl(url, "w500");
+    }
+
+    /** 详情页 rail 的图集/剧照缩略图档位（backdrop 官方档位 w780）。 */
+    public static String photoTier(String url) {
+        return tierUrl(url, "w780");
+    }
+
+    /**
+     * 详情页 hero 海报档位（poster 官方档位 {@code w780}）。
+     * <p>
+     * hero 海报显示尺寸远小于原图，实测 original 1,187,694B / w780 201,063B（−83%），
+     * 解码后按显示尺寸缩放，画质无可见差异。
+     */
+    public static String heroPosterTier(String url) {
+        return tierUrl(url, "w780");
+    }
+
     private static void addImages(List<Candidate> candidates, JsonObject detail, String key, String base, Orientation fallback) {
         JsonArray images = array(detail, "images", key);
         for (JsonElement element : images) {
@@ -118,7 +156,7 @@ public class TmdbImageSelector {
     private static String image(String base, String path) {
         if (isEmpty(path)) return "";
         String normalizedBase = originalBase(base);
-        return normalizedBase + (path.startsWith("/") ? path : "/" + path);
+        return TmdbProxy.imageUrl(normalizedBase, path);
     }
 
     private static String originalBase(String base) {

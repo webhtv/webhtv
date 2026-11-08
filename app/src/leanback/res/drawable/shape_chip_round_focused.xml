@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「固定深色宿主」圆角芯片（直播源管理弹窗 LiveDialog 的玻璃面板行、
+    崩溃页/密码弹窗按钮）的统一焦点环。
+
+    环宽唯一来源：@dimen/webhtv_focus_ring_width——此前这里是 1.5dp，
+    与应用内其余焦点环写死的取值（2dp/3dp）不一致，正是用户报告「边框粗细也貌似不一样」的一族。
+
+    环色取 ?attr/tvPlayerRing（固定深色宿主族）而不是 ?attr/tvFocusRing：本 drawable 的主要宿主
+    dialog_live 面板是 shape_dialog_glass_panel（固定深靛玻璃渐变，两张表里都是深色），
+    已由 ThemeBaseWiringTest 的 DARK_GLASS_SHEETS 规则要求「固定深色面板上的前景必须与
+    调色板无关」。浅色表（day）的 FOCUS 槽是深蓝，画在该玻璃面板上只有约 1.9:1，
+    焦点环会看不见；tvPlayerRing 在浅色表就是为这类玻璃宿主夹取出来的派生值，
+    深色表则直接取与应用表面焦点环同值的近白（对深玻璃约 10:1）。
+    宿主为调色板表面的应用页面焦点环见 shape_item_focused.xml / shape_vod_focused.xml。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
@@ -11,7 +26,7 @@
         android:top="8dp" />
 
     <stroke
-        android:width="1.5dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvPlayerRing" />
 
 </shape>

@@ -1,9 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 停止按钮：补 state_focused，与运行按钮同一套遥控聚焦反馈。 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
             <corners android:radius="6dp"/>
             <solid android:color="#ccf44336"/>
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="6dp"/>
+            <solid android:color="#e6f44336"/>
+            <stroke
+                android:width="2dp"
+                android:color="@color/white"/>
         </shape>
     </item>
     <item>

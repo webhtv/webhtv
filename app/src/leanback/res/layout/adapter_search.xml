@@ -11,7 +11,7 @@
         android:id="@+id/image"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="@color/black_20"
+        android:background="?attr/colorSurfaceContainer"
         android:scaleType="centerCrop"
         app:shapeAppearanceOverlay="@style/Vod.Grid" />
 
@@ -26,7 +26,7 @@
         android:marqueeRepeatLimit="marquee_forever"
         android:maxWidth="96dp"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="13sp"
         android:visibility="gone" />
 
@@ -41,7 +41,7 @@
         android:ellipsize="marquee"
         android:marqueeRepeatLimit="marquee_forever"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="14sp" />
 
     <TextView
@@ -57,7 +57,7 @@
         android:marqueeRepeatLimit="marquee_forever"
         android:padding="6dp"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="16sp" />
 
 </RelativeLayout>

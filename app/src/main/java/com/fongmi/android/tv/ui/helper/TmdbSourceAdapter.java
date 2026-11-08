@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.helper;
 
+import com.fongmi.android.tv.utils.TmdbProxy;
 import androidx.annotation.Nullable;
 
 import com.fongmi.android.tv.bean.TmdbConfig;
@@ -10,6 +11,8 @@ import com.fongmi.android.tv.bean.TmdbSourceDetail;
 import com.fongmi.android.tv.bean.TmdbSourcePayload;
 import com.fongmi.android.tv.bean.TmdbVideo;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -82,7 +85,9 @@ public final class TmdbSourceAdapter {
 
     private static TmdbItem item(int tmdbId, String mediaType, JsonObject detail, @Nullable Vod vod, TmdbConfig config, boolean coreComplete) {
         boolean tv = "tv".equals(mediaType);
-        String title = firstString(detail, tv ? new String[]{"name", "title"} : new String[]{"title", "name"});
+        String titleKey = tv ? "name" : "title";
+        String title = TmdbLanguagePolicy.bestDisplayValue(firstString(detail, tv ? new String[]{"name", "title"} : new String[]{"title", "name"}),
+                array(object(detail, "translations"), "translations"), titleKey, TmdbLanguagePolicy.requestLanguage(config, Setting.getLanguage()));
         if (title.isEmpty() && vod != null && coreComplete) title = vod.getName();
         String date = firstString(detail, tv ? new String[]{"first_air_date", "release_date"} : new String[]{"release_date", "first_air_date"});
         double vote = number(detail, "vote_average", 0d);
@@ -94,7 +99,7 @@ public final class TmdbSourceAdapter {
                 mediaType,
                 title,
                 subtitle,
-                string(detail, "overview"),
+                TmdbLanguagePolicy.bestDisplayValue(string(detail, "overview"), array(object(detail, "translations"), "translations"), "overview", TmdbLanguagePolicy.requestLanguage(config, Setting.getLanguage())),
                 poster,
                 backdrop,
                 "",
@@ -291,15 +296,17 @@ public final class TmdbSourceAdapter {
 
     private static List<TmdbEpisode> episodes(JsonObject season, int tmdbId, int seasonNumber, TmdbConfig config) {
         List<TmdbEpisode> result = new ArrayList<>();
+        // 语言策略每条分集都一样，提到循环外，避免按集重复读 Setting（一季几十集）。
+        String target = TmdbLanguagePolicy.requestLanguage(config, Setting.getLanguage());
         for (JsonElement element : array(season, "episodes")) {
             if (!element.isJsonObject()) continue;
             JsonObject episode = element.getAsJsonObject();
             int number = integer(episode, "episode_number", result.size() + 1);
             result.add(new TmdbEpisode(
                     number,
-                    string(episode, "name"),
+                    TmdbLanguagePolicy.bestDisplayValue(string(episode, "name"), array(object(episode, "translations"), "translations"), "name", target),
                     string(episode, "air_date"),
-                    string(episode, "overview"),
+                    TmdbLanguagePolicy.bestDisplayValue(string(episode, "overview"), array(object(episode, "translations"), "translations"), "overview", target),
                     imageUrl(config.getBackdropBase(), string(episode, "still_path")),
                     number(episode, "vote_average", 0d),
                     integer(episode, "runtime", 0),
@@ -383,7 +390,7 @@ public final class TmdbSourceAdapter {
         if (normalized.isEmpty()) return "";
         if (!normalized.startsWith("/")) return normalized;
         String normalizedBase = base == null ? "" : base.trim();
-        return normalizedBase.isEmpty() ? normalized : normalizedBase + normalized;
+        return normalizedBase.isEmpty() ? normalized : TmdbProxy.imageUrl(normalizedBase, normalized);
     }
 
     private static String subtitle(String date, double vote) {

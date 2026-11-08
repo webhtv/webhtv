@@ -24,6 +24,16 @@ final class AutoPreloadPolicy {
     private static final long APP_PROXY_RECOVERY_BUFFER_MS =
             ExoNetworkGuardBufferPolicy.LOOPBACK_FLOOR_MS;
     private static final long EXTERNAL_LOOPBACK_NORMAL_BUFFER_MS = 20_000;
+
+    /**
+     * How long preload stands down after a foreground EOF recovery.
+     *
+     * <p>Chosen to outlast the recovery burst itself (on device a burst ran 2-6 s) with room to
+     * spare, while staying well inside {@link #EXTERNAL_LOOPBACK_DURATION_MS} so a single stall does
+     * not forfeit a whole preload window. Same order as {@link #WEAK_RESUME_DELAY_MS}, which already
+     * expresses "wait this long before touching the network again after trouble".
+     */
+    private static final long EOF_YIELD_WINDOW_MS = 15_000;
     private static final long NORMAL_STABLE_MS = 20_000;
     private static final long RESUME_DELAY_MS = 10_000;
     private static final long WEAK_RESUME_DELAY_MS = 15_000;
@@ -154,6 +164,13 @@ final class AutoPreloadPolicy {
                 && (system.thermal() == PlaybackAutoContext.ThermalState.SEVERE
                 || system.thermal() == PlaybackAutoContext.ThermalState.CRITICAL)) {
             return Reason.THERMAL_PRESSURE;
+        }
+        // The foreground connection is being repaired right now. This is direct evidence that the
+        // upstream is struggling, and it is the one signal available on a route whose throughput
+        // estimate is BLOCKED (see ExoForegroundEofSignal). Yield, or preload competes with the
+        // recovery for the same fragile connection.
+        if (input.foregroundEofRecoveryAgeMs() <= EOF_YIELD_WINDOW_MS) {
+            return Reason.FOREGROUND_EOF_RECOVERY;
         }
         if (unknownAppProxyRecovery(input)
                 && input.bufferedMs() < APP_PROXY_RECOVERY_BUFFER_MS) {
@@ -443,6 +460,7 @@ final class AutoPreloadPolicy {
             SystemEvidence system,
             boolean memoryPreloadPaused,
             boolean preloadActive,
+            long foregroundEofRecoveryAgeMs,
             long nowElapsedMs) {
 
         Inputs {
@@ -456,6 +474,7 @@ final class AutoPreloadPolicy {
             throughput = throughput == null
                     ? ThroughputEvidence.unknown() : throughput;
             system = system == null ? SystemEvidence.unknown() : system;
+            foregroundEofRecoveryAgeMs = Math.max(0L, foregroundEofRecoveryAgeMs);
             nowElapsedMs = Math.max(0, nowElapsedMs);
         }
 
@@ -496,6 +515,7 @@ final class AutoPreloadPolicy {
                             : SystemEvidence.unknown(),
                     memoryPreloadPaused,
                     preloadActive,
+                    ExoForegroundEofSignal.ageMs(nowElapsedMs),
                     nowElapsedMs);
         }
 
@@ -513,6 +533,7 @@ final class AutoPreloadPolicy {
                     SystemEvidence.unknown(),
                     false,
                     false,
+                    Long.MAX_VALUE,
                     0);
         }
     }
@@ -747,6 +768,7 @@ final class AutoPreloadPolicy {
         THERMAL_PRESSURE("thermal-pressure"),
         THERMAL_MODERATE("thermal-moderate"),
         FOREGROUND_RECOVERY("foreground-recovery"),
+        FOREGROUND_EOF_RECOVERY("foreground-eof-recovery"),
         FRONT_BUFFER_LOW("front-buffer-low"),
         FRONT_BUFFER_MARGIN("front-buffer-margin"),
         BUFFER_DECLINING("buffer-declining"),

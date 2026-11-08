@@ -4,7 +4,7 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#101820"
+    android:background="?attr/colorSurfaceContainerLowest"
     android:fitsSystemWindows="true">
 
     <androidx.core.widget.NestedScrollView
@@ -53,10 +53,10 @@
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="120dp"
                     android:layout_height="170dp"
-                    app:cardBackgroundColor="#25313D"
+                    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                     app:cardCornerRadius="8dp"
                     app:cardElevation="0dp"
-                    app:strokeColor="#33FFFFFF"
+                    app:strokeColor="?attr/colorOutlineVariant"
                     app:strokeWidth="1dp">
 
                     <androidx.appcompat.widget.AppCompatImageView
@@ -104,7 +104,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:lineSpacingExtra="4dp"
-                        android:textColor="#B3FFFFFF"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="12sp" />
 
                     <LinearLayout
@@ -147,7 +147,7 @@
                             android:layout_marginTop="4dp"
                             android:lineSpacingExtra="2dp"
                             android:maxLines="3"
-                            android:textColor="#B3FFFFFF"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="12sp" />
                     </LinearLayout>
 
@@ -166,7 +166,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="18dp"
                     android:lineSpacingExtra="4dp"
-                    android:textColor="#DDEAF2F8"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="13sp" />
 
                 <com.google.android.material.textview.MaterialTextView
@@ -210,7 +210,7 @@
                         android:id="@+id/worksCount"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="#99FFFFFF"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -310,7 +310,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="18dp"
                     android:text="@string/detail_person_empty"
-                    android:textColor="#99FFFFFF"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="13sp"
                     android:visibility="gone" />
             </LinearLayout>

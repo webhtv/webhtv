@@ -53,11 +53,12 @@ public class PlayerButtonSetting {
 
     private static final String ORDER = "player_button_order";
     private static final String HIDDEN = "player_button_hidden";
+    private static final String HIDDEN_SEEDED = "player_button_hidden_seeded";
     private static final List<Item> DEFAULT = List.of(
             new Item(PLAYER, R.string.play_exo),
             new Item(DECODE, R.string.play_decode),
             new Item(PLAY_PARAMS, R.string.play_params),
-            new Item(MULTI_THREAD_PROXY, R.string.multi_thread_proxy_button),
+            new Item(MULTI_THREAD_PROXY, R.string.multi_thread_proxy_button, false),
             new Item(CODEC_CAPABILITY, R.string.codec_capability_short),
             new Item(SPEED, R.string.play_speed),
             new Item(SCALE, R.string.play_scale),
@@ -139,6 +140,7 @@ public class PlayerButtonSetting {
     public static void reset() {
         Prefers.remove(ORDER);
         Prefers.remove(HIDDEN);
+        Prefers.remove(HIDDEN_SEEDED);
     }
 
     public static void applyOrder(ViewGroup container, Map<String, View> views) {
@@ -215,6 +217,11 @@ public class PlayerButtonSetting {
     private static Set<String> getHidden() {
         Set<String> hidden = new HashSet<>();
         for (String id : split(Prefers.getString(HIDDEN))) if (contains(id)) hidden.add(id);
+        if (Prefers.getBoolean(HIDDEN_SEEDED)) return hidden;
+        // 首次运行只写入 DEFAULT 中标记为不显示的按钮，之后完全以用户在播放设置-播放器按钮中的选择为准。
+        for (Item item : DEFAULT) if (!item.visible()) hidden.add(item.id());
+        Prefers.put(HIDDEN, join(hidden));
+        Prefers.put(HIDDEN_SEEDED, true);
         return hidden;
     }
 

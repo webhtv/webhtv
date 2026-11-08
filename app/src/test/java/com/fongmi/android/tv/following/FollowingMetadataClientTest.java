@@ -30,6 +30,8 @@ public class FollowingMetadataClientTest {
         assertEquals(8, snapshot.latestReleasedEpisode);
         assertEquals(12, snapshot.seasonTotalEpisodes);
         assertEquals(9, snapshot.nextAirEpisode);
+        assertEquals(24, snapshot.seriesTotalEpisodes);
+        assertEquals(1, snapshot.nextAirWeekday);
         assertTrue(snapshot.nextAirAt > 0);
         assertEquals(1234, snapshot.fetchedAt);
     }
@@ -54,5 +56,12 @@ public class FollowingMetadataClientTest {
 
         assertEquals(10, snapshot.latestReleasedEpisode);
         assertEquals(2, snapshot.seasonReleasedEpisodes);
+    }
+
+    @Test
+    public void weekdayIsStableForUtcAirDate() {
+        assertEquals(1, FollowingMetadataSnapshot.weekday("2026-09-20"));
+        assertEquals(2, FollowingMetadataSnapshot.weekday("2026-09-21"));
+        assertEquals(7, FollowingMetadataSnapshot.weekday("2026-09-26"));
     }
 }

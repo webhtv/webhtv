@@ -16,7 +16,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/detail_flag"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="15sp"
         android:textStyle="bold" />
 
@@ -39,7 +39,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:text="@string/detail_season"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="15sp"
         android:textStyle="bold"
         android:visibility="gone"
@@ -65,7 +65,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:text="@string/detail_episode"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="15sp"
         android:textStyle="bold" />
 

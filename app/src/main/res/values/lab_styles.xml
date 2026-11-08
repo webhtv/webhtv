@@ -1,13 +1,31 @@
 <resources>
-<style name="Theme.App.Lab.DayNight.Dialog" parent="Theme.Material3.DayNight.Dialog.Alert">
+<!--
+        实验室弹窗主题：面板与内容必须来自同一张表。
+
+        此前 LabActivity.showSettings() 用 Activity 的 LayoutInflater inflate dialog_lab_settings.xml，
+        其中的 ?attr/colorOnSurface 由 Theme.App.Lab（固定深色、白字）解析，而面板由本主题 /
+        ThemeOverlay.WebHTV.Dialog 的 colorSurfaceContainerHigh（日/夜双表）决定，
+        浅色系统下形成「白字 + 浅色面板」≈1.05:1，默认主题直接看不清。
+
+        colorPrimary 必须用语义 token（而不是固定的 @color/accent=#2196F3），
+        否则输入框描边、hint 与图标既不能跟随深浅色，也不满足 ThemeBinder 的精确匹配改写，
+        主题色永远作用不到这个设置弹窗。
+    -->
+    <style name="Theme.App.Lab.DayNight.Dialog" parent="Theme.Material3.DayNight.Dialog.Alert">
         <item name="android:windowNoTitle">true</item>
         <item name="colorSurface">@color/lab_surface</item>
+        <item name="colorSurfaceContainerHigh">@color/lab_surface</item>
         <item name="colorOnSurface">@color/lab_text_primary</item>
         <item name="colorOnSurfaceVariant">@color/lab_text_secondary</item>
         <item name="android:textColorPrimary">@color/lab_text_primary</item>
         <item name="android:textColorSecondary">@color/lab_text_secondary</item>
         <item name="android:textColorHint">@color/lab_text_secondary</item>
-        <item name="colorPrimary">@color/accent</item>
+        <item name="colorPrimary">@color/webhtv_color_primary</item>
+        <item name="colorOnPrimary">@color/webhtv_color_on_primary</item>
+        <item name="colorControlNormal">@color/webhtv_color_on_surface_variant</item>
+        <item name="colorControlActivated">@color/webhtv_color_primary</item>
+        <item name="colorOutline">@color/webhtv_color_outline</item>
+        <item name="colorOutlineVariant">@color/webhtv_color_outline_variant</item>
     </style>
 <style name="Theme.App.Lab.Dialog" parent="Theme.Material3.Dark.Dialog.Alert">
         <item name="android:windowBackground">@drawable/shape_lab_dialog</item>

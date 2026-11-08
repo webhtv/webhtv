@@ -43,6 +43,18 @@ public class VodAdapterLayoutTest {
     }
 
     @Test
+    public void mobileRectSiteTagSpansThePosterWidth() throws Exception {
+        Element site = findById(parseLayout(read(findMobileResPath().resolve(Path.of("layout", "adapter_vod_rect.xml")))), "@+id/site");
+
+        assertEquals("rect source tag must fill the card width so its edges line up with the poster",
+                "match_parent", androidAttribute(site, "layout_width"));
+        assertEquals("rect source tag must start at the poster's start edge", "@+id/image", androidAttribute(site, "layout_alignStart"));
+        assertEquals("rect source tag must end at the poster's end edge", "@+id/image", androidAttribute(site, "layout_alignEnd"));
+        assertEquals("rect source tag must ellipsize a long source name instead of clipping it",
+                "end", androidAttribute(site, "ellipsize"));
+    }
+
+    @Test
     public void mobileRectRemarkStaysLegibleOverTheScrim() throws Exception {
         Element remark = rectRemark();
         Element gradient = directChild(rectScrim(), "gradient");

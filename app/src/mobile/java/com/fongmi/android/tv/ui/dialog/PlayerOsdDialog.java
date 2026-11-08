@@ -19,6 +19,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.AdapterPlayerOsdBinding;
 import com.fongmi.android.tv.databinding.DialogPlayerOsdBinding;
+import com.fongmi.android.tv.theme.PlayerSettingsRowTheme;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.utils.ResUtil;
 
 import java.util.Arrays;
@@ -110,11 +112,12 @@ public final class PlayerOsdDialog extends DialogFragment {
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             boolean visible = checked[position];
             holder.binding.name.setText(items[position]);
-            holder.binding.name.setAlpha(visible ? 1f : 0.55f);
             holder.binding.visible.setImageResource(visible ? R.drawable.ic_player_button_visible : R.drawable.ic_player_button_hidden);
             holder.binding.visible.setContentDescription(getString(visible ? R.string.setting_show : R.string.setting_hide));
             holder.binding.visible.setSelected(visible);
             holder.binding.visible.setActivated(visible);
+            PlayerSettingsRowTheme.apply(holder.binding.root, holder.binding.name, ThemeController.current(), visible);
+            PlayerSettingsRowTheme.applySwitch(holder.binding.visible, ThemeController.current());
             holder.binding.root.setOnClickListener(view -> toggle(holder.getBindingAdapterPosition()));
             holder.binding.visible.setOnClickListener(view -> toggle(holder.getBindingAdapterPosition()));
         }

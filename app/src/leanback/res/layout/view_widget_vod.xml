@@ -77,6 +77,33 @@
             android:textSize="16sp"
             tools:text="@string/error_play_url" />
 
+        <!--
+            播放失败的重试动作（设计文档 §9.9：错误态要给出「重试动作」）。
+
+            背景用 selector_control_sheet_button 而不是空态那套 selector_empty_action：
+            本面板是 shape_widget（black_40 半透明深色，两张表都一样），属于**固定深玻璃族**，
+            焦点环必须取 ?attr/tvPlayerRing——空态那套用的是 ?attr/tvFocusRing，
+            在深玻璃上（浅色表）只有约 1.8:1，会看不见。这正是 selector_control_sheet_button
+            的注释里记录过的同一类错误。
+        -->
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/retry"
+            android:layout_width="wrap_content"
+            android:layout_height="46dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/selector_control_sheet_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center"
+            android:minWidth="140dp"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:singleLine="true"
+            android:text="@string/error_retry"
+            android:textColor="@color/white"
+            android:textSize="16sp" />
+
     </androidx.appcompat.widget.LinearLayoutCompat>
 
     <androidx.appcompat.widget.LinearLayoutCompat

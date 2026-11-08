@@ -1,14 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」站点/站点切换卡片（adapter_site、adapter_site_switch、dialog_site）的
+    选中态。填充 = ?attr/colorPrimaryContainer，描边 = ?attr/colorPrimary。
+    环宽改为唯一来源 @dimen/webhtv_focus_ring_width（此前写死 2dp），
+    与同一组件的焦点态 shape_site_item_focused.xml 保持同宽，避免选中↔焦点切换时尺寸变化。
+    见 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="#747474" />
+    <solid android:color="?attr/colorPrimaryContainer" />
 
     <corners android:radius="12dp" />
 
     <stroke
-        android:width="1.5dp"
-        android:color="@color/yellow_500" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/colorPrimary" />
 
     <padding
         android:bottom="10dp"

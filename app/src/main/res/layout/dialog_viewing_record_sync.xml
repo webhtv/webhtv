@@ -16,7 +16,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/setting_viewing_record_sync"
-        android:textColor="@color/black"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -25,7 +25,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp" />
 
     <com.fongmi.android.tv.ui.custom.CustomNestedScrollView
@@ -66,7 +66,7 @@
             android:text="@string/dialog_negative"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
@@ -79,7 +79,9 @@
             android:minWidth="0dp"
             android:text="@string/dialog_positive"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

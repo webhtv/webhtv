@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 选中状态：黄色 -->
-    <item android:color="#FFD700" android:state_selected="true" />
-    <!-- 焦点状态：白色 -->
-    <item android:color="#FFFFFF" android:state_focused="true" />
-    <!-- 默认状态：白色 -->
-    <item android:color="#FFFFFF" />
+    <!-- 播放器选中状态：专用激活 token，不用于普通焦点 -->
+    <item android:color="@color/webhtv_color_player_control_active" android:state_selected="true" />
+    <!-- 播放器焦点/默认状态：播放器画面上的高对比前景 -->
+    <item android:color="@color/webhtv_color_player_control" android:state_focused="true" />
+    <item android:color="@color/webhtv_color_player_control" />
 </selector>

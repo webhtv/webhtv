@@ -1,0 +1,82 @@
+<resources>
+    <attr name="webhtvColorPrimary" format="color" />
+    <attr name="webhtvColorOnPrimary" format="color" />
+    <attr name="webhtvColorPrimaryContainer" format="color" />
+    <attr name="webhtvColorOnPrimaryContainer" format="color" />
+    <attr name="webhtvColorSecondary" format="color" />
+    <attr name="webhtvColorOnSecondary" format="color" />
+    <attr name="webhtvColorSecondaryContainer" format="color" />
+    <attr name="webhtvColorOnSecondaryContainer" format="color" />
+    <attr name="webhtvColorTertiary" format="color" />
+    <attr name="webhtvColorOnTertiary" format="color" />
+    <attr name="webhtvColorError" format="color" />
+    <attr name="webhtvColorOnError" format="color" />
+    <attr name="webhtvColorErrorContainer" format="color" />
+    <attr name="webhtvColorOnErrorContainer" format="color" />
+    <attr name="webhtvColorSuccess" format="color" />
+    <attr name="webhtvColorOnSuccess" format="color" />
+    <attr name="webhtvColorSuccessContainer" format="color" />
+    <attr name="webhtvColorOnSuccessContainer" format="color" />
+    <attr name="webhtvColorWarning" format="color" />
+    <attr name="webhtvColorOnWarning" format="color" />
+    <attr name="webhtvColorWarningContainer" format="color" />
+    <attr name="webhtvColorOnWarningContainer" format="color" />
+    <attr name="webhtvColorSurface" format="color" />
+    <attr name="webhtvColorSurfaceDim" format="color" />
+    <attr name="webhtvColorSurfaceBright" format="color" />
+    <attr name="webhtvColorSurfaceContainerLowest" format="color" />
+    <attr name="webhtvColorSurfaceContainerLow" format="color" />
+    <attr name="webhtvColorSurfaceContainer" format="color" />
+    <attr name="webhtvColorSurfaceContainerHigh" format="color" />
+    <attr name="webhtvColorSurfaceContainerHighest" format="color" />
+    <attr name="webhtvColorOnSurface" format="color" />
+    <attr name="webhtvColorOnSurfaceVariant" format="color" />
+    <attr name="webhtvColorOutline" format="color" />
+    <attr name="webhtvColorOutlineVariant" format="color" />
+    <attr name="webhtvColorInverseSurface" format="color" />
+    <attr name="webhtvColorInverseOnSurface" format="color" />
+    <attr name="webhtvColorInversePrimary" format="color" />
+    <attr name="webhtvColorScrim" format="color" />
+    <attr name="webhtvColorShadow" format="color" />
+    <attr name="webhtvColorFocus" format="color" />
+    <attr name="webhtvColorPlayerControl" format="color" />
+    <!-- 播放页（视频层）环色：由 ThemeResolver 在控制面板/快捷搜索/选集面板的**固定深靛玻璃**
+         （#E62F315E→#D6282955→#CC303463）上夹取到 ≥3:1 后的派生值，不能直接用 colorFocus
+         （浅色表在玻璃上仅 1.83:1）。纯白视频刻意不作为约束背景，取舍见
+         ThemeResolver.PLAYER_RING_BACKDROPS。 -->
+    <attr name="webhtvColorPlayerFocusRing" format="color" />
+    <attr name="webhtvColorPlayerCurrentRing" format="color" />
+    <attr name="webhtvColorPlayerControlMuted" format="color" />
+    <attr name="webhtvColorPlayerControlActive" format="color" />
+    <attr name="webhtvColorPlayerScrim" format="color" />
+    <attr name="webhtvColorHealthGood" format="color" />
+    <attr name="webhtvColorHealthWarn" format="color" />
+    <attr name="webhtvColorHealthBad" format="color" />
+    <attr name="webhtvColorOverlayLight" format="color" />
+    <attr name="webhtvColorOverlayDark" format="color" />
+    <!-- 条目遮罩底色与遮罩上的文字色。两者是「列表/按钮聚焦时压在同一块表面上的那层半透明
+         深色」的底色与文字色，跟随用户档案变化；默认值就是既有外观（@color/black_40 与
+         onPrimary），所以未改过主题时它们读出来与编译期等价。 -->
+    <attr name="webhtvColorItemOverlay" format="color" />
+    <attr name="webhtvColorOnItemOverlay" format="color" />
+    <!-- onSurface at 20/70/80/90% alpha for text and strokes drawn directly over video.
+         Declared here because the player overlay cannot rely on ?attr/colorOnSurface alpha,
+         and the alpha variants must stay tied to the onSurface token per light/dark mode. -->
+    <attr name="colorOnSurface_20" format="color" />
+    <attr name="colorOnSurface_70" format="color" />
+    <attr name="colorOnSurface_80" format="color" />
+    <attr name="colorOnSurface_90" format="color" />
+    <!-- Foreground for text drawn straight on the app wallpaper.
+         Mobile paints a full-screen dark CustomWallView under every activity, while
+         dialogs draw on a light panel, so ?attr/colorOnSurface cannot serve both.
+         This role is always light and is assigned by Theme.WebHTV. -->
+    <attr name="webhtvColorOnWallpaper" format="color" />
+    <!-- Secondary counterpart of webhtvColorOnWallpaper: values, metadata and group
+         headings drawn on the wallpaper, so a title and its own subtitle stop being the
+         same pure white. Assigned by Theme.WebHTV; palette-independent for the same
+         reason as webhtvColorOnWallpaper (the built-in walls are dark in both modes). -->
+    <attr name="webhtvColorOnWallpaperVariant" format="color" />
+    <!-- 壁纸页面上的错误前景色（与明暗无关）。用法边界见 webhtv_tokens.xml 同名条目：
+         可直接用于 Display 档标题与行色带上的正文；直接画在壁纸上的正文不要用。 -->
+    <attr name="webhtvColorOnWallpaperError" format="color" />
+</resources>

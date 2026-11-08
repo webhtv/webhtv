@@ -7,13 +7,24 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.leanback.widget.Presenter;
 
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.databinding.AdapterTmdbRecommendationBinding;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.helper.TmdbRatingFormatter;
 import com.fongmi.android.tv.utils.ImgUtil;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
+import com.google.android.material.card.MaterialCardView;
 
 public class TmdbRecommendationPresenter extends Presenter {
+
+    // 焦点环宽度与环色都不得在本类里写死：
+    //   宽度 → @dimen/webhtv_focus_ring_width（全 TV 唯一宽度来源）；
+    //   环色 → ThemeController.focusRingColor()（= ?attr/tvFocusRing 的代码路径同一来源）。
+    // 此前这里写死 FOCUS_WIDTH_DP = 3 与 R.color.tv_item_focus_ring，于是前几轮统一
+    // drawable 宽度时漏掉了本卡（用户报告「个性推荐等卡片的边框粗细没有改小没有统一」）。
+    private static final int NORMAL_WIDTH_DP = 1;
 
     private final OnClickListener mListener;
     private final OnLongClickListener mLongClickListener;
@@ -68,8 +79,10 @@ public class TmdbRecommendationPresenter extends Presenter {
         });
         holder.view.setOnLongClickListener(view -> mLongClickListener != null && mLongClickListener.onItemLongClick(tmdbItem));
         holder.view.setOnFocusChangeListener((view, focused) -> {
+            applyUnifiedFocus((MaterialCardView) view, focused);
             if (mFocusListener != null) mFocusListener.onItemFocus(tmdbItem, focused);
         });
+        applyUnifiedFocus((MaterialCardView) holder.view, holder.view.hasFocus());
         if (holder.view.hasFocus() && mFocusListener != null) mFocusListener.onItemFocus(tmdbItem, true);
     }
 
@@ -82,6 +95,21 @@ public class TmdbRecommendationPresenter extends Presenter {
         holder.item = null;
         viewHolder.view.setOnLongClickListener(null);
         viewHolder.view.setOnFocusChangeListener(null);
+    }
+
+    /**
+     * 统一焦点外观：焦点用 @dimen/webhtv_focus_ring_width 的主题环，失焦恢复常态描边。
+     * 只作用于 leanback 播放页的推荐卡，不改变共享布局和独立详情页的焦点契约。
+     */
+    private static void applyUnifiedFocus(MaterialCardView card, boolean focused) {
+        if (focused) {
+            card.setStrokeWidth(card.getContext().getResources()
+                    .getDimensionPixelSize(R.dimen.webhtv_focus_ring_width));
+            card.setStrokeColor(ThemeController.focusRingColor(card.getContext()));
+        } else {
+            card.setStrokeWidth(ResUtil.dp2px(NORMAL_WIDTH_DP));
+            card.setStrokeColor(card.getContext().getColor(R.color.tv_item_normal_stroke));
+        }
     }
 
     public static class ViewHolder extends Presenter.ViewHolder {

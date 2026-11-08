@@ -14,6 +14,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.databinding.DialogDanmakuBinding;
 import com.fongmi.android.tv.player.PlayerManager;
@@ -94,6 +95,12 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
     protected void initEvent() {
         binding.search.setOnClickListener(this::onSearch);
         binding.load.setOnCheckedChangeListener((button, checked) -> onLoadChanged(checked));
+        // 焦点由 loadHost 承载（开关自身不聚焦，否则宿主的焦点环不会出现），
+        // 所以点击/遥控确定的切换必须由宿主转给开关。
+        // loadHost 只在 leanback 布局中存在：main 里声明 @id/loadHost 后按 id 查找，
+        // mobile 布局查不到会返回 null，整段跳过，mobile 行为与改动前完全一致。
+        View loadHost = binding.getRoot().findViewById(R.id.loadHost);
+        if (loadHost != null && loadHost != binding.load) loadHost.setOnClickListener(view -> binding.load.toggle());
         binding.choose.setOnClickListener(this::onChoose);
         binding.setting.setOnClickListener(this::onSetting);
     }

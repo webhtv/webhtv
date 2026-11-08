@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 与 leanback 首页按钮 shape_item_normal(@color/black_20) 对齐的 20% 黑纱。 -->
+    <item android:alpha="0.20" android:color="@color/black" />
+</selector>

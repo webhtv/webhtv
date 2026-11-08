@@ -11,7 +11,7 @@
         android:id="@+id/image"
         android:layout_width="match_parent"
         android:layout_height="80dp"
-        android:background="@color/black_20"
+        android:background="?attr/colorSurfaceContainer"
         android:scaleType="centerCrop"
         app:shapeAppearanceOverlay="@style/Vod.Grid" />
 
@@ -23,7 +23,7 @@
         android:layout_alignTop="@+id/image"
         android:layout_alignEnd="@+id/image"
         android:layout_alignBottom="@+id/history_info"
-        android:background="@color/black_50"
+        android:background="@color/webhtv_color_player_scrim"
         android:scaleType="center"
         android:src="@drawable/ic_vod_delete"
         android:visibility="gone"
@@ -40,7 +40,7 @@
         android:ellipsize="end"
         android:maxWidth="100dp"
         android:singleLine="true"
-        android:textColor="@color/text_remark"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="12sp"
         tools:text="00:32 / 13:08" />
 
@@ -54,7 +54,7 @@
         android:ellipsize="end"
         android:maxWidth="92dp"
         android:singleLine="true"
-        android:textColor="@color/text_site"
+        android:textColor="?attr/colorPrimary"
         android:textSize="12sp"
         android:visibility="gone"
         tools:text="瓜子[优](DS)"
@@ -68,12 +68,19 @@
         android:layout_below="@+id/image"
         android:layout_alignStart="@+id/image"
         android:layout_alignEnd="@+id/image"
-        android:background="@color/black_20"
-        app:indicatorColor="@color/white"
+        android:background="?attr/colorSurfaceContainer"
+        app:indicatorColor="?attr/colorPrimary"
         app:trackColor="@color/transparent"
         app:trackStopIndicatorSize="0dp"
         app:trackThickness="2dp" />
 
+    <!--
+        信息区底是 shape_vod_name 的半透明黑，压在壁纸上，与明暗调色板无关，所以标题行和
+        集数行都必须用恒定亮色的 ?attr/webhtvColorOnWallpaper。集数行曾被 f63b0a81bc 从
+        @color/white_70 改成 ?attr/colorOnSurfaceVariant，日间表解析成深灰，实测压在紫色
+        壁纸卡片底上只有 1.4:1，历史记录的集数信息几乎看不见。
+        具体色值见 HistoryAdapterTest 同用例说明，布局文件内不保留裸色值以免触发 token 门禁。
+    -->
     <LinearLayout
         android:id="@+id/history_info"
         android:layout_width="match_parent"
@@ -99,7 +106,7 @@
             android:marqueeRepeatLimit="marquee_forever"
             android:scrollHorizontally="true"
             android:singleLine="true"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="14sp"
             tools:text="云秀行" />
 
@@ -114,26 +121,9 @@
             android:marqueeRepeatLimit="marquee_forever"
             android:scrollHorizontally="true"
             android:singleLine="true"
-            android:textColor="@color/white_70"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="12sp"
             tools:text="第01集. 海边散步" />
-
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/historyProgress"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:ellipsize="marquee"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:marqueeRepeatLimit="marquee_forever"
-            android:scrollHorizontally="true"
-            android:singleLine="true"
-            android:textColor="@color/white_70"
-            android:textSize="12sp"
-            android:visibility="gone"
-            tools:text="已看 12:34"
-            tools:visibility="visible" />
 
     </LinearLayout>
 

@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/recommendation_feedback_summary"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp" />
 
     <FrameLayout
@@ -36,7 +36,7 @@
             android:layout_height="72dp"
             android:gravity="center"
             android:text="@string/recommendation_feedback_empty"
-            android:textColor="#5F6368"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="14sp"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -52,7 +52,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/clearAll"
-            style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+            style="@style/Widget.WebHTV.Button.Outlined"
             android:layout_width="wrap_content"
             android:layout_height="40dp"
             android:focusable="true"
@@ -64,7 +64,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/close"
-            style="@style/Widget.WebHTV.LightDialog.Button.Tonal"
+            style="@style/Widget.WebHTV.Button.Tonal"
             android:layout_width="wrap_content"
             android:layout_height="40dp"
             android:layout_marginStart="12dp"

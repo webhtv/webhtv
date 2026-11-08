@@ -46,6 +46,33 @@ public final class TmdbEpisodeGridPolicy {
         return rowStart < lastRowStart ? itemCount - 1 : NO_FOCUS_TARGET;
     }
 
+    /**
+     * 选集网格内的水平（左右）焦点目标。只在本行内移动，行首向左、行尾向右都返回
+     * {@link #NO_FOCUS_TARGET}：集数卡片根视图不可聚焦、也不声明水平 nextFocus，
+     * 系统 FocusFinder 找不到水平邻居时会让焦点跳出选集网格（例如落到上方的“简介”按钮）。
+     */
+    public static int horizontalFocusTarget(int position, int spanCount, int itemCount, boolean right) {
+        if (position < 0 || spanCount <= 0 || itemCount <= 0) return NO_FOCUS_TARGET;
+        int target = right ? position + 1 : position - 1;
+        int rowStart = position / spanCount * spanCount;
+        int rowEnd = Math.min(rowStart + spanCount, itemCount) - 1;
+        return target >= rowStart && target <= rowEnd ? target : NO_FOCUS_TARGET;
+    }
+
+    /**
+     * 长按连续移动的基准位置。
+     *
+     * <p>按住方向键时系统会持续发 {@code ACTION_DOWN}（{@code repeatCount > 0}），而
+     * {@code requestFocus()} 是异步的：焦点还没落到上一格时若仍以「当前焦点所在卡片」为基准，
+     * 每一个重复事件都会算出同一个目标，表现就是长按只前进一格（用户报告“长按遥控器不能快速选集”）。
+     * 这里改用「上一次请求的目标」作为基准，让每个重复事件都真正推进一格；焦点一旦落地，
+     * 基准与焦点重合，状态自动收敛，不需要额外清理。
+     */
+    public static int holdBasePosition(int focusedPosition, int pendingTarget) {
+        if (pendingTarget < 0 || pendingTarget == focusedPosition) return focusedPosition;
+        return pendingTarget;
+    }
+
     public static int nativeGridCardHeightDp(boolean phoneWidth) {
         return phoneWidth ? NATIVE_MOBILE_GRID_CARD_HEIGHT_DP : NATIVE_GRID_CARD_HEIGHT_DP;
     }

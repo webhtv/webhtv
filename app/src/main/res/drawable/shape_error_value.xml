@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    错误取值文字的底材（设计文档 §9.9「错误色」的落地前提）。
+
+    为什么需要它：壁纸与设置页行色带都是中亮度（实机取样 L≈0.13–0.15），
+    ?attr/webhtvColorOnWallpaperError 画在其上只有 4.05–4.50:1，**略低于正文门槛 4.5:1**。
+    继续调色无解——要达到 4.5:1 就必须接近纯白，那时"错误色"与普通白字观感无异。
+    因此按 docs/TV-ERROR-STATE-20261012.md §7.1 记录的修法改底材：实心深底上
+    错误前景色为 8.84:1，稳过门槛。
+
+    实心而非半透明：半透明结果取决于下层色带，给不出确定值；也正因为它是**实心**色，
+    这个 8.84:1 与 flavor 无关，电视端与手机端可以共用同一份（本文件在 main 源集）。
+
+    原先这份放在 leanback/res/drawable，手机端批次要用时改为放 main 供两个 flavor 共用，
+    避免出现两份内容相同的副本。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <solid android:color="@color/webhtv_color_error_value_bg" />
+
+    <corners android:radius="8dp" />
+
+    <padding
+        android:bottom="4dp"
+        android:left="12dp"
+        android:right="12dp"
+        android:top="4dp" />
+
+</shape>

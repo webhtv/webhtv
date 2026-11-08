@@ -80,7 +80,7 @@ final class PlaybackPerformanceModal {
     private static Shell createShell(
             Context context,
             CharSequence title) {
-        Dialog dialog = new Dialog(context, R.style.Theme_WebHTV_LightDialog);
+        Dialog dialog = new Dialog(context, R.style.Theme_WebHTV_Dialog);
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundResource(R.drawable.shape_shell_proxy_dialog);
@@ -109,7 +109,7 @@ final class PlaybackPerformanceModal {
         ScrollView scroll = new MaxHeightScrollView(
                 context,
                 Math.min(dp(context, 460),
-                        ResUtil.getScreenHeight(context) * 3 / 5));
+                        DialogSafeArea.height(context) * 3 / 5));
         scroll.setFillViewport(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         LinearLayout body = new LinearLayout(context);

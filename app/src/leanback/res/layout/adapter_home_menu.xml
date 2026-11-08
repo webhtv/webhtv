@@ -17,7 +17,7 @@
         android:focusableInTouchMode="true"
         android:gravity="center"
         android:singleLine="true"
-        android:textColor="@color/config_history_text"
+        android:textColor="@color/home_menu_text"
         android:textSize="18sp"
         app:autoSizeMaxTextSize="18sp"
         app:autoSizeMinTextSize="14sp"

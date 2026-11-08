@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/dialog_select_title"
-            android:textColor="@color/white_70"
+            android:textColor="@color/webhtv_color_player_control_muted"
             android:textSize="16sp" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>

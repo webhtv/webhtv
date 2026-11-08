@@ -28,6 +28,21 @@ public abstract class HistoryDao extends BaseDao<History> {
     @Query("SELECT * FROM History WHERE cid = :cid AND `key` LIKE :keyPrefix || '%' ORDER BY createTime DESC")
     public abstract List<History> findByKeyPrefix(int cid, String keyPrefix);
 
+    /**
+     * 按 siteKey 精确取该站点的历史，最新的在前。
+     *
+     * <p>为什么用 {@code substr} 而不是 {@code LIKE}：`key` 是
+     * {@code siteKey@@@vodId@@@cid}，而 siteKey 可能含 {@code %} 或 {@code _}
+     * （SQL LIKE 的通配符）。用 {@code LIKE} 会让 {@code csp_a} 误命中
+     * {@code csp_ab}，也会让含 {@code %} 的 siteKey 命中整个表。
+     * {@code substr} 是精确前缀比较，无通配语义。
+     *
+     * <p>前缀必须由调用方带上分隔符（{@code siteKey + "@@@"}），否则
+     * {@code csp_a} 仍会命中 {@code csp_ab@@@...}。
+     */
+    @Query("SELECT * FROM History WHERE cid = :cid AND substr(`key`, 1, length(:keyPrefix)) = :keyPrefix ORDER BY createTime DESC LIMIT :limit")
+    public abstract List<History> findBySiteKey(int cid, String keyPrefix, int limit);
+
     @Query("SELECT * FROM History WHERE cid = :cid AND tmdbId = :tmdbId AND tmdbId > 0 ORDER BY createTime DESC")
     public abstract List<History> findByTmdbId(int cid, int tmdbId);
 

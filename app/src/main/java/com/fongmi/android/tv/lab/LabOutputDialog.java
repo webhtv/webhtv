@@ -9,7 +9,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 
 import com.fongmi.android.tv.App;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 
 public final class LabOutputDialog implements LabRunner.OutputListener {
 
@@ -34,7 +34,7 @@ public final class LabOutputDialog implements LabRunner.OutputListener {
     }
 
     public void show(String title) {
-        dialog = new MaterialAlertDialogBuilder(context, com.fongmi.android.tv.R.style.Theme_App_Lab_Dialog)
+        dialog = new WebHtvAlertDialogBuilder(context, com.fongmi.android.tv.R.style.Theme_App_Lab_Dialog)
                 .setTitle(title)
                 .setView(scroll)
                 .setNegativeButton("停止", (d, w) -> LabRunner.stop(key))

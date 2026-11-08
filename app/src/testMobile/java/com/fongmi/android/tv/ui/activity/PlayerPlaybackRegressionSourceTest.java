@@ -12,6 +12,49 @@ import static org.junit.Assert.assertTrue;
 public class PlayerPlaybackRegressionSourceTest {
 
     @Test
+    public void autoLineFallbackRebuildsRememberedPlayerBeforeFetchingNextLine() throws Exception {
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String leanback = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+
+        assertAutoLineFallbackRebuildsPlayer("mobile", mobile);
+        assertAutoLineFallbackRebuildsPlayer("leanback", leanback);
+    }
+
+    private static void assertAutoLineFallbackRebuildsPlayer(String label, String source) {
+        String signature = "protected void onError(String msg)";
+        int method = source.indexOf(signature);
+        int next = source.indexOf("\n    @Override", method);
+        assertTrue(label + " onError must exist", method >= 0 && next > method);
+        String body = source.substring(method, next);
+        int stop = body.indexOf("player().stop();");
+        int prepare = body.indexOf("applyHistoryPlayerKernel(true);");
+        int flow = body.indexOf("startFlow();");
+        assertTrue(label + " onError must stop the failed engine before rebuilding it", stop >= 0);
+        assertTrue(label + " onError must recreate the remembered player before automatic line fallback", prepare > stop && prepare < flow);
+        assertTrue(label + " automatic line fallback must still start after cleanup", flow > prepare);
+        assertFalse(label + " onError must not prepare the remembered kernel twice",
+                body.contains("player().preparePlayer(applyHistoryPlayerKernel(), true);"));
+    }
+
+    @Test
+    public void automaticLineFallbackForcePreparesEvenForTheRememberedKernel() throws Exception {
+        String source = readMainJava("com", "fongmi", "android", "tv", "player", "PlayerManager.java");
+        int method = source.indexOf("public void preparePlayer(int type, boolean force)");
+        int methodEnd = source.indexOf("public void switchPlayer(int type, PlaySpec", method);
+        assertTrue("PlayerManager preparePlayer force overload must exist", method >= 0 && methodEnd > method);
+
+        String body = source.substring(method, methodEnd);
+        assertTrue("automatic fallback must force rebuilding even when the remembered kernel is active",
+                body.contains("if (engine == null || player == null || (next == playerType && !force)) return;"));
+        assertTrue("forced automatic fallback must reset the failed video surface",
+                body.contains("callback.onPlayerRebuild(player, force);"));
+        int rebuild = body.indexOf("callback.onPlayerRebuild(player, force);");
+        int clearSpec = body.indexOf("spec = null;");
+        assertTrue("forced automatic fallback must keep ownership while rebuilding the video surface",
+                rebuild >= 0 && clearSpec > rebuild);
+    }
+
+    @Test
     public void episodeNavigationUsesTheFullFlagListAcrossRangePages() throws Exception {
         String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
         int adjacent = mobile.indexOf("private Episode getAdjacentEpisode(int offset)");
@@ -193,6 +236,39 @@ public class PlayerPlaybackRegressionSourceTest {
     }
 
     @Test
+    public void mobileManualRotateSurvivesEpisodeSwitchInsteadOfBeingAutoCorrected() throws Exception {
+        String source = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        int rotate = source.indexOf("private void onRotate()");
+        int rotateEnd = source.indexOf("\n    private ", rotate + 1);
+        int check = source.indexOf("private void checkOrientation()");
+        int checkEnd = source.indexOf("\n    private ", check + 1);
+        int enter = source.indexOf("private void enterFullscreen()");
+        int enterEnd = source.indexOf("\n    private ", enter + 1);
+        int exit = source.indexOf("private void exitFullscreen()");
+        int exitEnd = source.indexOf("\n    private ", exit + 1);
+
+        assertTrue("the rotate button must mark the user's explicit choice before requesting it",
+                rotate >= 0 && rotateEnd > rotate
+                        && source.indexOf("manualRotate = true;", rotate) > rotate
+                        && source.indexOf("manualRotate = true;", rotate) < source.indexOf("PlaybackOrientation.getRotateOrientation(isRotate())", rotate)
+                        && source.indexOf("PlaybackOrientation.getRotateOrientation(isRotate())", rotate) < rotateEnd);
+        assertTrue("video-size auto correction must stand down while the user's rotation is in force",
+                check >= 0 && checkEnd > check
+                        && source.indexOf("if (manualRotate) return;", check) > check
+                        && source.indexOf("if (manualRotate) return;", check) < source.indexOf("setRotate(true);", check)
+                        && source.indexOf("setRotate(true);", check) < checkEnd);
+        assertTrue("entering fullscreen must rebuild the automatic baseline from the current video shape",
+                enter >= 0 && enterEnd > enter
+                        && source.indexOf("setRotate(current.isPortrait());", enter) > enter
+                        && source.indexOf("manualRotate = false;", enter) > source.indexOf("setRotate(current.isPortrait());", enter)
+                        && source.indexOf("manualRotate = false;", enter) < enterEnd);
+        assertTrue("leaving fullscreen must end the manual override",
+                exit >= 0 && exitEnd > exit
+                        && source.indexOf("manualRotate = false;", exit) > exit
+                        && source.indexOf("manualRotate = false;", exit) < exitEnd);
+    }
+
+    @Test
     public void mobileFullscreenExitRebindsEpisodesAfterOrientationSettles() throws Exception {
         String source = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
         int restore = source.indexOf("private void restoreEmbeddedVideoLayoutAfterFullscreen()");
@@ -337,6 +413,14 @@ public class PlayerPlaybackRegressionSourceTest {
         return read(Path.of("src", "mobile", "java"), Path.of("app", "src", "mobile", "java"), parts);
     }
 
+    /**
+     * 读取源文件并把行尾统一成 LF。
+     *
+     * <p>仓库开了 {@code core.autocrlf}，Windows 工作区里这些文件是 CRLF，而 Java 字符串字面量里的
+     * {@code "\n"} 是单个 LF。不归一化的话，任何跨行的 {@code contains()} 断言都永远为假——
+     * 要么让整个用例恒失败，要么（当它被 {@code &&} 串在别的真断言后面时）让本该生效的回归锁恒假。
+     * 同包的 {@code SiteDialogLayoutTest} / {@code TmdbDetailActivityLayoutTest} 用的是同一套写法。
+     */
     private static String read(Path moduleRoot, Path workspaceRoot, String... parts) throws Exception {
         Path path = moduleRoot;
         for (String part : parts) path = path.resolve(part);
@@ -344,6 +428,6 @@ public class PlayerPlaybackRegressionSourceTest {
             path = workspaceRoot;
             for (String part : parts) path = path.resolve(part);
         }
-        return Files.readString(path, StandardCharsets.UTF_8);
+        return Files.readString(path, StandardCharsets.UTF_8).replace("\r\n", "\n");
     }
 }

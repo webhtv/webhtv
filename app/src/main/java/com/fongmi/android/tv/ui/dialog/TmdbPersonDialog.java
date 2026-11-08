@@ -29,6 +29,7 @@ import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.service.TmdbService;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.adapter.TmdbPersonPhotoAdapter;
 import com.fongmi.android.tv.ui.adapter.TmdbPersonWorkAdapter;
@@ -369,7 +370,7 @@ public class TmdbPersonDialog {
         MaterialCardView biographyCard = view.findViewById(R.id.biographyCard);
         ImageView profile = view.findViewById(R.id.profile);
         ImageView close = view.findViewById(R.id.closeBtn);
-        int overlay = light ? 0x99F4F7FA : 0x8F000000;
+        int overlay = applyScrimOpacity(light ? 0x99F4F7FA : 0x8F000000, light);
         int panelColor = light ? 0xFFF4F7FA : 0xF2101821;
         int cardColor = light ? 0xFFFFFFFF : 0x261C2833;
         int imageBg = light ? 0xFFE7EDF3 : 0xFF25313D;
@@ -406,6 +407,19 @@ public class TmdbPersonDialog {
     private static boolean resolveLightTheme(Activity activity) {
         int night = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return Setting.resolveTmdbDetailLightTheme(Setting.getTmdbDetailTheme(), night == Configuration.UI_MODE_NIGHT_YES);
+    }
+
+    /**
+     * Keeps this dialog's own scrim colour and lets the user drive only its alpha.
+     *
+     * <p>The shipped scrim is translucent white in light mode and translucent black in
+     * dark mode; the theme token is translucent black in both. Substituting the token
+     * was measured to invert the light-mode scrim from lightening to darkening, so the
+     * user's {@code scrimOpacity} is applied to the dialog's existing colour instead.
+     * An unset slot returns {@code base} untouched, keeping the default byte-identical.
+     */
+    private static int applyScrimOpacity(int base, boolean light) {
+        return ThemeController.applyScrimOpacity(base, ThemeController.configuredScrimOpacity(light));
     }
 
     /**

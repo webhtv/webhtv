@@ -38,6 +38,10 @@ import java.util.concurrent.TimeUnit;
 @Entity
 public class Site implements Parcelable {
 
+    /** 与 {@link #TAG_CLOSE} 逐位配对，覆盖半角与常见的全角括号写法。 */
+    private static final String TAG_OPEN = "[「【〔［";
+    private static final String TAG_CLOSE = "]」】〕］";
+
     @NonNull
     @PrimaryKey
     @SerializedName("key")
@@ -125,6 +129,16 @@ public class Site implements Parcelable {
 
     @Ignore
     private boolean selected;
+
+    /**
+     * 该 Site 属于哪条配置（桥接解析非激活配置时的缓存命名空间）。
+     *
+     * <p>只在 {@code VodSiteCatalog} 由 configKey 构造的 Catalog 上被设置；激活配置（原生
+     * {@code VodConfig} 路径）与数据库里的 Site 一律为空，{@code transient} + {@code @Ignore}
+     * 保证它既不进 Room 也不进 Gson、不进 Parcel——纯运行时标记。
+     */
+    @Ignore
+    private transient String namespace;
 
     public Site() {
     }
@@ -426,11 +440,43 @@ public class Site implements Parcelable {
         return this;
     }
 
+    /**
+     * 方括号里的内容（{@code [采]}、{@code 「盘」}、{@code 【漫】}……）是站点的能力标签，不是普通文案：
+     * 它们既会被 {@code GroupRuleConfig} 抽成站点分组名（分组名同时是分组排序的持久化键），
+     * 也会被音频源、短剧、小说、漫画与 TMDB 的站点规则直接比对。
+     * <p>
+     * 因此这里只翻译标签之外的文案，标签本身一律原样保留。否则繁体界面下 {@code 荐片[采][广]} 会变成
+     * {@code 薦片[采][廣]}：标签与用户规则文本不再互等，分组名还会随语言漂移，把已保存的分组顺序与规则勾选态全部打散。
+     */
     public Site trans() {
         if (Trans.pass()) return this;
-        this.name = Trans.s2t(name);
+        this.name = transName(name);
         setCategories(getCategories().stream().map(Trans::s2t).toList());
         return this;
+    }
+
+    private static String transName(String name) {
+        if (TextUtils.isEmpty(name)) return name;
+        StringBuilder result = new StringBuilder(name.length());
+        int index = 0;
+        while (index < name.length()) {
+            int open = TAG_OPEN.indexOf(name.charAt(index));
+            if (open < 0) {
+                int next = index + 1;
+                while (next < name.length() && TAG_OPEN.indexOf(name.charAt(next)) < 0) next++;
+                result.append(Trans.s2t(name.substring(index, next)));
+                index = next;
+                continue;
+            }
+            int close = name.indexOf(TAG_CLOSE.charAt(open), index + 1);
+            if (close < 0) {
+                result.append(Trans.s2t(name.substring(index)));
+                break;
+            }
+            result.append(name, index, close + 1);
+            index = close + 1;
+        }
+        return result.toString();
     }
 
     public Site sync(Site item) {
@@ -440,13 +486,27 @@ public class Site implements Parcelable {
         return this;
     }
 
+    /** 缓存命名空间；未设置时返回空串（= 激活配置路径）。 */
+    public String getNamespace() {
+        return namespace == null ? "" : namespace.trim();
+    }
+
+    public Site setNamespace(String namespace) {
+        this.namespace = namespace == null || namespace.isEmpty() ? null : namespace;
+        return this;
+    }
+
     public Site recent() {
-        BaseLoader.get().setRecent(getKey(), getApi(), getJar());
+        // recent 是 ?do=js/?do=py 子路由唯一的定位凭据，必须和 getSpider 的槽位键同形，
+        // 否则桥接配置的脚本请求会落到别的配置（或落空）。命名空间为空时与改动前一致。
+        BaseLoader.get().setRecent(getNamespace(), getKey(), getApi(), getJar());
         return this;
     }
 
     public Spider spider() {
-        return BaseLoader.get().getSpider(getKey(), getApi(), getExt(), getJar());
+        // 带命名空间：桥接配置（非激活）的 spider 必须落在自己的缓存槽里，否则同名 siteKey
+        // 会把别的配置的实例写进激活配置的槽位。命名空间为空时键与改动前逐字节相同。
+        return BaseLoader.get().getSpider(getNamespace(), getKey(), getApi(), getExt(), getJar());
     }
 
     public void save() {

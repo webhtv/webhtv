@@ -1,7 +1,9 @@
 package com.fongmi.android.tv.subtitle;
 
 import com.fongmi.android.tv.bean.TmdbEpisode;
+import com.fongmi.android.tv.bean.TmdbConfig;
 import com.fongmi.android.tv.bean.TmdbItem;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.model.ResolvedMediaIdentity;
 import com.fongmi.android.tv.subtitle.model.SubtitleRequest;
@@ -22,7 +24,7 @@ public final class SubtitleTmdbResolver {
         TmdbItem tmdbItem = request.getTmdbItem();
         TmdbEpisode tmdbEpisode = request.getTmdbEpisode();
         if (tmdbItem == null && request.isAllowTmdbLookup() && !SubtitleStrings.isEmpty(request.getSiteKey()) && !SubtitleStrings.isEmpty(request.getVodId())) {
-            tmdbItem = Setting.getTmdbMatchCache().find(request.getSiteKey(), request.getVodId(), request.getVodName());
+            tmdbItem = Setting.getTmdbMatchCache().find(request.getSiteKey(), request.getVodId(), request.getVodName(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent(), Setting.getLanguage()));
         }
 
         ResolvedMediaIdentity.Builder builder = ResolvedMediaIdentity.builder();

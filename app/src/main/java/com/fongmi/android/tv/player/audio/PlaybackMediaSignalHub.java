@@ -10,7 +10,7 @@ import java.util.concurrent.Executor;
 public final class PlaybackMediaSignalHub implements AutoCloseable {
 
     public enum ResetReason { SEEK, SOURCE_CHANGED, AUDIO_FLUSH, ENGINE_REBUILD, RELEASE }
-    public enum ConsumerKind { REALTIME_SUBTITLE, AD_AUDIO, TEST }
+    public enum ConsumerKind { REALTIME_SUBTITLE, TEST }
 
     public record Session(long id, long generation, long mediaAnchorMs) {
         public PcmFrame frame(float[] monoSamples, int sampleRate, long captureStartTimeMs) {

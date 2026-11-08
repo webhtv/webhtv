@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(AndroidJUnit4.class)
@@ -109,5 +110,51 @@ public class FollowingUpdateCoordinatorDeviceTest {
         assertEquals("TMDB不可用，已回退原站", stored.lastError);
         assertEquals(8, source.playableEpisode);
         assertEquals(1, probes.get());
+    }
+
+    @Test
+    public void failureKeepsPreviousSourceAndOfficialSnapshot() {
+        // 只锁「失败不覆盖旧快照 + 失败态记账」；失败分支内 update→reconcile 的先后顺序不在此用例覆盖范围，
+        // 由 FollowingFailureReconcileContractTest#reconcileRunsAfterTheFailureWrite 锁定。
+        AtomicInteger probes = new AtomicInteger();
+        FollowingSource seeded = FollowingStore.preferredSource(identityKey);
+        seeded.playableSeason = 1;
+        seeded.playableEpisode = 8;
+        seeded.playableCount = 8;
+        seeded.lastProbeAt = 1_000L;
+        seeded.lastError = "";
+        FollowingStore.updateSource(seeded);
+
+        FollowingMetadataClient metadata = new FollowingMetadataClient() {
+            @Override
+            public FollowingMetadataSnapshot fetch(Following item, boolean refresh) throws Exception {
+                throw new IOException("TMDB unavailable");
+            }
+        };
+        FollowingSourceProbe probe = new FollowingSourceProbe() {
+            @Override
+            public FollowingSourceSnapshot probe(Following item, FollowingSource source) {
+                probes.incrementAndGet();
+                throw new IllegalStateException("来源没有可播放线路");
+            }
+        };
+
+        long before = System.currentTimeMillis();
+        Following item = FollowingStore.find(identityKey);
+        assertFalse(new FollowingUpdateCoordinator(metadata, probe).check(item, true, false));
+
+        Following stored = FollowingStore.find(identityKey);
+        FollowingSource source = FollowingStore.preferredSource(identityKey);
+        assertEquals(1, source.playableSeason);
+        assertEquals(8, source.playableEpisode);
+        assertEquals(8, source.playableCount);
+        assertEquals(FollowingMetadataSnapshot.RETURNING, stored.officialStatus);
+        assertEquals(6, stored.latestReleasedEpisode);
+        assertEquals(1, stored.failureCount);
+        assertTrue(stored.lastCheckedAt >= before);
+        assertTrue(stored.lastError != null && !stored.lastError.isBlank());
+        assertTrue(stored.nextCheckAt > before);
+        assertEquals(1, probes.get());
+        assertEquals("来源没有可播放线路", source.lastError);
     }
 }

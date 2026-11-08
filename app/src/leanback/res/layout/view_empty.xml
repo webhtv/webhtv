@@ -1,12 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视端空态。
+
+    设计文档 §9.9 要求空态是「标题 + 解释 + 一个主动作」，并明确「不能只显示一句
+    '暂无数据'」；§6.2 又把空态归入 Display 档（电视 40–48sp）。改动前这里只有一个
+    16sp 的单行文案，三条都不满足。
+
+    description 与 action 默认 GONE：ProgressLayout 未注入内容时，渲染结果与改动前
+    只有标题一致，因此既有宿主不会被强制改变观感；宿主按需通过
+    ProgressLayout.setEmptyContent(...) 接入（首个接入的是收藏页）。
+
+    action 用带焦点环的 TextView 而不是 MaterialButton：电视端既有按钮都是这个形态
+    （见 dialog_exit_confirm），焦点态由 selector_empty_action 画在应用表面族的环上。
+-->
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:gravity="center"
     android:orientation="vertical">
 
     <com.airbnb.lottie.LottieAnimationView
+        android:id="@+id/illustration"
         android:layout_width="200dp"
         android:layout_height="224dp"
         app:lottie_autoPlay="true"
@@ -17,8 +33,42 @@
         android:id="@+id/text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:gravity="center"
         android:text="@string/error_empty"
-        android:textColor="@color/white"
-        android:textSize="16sp" />
+        android:textColor="?attr/webhtvColorOnWallpaper"
+        android:textSize="40sp" />
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/description"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:maxWidth="520dp"
+        android:textColor="?attr/webhtvColorOnWallpaperVariant"
+        android:textSize="16sp"
+        android:visibility="gone"
+        tools:text="在详情页按「收藏」，这里就会出现"
+        tools:visibility="visible" />
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/action"
+        android:layout_width="wrap_content"
+        android:layout_height="46dp"
+        android:layout_marginTop="24dp"
+        android:background="@drawable/selector_empty_action"
+        android:clickable="true"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:gravity="center"
+        android:minWidth="140dp"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:singleLine="true"
+        android:textColor="?attr/webhtvColorOnWallpaper"
+        android:textSize="16sp"
+        android:visibility="gone"
+        tools:text="去点播"
+        tools:visibility="visible" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

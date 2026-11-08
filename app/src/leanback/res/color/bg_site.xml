@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    卡片「片源」角标底色（红）。语义与对比度依据见 webhtv_tokens.xml 的
+    webhtv_color_badge_site。用直接 @color 引用与不透明的理由同 bg_remark.xml。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:alpha="0.7" android:color="#F44336" />
+    <item android:color="@color/webhtv_color_badge_site" />
 </selector>

@@ -35,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:textColor="#202124"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="17sp"
                 android:textStyle="bold" />
 
@@ -46,7 +46,7 @@
                 android:ellipsize="end"
                 android:gravity="center"
                 android:maxLines="1"
-                android:textColor="#80868B"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -62,7 +62,7 @@
             android:text="@string/mpv_config_save"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -78,7 +78,7 @@
         android:inputType="textMultiLine|textNoSuggestions"
         android:overScrollMode="ifContentScrolls"
         android:scrollbars="vertical|horizontal"
-        android:textColor="#303134"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="13sp" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -93,7 +93,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/mpv_config_encoding"
-            android:textColor="#80868B"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="11sp" />
 
         <Space
@@ -105,7 +105,7 @@
             android:id="@+id/stats"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#80868B"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="11sp" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>

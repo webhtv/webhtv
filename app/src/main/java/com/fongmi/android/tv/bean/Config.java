@@ -11,15 +11,18 @@ import androidx.room.PrimaryKey;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.playback.PlaybackConfigIdentity;
 import com.github.catvod.utils.Prefers;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
-@Entity(indices = @Index(value = {"url", "type"}, unique = true))
+@Entity(indices = {@Index(value = {"url", "type"}), @Index(value = {"interfaceKey", "type"}, unique = true)})
 public class Config {
 
     @PrimaryKey(autoGenerate = true)
@@ -31,6 +34,16 @@ public class Config {
     private long time;
     @SerializedName("url")
     private String url;
+    @SerializedName("interfaceKey")
+    private String interfaceKey;
+    @SerializedName("urlsJson")
+    private String urlsJson;
+    @SerializedName("legacyConfigKeysJson")
+    private String legacyConfigKeysJson;
+    @SerializedName("addressMatchAliasesJson")
+    private String addressMatchAliasesJson;
+    @SerializedName("identityResolutionState")
+    private String identityResolutionState;
     @SerializedName("json")
     private String json;
     @SerializedName("name")
@@ -81,24 +94,46 @@ public class Config {
 
     public static void delete(String url) {
         AppDatabase.get().getConfigDao().delete(url);
+        PlaybackConfigIdentity.invalidateAll();
     }
 
     public static void delete(String url, int type) {
         AppDatabase.get().getConfigDao().delete(url, type);
+        PlaybackConfigIdentity.invalidateAll();
+    }
+
+    /**
+     * 启动时取"上次实际使用"的配置，而不是数据库里 time 最新的一行。
+     *
+     * <p>{@link #update()} 每次加载成功都会同时写 time 和 {@code config_<type>} 偏好。旧行为只按
+     * {@code ORDER BY time DESC} 取最新行：一旦某行（典型是猫源）成功加载过一次，它的 time 就是最新的；
+     * 之后每次冷启动都会优先再拉它——猫源要重启 :node 子进程，慢机器上就绪探测超时，启动就显示
+     * "配置取得失败"，而用户实际在用的 http 接口根本没被加载。切换一次接口（bump 另一行）或重装
+     * （清空表）才能逃出来，与用户反馈完全一致。
+     *
+     * <p>这里先按持久化的 {@code config_<type>} 偏好精确找行；偏好缺失或对应行已被删掉时，回退旧行为。
+     */
+    private static Config lastActive(int type) {
+        String url = Prefers.getString("config_" + type);
+        if (!TextUtils.isEmpty(url)) {
+            Config item = AppDatabase.get().getConfigDao().find(url, type);
+            if (item != null) return item;
+        }
+        return AppDatabase.get().getConfigDao().findOne(type);
     }
 
     public static Config vod() {
-        Config item = AppDatabase.get().getConfigDao().findOne(0);
+        Config item = lastActive(0);
         return item == null ? create(0) : item;
     }
 
     public static Config live() {
-        Config item = AppDatabase.get().getConfigDao().findOne(1);
+        Config item = lastActive(1);
         return item == null ? create(1) : item;
     }
 
     public static Config wall() {
-        Config item = AppDatabase.get().getConfigDao().findOne(2);
+        Config item = lastActive(2);
         return item == null ? create(2) : item;
     }
 
@@ -152,6 +187,153 @@ public class Config {
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    public List<String> getUrls() {
+        List<String> urls;
+        try {
+            Type listType = TypeToken.getParameterized(List.class, String.class).getType();
+            urls = App.gson().fromJson(urlsJson, listType);
+        } catch (Exception e) {
+            urls = null;
+        }
+        if (urls == null) urls = new ArrayList<>();
+        List<String> result = new ArrayList<>();
+        addUrl(result, url);
+        for (String item : urls) addUrl(result, item);
+        return result;
+    }
+
+    public Config urls(List<String> urls) {
+        rememberAddressAliases(getUrls());
+        List<String> result = new ArrayList<>();
+        if (urls != null) for (String item : urls) addUrl(result, item);
+        setUrl(result.isEmpty() ? "" : result.get(0));
+        setUrlsJson(App.gson().toJson(result));
+        return this;
+    }
+
+    public Config mergeUrls(List<String> urls) {
+        List<String> result = getUrls();
+        if (urls != null) for (String item : urls) addUrl(result, item);
+        return urls(result);
+    }
+
+    public Config replaceUrl(String oldUrl, String newUrl) {
+        List<String> result = getUrls();
+        result.remove(oldUrl);
+        result.remove(newUrl);
+        if (!TextUtils.isEmpty(newUrl)) result.add(0, newUrl.trim());
+        return urls(result);
+    }
+
+    private static void addUrl(List<String> urls, String value) {
+        value = value == null ? "" : value.trim();
+        if (!TextUtils.isEmpty(value) && !urls.contains(value)) urls.add(value);
+    }
+
+    public String getInterfaceKey() {
+        return interfaceKey;
+    }
+
+    public void setInterfaceKey(String interfaceKey) {
+        this.interfaceKey = interfaceKey;
+    }
+
+    public String getUrlsJson() {
+        return urlsJson;
+    }
+
+    public void setUrlsJson(String urlsJson) {
+        this.urlsJson = urlsJson;
+    }
+
+    public String getLegacyConfigKeysJson() {
+        return legacyConfigKeysJson;
+    }
+
+    public List<String> getLegacyConfigKeys() {
+        return readStringList(legacyConfigKeysJson);
+    }
+
+    public void setLegacyConfigKeysJson(String value) {
+        legacyConfigKeysJson = value;
+    }
+
+    public Config addLegacyConfigKey(String value) {
+        List<String> values = getLegacyConfigKeys();
+        addUnique(values, value);
+        legacyConfigKeysJson = App.gson().toJson(values);
+        return this;
+    }
+
+    public Config addLegacyConfigKeys(List<String> values) {
+        List<String> current = getLegacyConfigKeys();
+        if (values != null) for (String value : values) addUnique(current, value);
+        legacyConfigKeysJson = App.gson().toJson(current);
+        return this;
+    }
+
+    public String getAddressMatchAliasesJson() {
+        return addressMatchAliasesJson;
+    }
+
+    public List<String> getAddressMatchAliases() {
+        return readStringList(addressMatchAliasesJson);
+    }
+
+    public void setAddressMatchAliasesJson(String value) {
+        addressMatchAliasesJson = value;
+    }
+
+    public Config addAddressMatchAliases(List<String> values) {
+        List<String> aliases = getAddressMatchAliases();
+        if (values != null) for (String value : values) addUnique(aliases, value);
+        addressMatchAliasesJson = App.gson().toJson(aliases);
+        return this;
+    }
+
+    public String getIdentityResolutionState() {
+        return TextUtils.isEmpty(identityResolutionState) ? "unresolved" : identityResolutionState;
+    }
+
+    public void setIdentityResolutionState(String value) {
+        identityResolutionState = value;
+    }
+
+    public Config identityResolutionState(String value) {
+        setIdentityResolutionState(value);
+        return this;
+    }
+
+    private void rememberAddressAliases(List<String> values) {
+        if (values == null || values.isEmpty()) return;
+        List<String> aliases = new ArrayList<>();
+        aliases.addAll(com.fongmi.android.tv.playback.PlaybackConfigIdentity.strictAddressKeys(getType(), values));
+        aliases.addAll(com.fongmi.android.tv.playback.PlaybackConfigIdentity.endpointMatchKeys(getType(), values));
+        aliases.addAll(com.fongmi.android.tv.playback.PlaybackConfigIdentity.hostMatchKeys(getType(), values));
+        addAddressMatchAliases(aliases);
+        for (String value : values) addLegacyConfigKey(com.fongmi.android.tv.playback.PlaybackConfigIdentity.keyForUrl(value));
+    }
+
+    private List<String> readStringList(String json) {
+        try {
+            Type listType = TypeToken.getParameterized(List.class, String.class).getType();
+            List<String> values = App.gson().fromJson(json, listType);
+            return values == null ? new ArrayList<>() : new ArrayList<>(values);
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private static void addUnique(List<String> values, String value) {
+        value = value == null ? "" : value.trim();
+        if (!TextUtils.isEmpty(value) && !values.contains(value)) values.add(value);
+    }
+
+    public String ensureInterfaceKey() {
+        if (TextUtils.isEmpty(interfaceKey)) interfaceKey = UUID.randomUUID().toString();
+        return interfaceKey;
     }
 
     public String getJson() {
@@ -224,7 +406,20 @@ public class Config {
     }
 
     public Config url(String url) {
+        String oldUrl = getUrl();
+        if (!TextUtils.isEmpty(oldUrl) && !TextUtils.equals(oldUrl, url)) return replaceUrl(oldUrl, url);
         setUrl(url);
+        if (!TextUtils.isEmpty(url) && TextUtils.isEmpty(urlsJson)) urlsJson = App.gson().toJson(Collections.singletonList(url));
+        return this;
+    }
+
+    public Config interfaceKey(String interfaceKey) {
+        if (!TextUtils.isEmpty(interfaceKey)) setInterfaceKey(interfaceKey.trim());
+        return this;
+    }
+
+    public Config urlsJson(String urlsJson) {
+        setUrlsJson(urlsJson);
         return this;
     }
 
@@ -248,15 +443,30 @@ public class Config {
         return "";
     }
 
+    /** 配置行变动后必须让桥接解析缓存失效，否则网关最多 60 秒仍在按旧站源服务。 */
+    private static void invalidateCatalog() {
+        com.fongmi.android.tv.api.config.VodSiteCatalog.invalidate();
+    }
+
     public Config insert() {
         if (isEmpty()) return this;
+        ensureInterfaceKey();
+        rememberAddressAliases(getUrls());
+        if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
+        PlaybackConfigIdentity.invalidateAll();
+        invalidateCatalog();
         return this;
     }
 
     public Config save() {
         if (isEmpty()) return this;
+        ensureInterfaceKey();
+        rememberAddressAliases(getUrls());
+        if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         AppDatabase.get().getConfigDao().insertOrUpdate(this);
+        PlaybackConfigIdentity.invalidateAll();
+        invalidateCatalog();
         return this;
     }
 
@@ -271,6 +481,8 @@ public class Config {
         AppDatabase.get().getConfigDao().delete(getUrl(), getType());
         History.delete(getId());
         Keep.delete(getId());
+        PlaybackConfigIdentity.invalidateAll();
+        invalidateCatalog();
     }
 
     @NonNull

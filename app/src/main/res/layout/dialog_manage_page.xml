@@ -18,7 +18,7 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="@string/setting_manage_page"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -36,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:lineSpacingMultiplier="1.12"
-            android:textColor="#5F6368"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="14sp"
             tools:text="管理页面已启动。&#10;&#10;局域网地址：&#10;http://192.168.1.2:9978&#10;&#10;本机地址：&#10;http://127.0.0.1:9978" />
 
@@ -63,7 +63,7 @@
             android:singleLine="true"
             android:text="@string/manage_page_stop"
             android:textColor="@color/dialog_text_button"
-            app:rippleColor="#1A1A73E8" />
+            app:rippleColor="?attr/colorOnSurfaceVariant" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/copy"
@@ -80,7 +80,7 @@
             android:text="@string/manage_page_copy_url"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/open"
@@ -96,7 +96,9 @@
             android:singleLine="true"
             android:text="@string/manage_page_open_browser"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

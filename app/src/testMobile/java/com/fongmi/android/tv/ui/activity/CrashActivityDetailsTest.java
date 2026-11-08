@@ -46,6 +46,24 @@ public class CrashActivityDetailsTest {
     }
 
     @Test
+    public void crashScreenOffersACopyableLanLogAddress() throws Exception {
+        String source = read("app/src/main/java/com/fongmi/android/tv/ui/activity/CrashActivity.java");
+
+        assertTrue("The crash screen must offer a copy action for the LAN address",
+                source.contains("mBinding.copyLogAddress.setOnClickListener"));
+        assertTrue("The crash screen must offer opening the log page locally",
+                source.contains("mBinding.openLog.setOnClickListener"));
+        assertTrue("The crash session must be prepared before the address is shown",
+                source.contains("CrashLogSession.prepare(this)"));
+        assertTrue("The crash screen must start the LAN log service",
+                source.contains("Server.get().start()") && source.contains("Server.get().getAddress(false)"));
+        assertTrue("The crash screen must keep the screen on while the address is read",
+                source.contains("FLAG_KEEP_SCREEN_ON"));
+        assertTrue("The existing error-details entry must remain available",
+                source.contains("mBinding.details.setOnClickListener(v -> showError())"));
+    }
+
+    @Test
     public void bothHomeVariantsConsumeCrashModeBeforeLoadingConfig() throws Exception {
         assertCrashModeBeforeConfig("app/src/mobile/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
         assertCrashModeBeforeConfig("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");

@@ -3,7 +3,7 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <gradient
         android:angle="90"
-        android:endColor="#EE0F141A"
-        android:startColor="#000F141A"
+        android:endColor="@color/webhtv_color_player_scrim"
+        android:startColor="@android:color/transparent"
         android:type="linear" />
 </shape>

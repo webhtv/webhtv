@@ -315,13 +315,9 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         textView.setEllipsize(TextUtils.TruncateAt.MARQUEE);
         textView.setNextFocusUpId(isTopEdge(position) && nextFocusUp != 0 ? nextFocusUp : View.NO_ID);
         textView.setNextFocusDownId(isBottomEdge(position) && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
-        textView.setSelected(item.isSelected() || textView.hasFocus());
+        applyTextActive(holder, item, textView.hasFocus());
         textView.setText(getNativeDisplayTitle(item));
-        textView.setOnFocusChangeListener((view, hasFocus) -> {
-            boolean active = item.isSelected() || hasFocus;
-            textView.setSelected(active);
-            if (holder.nativeFileSizeView != null) holder.nativeFileSizeView.setSelected(active);
-        });
+        textView.setOnFocusChangeListener((view, hasFocus) -> applyTextActive(holder, item, hasFocus));
         textView.setOnKeyListener(keyListener);
         textView.setOnClickListener(v -> mListener.onItemClick(item));
         if (mLongClickListener != null) {
@@ -330,6 +326,18 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
                 return true;
             });
         }
+    }
+
+    /**
+     * 文本芯片的双状态：selected 只负责跑马灯（见 selector_video_item 顶部说明），
+     * 「当前正在播放」的描边走 state_activated。此前这里只设 selected，影视原生
+     * (DIRECT) 的选集因此完全没有当前集标记——用户报告播到第 12 集时看不出在播哪一集。
+     */
+    private void applyTextActive(@NonNull ViewHolder holder, Episode item, boolean hasFocus) {
+        boolean active = item.isSelected();
+        holder.textView.setSelected(active || hasFocus);
+        holder.textView.setActivated(active);
+        if (holder.nativeFileSizeView != null) holder.nativeFileSizeView.setSelected(active || hasFocus);
     }
 
     private void bindCardView(@NonNull ViewHolder holder, Episode item, int position) {

@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit;
 public final class FollowingSchedulePolicy {
 
     public static final long PERIODIC_INTERVAL = TimeUnit.HOURS.toMillis(6);
+    public static final long FOREGROUND_INTERVAL = TimeUnit.MINUTES.toMillis(15);
     public static final long PERIODIC_FLEX = TimeUnit.HOURS.toMillis(1);
     public static final long MIN_ONE_SHOT_DELAY = TimeUnit.MINUTES.toMillis(15);
     public static final long MIN_ONE_SHOT_AFTER_CHECK = TimeUnit.HOURS.toMillis(1);
@@ -14,10 +15,15 @@ public final class FollowingSchedulePolicy {
     }
 
     public static long nextCheckAt(long now, String status, long nextAirAt) {
+        return nextCheckAt(now, status, nextAirAt, false);
+    }
+
+    public static long nextCheckAt(long now, String status, long nextAirAt, boolean foreground) {
         String normalized = FollowingMetadataSnapshot.normalizeStatus(status);
         long nextAirCheckAt = nextAirCheckAt(now, nextAirAt);
         if (FollowingMetadataSnapshot.RETURNING.equals(normalized)) {
-            return nextAirCheckAt > 0 ? Math.min(now + PERIODIC_INTERVAL, nextAirCheckAt) : now + PERIODIC_INTERVAL;
+            long interval = now + (foreground ? FOREGROUND_INTERVAL : PERIODIC_INTERVAL);
+            return nextAirCheckAt > 0 ? Math.min(interval, nextAirCheckAt) : interval;
         }
         if (FollowingMetadataSnapshot.PLANNED.equals(normalized)) {
             long daily = now + TimeUnit.HOURS.toMillis(24);
@@ -26,7 +32,7 @@ public final class FollowingSchedulePolicy {
         if (FollowingMetadataSnapshot.ENDED.equals(normalized) || FollowingMetadataSnapshot.CANCELED.equals(normalized)) {
             return now + TimeUnit.DAYS.toMillis(7);
         }
-        return now + PERIODIC_INTERVAL;
+        return now + (foreground ? FOREGROUND_INTERVAL : PERIODIC_INTERVAL);
     }
 
     private static long nextAirCheckAt(long now, long nextAirAt) {

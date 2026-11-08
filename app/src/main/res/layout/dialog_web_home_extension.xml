@@ -61,7 +61,7 @@
             android:text="@string/web_home_extension_refresh"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/reverse"
@@ -77,7 +77,7 @@
             android:text="@string/setting_order_reverse"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/enabled"
@@ -100,7 +100,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp" />
 
     <com.google.android.material.button.MaterialButtonToggleGroup
@@ -120,7 +120,7 @@
             android:text="@string/web_home_extension_form_mode"
             android:textColor="@color/dialog_toggle_button_text"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/textMode"
@@ -131,7 +131,7 @@
             android:text="@string/web_home_extension_text_mode"
             android:textColor="@color/dialog_toggle_button_text"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -160,7 +160,7 @@
                 android:paddingTop="24dp"
                 android:paddingBottom="24dp"
                 android:text="@string/web_home_extension_empty"
-                android:textColor="#5F6368"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="14sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -173,11 +173,11 @@
         android:layout_height="420dp"
         android:layout_marginTop="10dp"
         android:visibility="gone"
-        app:boxBackgroundColor="@color/white"
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
         app:boxCollapsedPaddingTop="0dp"
-        app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+        app:boxStrokeColor="?attr/colorOutline"
         app:hintEnabled="false"
-        app:hintTextColor="#5F6368">
+        app:hintTextColor="?attr/colorOnSurfaceVariant">
 
         <com.fongmi.android.tv.ui.custom.SafeScrollEditText
             android:id="@+id/jsonText"
@@ -194,8 +194,8 @@
             android:scrollbars="none"
             android:selectAllOnFocus="false"
             android:singleLine="false"
-            android:textColor="@color/black"
-            android:textColorHint="#666666" />
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -217,7 +217,7 @@
             android:text="@string/dialog_negative"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
@@ -230,7 +230,9 @@
             android:minWidth="0dp"
             android:text="@string/dialog_positive"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

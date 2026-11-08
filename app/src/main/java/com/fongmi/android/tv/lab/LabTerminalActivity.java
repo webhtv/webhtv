@@ -188,7 +188,7 @@ public class LabTerminalActivity extends AppCompatActivity {
         renderHistory();
         append("$ " + command + "\n");
         try {
-            if (process == null || !process.isAlive()) startShell();
+            if (!LabRunner.isAlive(process)) startShell();
             if (stdin != null) {
                 stdin.write((command + "\n").getBytes(StandardCharsets.UTF_8));
                 stdin.flush();
@@ -208,7 +208,7 @@ public class LabTerminalActivity extends AppCompatActivity {
 
     private void writeRaw(byte[] bytes) {
         try {
-            if (process == null || !process.isAlive()) startShell();
+            if (!LabRunner.isAlive(process)) startShell();
             if (stdin != null) {
                 stdin.write(bytes);
                 stdin.flush();
@@ -261,7 +261,7 @@ public class LabTerminalActivity extends AppCompatActivity {
     }
 
     private void startShell() {
-        if (process != null && process.isAlive()) return;
+        if (LabRunner.isAlive(process)) return;
         try {
             ProcessBuilder builder = new ProcessBuilder("/system/bin/sh");
             builder.redirectErrorStream(true);

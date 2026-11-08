@@ -28,6 +28,7 @@ import com.fongmi.android.tv.setting.InterfaceFailoverState;
 import com.fongmi.android.tv.setting.InterfaceOrderStore;
 import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -38,7 +39,6 @@ import com.github.catvod.bean.Proxy;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Json;
 import com.google.gson.JsonObject;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -274,21 +274,20 @@ public class VodConfig extends BaseConfig {
             return;
         }
 
-        List<Config> configs = InterfaceOrderStore.sortVodConfigs(Config.getAll(VOD));
         String originUrl = config.getUrl();
-        int index = indexOfUrl(configs, originUrl);
-        int limit = InterfaceFailoverPolicy.fallbackLimit(configs.size());
+        List<String> addresses = config.getUrls();
+        int limit = InterfaceFailoverPolicy.fallbackLimit(addresses.size());
         List<Config> remaining = new ArrayList<>();
-        for (int i = Math.max(index + 1, 0); i < configs.size() && remaining.size() < limit; i++) {
-            Config candidate = configs.get(i);
-            if (!TextUtils.equals(candidate.getUrl(), originUrl)) remaining.add(candidate);
+        for (String address : addresses) {
+            if (remaining.size() >= limit || TextUtils.equals(address, originUrl)) continue;
+            remaining.add(copyWithUrl(config, address));
         }
         if (remaining.isEmpty()) {
             App.post(() -> callback.error(message));
             return;
         }
 
-        FailoverRound round = new FailoverRound(config.getDesc(), remaining, callback, message,
+        FailoverRound round = new FailoverRound(config, config.getDesc(), remaining, callback, message,
                 new InterfaceFailoverState(mode, originUrl, urls(remaining)));
         failoverRound = round;
         if (InterfaceFailoverPolicy.isConfirm(mode)) {
@@ -387,7 +386,7 @@ public class VodConfig extends BaseConfig {
         CharSequence[] labels = new CharSequence[round.candidates.size()];
         for (int i = 0; i < labels.length; i++) labels[i] = round.candidates.get(i).getDesc();
         final int[] selected = {0};
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.interface_failover_title)
                 .setMessage(ResUtil.getString(R.string.interface_failover_message, round.originDesc))
                 .setSingleChoiceItems(labels, 0, (dialog1, which) -> selected[0] = which)
@@ -434,6 +433,11 @@ public class VodConfig extends BaseConfig {
 
     private void finishSuccess(FailoverRound round) {
         if (failoverRound != round) return;
+        Config loaded = getConfig();
+        if (loaded != null && round.origin != null && loaded.getId() == round.origin.getId()) {
+            round.origin.url(loaded.getUrl()).update();
+            config(round.origin);
+        }
         failoverRound = null;
         super.postEvent();
         ConfigEvent.vod();
@@ -463,11 +467,6 @@ public class VodConfig extends BaseConfig {
         if (dialog != null) App.post(dialog::dismiss);
     }
 
-    private int indexOfUrl(List<Config> configs, String url) {
-        for (int i = 0; i < configs.size(); i++) if (TextUtils.equals(configs.get(i).getUrl(), url)) return i;
-        return -1;
-    }
-
     private List<String> urls(List<Config> configs) {
         List<String> urls = new ArrayList<>();
         for (Config config : configs) urls.add(config.getUrl());
@@ -479,18 +478,26 @@ public class VodConfig extends BaseConfig {
         return null;
     }
 
+    private Config copyWithUrl(Config source, String url) {
+        Config copy = Config.objectFrom(source.toString());
+        copy.setUrl(url);
+        return copy;
+    }
+
     private static final class FailoverRound {
 
         private final String originDesc;
+        private final Config origin;
         private final List<Config> candidates;
         private final Callback callback;
         private final InterfaceFailoverState state;
         private String lastError;
         private Callback attemptCallback;
 
-        private FailoverRound(String originDesc, List<Config> candidates, Callback callback, String lastError,
+        private FailoverRound(Config origin, String originDesc, List<Config> candidates, Callback callback, String lastError,
                               InterfaceFailoverState state) {
             this.originDesc = originDesc;
+            this.origin = origin;
             this.candidates = candidates;
             this.callback = callback;
             this.lastError = lastError;
@@ -645,7 +652,11 @@ public class VodConfig extends BaseConfig {
     }
 
     public Site getSite(String key) {
-        return getSites().stream().filter(item -> item.getKey().equals(key)).findFirst().orElse(new Site());
+        Site exact = getSites().stream().filter(item -> item.getKey().equals(key)).findFirst().orElse(null);
+        if (exact != null) return exact;
+        // Following and history identities intentionally normalize source keys to lowercase. Preserve
+        // compatibility with saved routes when a current configuration changes only key case.
+        return getSites().stream().filter(item -> item.getKey().equalsIgnoreCase(key)).findFirst().orElse(new Site());
     }
 
     private void setParse(Config config, Parse parse, boolean save) {

@@ -49,7 +49,7 @@
         android:clickable="true"
         android:focusable="true"
         android:visibility="gone"
-        app:cardBackgroundColor="#CC16202A"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
         app:cardCornerRadius="8dp"
         app:cardElevation="0dp"
         app:strokeColor="@color/selector_episode_card_stroke"
@@ -69,7 +69,7 @@
                     android:id="@+id/still"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="#16202A"
+                    android:background="?attr/colorSurfaceContainerHigh"
                     android:contentDescription="@null"
                     android:scaleType="centerCrop" />
 
@@ -188,7 +188,7 @@
                     android:ellipsize="end"
                     android:lineSpacingExtra="1dp"
                     android:maxLines="2"
-                    android:textColor="#E6FFFFFF"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="10sp"
                     tools:text="Episode overview preview." />
 

@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.ui.presenter;
 
+import android.content.res.ColorStateList;
+import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
@@ -10,6 +12,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.AdapterTmdbPhotoBinding;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.google.android.material.card.MaterialCardView;
 
 public class TmdbPhotoPresenter extends Presenter {
 
@@ -38,6 +41,7 @@ public class TmdbPhotoPresenter extends Presenter {
             params.height = ResUtil.dp2px(222);
             binding.getRoot().setLayoutParams(params);
         }
+        bindFocusStyle(binding.getRoot());
         return new ViewHolder(binding);
     }
 
@@ -56,7 +60,26 @@ public class TmdbPhotoPresenter extends Presenter {
     public void onUnbindViewHolder(Presenter.ViewHolder viewHolder) {
     }
 
-    public static class ViewHolder extends Presenter.ViewHolder {
+    /**
+     * 剧照/海报卡片此前完全没有焦点外观：布局里关闭了系统默认焦点高亮，presenter 也不改描边，
+     * 所以遥控停在卡片上时看不出焦点在哪里。这里用前景 selector 画 3dp 焦点环，
+     * 与演员卡（selector_tmdb_cast_focus.xml）同一套做法：前景绘制在图片之上，
+     * 不需要在每次绑定时改动卡片描边。
+     */
+    private static void bindFocusStyle(MaterialCardView card) {
+        card.setRippleColor(ColorStateList.valueOf(0x00000000));
+        card.setForeground(card.getContext().getDrawable(R.drawable.selector_tmdb_media_focus));
+        card.setStateListAnimator(null);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) card.setDefaultFocusHighlightEnabled(false);
+        applyFocusStyle(card, card.hasFocus());
+        card.setOnFocusChangeListener((view, focused) -> applyFocusStyle(card, focused));
+    }
+
+    private static void applyFocusStyle(MaterialCardView card, boolean focused) {
+        card.setActivated(focused);
+    }
+
+    static class ViewHolder extends Presenter.ViewHolder {
 
         private final AdapterTmdbPhotoBinding binding;
 

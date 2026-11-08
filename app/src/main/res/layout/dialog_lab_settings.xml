@@ -12,7 +12,7 @@
         android:paddingEnd="24dp">
         <com.google.android.material.textview.MaterialTextView
             android:textSize="13sp"
-            android:textColor="@color/lab_text_secondary"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:id="@+id/hint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -24,15 +24,24 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:hint="@string/lab_source_switch"
-            app:boxStrokeColor="#1976d2"
-            app:hintTextColor="#1976d2"
+            app:boxStrokeColor="?attr/colorPrimary"
+            app:hintTextColor="?attr/colorPrimary"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
-            <AutoCompleteTextView
+            <!--
+                MaterialAutoCompleteTextView（而不是 android.widget.AutoCompleteTextView）是下拉菜单
+                跟随主题的前提：只有它应用 Widget.Material3.AutoCompleteTextView.OutlinedBox 的
+                dropDownBackgroundTint（= colorSurfaceContainer）与 simpleItemLayout，
+                并把 item 文字交给主题。用普通 AutoCompleteTextView 时，弹出面板会落到
+                @android:layout/simple_dropdown_item_1line 的 Material 基线字色，
+                浅色系统下实测是「白字 + 浅色面板」1.76:1，默认主题下依然看不清。
+            -->
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView
                 android:textSize="14sp"
-                android:textColor="@color/lab_text_primary"
+                android:textColor="?attr/colorOnSurface"
                 android:id="@+id/sourceDropdown"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:nextFocusDown="@+id/folder"
                 android:inputType="none"/>
         </com.google.android.material.textfield.TextInputLayout>
         <LinearLayout
@@ -40,24 +49,26 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
             <com.google.android.material.textfield.TextInputLayout
-                android:textColorHint="@color/lab_text_secondary"
+                android:textColorHint="?attr/colorOnSurfaceVariant"
                 android:id="@+id/inputLayout"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:hint="@string/lab_source_placeholder"
                 android:layout_weight="1"
-                app:boxStrokeColor="#1976d2"
+                app:boxStrokeColor="?attr/colorPrimary"
                 app:boxStrokeWidth="2dp"
-                app:hintTextColor="#1976d2"
+                app:hintTextColor="?attr/colorPrimary"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
                 <com.google.android.material.textfield.TextInputEditText
                     android:textSize="13sp"
-                    android:textColor="@color/lab_text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:id="@+id/input"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:minHeight="48dp"
                     android:maxLines="3"
+                    android:nextFocusUp="@+id/sourceDropdown"
+                    android:nextFocusDown="@+id/rootInput"
                     android:inputType="textUri"/>
             </com.google.android.material.textfield.TextInputLayout>
             <androidx.appcompat.widget.AppCompatImageView
@@ -69,23 +80,25 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:src="@drawable/ic_setting_folder"
-                android:tint="#1976d2"
+                android:tint="?attr/colorPrimary"
+                android:nextFocusUp="@+id/sourceDropdown"
+                android:nextFocusDown="@+id/input"
                 android:layout_marginStart="8dp"/>
         </LinearLayout>
         <com.google.android.material.textfield.TextInputLayout
-            android:textColorHint="@color/lab_text_secondary"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
             android:id="@+id/rootLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="根目录（留空跟随配置）"
             android:layout_marginBottom="16dp"
-            app:boxStrokeColor="#1976d2"
+            app:boxStrokeColor="?attr/colorPrimary"
             app:boxStrokeWidth="2dp"
-            app:hintTextColor="#1976d2"
+            app:hintTextColor="?attr/colorPrimary"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
             <com.google.android.material.textfield.TextInputEditText
                 android:textSize="13sp"
-                android:textColor="@color/lab_text_primary"
+                android:textColor="?attr/colorOnSurface"
                 android:id="@+id/rootInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -112,14 +125,14 @@
                 android:layout_weight="1">
                 <TextView
                     android:textSize="14sp"
-                    android:textColor="@color/lab_text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:id="@+id/foregroundTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/lab_keepalive_foreground_title"/>
                 <TextView
                     android:textSize="12sp"
-                    android:textColor="@color/lab_text_secondary"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:id="@+id/foregroundHint"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -145,14 +158,14 @@
                 android:layout_weight="1">
                 <TextView
                     android:textSize="14sp"
-                    android:textColor="@color/lab_text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:id="@+id/batteryTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/lab_keepalive_battery_title"/>
                 <TextView
                     android:textSize="12sp"
-                    android:textColor="@color/lab_text_secondary"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:id="@+id/batteryHint"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -178,14 +191,14 @@
                 android:layout_weight="1">
                 <TextView
                     android:textSize="14sp"
-                    android:textColor="@color/lab_text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:id="@+id/navEntryTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/lab_nav_entry_title"/>
                 <TextView
                     android:textSize="12sp"
-                    android:textColor="@color/lab_text_secondary"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:id="@+id/navEntryHint"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -216,14 +229,14 @@
                 android:layout_weight="1">
                 <TextView
                     android:textSize="14sp"
-                    android:textColor="@color/lab_text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:id="@+id/proxyTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/lab_global_proxy_title"/>
                 <TextView
                     android:textSize="12sp"
-                    android:textColor="@color/lab_text_secondary"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:id="@+id/proxyHint"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -241,12 +254,12 @@
             android:layout_height="wrap_content"
             android:hint="@string/lab_global_proxy_port"
             android:layout_marginTop="12dp"
-            app:boxStrokeColor="#1976d2"
-            app:hintTextColor="#1976d2"
+            app:boxStrokeColor="?attr/colorPrimary"
+            app:hintTextColor="?attr/colorPrimary"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
             <com.google.android.material.textfield.TextInputEditText
                 android:textSize="13sp"
-                android:textColor="@color/lab_text_primary"
+                android:textColor="?attr/colorOnSurface"
                 android:id="@+id/proxyPort"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -260,12 +273,12 @@
             android:layout_height="wrap_content"
             android:hint="@string/lab_global_proxy_no_proxy"
             android:layout_marginTop="12dp"
-            app:boxStrokeColor="#1976d2"
-            app:hintTextColor="#1976d2"
+            app:boxStrokeColor="?attr/colorPrimary"
+            app:hintTextColor="?attr/colorPrimary"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
             <com.google.android.material.textfield.TextInputEditText
                 android:textSize="13sp"
-                android:textColor="@color/lab_text_primary"
+                android:textColor="?attr/colorOnSurface"
                 android:id="@+id/proxyNoProxy"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

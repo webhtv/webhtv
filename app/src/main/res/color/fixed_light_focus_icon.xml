@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    固定浅底上的图标 tint，与 fixed_light_focus_text 同源同值，仅按用途分开命名：
+    selector_mpv_icon_button 的焦点态 #E8F0FE / 按压态 #D2E3FC 是字面量浅色，因此 tint
+    必须两表恒定（默认 #202124、焦点/按下 #174EA6），不能跟随 ?attr/colorOnSurfaceVariant
+    （夜间 #C4C6D0 压 #D2E3FC 仅 1.31:1）。回归守卫：TvFixedLightSurfaceContrastTest。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="#174EA6" android:state_focused="true" />
+    <item android:color="#174EA6" android:state_pressed="true" />
+    <item android:color="#202124" />
+</selector>

@@ -26,33 +26,39 @@ public final class TmdbEpisodeSorter {
     }
 
     public static void sort(Flag flag) {
-        if (flag == null || flag.getEpisodes() == null || flag.getEpisodes().size() < 2) return;
-        List<IndexedEpisode> indexed = new ArrayList<>();
-        int recognized = 0;
-        int recognizedWithSeason = 0;
-        for (int i = 0; i < flag.getEpisodes().size(); i++) {
-            Episode episode = flag.getEpisodes().get(i);
-            int season = sourceSeasonNumber(episode);
-            int number = number(episode);
-            if (number > 0) {
-                recognized++;
-                if (season > 0) recognizedWithSeason++;
+        if (flag == null || flag.getEpisodes() == null) return;
+        List<Episode> episodes = flag.getEpisodes();
+        synchronized (episodes) {
+            if (episodes.size() < 2) return;
+            List<IndexedEpisode> indexed = new ArrayList<>();
+            int recognized = 0;
+            int recognizedWithSeason = 0;
+            for (int i = 0; i < episodes.size(); i++) {
+                Episode episode = episodes.get(i);
+                int season = sourceSeasonNumber(episode);
+                int number = number(episode);
+                if (number > 0) {
+                    recognized++;
+                    if (season > 0) recognizedWithSeason++;
+                }
+                indexed.add(new IndexedEpisode(episode, season, number, i));
             }
-            indexed.add(new IndexedEpisode(episode, season, number, i));
+            if (recognized < 2) return;
+            // Use one strategy for the whole flag so the comparator remains transitive.
+            boolean useSeason = recognized == recognizedWithSeason;
+            Comparator<IndexedEpisode> comparator = (left, right) -> compare(left, right, useSeason);
+            if (isSorted(indexed, comparator)) return;
+            try {
+                indexed.sort(comparator);
+            } catch (IllegalArgumentException e) {
+                SpiderDebug.log("tmdb-episode-sort", "keep source order after sort failure: %s", e.getMessage());
+                return;
+            }
+            // Reorder in place instead of clear()+add(). The episode list is shared with the UI;
+            // structural replacement increments ArrayList.modCount and can invalidate a UI iterator
+            // while SourceEpisodeSeasonCache resolves the current season on the main thread.
+            for (int i = 0; i < indexed.size(); i++) episodes.set(i, indexed.get(i).episode());
         }
-        if (recognized < 2) return;
-        // Use one strategy for the whole flag so the comparator remains transitive.
-        boolean useSeason = recognized == recognizedWithSeason;
-        Comparator<IndexedEpisode> comparator = (left, right) -> compare(left, right, useSeason);
-        if (isSorted(indexed, comparator)) return;
-        try {
-            indexed.sort(comparator);
-        } catch (IllegalArgumentException e) {
-            SpiderDebug.log("tmdb-episode-sort", "keep source order after sort failure: %s", e.getMessage());
-            return;
-        }
-        flag.getEpisodes().clear();
-        for (IndexedEpisode item : indexed) flag.getEpisodes().add(item.episode());
     }
 
     private static boolean isSorted(List<IndexedEpisode> episodes, Comparator<IndexedEpisode> comparator) {

@@ -15,7 +15,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/apk_push_url_progress_title"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -25,7 +25,7 @@
         android:layout_marginTop="8dp"
         android:lineSpacingExtra="2dp"
         android:text="@string/apk_push_url_progress_hint"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="14sp" />
 
     <com.google.android.material.textview.MaterialTextView
@@ -34,7 +34,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="22dp"
         android:lineSpacingExtra="4dp"
-        android:textColor="#303134"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="15sp"
         tools:text="正在接收 46% · 61 MB / 133 MB&#10;3.2 MB/s · 剩余 00:23 · 已用 00:12" />
 
@@ -60,6 +60,8 @@
         android:textColor="@color/dialog_primary_button_text"
         android:textSize="15sp"
         app:backgroundTint="@color/dialog_primary_button_bg"
+        app:strokeWidth="@dimen/webhtv_focus_ring_width"
+        app:strokeColor="@color/focus_ring_primary_container"
         app:cornerRadius="8dp" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

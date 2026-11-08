@@ -1,11 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版弹幕搜索结果行的旧焦点 selector。
+
+    当前无消费者（保留文件以免外部引用失效）。宽度改用唯一来源
+    @dimen/webhtv_focus_ring_width，避免以后接回时重新引入 2dp 这套旧规范；
+    其余状态（selected/activated/default）的 1dp 描边表达的是「未聚焦轮廓」，不属于焦点环，
+    保持 1dp。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="#333A7AFE" />
             <corners android:radius="7dp" />
             <stroke
-                android:width="2dp"
+                android:width="@dimen/webhtv_focus_ring_width"
                 android:color="@color/white" />
         </shape>
     </item>

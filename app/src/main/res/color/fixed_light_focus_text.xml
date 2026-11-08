@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    固定浅底（#F8FAFD / #FAFBFC / #F4F7FB / #E8F0FE / #D2E3FC / #F4F8FF / #F1F6FF / #FFFFFF
+    / #F3F5F7 / #E8F5E9）上的文字色。这些底是字面量，两张色板下都不变，所以文字也必须是
+    两表恒定值：默认 #202124、焦点/按下 #174EA6。
+
+    不得改回 ?attr/colorOnSurfaceVariant 一类的调色板角色：夜间表把该角色映射成 #C4C6D0，
+    压在 #FAFBFC 只有约 1.64:1，2026-10-24 电视端「取消」按钮就是这样几乎隐形的。
+    回归守卫：TvFixedLightSurfaceContrastTest。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="#174EA6" android:state_focused="true" />
+    <item android:color="#174EA6" android:state_pressed="true" />
+    <item android:color="#202124" />
+</selector>

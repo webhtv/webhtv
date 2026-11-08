@@ -201,6 +201,11 @@ public class FolderFragment extends BaseFragment {
         Optional.ofNullable(getChild()).ifPresent(TypeFragment::onRefresh);
     }
 
+    public boolean resetFilter() {
+        TypeFragment child = getChild();
+        return child != null && child.resetFilter();
+    }
+
     public boolean canBack() {
         return getChildFragmentManager().getBackStackEntryCount() > 0;
     }

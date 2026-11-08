@@ -5,9 +5,9 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:hint="@string/remote_trust_server_url"
-    app:boxBackgroundColor="@color/white"
+    app:boxBackgroundColor="?attr/colorOnSurface"
     app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-    app:hintTextColor="#5F6368">
+    app:hintTextColor="?attr/colorOnSurfaceVariant">
 
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/server"
@@ -20,6 +20,6 @@
         android:selectAllOnFocus="false"
         android:singleLine="true"
         android:textColor="@color/black"
-        android:textColorHint="#666666" />
+        android:textColorHint="?attr/colorOnSurfaceVariant" />
 
 </com.google.android.material.textfield.TextInputLayout>

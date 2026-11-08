@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版搜索输入框的实体宿主。此前该行只有文字（CustomSearchView 的 background 是 @null），
+    没有任何可见的输入框轮廓，于是「浅色模式下搜索那一栏的框框去哪了」无从回答——它本就不存在。
+
+    取值判据与 shape_keyboard_normal 同一族（恒定浅色前景压在壁纸上的半透明宿主）：
+      solid black_40 —— 白字在实测键底约 6.6:1，满足正文 4.5:1；black_20 实测仅 4.36:1，不采用。
+    边框用 ?attr/colorOutline（随调色板），焦点态由 selector_tv_search_field 换成
+    焦点环（唯一宽度 token + 唯一环色 token），因此两种明暗模式下都有可辨认的框。
+    填充同样走 ?attr/webhtvColorItemOverlay：默认值仍是 @color/black_40，未改过主题时渲染字节不变；
+    normal 态为何不接线、运行时为何要由 ThemeBinder 改写，理由见 shape_item_focused.xml。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <solid android:color="?attr/webhtvColorItemOverlay" />
+
+    <corners android:radius="28dp" />
+
+    <stroke
+        android:width="1dp"
+        android:color="?attr/colorOutline" />
+
+</shape>

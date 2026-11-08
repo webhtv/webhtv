@@ -79,7 +79,7 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     private void setRecyclerView() {
         setGridSpec();
         CustomSelector selector = new CustomSelector();
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16, FocusHighlight.ZOOM_FACTOR_NONE, HorizontalGridView.FOCUS_SCROLL_ALIGNED), VodPresenter.class);
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(ResUtil.dpOf(R.dimen.webhtv_size_tv_card_gap), FocusHighlight.ZOOM_FACTOR_NONE, HorizontalGridView.FOCUS_SCROLL_ALIGNED), VodPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.addOnScrollListener(mScroller = new CustomScroller(this));
         mBinding.recycler.setHeader(getActivity(), R.id.result, R.id.recycler);

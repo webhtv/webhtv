@@ -31,7 +31,7 @@
 ## Python/Chaquopy
 
 1. `api` 指向 `.py`，继承 `base.spider.Spider`。
-2. `getDependence()` 可返回依赖模块名列表；运行时先下载到缓存目录再初始化。
+2. `getDependence()` 可返回依赖模块名列表（不带 `.py`）；运行时逐个取回并写到 `cache/py/<name>.py`，**再**初始化。取回失败只记日志并继续初始化，不会把整站降级成 `SpiderNull`；日志同时走 `python-spider`（调试日志的「网络请求」分类）与 Logcat，后者在未开调试日志时仍可见。
 3. 可用基类工具：`loadSpider/loadModule/fetch/post/html/regStr/cleanText/getProxyUrl/getCache/setCache/delCache`。
 4. 只有包含 Chaquopy 运行时的构建变体可用；普通构建遇 Python 源会退回 `SpiderNull`。
 5. `ext=[]` 会被规范化为 `{}`，避免部分直播 Python Spider 反序列化失败。
@@ -57,7 +57,7 @@
 
 - 初始化失败会退回 `SpiderNull`，不应影响其它站点。
 - JAR/脚本更新后需要清理加载缓存或刷新配置。
-- Python 依赖下载失败会初始化失败；不要在 `init` 中无限重试。
+- Python 依赖取回失败只记日志并继续初始化；真正缺少该模块的源会在首次使用时抛 `ImportError`，比整站静默空列表更容易定位。日志走 Logcat（无条件）与调试日志的「网络请求」分类（需开启调试日志）。
 - 外部脚本不要依赖未公开的 App 内部类；优先使用运行时公开 API。
 
 ## 验证清单

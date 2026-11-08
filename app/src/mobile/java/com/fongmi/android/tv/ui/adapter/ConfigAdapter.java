@@ -19,6 +19,8 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     private final OnClickListener listener;
     private List<Config> mItems;
     private boolean readOnly;
+    private boolean protectCurrent;
+    private Config current;
 
     public ConfigAdapter(OnClickListener listener) {
         this.listener = listener;
@@ -30,6 +32,8 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
 
         boolean onTextLongClick(ViewHolder holder);
 
+        void onEditClick(Config item);
+
         void onDeleteClick(Config item);
     }
 
@@ -38,15 +42,33 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
         return this;
     }
 
+    public ConfigAdapter protectCurrent(boolean protectCurrent) {
+        this.protectCurrent = protectCurrent;
+        return this;
+    }
+
     public ConfigAdapter addAll(int type) {
         return addAll(type, null);
     }
 
     public ConfigAdapter addAll(int type, Config current) {
+        this.current = current;
         mItems = type == 0 ? InterfaceOrderStore.sortVodConfigs(Config.getAll(type)) : Config.getAll(type);
         String currentUrl = current == null ? null : current.getUrl();
-        if (!readOnly && !TextUtils.isEmpty(currentUrl)) mItems.removeIf(item -> TextUtils.equals(item.getUrl(), currentUrl));
+        if (!readOnly && !protectCurrent && !TextUtils.isEmpty(currentUrl)) mItems.removeIf(item -> TextUtils.equals(item.getUrl(), currentUrl));
         return this;
+    }
+
+    private boolean isCurrent(Config item) {
+        if (!protectCurrent || current == null) return false;
+        if (current.getId() > 0 && item.getId() == current.getId()) return true;
+        return current.getType() == item.getType()
+                && !TextUtils.isEmpty(current.getInterfaceKey())
+                && TextUtils.equals(current.getInterfaceKey(), item.getInterfaceKey());
+    }
+
+    public boolean isProtectedCurrent(Config item) {
+        return isCurrent(item);
     }
 
     public int remove(Config item) {
@@ -82,10 +104,18 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Config item = mItems.get(position);
+        boolean current = isCurrent(item);
         holder.binding.text.setText(item.getDesc());
-        holder.binding.text.setOnClickListener(v -> listener.onTextClick(item));
-        holder.binding.text.setOnLongClickListener(v -> listener.onTextLongClick(holder));
+        holder.binding.text.setEnabled(!current);
+        holder.binding.text.setFocusable(!current);
+        holder.binding.text.setOnClickListener(v -> {
+            if (!current) listener.onTextClick(item);
+        });
+        holder.binding.text.setOnLongClickListener(v -> !current && listener.onTextLongClick(holder));
+        holder.binding.edit.setVisibility(readOnly ? View.GONE : View.VISIBLE);
+        holder.binding.edit.setOnClickListener(v -> listener.onEditClick(item));
         holder.binding.delete.setVisibility(readOnly ? View.GONE : View.VISIBLE);
+        holder.binding.delete.setAlpha(current ? 0.38f : 1f);
         holder.binding.delete.setOnClickListener(v -> listener.onDeleteClick(item));
     }
 

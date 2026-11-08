@@ -16,6 +16,10 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Update;
 import com.fongmi.android.tv.databinding.DialogUpdateBinding;
 import com.fongmi.android.tv.impl.UpdateListener;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeTokens;
+import com.fongmi.android.tv.theme.UpdateVersionRowTheme;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.AppVersion;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.MarkdownText;
@@ -75,7 +79,7 @@ public class UpdateDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog_NoInset).setView(getBinding().getRoot()).setCancelable(false);
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog_NoInset).setView(getBinding().getRoot()).setCancelable(false);
     }
 
     @Override
@@ -166,6 +170,7 @@ public class UpdateDialog extends BaseAlertDialog {
         View content = stableChannel ? binding.stableContent : binding.betaContent;
         item.setSelected(expanded);
         content.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        applyCardTheme(channel, expanded);
         if (stableChannel) {
             binding.stableVersion.setText(getVersion(update));
             binding.stableStatus.setText(getStatus(update));
@@ -184,6 +189,20 @@ public class UpdateDialog extends BaseAlertDialog {
             binding.betaConfirm.setEnabled(update != null && update.hasUpdate());
             binding.betaConfirm.setText(R.string.update_confirm);
             binding.betaConfirm.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * Paints one version card from the active palette; see
+     * {@link UpdateVersionRowTheme} for why the card cannot rely on the static selector.
+     */
+    private void applyCardTheme(String channel, boolean expanded) {
+        ThemeTokens tokens = ThemeController.current();
+        boolean stableChannel = Update.CHANNEL_STABLE.equals(channel);
+        if (stableChannel) {
+            UpdateVersionRowTheme.apply(binding.stableItem, binding.stableName, binding.stableVersion, binding.stableStatus, binding.stableExpand, binding.stableDesc, expanded, tokens);
+        } else {
+            UpdateVersionRowTheme.apply(binding.betaItem, binding.betaName, binding.betaVersion, binding.betaStatus, binding.betaExpand, binding.betaDesc, expanded, tokens);
         }
     }
 

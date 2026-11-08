@@ -11,15 +11,17 @@ import androidx.leanback.widget.Presenter;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.databinding.AdapterTmdbCastBinding;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.card.MaterialCardView;
 
 public class TmdbCastPresenter extends Presenter {
 
-    private static final int CARD_BACKGROUND = 0xFF16202A;
-    private static final int STROKE_NORMAL = 0x26FFFFFF;
-    private static final int STROKE_FOCUSED = 0xFFFFFFFF;
+    // 统一焦点规范（与 selector_video_item.xml / selector_tmdb_cast_focus.xml 一致）：
+    // 常态 1dp @color/tv_item_normal_stroke，焦点环 3dp @color/tv_item_focus_ring 由 foreground 绘制。
+    private static final int STROKE_NORMAL = 0x33FFFFFF;
+    private static final int STROKE_WIDTH_NORMAL_DP = 1;
 
     private final OnClickListener mListener;
 
@@ -63,10 +65,14 @@ public class TmdbCastPresenter extends Presenter {
     }
 
     private void applyFocusStyle(MaterialCardView card, boolean focused) {
+        var tokens = ThemeController.current();
         card.setActivated(focused);
-        card.setCardBackgroundColor(CARD_BACKGROUND);
-        card.setStrokeColor(focused ? STROKE_FOCUSED : STROKE_NORMAL);
-        card.setStrokeWidth(ResUtil.dp2px(focused ? 3 : 1));
+        // 卡面走统一主题 token，自定义主题可覆写；
+        // 焦点环已由 foreground 的 selector 统一绘制，这里只维护常态描边，
+        // 避免"焦点用 3dp 卡片描边 + foreground 再画一圈"的双重描边。
+        card.setCardBackgroundColor(tokens.colorSurfaceContainerHigh());
+        card.setStrokeColor(STROKE_NORMAL);
+        card.setStrokeWidth(ResUtil.dp2px(STROKE_WIDTH_NORMAL_DP));
         card.setCardElevation(0);
         card.setTranslationZ(0);
     }

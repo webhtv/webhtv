@@ -23,7 +23,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/update_title"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="22sp"
             android:textStyle="bold" />
 
@@ -37,7 +37,7 @@
             android:nextFocusDown="@id/stableItem"
             android:padding="10dp"
             android:src="@drawable/ic_dialog_close"
-            app:tint="#5F6368" />
+            app:tint="@color/fixed_light_focus_icon" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -47,7 +47,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:text="@string/update_hint"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="14sp" />
 
     <androidx.core.widget.NestedScrollView
@@ -81,6 +81,7 @@
                 <androidx.appcompat.widget.LinearLayoutCompat
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:duplicateParentState="true"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -88,8 +89,9 @@
                         android:id="@+id/stableName"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:duplicateParentState="true"
                         android:text="@string/update_channel_stable"
-                        android:textColor="#202124"
+                        android:textColor="@color/update_version_item_title"
                         android:textSize="18sp"
                         android:textStyle="bold" />
 
@@ -104,7 +106,7 @@
                         android:paddingTop="5dp"
                         android:paddingEnd="9dp"
                         android:paddingBottom="5dp"
-                        android:textColor="#174EA6"
+                        android:textColor="?attr/colorPrimary"
                         android:textSize="13sp"
                         tools:text="可更新" />
 
@@ -114,8 +116,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
+                        android:duplicateParentState="true"
                         android:gravity="end"
-                        android:textColor="#174EA6"
+                        android:textColor="@color/update_version_item_accent"
                         android:textSize="14sp"
                         tools:text="收起" />
 
@@ -126,8 +129,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:duplicateParentState="true"
                     android:maxLines="2"
-                    android:textColor="#5F6368"
+                    android:textColor="@color/update_version_item_meta"
                     android:textSize="14sp"
                     tools:text="5.6.0-202608101200" />
 
@@ -136,6 +140,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
+                    android:duplicateParentState="true"
                     android:orientation="vertical"
                     tools:visibility="visible">
 
@@ -143,8 +148,9 @@
                         android:id="@+id/stableDesc"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:duplicateParentState="true"
                         android:lineSpacingExtra="3dp"
-                        android:textColor="#303134"
+                        android:textColor="@color/update_version_item_title"
                         android:textSize="16sp"
                         tools:text="### 更新内容&#10;&#10;- 稳定版更新说明" />
 
@@ -163,7 +169,9 @@
                         android:textColor="@color/dialog_primary_button_text"
                         android:textSize="15sp"
                         app:backgroundTint="@color/dialog_primary_button_bg"
-                        app:cornerRadius="8dp" />
+                        app:cornerRadius="8dp"
+                        app:strokeColor="@color/focus_ring_primary_container"
+                        app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -185,6 +193,7 @@
                 <androidx.appcompat.widget.LinearLayoutCompat
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:duplicateParentState="true"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -192,8 +201,9 @@
                         android:id="@+id/betaName"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:duplicateParentState="true"
                         android:text="@string/update_channel_beta"
-                        android:textColor="#202124"
+                        android:textColor="@color/update_version_item_title"
                         android:textSize="18sp"
                         android:textStyle="bold" />
 
@@ -208,7 +218,7 @@
                         android:paddingTop="5dp"
                         android:paddingEnd="9dp"
                         android:paddingBottom="5dp"
-                        android:textColor="#174EA6"
+                        android:textColor="?attr/colorPrimary"
                         android:textSize="13sp"
                         tools:text="可更新" />
 
@@ -218,8 +228,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
+                        android:duplicateParentState="true"
                         android:gravity="end"
-                        android:textColor="#174EA6"
+                        android:textColor="@color/update_version_item_accent"
                         android:textSize="14sp"
                         tools:text="展开" />
 
@@ -230,8 +241,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:duplicateParentState="true"
                     android:maxLines="2"
-                    android:textColor="#5F6368"
+                    android:textColor="@color/update_version_item_meta"
                     android:textSize="14sp"
                     tools:text="5.6.0-beta-202608101200" />
 
@@ -240,6 +252,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
+                    android:duplicateParentState="true"
                     android:orientation="vertical"
                     tools:visibility="gone">
 
@@ -247,8 +260,9 @@
                         android:id="@+id/betaDesc"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:duplicateParentState="true"
                         android:lineSpacingExtra="3dp"
-                        android:textColor="#303134"
+                        android:textColor="@color/update_version_item_title"
                         android:textSize="16sp"
                         tools:text="### 更新内容&#10;&#10;- 测试版更新说明" />
 
@@ -267,7 +281,9 @@
                         android:textColor="@color/dialog_primary_button_text"
                         android:textSize="15sp"
                         app:backgroundTint="@color/dialog_primary_button_bg"
-                        app:cornerRadius="8dp" />
+                        app:cornerRadius="8dp"
+                        app:strokeColor="@color/focus_ring_primary_container"
+                        app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -290,7 +306,7 @@
             android:id="@+id/progressText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#5F6368"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="14sp"
             tools:text="正在下载 46% · 3.2 MB/s · 已用 00:12" />
 
@@ -320,6 +336,8 @@
         android:textColor="@color/dialog_primary_button_text"
         android:textSize="15sp"
         app:backgroundTint="@color/dialog_primary_button_bg"
-        app:cornerRadius="8dp" />
+        app:cornerRadius="8dp"
+        app:strokeColor="@color/focus_ring_primary_container"
+        app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

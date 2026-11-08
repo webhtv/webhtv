@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 public class TmdbCinemaThemeTest {
@@ -29,8 +30,18 @@ public class TmdbCinemaThemeTest {
     public void palette_usesLightCanvasForLightTheme() {
         TmdbCinemaTheme.Palette palette = TmdbCinemaTheme.palette(true);
 
-        assertEquals(0xFFF4F7FA, palette.background());
+        assertEquals(0xFFEBE3DA, palette.background());
         assertEquals(0xFF12202D, palette.primary());
         assertEquals(0xD9FFFFFF, palette.card());
+    }
+
+    @Test
+    public void lightCinemaPaletteStaysDistinctFromProfileChrome() {
+        TmdbCinemaTheme.Palette palette = TmdbCinemaTheme.palette(true);
+
+        // 清透流彩是冷白/浅绿（F4F7FA / 20B866）；光影剧幕保持暖幕布与金色强调。
+        assertNotEquals(0xFFF4F7FA, palette.background());
+        assertNotEquals(0xFF20B866, palette.accent());
+        assertEquals(0xFFA8702F, palette.accent());
     }
 }

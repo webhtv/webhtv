@@ -115,7 +115,7 @@ public class HomeButton implements Diffable<HomeButton> {
         ids.add("4");
         if (!Setting.isHomeHistory()) ids.add("6");
         ids.add("7");
-        ids.add("9");
+        // 站点注入（id 9）默认不开启：仍保留在 all()/sortedAll() 目录中，由用户在“个性设置 → 首页按钮”内手动启用。
         return TextUtils.join(",", ids);
     }
 

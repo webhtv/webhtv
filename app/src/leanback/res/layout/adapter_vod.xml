@@ -12,7 +12,7 @@
         android:id="@+id/image"
         android:layout_width="match_parent"
         android:layout_height="80dp"
-        android:background="@color/black_20"
+        android:background="?attr/colorSurfaceContainer"
         android:scaleType="centerCrop"
         app:shapeAppearanceOverlay="@style/Vod.Grid" />
 
@@ -24,7 +24,7 @@
         android:layout_alignTop="@+id/image"
         android:layout_alignEnd="@+id/image"
         android:layout_alignBottom="@+id/image"
-        android:background="@color/black_50"
+        android:background="@color/webhtv_color_player_scrim"
         android:scaleType="center"
         android:src="@drawable/ic_vod_delete"
         android:visibility="gone"
@@ -41,7 +41,7 @@
         android:ellipsize="end"
         android:maxWidth="104dp"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="14sp"
         android:visibility="gone"
         tools:text="2022"
@@ -58,7 +58,7 @@
         android:ellipsize="end"
         android:maxWidth="116dp"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="14sp"
         android:visibility="gone"
         tools:text="瓜子[优](DS)"
@@ -74,7 +74,7 @@
         android:ellipsize="end"
         android:maxWidth="132dp"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="14sp"
         tools:text="00:32 / 13:08" />
 
@@ -85,8 +85,8 @@
         android:layout_below="@+id/image"
         android:layout_alignStart="@+id/image"
         android:layout_alignEnd="@+id/image"
-        android:background="@color/black_20"
-        app:indicatorColor="@color/white"
+        android:background="?attr/colorSurfaceContainer"
+        app:indicatorColor="?attr/colorPrimary"
         app:trackColor="@color/transparent"
         app:trackStopIndicatorSize="0dp"
         app:trackThickness="2dp" />
@@ -116,7 +116,7 @@
             android:marqueeRepeatLimit="marquee_forever"
             android:scrollHorizontally="true"
             android:singleLine="true"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="16sp"
             tools:text="云秀行" />
 
@@ -131,7 +131,7 @@
             android:marqueeRepeatLimit="marquee_forever"
             android:scrollHorizontally="true"
             android:singleLine="true"
-            android:textColor="@color/white_70"
+            android:textColor="?attr/webhtvColorOnWallpaperVariant"
             android:textSize="14sp"
             tools:text="第01集. 海边散步" />
 

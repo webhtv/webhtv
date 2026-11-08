@@ -33,6 +33,24 @@ public final class FollowingMergePolicy {
     }
 
     static Following mergeOne(Following local, Following remote) {
+        // 墓碑冲突：删除意图 vs 重新追更意图，按状态转换时间戳 LWW。
+        // createdAt 在复活/新建时重置，代表“最后一次关注”时刻；deletedAt 代表“取消”时刻，新者胜。
+        // 双方都是墓碑时较新墓碑胜；旧设备的活跃行（createdAt 缺失为 0）不触发复活，墓碑胜（保守）。
+        if (local.isDeleted() || remote.isDeleted()) {
+            long deletedAt = Math.max(local.deletedAt, remote.deletedAt);
+            boolean localRevives = local.deletedAt == 0 && local.createdAt > deletedAt;
+            boolean remoteRevives = remote.deletedAt == 0 && remote.createdAt > deletedAt;
+            if (localRevives || remoteRevives) {
+                return localRevives && (!remoteRevives || local.createdAt >= remote.createdAt)
+                        ? local.copy() : remote.copy();
+            }
+            Following result = deletedAt == local.deletedAt ? local.copy() : remote.copy();
+            result.deletedAt = deletedAt;
+            result.enabled = false;
+            result.updatedAt = Math.max(local.updatedAt, remote.updatedAt);
+            FollowingUpdatePolicy.refreshDerived(result, 0);
+            return result;
+        }
         Following result = local.copy();
         if (remote.metadataUpdatedAt > local.metadataUpdatedAt) {
             result.vodName = prefer(remote.vodName, local.vodName);

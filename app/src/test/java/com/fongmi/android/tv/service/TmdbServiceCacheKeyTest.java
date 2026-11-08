@@ -46,6 +46,36 @@ public class TmdbServiceCacheKeyTest {
         assertEquals(1, service.detailCacheKeys(item, config, true).size());
     }
 
+    /**
+     * 消歧 lite 详情必须与完整/core 详情使用不同缓存条目，否则 lite 结果会把完整详情缓存
+     * 覆盖成缺 images/translations/recommendations 的残缺对象；语言差异仍要分开。
+     */
+    @Test
+    public void disambiguationCacheKeyIsIsolatedFromDetailCaches() {
+        TmdbService service = new TmdbService();
+        TmdbItem tv = new TmdbItem(123, "tv", "庆余年", "", "", "", "");
+        TmdbItem movie = new TmdbItem(123, "movie", "庆余年", "", "", "", "");
+        TmdbConfig config = config("https://api.tmdb.org/3", "test-key", "zh-CN");
+
+        String lite = service.disambiguationCacheKey(tv, config);
+        assertNotEquals(service.detailCacheKey(tv, config, true), lite);
+        assertNotEquals(service.detailCacheKey(tv, config, false), lite);
+        assertNotEquals(lite, service.disambiguationCacheKey(movie, config));
+        assertEquals(lite, service.disambiguationCacheKey(tv, config("https://mirror.example.com/3", "other-key", "ZH-Hans")));
+        assertNotEquals(lite, service.disambiguationCacheKey(tv, config("https://api.tmdb.org/3", "test-key", "zh-TW")));
+    }
+
+    @Test
+    public void cacheKeysNormalizeLanguageCaseAndAliases() {
+        TmdbService service = new TmdbService();
+        TmdbItem item = new TmdbItem(123, "tv", "庆余年", "", "", "", "");
+
+        assertEquals(service.detailCacheKey(item, config("https://api.tmdb.org/3", "key", "ZH-Hans"), true),
+                service.detailCacheKey(item, config("https://api.tmdb.org/3", "key", "zh-CN"), true));
+        assertNotEquals(service.detailCacheKey(item, config("https://api.tmdb.org/3", "key", "zh-CN"), true),
+                service.detailCacheKey(item, config("https://api.tmdb.org/3", "key", "zh-TW"), true));
+    }
+
     @Test
     public void seasonAndEpisodeCacheKeysIgnoreAuthAndApiBase() {
         TmdbService service = new TmdbService();

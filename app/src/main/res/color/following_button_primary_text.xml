@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    追更页 primary 按钮（检查更新/全部已读/导入订阅）的文本色。
+
+    文本必须与**焦点态填充**配对：该按钮的 backgroundTint 是
+    following_button_primary_bg，focused/pressed 时填充取 following_button_focus
+    （= webhtv_color_focus）。此前这里写死 @android:color/white，在浅色表下凑巧可读，
+    但深色表下填充是浅色而文本仍为白，对比度降到 1.00:1 完全不可读；
+    TV 默认改为深色后这个缺陷会直接显形。
+    改取与填充配对的 on-色（webhtv_color_on_primary），两张表都 ≥6:1。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="@android:color/white" />
+    <item android:color="@color/webhtv_color_on_primary" />
 </selector>

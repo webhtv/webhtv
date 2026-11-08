@@ -271,7 +271,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
     protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
         binding = DialogControlBinding.inflate(inflater, container, false);
         speeds = Arrays.asList(binding.speed05, binding.speed075, binding.speed10, binding.speed125, binding.speed15, binding.speed175, binding.speed20, binding.speed25, binding.speed30, binding.speed50);
-        displays = Arrays.asList(binding.displayTime, binding.displayTraffic, binding.displaySize, binding.displayProgress, binding.displayMini, binding.displayTitle, binding.displayParams);
+        displays = Arrays.asList(binding.displayTime, binding.displayTraffic, binding.displaySize, binding.displayProgress, binding.displayMini, binding.displayTitle, binding.displayParams, binding.displayMediaBadges);
         return binding;
     }
 

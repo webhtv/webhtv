@@ -20,6 +20,7 @@ import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.service.TmdbService;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.adapter.EpisodePhotoAdapter;
 import com.fongmi.android.tv.ui.adapter.TmdbPersonAdapter;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -171,7 +172,7 @@ public class EpisodeDetailDialog {
             loadEpisodeMedia(activity, tmdbEpisode, site, light, photosLabel, photosGrid, guestsLabel, guestsGrid);
         }
 
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
+        MaterialAlertDialogBuilder builder = new WebHtvAlertDialogBuilder(activity)
                 .setView(view);
 
         AlertDialog alertDialog = builder.create();
@@ -274,7 +275,7 @@ public class EpisodeDetailDialog {
         guestsLabel.setVisibility(View.GONE);
         guestsGrid.setVisibility(View.GONE);
 
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
+        MaterialAlertDialogBuilder builder = new WebHtvAlertDialogBuilder(activity)
                 .setView(view);
 
         AlertDialog alertDialog = builder.create();
@@ -334,7 +335,7 @@ public class EpisodeDetailDialog {
     private static void showSimpleDialog(FragmentActivity activity, Episode episode,
                                          android.content.DialogInterface.OnDismissListener dismissListener) {
         // 标题放固定文案，源站文件名放可换行的正文，避免长名被单行标题截断
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.detail_tmdb_empty)
                 .setMessage(episode.getName())
                 .setPositiveButton("关闭", null)

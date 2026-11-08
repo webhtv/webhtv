@@ -2,10 +2,12 @@ package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Dialog;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,7 +18,6 @@ import android.view.WindowManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.LinearLayoutCompat;
-import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -32,8 +33,10 @@ import com.fongmi.android.tv.databinding.DialogSiteBinding;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.SiteGroupOrderStore;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.adapter.SiteAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.ui.helper.SiteDialogTheme;
 import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -49,6 +52,23 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     private static final int GRID_COUNT = 3;
     private static final String TAG = "site_dialog";
     private static final int INITIAL_BATCH = 48;
+    /** 站点卡片高度，必须与 adapter_site*.xml 的 layout_height 一致。 */
+    private static final int ROW_HEIGHT_DP = 52;
+    /** 网格行间距，必须与 SpaceItemDecoration(GRID_COUNT, 16) 的 16 一致。 */
+    private static final int ROW_SPACING_DP = 16;
+    /**
+     * 面板占屏宽的比例，对齐仓库既有大弹窗惯例（CacheManagementDialog.SCREEN_FRACTION = 0.9f）。
+     * 这里刻意不再叠加 dp 上限：真机电视常见 density 1.0，1920px 屏即 1920dp，旧上限 1180dp
+     * 会把面板压到只剩 61% 屏宽，分组标签行放不下、末尾标签被硬裁。
+     */
+    private static final float PANEL_WIDTH_RATIO = 0.9f;
+    /** 极窄屏兜底宽度，避免面板窄到无法阅读。 */
+    private static final int PANEL_MIN_WIDTH_DP = 480;
+    /**
+     * 面板高度占可用高度的上限。同样对齐 0.9 惯例，让一屏能多显示几行站点；
+     * 网格高度仍按整数行收敛，不会把末行裁半截。
+     */
+    private static final float PANEL_MAX_HEIGHT_RATIO = 0.9f;
 
     private static String selectedGroup = "";
 
@@ -115,6 +135,9 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         initView();
         initEvent();
         dialog.setOnKeyListener((d, keyCode, event) -> onDialogKey(keyCode, event));
+        ThemeController.bindDialog(dialog);
+        SiteDialogTheme.applyShell(binding.getRoot(), binding.keyword, binding.config, binding.search,
+                binding.change, binding.select, binding.cancel, binding.mode);
         return dialog;
     }
 
@@ -145,6 +168,9 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         directDialog.show();
         log("show call end cost=%sms total=%sms", cost(showDialogStart), cost());
         applyWindow(directDialog.getWindow());
+        ThemeController.bindDialog(directDialog);
+        SiteDialogTheme.applyShell(binding.getRoot(), binding.keyword, binding.config, binding.search,
+                binding.change, binding.select, binding.cancel, binding.mode);
         TouchOptimizationHelper.sync(directDialog);
         log("window applied total=%sms", cost());
     }
@@ -159,6 +185,9 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         long start = System.currentTimeMillis();
         setRootWidth();
         setRecyclerHeight(INITIAL_BATCH);
+        binding.header.setVisibility(View.VISIBLE);
+        binding.title.setText(action ? R.string.site_dialog_title_action : R.string.site_dialog_title);
+        binding.count.setVisibility(View.GONE);
         binding.searchBar.setVisibility(View.GONE);
         binding.keyword.setVisibility(View.GONE);
         binding.actionGap.setVisibility(View.GONE);
@@ -168,6 +197,8 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         binding.select.setVisibility(action ? View.VISIBLE : View.GONE);
         binding.cancel.setVisibility(action ? View.VISIBLE : View.GONE);
         binding.mode.setVisibility(View.GONE);
+        SiteDialogTheme.applyShell(binding.getRoot(), binding.keyword, binding.config, binding.search,
+                binding.change, binding.select, binding.cancel, binding.mode);
         setActionEnabled(false);
         binding.recycler.setAdapter(null);
         binding.recycler.setItemAnimator(null);
@@ -196,16 +227,33 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         long layoutStart = System.currentTimeMillis();
         setType(type);
         setRecyclerView();
-        setRecyclerHeight(adapter.getItemCount());
         setMode();
         setGroupView();
+        setRecyclerHeight(adapter.getItemCount());
         setActionEnabled(true);
+        updateCountText();
         log("view configured cost=%sms total=%sms", cost(layoutStart), cost());
         runAfterFirstPreDraw("list preDraw", () -> {
             if (adapter != null) adapter.showAll();
             log("list expanded total=%sms items=%s", cost(), adapter == null ? -1 : adapter.getItemCount());
+            // 首帧后 wrap_content 的标题/分组行才有真实高度，此时再收敛一次网格高度，
+            // 面板高度才是「内容 + 整数行网格」，不会在屏幕外多留一行。
+            if (binding != null && adapter != null) {
+                setRecyclerHeight(adapter.getItemCount());
+                updateCountText();
+            }
             focusSelectedSite();
         });
+    }
+
+    private void updateCountText() {
+        if (binding == null || adapter == null) return;
+        int count = adapter.getItemCount();
+        // 走视图自己的 context：TV 版是裸 Dialog（showDirect），Fragment 从未 attach 到
+        // FragmentManager，Fragment.getString()/requireContext() 会抛
+        // IllegalStateException: not attached to a context。
+        binding.count.setText(binding.getRoot().getContext().getString(R.string.site_dialog_count, count));
+        binding.count.setVisibility(count > 0 ? View.VISIBLE : View.GONE);
     }
 
     @Override
@@ -232,6 +280,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
                 setRecyclerView();
                 setRecyclerHeight(adapter.getItemCount());
                 setMode();
+                updateCountText();
                 setWidth();
             }
         });
@@ -247,17 +296,75 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     }
 
     private void setRecyclerHeight(int count) {
-        // 全屏模式下，recycler 由布局 layout_weight 决定高度，无需动态计算
+        // 面板不再铺满：网格高度收敛到整数行，多余的行交给滚动，避免最后一行被裁掉半截。
+        // 高度在这里显式给定，因此不再需要 maxHeight 兜底（Integer.MAX_VALUE 还会被
+        // CustomRecyclerView 折成 AT_MOST 的畸形 spec）。
         ViewGroup.LayoutParams params = binding.recycler.getLayoutParams();
-        params.height = ViewGroup.LayoutParams.MATCH_PARENT;
+        params.height = gridHeight(count);
         binding.recycler.setLayoutParams(params);
-        binding.recycler.setMaxHeight(Integer.MAX_VALUE);
+    }
+
+    private int gridHeight(int count) {
+        int rows = Math.max(1, (Math.max(0, count) + getCount() - 1) / getCount());
+        int row = ResUtil.dp2px(ROW_HEIGHT_DP);
+        int spacing = ResUtil.dp2px(ROW_SPACING_DP);
+        int budget = gridBudgetHeight();
+        if (budget < row) return row;
+        int fitRows = Math.max(1, (budget + spacing) / (row + spacing));
+        int visibleRows = Math.min(rows, fitRows);
+        return visibleRows * row + (visibleRows - 1) * spacing;
+    }
+
+    /** 网格高度预算 = 可用高度 × 面板高度上限 − 面板里除网格以外的固定内容高度。 */
+    private int gridBudgetHeight() {
+        return Math.max(0, Math.round(windowVisibleHeight() * PANEL_MAX_HEIGHT_RATIO) - panelChromeHeight());
+    }
+
+    /**
+     * 窗口实际可用高度。优先用 decor 的可见显示区域：它已经扣掉了系统栏，
+     * 比直接用屏幕高度更接近面板真正能占的高度；拿不到时退回屏幕高度。
+     */
+    private int windowVisibleHeight() {
+        View root = binding == null ? null : binding.getRoot();
+        if (root != null) {
+            Rect frame = new Rect();
+            root.getWindowVisibleDisplayFrame(frame);
+            if (frame.height() > 0) return frame.height();
+        }
+        return ResUtil.getScreenHeight(getDialogActivity());
+    }
+
+    /**
+     * 面板除网格以外的固定高度。按实际布局测量，避免把 dialog_site.xml 的尺寸写死成第二份常量：
+     * 改布局的人不需要记得同步这里。
+     */
+    private int panelChromeHeight() {
+        if (binding == null) return 0;
+        int chrome = binding.getRoot().getPaddingTop() + binding.getRoot().getPaddingBottom();
+        chrome += fixedHeight(binding.header);
+        chrome += fixedHeight(binding.searchBar);
+        chrome += fixedHeight(binding.groupScroll);
+        chrome += fixedHeight(binding.groupHint);
+        if (binding.recycler.getParent() instanceof View container && container.getLayoutParams() instanceof ViewGroup.MarginLayoutParams margins) {
+            chrome += Math.max(0, margins.topMargin);
+        }
+        return chrome;
+    }
+
+    private int fixedHeight(View view) {
+        if (view == null || view.getVisibility() == View.GONE) return 0;
+        int height = view.getMeasuredHeight();
+        if (height <= 0 && view.getLayoutParams() != null) height = Math.max(0, view.getLayoutParams().height);
+        if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams margins) height += Math.max(0, margins.topMargin);
+        return height;
     }
 
     private void setRootWidth() {
         ViewGroup.LayoutParams params = binding.getRoot().getLayoutParams();
-        if (params == null) params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (params == null) params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        // 宽度填满窗口（窗口本身已按屏宽比例收窄），高度贴合内容。
         params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+        params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
         binding.getRoot().setLayoutParams(params);
     }
 
@@ -289,8 +396,10 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     private void setActionEnabled(boolean enabled) {
         binding.search.setEnabled(enabled);
         binding.change.setEnabled(enabled);
-        binding.select.setEnabled(enabled && type > 0);
-        binding.cancel.setEnabled(enabled && type > 0);
+        // Keep bulk actions in the D-pad focus chain even in plain switch mode.
+        // setType() controls whether they are clickable; enabled only reflects loading state.
+        binding.select.setEnabled(enabled);
+        binding.cancel.setEnabled(enabled);
     }
 
     @Override
@@ -399,10 +508,20 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         window.setWindowAnimations(0);
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         WindowManager.LayoutParams params = window.getAttributes();
-        params.width = WindowManager.LayoutParams.MATCH_PARENT;
-        params.height = WindowManager.LayoutParams.MATCH_PARENT;
+        // 居中浮层面板：四周留出安全边距，高度贴合内容，不再铺满整屏。
+        params.width = panelWidth();
+        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        params.gravity = Gravity.CENTER;
+        params.dimAmount = 0.62f;
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
+    }
+
+    private int panelWidth() {
+        int screen = ResUtil.getScreenWidth(getDialogActivity());
+        int min = Math.min(ResUtil.dp2px(PANEL_MIN_WIDTH_DP), screen);
+        return Math.max(min, Math.round(screen * PANEL_WIDTH_RATIO));
     }
 
     private void runAfterFirstPreDraw(String label, Runnable action) {
@@ -480,16 +599,17 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     private androidx.appcompat.widget.AppCompatTextView getGroupView(String group, String text) {
         androidx.appcompat.widget.AppCompatTextView button = new androidx.appcompat.widget.AppCompatTextView(getDialogActivity());
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMarginEnd(ResUtil.dp2px(12));
+        // 间距与内边距收紧到 10dp/14dp：面板 90% 宽时 14 个标签刚好放得下，
+        // 不再让末尾标签被面板右缘裁掉半个（超出时仍由 groupScroll 横向滚动兜底）。
+        params.setMarginEnd(ResUtil.dp2px(10));
         button.setLayoutParams(params);
         button.setTag(group);
         button.setText(text);
         button.setSingleLine(true);
         button.setAllCaps(false);
         button.setGravity(android.view.Gravity.CENTER);
-        button.setPadding(ResUtil.dp2px(16), ResUtil.dp2px(8), ResUtil.dp2px(16), ResUtil.dp2px(8));
-        button.setTextColor(ContextCompat.getColorStateList(getDialogActivity(), R.color.selector_group_text));
-        button.setBackgroundResource(R.drawable.selector_group_button);
+        button.setPadding(ResUtil.dp2px(14), ResUtil.dp2px(8), ResUtil.dp2px(14), ResUtil.dp2px(8));
+        SiteDialogTheme.applyGroup(button);
         button.setFocusable(true);
         button.setClickable(true);
         button.setNextFocusDownId(binding.recycler.getId());
@@ -609,6 +729,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         updateGroupView();
         adapter.filter(selectedGroup, "");
         setRecyclerHeight(adapter.getItemCount());
+        updateCountText();
         scrollRecyclerToTop();
         centerGroup(view);
     }
@@ -635,6 +756,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
             button.setContentDescription(TextUtils.isEmpty(group) ? text : getDialogActivity().getString(description, text));
             view.setAlpha(groupReordering && !reordering ? 0.55f : 1.0f);
             view.setSelected(selected);
+            SiteDialogTheme.applyGroup(button);
         }
     }
 

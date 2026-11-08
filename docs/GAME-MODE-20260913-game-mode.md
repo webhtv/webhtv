@@ -9,6 +9,12 @@
 - 验证记录：`bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.content.GameContentHandlerTest :app:compileMobileArm64_v8aDebugJavaWithJavac :app:compileLeanbackArm64_v8aDebugJavaWithJavac --console=plain` 成功。已加强 GameWebActivity 安全设置：禁用本地文件访问和混合内容，符合 CatWebActivity 与 HomeWebController 水平。
 - 下一步：提交任务守卫并创建本地恢复标签。
 
+## 2026-09-23 动作回传空值修复
+
+- 现象：动作实际执行成功，但 `spider.action()` 返回 `null` / `"null"` / 空串时，界面弹出「动作无响应」。
+- 原因：`ActionCardHelper.dispatch()` 把“无 JSON 回传”直接等同于失败。
+- 修复：`null` / JSON 字面量 `null` / 空白回传静默视为成功；其他非 JSON 文本仍原样提示，保留真实错误。站点不存在或类型不支持动作时返回可见错误，不再被空回传语义静默吞掉。
+
 ## 设计与行为
 
 1. `vod_tag=action` 且 `vod_id` 是 JSON 时，`Vod.getAction()` 将 JSON 交给动作卡流程。

@@ -60,6 +60,7 @@ public class TypeAdapter extends RecyclerView.Adapter<TypeAdapter.ViewHolder> {
         holder.binding.text.setCompoundDrawablePadding(ResUtil.dp2px(4));
         holder.binding.text.setCompoundDrawablesWithIntrinsicBounds(0, 0, getIcon(item), 0);
         holder.binding.text.setListener(() -> mListener.onRefresh(item));
+        holder.binding.text.setLongPressListener(() -> mListener.onLongPress(item));
         holder.binding.getRoot().setOnClickListener(v -> mListener.onItemClick(item));
     }
 
@@ -72,6 +73,8 @@ public class TypeAdapter extends RecyclerView.Adapter<TypeAdapter.ViewHolder> {
         void onItemClick(Class item);
 
         void onRefresh(Class item);
+
+        void onLongPress(Class item);
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/mpv_config_rename_title"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="18sp"
             android:textStyle="bold" />
 
@@ -31,7 +31,7 @@
             android:focusable="true"
             android:padding="10dp"
             android:src="@drawable/ic_dialog_close"
-            android:tint="#5F6368" />
+            android:tint="@color/fixed_light_focus_icon" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -69,7 +69,7 @@
             android:text="@string/dialog_negative"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/rename"
@@ -80,7 +80,9 @@
             android:minHeight="40dp"
             android:text="@string/mpv_config_rename"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

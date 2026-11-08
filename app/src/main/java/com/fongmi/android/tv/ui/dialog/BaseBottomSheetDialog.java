@@ -15,6 +15,7 @@ import androidx.core.view.WindowCompat;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -57,7 +58,14 @@ public abstract class BaseBottomSheetDialog extends BottomSheetDialogFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         initView();
+        bindDialogTheme();
         initEvent();
+    }
+
+    private void bindDialogTheme() {
+        Dialog dialog = getDialog();
+        if (dialog == null) return;
+        ThemeController.bindDialog(dialog);
     }
 
     protected void initView() {

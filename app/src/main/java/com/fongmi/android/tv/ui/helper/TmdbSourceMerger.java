@@ -1,11 +1,14 @@
 package com.fongmi.android.tv.ui.helper;
 
+import android.text.TextUtils;
+
 import androidx.annotation.Nullable;
 
 import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.bean.TmdbSourcePayload;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -26,7 +29,8 @@ public final class TmdbSourceMerger {
         SOURCE,
         LOCAL_CACHE,
         REMOTE_TMDB,
-        VOD_FALLBACK
+        VOD_FALLBACK,
+        REMOTE_TMDB_LANGUAGE
     }
 
     public record MergedBundle(TmdbBundle bundle, Map<String, Origin> origins) {
@@ -41,25 +45,36 @@ public final class TmdbSourceMerger {
     }
 
     public static TmdbBundle fillOnly(@Nullable TmdbBundle source, @Nullable TmdbSourcePayload payload, @Nullable TmdbBundle network) {
-        return merge(source, payload, null, network).bundle();
+        return fillOnly(source, payload, network, "");
+    }
+
+    public static TmdbBundle fillOnly(@Nullable TmdbBundle source, @Nullable TmdbSourcePayload payload,
+                                      @Nullable TmdbBundle network, @Nullable String targetLanguage) {
+        return merge(source, payload, null, network, targetLanguage).bundle();
     }
 
     public static MergedBundle merge(@Nullable TmdbBundle source, @Nullable TmdbSourcePayload payload,
                                      @Nullable TmdbBundle cache, @Nullable TmdbBundle network) {
+        return merge(source, payload, cache, network, "");
+    }
+
+    public static MergedBundle merge(@Nullable TmdbBundle source, @Nullable TmdbSourcePayload payload,
+                                     @Nullable TmdbBundle cache, @Nullable TmdbBundle network,
+                                     @Nullable String targetLanguage) {
         TmdbBundle base = source == null ? empty() : source;
         Map<String, Origin> origins = new LinkedHashMap<>();
-        base = mergePair(base, payload, cache, Origin.LOCAL_CACHE, origins);
-        base = mergePair(base, payload, network, Origin.REMOTE_TMDB, origins);
+        base = mergePair(base, payload, cache, Origin.LOCAL_CACHE, origins, targetLanguage);
+        base = mergePair(base, payload, network, Origin.REMOTE_TMDB, origins, targetLanguage);
         return new MergedBundle(base, origins);
     }
 
     private static TmdbBundle mergePair(TmdbBundle base, @Nullable TmdbSourcePayload payload, @Nullable TmdbBundle lower,
-                                        Origin lowerOrigin, Map<String, Origin> origins) {
+                                        Origin lowerOrigin, Map<String, Origin> origins, @Nullable String targetLanguage) {
         if (lower == null || lower.item() == null) return base;
         if (base.item() != null && !identityMatches(base.item(), lower.item())) return base;
 
-        TmdbItem item = mergeItem(base.item(), lower.item(), payload, origins, lowerOrigin);
-        JsonObject detail = mergeObject(base.detail(), lower.detail(), payload, "detail", origins, lowerOrigin);
+        TmdbItem item = mergeItem(base.item(), lower.item(), payload, origins, lowerOrigin, targetLanguage);
+        JsonObject detail = mergeObject(base.detail(), lower.detail(), payload, "detail", origins, lowerOrigin, targetLanguage);
         List<TmdbPerson> cast = mergeList(base.cast(), lower.cast(), "cast", cachedComplete(payload, "credits"), origins, lowerOrigin);
         List<TmdbPerson> creators = mergeList(base.creators(), lower.creators(), "creators", cachedComplete(payload, "credits"), origins, lowerOrigin);
         List<String> photos = mergeList(base.photos(), lower.photos(), "photos", cachedComplete(payload, "images"), origins, lowerOrigin);
@@ -72,11 +87,12 @@ public final class TmdbSourceMerger {
         return new TmdbBundle(item, detail, cast, creators, photos, related, seasons, seasonCounts, seasonEpisodes, seasonCast, seasonPhotos);
     }
 
-    private static TmdbItem mergeItem(TmdbItem source, TmdbItem lower, @Nullable TmdbSourcePayload payload, Map<String, Origin> origins, Origin lowerOrigin) {
+    private static TmdbItem mergeItem(TmdbItem source, TmdbItem lower, @Nullable TmdbSourcePayload payload,
+                                       Map<String, Origin> origins, Origin lowerOrigin, @Nullable String targetLanguage) {
         if (source == null) return lower;
-        String title = choose(source.getTitle(), lower.getTitle(), "item.title", origins, lowerOrigin);
+        String title = chooseDisplay(source.getTitle(), lower.getTitle(), payload, targetLanguage, "item.title", origins, lowerOrigin);
         String subtitle = choose(source.getSubtitle(), lower.getSubtitle(), "item.subtitle", origins, lowerOrigin);
-        String overview = choose(source.getOverview(), lower.getOverview(), "item.overview", origins, lowerOrigin);
+        String overview = chooseDisplay(source.getOverview(), lower.getOverview(), payload, targetLanguage, "item.overview", origins, lowerOrigin);
         String poster = choose(source.getPosterUrl(), lower.getPosterUrl(), "item.poster", origins, lowerOrigin);
         String backdrop = choose(source.getBackdropUrl(), lower.getBackdropUrl(), "item.backdrop", origins, lowerOrigin);
         String credit = choose(source.getCredit(), lower.getCredit(), "item.credit", origins, lowerOrigin);
@@ -96,7 +112,7 @@ public final class TmdbSourceMerger {
     }
 
     private static JsonObject mergeObject(@Nullable JsonObject source, @Nullable JsonObject lower, @Nullable TmdbSourcePayload payload, String path,
-                                          Map<String, Origin> origins, Origin lowerOrigin) {
+                                          Map<String, Origin> origins, Origin lowerOrigin, @Nullable String targetLanguage) {
         JsonObject result = source == null ? new JsonObject() : source.deepCopy();
         if (lower == null) return result;
         for (Map.Entry<String, JsonElement> entry : lower.entrySet()) {
@@ -104,11 +120,13 @@ public final class TmdbSourceMerger {
             String childPath = path.isEmpty() ? key : path + '.' + key;
             JsonElement current = result.get(key);
             JsonElement replacement = entry.getValue();
-            if (current == null || isEmptyValue(current, payload, childPath)) {
+            boolean languageOverride = isCoreDisplayField(childPath) && !isEmptyValue(replacement, payload, childPath)
+                    && shouldOverrideCoreDisplay(stringValue(current), stringValue(replacement), payload, targetLanguage);
+            if (current == null || languageOverride || isEmptyValue(current, payload, childPath)) {
                 result.add(key, replacement.deepCopy());
-                mark(origins, childPath, lowerOrigin);
+                mark(origins, childPath, languageOverride ? Origin.REMOTE_TMDB_LANGUAGE : lowerOrigin);
             } else if (current.isJsonObject() && replacement.isJsonObject()) {
-                result.add(key, mergeObject(current.getAsJsonObject(), replacement.getAsJsonObject(), payload, childPath, origins, lowerOrigin));
+                result.add(key, mergeObject(current.getAsJsonObject(), replacement.getAsJsonObject(), payload, childPath, origins, lowerOrigin, targetLanguage));
             } else if (current.isJsonArray() && replacement.isJsonArray()) {
                 JsonArray merged = mergeArray(current.getAsJsonArray(), replacement.getAsJsonArray(), payload, childPath, origins, lowerOrigin);
                 result.add(key, merged);
@@ -228,6 +246,38 @@ public final class TmdbSourceMerger {
                     "poster_path", "backdrop_path" -> true;
             default -> false;
         };
+    }
+
+    private static String chooseDisplay(String source, String lower, @Nullable TmdbSourcePayload payload,
+                                       @Nullable String targetLanguage, String field, Map<String, Origin> origins, Origin lowerOrigin) {
+        if (!TextUtils.isEmpty(source) && shouldOverrideCoreDisplay(source, lower, payload, targetLanguage)) {
+            mark(origins, field, Origin.REMOTE_TMDB_LANGUAGE);
+            return lower == null ? "" : lower;
+        }
+        return choose(source, lower, field, origins, lowerOrigin);
+    }
+
+    private static boolean shouldOverrideCoreDisplay(String source, String lower, @Nullable TmdbSourcePayload payload,
+                                                     @Nullable String targetLanguage) {
+        if (TextUtils.isEmpty(lower) || TextUtils.isEmpty(source)) return false;
+        if (TextUtils.isEmpty(targetLanguage)) return false;
+        String target = TmdbLanguagePolicy.normalize(targetLanguage);
+        String declared = payload == null ? "" : payload.getLanguage();
+        if (!TmdbLanguagePolicy.isDisplayLanguageCompatible(target, declared)) {
+            return TmdbLanguagePolicy.looksTargetLanguage(target, lower);
+        }
+        return false;
+    }
+
+    private static String stringValue(JsonElement value) {
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) return "";
+        String text = value.getAsString();
+        return text == null ? "" : text.trim();
+    }
+
+    private static boolean isCoreDisplayField(String path) {
+        String field = path.substring(path.lastIndexOf('.') + 1);
+        return "title".equals(field) || "name".equals(field) || "overview".equals(field);
     }
 
     private static String choose(String source, String lower, String field, Map<String, Origin> origins, Origin lowerOrigin) {

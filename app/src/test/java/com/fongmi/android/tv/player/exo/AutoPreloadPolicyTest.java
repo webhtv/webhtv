@@ -39,7 +39,8 @@ public class AutoPreloadPolicyTest {
         input = new AutoPreloadPolicy.Inputs(
                 input.session(), false, input.route(), input.bufferedMs(),
                 input.mediaBitrateBitsPerSecond(), input.rebufferCount(), input.loading(),
-                input.trend(), input.throughput(), input.system(), false, false, 0);
+                input.trend(), input.throughput(), input.system(), false, false,
+                Long.MAX_VALUE, 0);
 
         AutoPreloadPolicy.Decision decision = new AutoPreloadPolicy().evaluate(input);
 
@@ -206,7 +207,8 @@ public class AutoPreloadPolicyTest {
         AutoPreloadPolicy.Inputs pressured = new AutoPreloadPolicy.Inputs(
                 safe.session(), safe.sessionMatches(), safe.route(), safe.bufferedMs(),
                 safe.mediaBitrateBitsPerSecond(), safe.rebufferCount(), safe.loading(),
-                safe.trend(), safe.throughput(), safe.system(), true, false, 0);
+                safe.trend(), safe.throughput(), safe.system(), true, false,
+                Long.MAX_VALUE, 0);
 
         AutoPreloadPolicy.Decision decision = new AutoPreloadPolicy().evaluate(pressured);
 
@@ -320,7 +322,8 @@ public class AutoPreloadPolicyTest {
         AutoPreloadPolicy.Inputs rebuffered = new AutoPreloadPolicy.Inputs(
                 safe.session(), safe.sessionMatches(), safe.route(), safe.bufferedMs(),
                 safe.mediaBitrateBitsPerSecond(), 1, safe.loading(), safe.trend(),
-                safe.throughput(), safe.system(), false, false, 0);
+                safe.throughput(), safe.system(), false, false,
+                Long.MAX_VALUE, 0);
 
         AutoPreloadPolicy.Decision decision = new AutoPreloadPolicy().evaluate(rebuffered);
 
@@ -344,6 +347,7 @@ public class AutoPreloadPolicyTest {
                 safeSystem(),
                 false,
                 false,
+                Long.MAX_VALUE,
                 0);
         AutoPreloadPolicy.Inputs recovered = new AutoPreloadPolicy.Inputs(
                 SESSION,
@@ -358,6 +362,7 @@ public class AutoPreloadPolicyTest {
                 safeSystem(),
                 false,
                 false,
+                Long.MAX_VALUE,
                 15_000);
 
         AutoPreloadPolicy.Decision paused = policy.evaluate(low);
@@ -515,6 +520,20 @@ public class AutoPreloadPolicyTest {
             ForwardBufferTrend.Snapshot trend,
             boolean memoryPaused,
             boolean preloadActive) {
+        return inputs(nowMs, route, bufferedMs, throughput, system, trend, memoryPaused,
+                preloadActive, Long.MAX_VALUE);
+    }
+
+    private static AutoPreloadPolicy.Inputs inputs(
+            long nowMs,
+            PlaybackRoute route,
+            long bufferedMs,
+            AutoPreloadPolicy.ThroughputEvidence throughput,
+            AutoPreloadPolicy.SystemEvidence system,
+            ForwardBufferTrend.Snapshot trend,
+            boolean memoryPaused,
+            boolean preloadActive,
+            long foregroundEofRecoveryAgeMs) {
         return new AutoPreloadPolicy.Inputs(
                 SESSION,
                 true,
@@ -528,7 +547,76 @@ public class AutoPreloadPolicyTest {
                 system,
                 memoryPaused,
                 preloadActive,
+                foregroundEofRecoveryAgeMs,
                 nowMs);
+    }
+
+    /**
+     * The external-loopback route is the one whose throughput estimate is BLOCKED, so the ordinary
+     * throughput judgments are skipped and only buffer level protects the foreground. These cases
+     * pin the new yield-on-EOF behavior on exactly that route.
+     */
+    @Test
+    public void foregroundEofRecoveryYieldsOnBlockedThroughputRoute() {
+        AutoPreloadPolicy.Decision decision = new AutoPreloadPolicy().evaluate(
+                inputs(0, PlaybackRoute.EXTERNAL_LOOPBACK_PROXY, 30_000,
+                        AutoPreloadPolicy.ThroughputEvidence.unknown(),
+                        safeSystem(), stableTrend(0, 30_000), false, false, 0));
+
+        assertFalse(decision.enabled());
+        assertEquals("foreground-eof-recovery", decision.reason());
+    }
+
+    @Test
+    public void yieldOutlastsTheObservedRecoveryBurst() {
+        AutoPreloadPolicy policy = new AutoPreloadPolicy();
+
+        // The device burst ran 2-6 s; the window must still be closed well after that.
+        assertFalse(policy.evaluate(
+                inputs(0, PlaybackRoute.EXTERNAL_LOOPBACK_PROXY, 30_000,
+                        AutoPreloadPolicy.ThroughputEvidence.unknown(),
+                        safeSystem(), stableTrend(0, 30_000), false, false, 6_000)).enabled());
+        assertFalse(policy.evaluate(
+                inputs(0, PlaybackRoute.EXTERNAL_LOOPBACK_PROXY, 30_000,
+                        AutoPreloadPolicy.ThroughputEvidence.unknown(),
+                        safeSystem(), stableTrend(0, 30_000), false, false, 14_999)).enabled());
+    }
+
+    @Test
+    public void preloadResumesOnceTheYieldWindowExpires() {
+        // A stale recovery must not suspend preload forever: the window is a delay, not a circuit.
+        AutoPreloadPolicy.Decision decision = new AutoPreloadPolicy().evaluate(
+                inputs(0, PlaybackRoute.EXTERNAL_LOOPBACK_PROXY, 30_000,
+                        AutoPreloadPolicy.ThroughputEvidence.unknown(),
+                        safeSystem(), stableTrend(0, 30_000), false, false, 15_001));
+
+        assertTrue(decision.enabled());
+        assertTrue(decision.threads() >= 1);
+    }
+
+    @Test
+    public void neverObservedRecoveryNeverYields() {
+        // Long.MAX_VALUE is the "no recovery in this process" sentinel. A healthy session must not
+        // be mistaken for a recovering one, or preload would never start at all.
+        AutoPreloadPolicy.Decision decision = new AutoPreloadPolicy().evaluate(
+                inputs(0, PlaybackRoute.EXTERNAL_LOOPBACK_PROXY, 30_000,
+                        AutoPreloadPolicy.ThroughputEvidence.unknown(),
+                        safeSystem(), stableTrend(0, 30_000), false, false, Long.MAX_VALUE));
+
+        assertTrue(decision.enabled());
+        assertTrue(decision.threads() >= 1);
+    }
+
+    @Test
+    public void healthyRouteWithTrustedThroughputIsUnaffectedByStaleRecovery() {
+        // The yield must not disturb the ordinary trusted path once its window has passed.
+        AutoPreloadPolicy.Decision decision = new AutoPreloadPolicy().evaluate(
+                inputs(0, PlaybackRoute.DIRECT_REMOTE_HTTP, 20_000,
+                        trustedThroughput(0, 30, 30, 30, 200, false),
+                        safeSystem(), stableTrend(0, 20_000), false, false, 60_000));
+
+        assertTrue(decision.enabled());
+        assertTrue(decision.threads() >= 1);
     }
 
     private static AutoPreloadPolicy.ThroughputEvidence trustedThroughput(

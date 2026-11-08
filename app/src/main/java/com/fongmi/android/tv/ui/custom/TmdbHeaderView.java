@@ -1470,6 +1470,11 @@ public class TmdbHeaderView {
         chip.setOrientation(androidx.appcompat.widget.LinearLayoutCompat.VERTICAL);
         chip.setGravity(android.view.Gravity.CENTER);
         chip.setPadding(28, 14, 28, 14);
+        // “评分与数据”卡片必须可被遥控/键盘选中：此前是纯装饰 LinearLayout，
+        // 上下键会整行跳过，与 TV 播放页保持同一行为。
+        chip.setFocusable(true);
+        chip.setFocusableInTouchMode(false);
+        chip.setClickable(true);
 
         android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
         background.setCornerRadius(ResUtil.dp2px(6));
@@ -1501,7 +1506,26 @@ public class TmdbHeaderView {
         boolean lightChrome = isLightDetailChrome() || (fusion && !isDarkDetailTheme());
         boolean lightSurface = !backdropSurfaceMode && lightChrome;
         styleSourceRatingChip(chip, fusion, lightChrome, lightSurface);
+        chip.setOnFocusChangeListener((view, focused) -> {
+            if (focused) applyUnifiedRatingChipFocus(view);
+            else styleSourceRatingChip((ViewGroup) view, Setting.isFusionDetailPage(),
+                    isLightDetailChrome() || (Setting.isFusionDetailPage() && !isDarkDetailTheme()),
+                    !backdropSurfaceMode && (isLightDetailChrome() || (Setting.isFusionDetailPage() && !isDarkDetailTheme())));
+        });
         return chip;
+    }
+
+    /**
+     * 统一焦点环：3dp @color/tv_item_focus_ring，与 selector_video_item.xml 同一套取值。
+     * 失焦时由 styleSourceRatingChip 恢复当前主题的常态外观，不改变既有亮/暗/融合配色。
+     */
+    private void applyUnifiedRatingChipFocus(View chip) {
+        if (!(chip instanceof ViewGroup group)) return;
+        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+        background.setColor(backdropSurfaceMode ? COLOR_BACKDROP_SURFACE_CONTROL_BG : 0x26FFFFFF);
+        background.setCornerRadius(ResUtil.dp2px(6));
+        background.setStroke(ResUtil.dp2px(3), activity.getColor(R.color.tv_item_focus_ring));
+        group.setBackground(background);
     }
 
     private void styleRatingChipContainer(ViewGroup container) {

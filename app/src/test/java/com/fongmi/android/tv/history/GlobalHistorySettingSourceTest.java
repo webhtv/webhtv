@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class GlobalHistorySettingSourceTest {
@@ -17,8 +18,18 @@ public class GlobalHistorySettingSourceTest {
         assertTrue(source.contains("GLOBAL_HISTORY_OFF = 0"));
         assertTrue(source.contains("GLOBAL_HISTORY_AUTO = 1"));
         assertTrue(source.contains("GLOBAL_HISTORY_SEARCH = 2"));
-        assertTrue(source.contains("Prefers.getInt(\"global_history_mode\", GLOBAL_HISTORY_OFF)"));
+        assertTrue(source.contains("getAll().get(\"global_history_mode\")"));
         assertTrue(source.contains("Prefers.put(\"global_history_mode\""));
+    }
+
+    @Test
+    public void explicitGlobalHistoryOffIsPersistedDistinctly() throws Exception {
+        String source = read("app/src/main/java/com/fongmi/android/tv/setting/Setting.java");
+
+        assertTrue(source.contains("mode == GLOBAL_HISTORY_OFF ? -1 : mode"));
+        assertTrue(source.contains("value instanceof Boolean legacy"));
+        assertTrue(source.contains("value instanceof Number number"));
+        assertTrue(source.contains("return clampGlobalHistoryMode(number.intValue())"));
     }
 
     @Test
@@ -29,6 +40,11 @@ public class GlobalHistorySettingSourceTest {
         String leanbackLayout = read("app/src/leanback/res/layout/activity_setting_personal.xml");
 
         assertTrue(mobile.contains("mBinding.globalHistory"));
+        assertTrue(mobile.contains("event.getActionMasked() == MotionEvent.ACTION_DOWN"));
+        assertFalse(mobile.contains("event.getActionMasked() == MotionEvent.ACTION_UP"));
+        assertTrue(mobile.contains("MotionEvent.ACTION_CANCEL) globalHistoryTouchStarted = false"));
+        assertTrue(mobile.contains("if (!globalHistoryTouchStarted) return"));
+        assertTrue(mobile.contains("globalHistoryTouchStarted = false"));
         assertTrue(mobile.contains("select_global_history_mode"));
         assertTrue(leanback.contains("mBinding.globalHistory"));
         assertTrue(leanback.contains("select_global_history_mode"));

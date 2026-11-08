@@ -59,10 +59,25 @@ public class CatSource {
                 latch.countDown();
             }
         });
-        if (!latch.await(60, TimeUnit.SECONDS)) {
+        if (!latch.await(NodeRuntime.START_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
             throw new Exception("猫源启动超时");
         }
         if (error.get() != null) throw new Exception("猫源启动失败: " + error.get());
+        return NodeRuntime.configUrl();
+    }
+
+    /**
+     * 只复用已经在服务的同一个 bundle，<b>绝不为桥接请求换源</b>。
+     *
+     * <p>{@link #serve} 走 {@link NodeRuntime#start}：bundle 不同就先杀掉正在服务的子进程再起新的，
+     * 而服务的是全局单例。桥接要解析的是另一个非激活配置，换源会把激活配置的全部请求打到这个
+     * 新 bundle 上，并且当前线程还要阻塞到新 bundle 就绪（最长 {@link NodeRuntime#START_TIMEOUT_MS}，
+     * 局域网可达即等于一个 DoS）。因此地址与当前服务的 bundle 不同时直接失败，由调用方转成错误响应。
+     *
+     * @throws IllegalStateException 当前服务的是别的 bundle，或根本没有 bundle 在服务
+     */
+    public static String reuse(String url) {
+        if (!NodeRuntime.isServing(url)) throw new IllegalStateException("该配置的猫源需要另起 node 运行时，为避免打断当前激活配置已拒绝解析");
         return NodeRuntime.configUrl();
     }
 

@@ -189,7 +189,7 @@ public final class CodecCapabilityDialog {
     }
 
     private int getReportHeight() {
-        int screen = ResUtil.getScreenHeight(activity);
+        int screen = DialogSafeArea.height(activity);
         if (Util.isLeanback()) return Math.min(ResUtil.dp2px(430), Math.round(screen * 0.58f));
         return Math.min(ResUtil.dp2px(330), Math.round(screen * (ResUtil.isLand(activity) ? 0.44f : 0.36f)));
     }

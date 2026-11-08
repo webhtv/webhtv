@@ -82,7 +82,7 @@ final class NodeRangeZip {
     private static String write(String url, long start, long length, int method, File target, Progress progress) {
         if (target.getParentFile() != null) target.getParentFile().mkdirs();
         Request request = new Request.Builder().url(url).header("Range", "bytes=" + start + "-" + (start + length - 1)).build();
-        try (Response response = OkHttp.client().newCall(request).execute()) {
+        try (Response response = OkHttp.client(NodeRuntime.LIB_TRANSFER_TIMEOUT_MS).newCall(request).execute()) {
             if (response.code() != 206 || response.body() == null) return "Range 请求失败 HTTP " + response.code();
             try (InputStream raw = new Counting(response.body().byteStream(), length, progress);
                  InputStream in = method == 0 ? raw : new InflaterInputStream(raw, new Inflater(true));
@@ -100,7 +100,7 @@ final class NodeRangeZip {
     }
 
     private static long contentLength(String url) {
-        try (Response response = OkHttp.client().newCall(new Request.Builder().url(url).head().build()).execute()) {
+        try (Response response = OkHttp.client(NodeRuntime.LIB_TRANSFER_TIMEOUT_MS).newCall(new Request.Builder().url(url).head().build()).execute()) {
             String value = response.header("Content-Length");
             return TextUtils.isEmpty(value) ? -1 : Long.parseLong(value);
         } catch (Exception e) {
@@ -110,7 +110,7 @@ final class NodeRangeZip {
 
     private static byte[] range(String url, long from, long to) {
         Request request = new Request.Builder().url(url).header("Range", "bytes=" + from + "-" + to).build();
-        try (Response response = OkHttp.client().newCall(request).execute()) {
+        try (Response response = OkHttp.client(NodeRuntime.LIB_TRANSFER_TIMEOUT_MS).newCall(request).execute()) {
             if (response.code() != 206 || response.body() == null) return null;
             return response.body().bytes();
         } catch (Exception e) {

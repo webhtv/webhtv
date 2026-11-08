@@ -15,13 +15,13 @@ import com.fongmi.android.tv.databinding.FragmentSettingAiBinding;
 import com.fongmi.android.tv.service.RecommendationFeedbackStore;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.RealtimeSubtitleController;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.AiConfigDialog;
 import com.fongmi.android.tv.ui.dialog.RecommendationFeedbackDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleSettingsDialog;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class SettingAiFragment extends BaseFragment {
 
@@ -87,7 +87,7 @@ public class SettingAiFragment extends BaseFragment {
             setText();
             return;
         }
-        new MaterialAlertDialogBuilder(requireContext())
+        new WebHtvAlertDialogBuilder(requireContext())
                 .setTitle(R.string.personal_recommendation_confirm_title)
                 .setMessage(R.string.personal_recommendation_confirm_message)
                 .setNegativeButton(R.string.dialog_negative, null)

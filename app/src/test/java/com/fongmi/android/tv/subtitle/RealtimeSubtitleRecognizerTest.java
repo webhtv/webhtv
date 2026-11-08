@@ -37,13 +37,6 @@ public class RealtimeSubtitleRecognizerTest {
         assertEquals(35_200, RealtimeSubtitleRecognizer.offlineFlushSamples(RealtimeSubtitleModelCatalog.find("yue")));
         assertEquals(35_200, RealtimeSubtitleRecognizer.offlineFlushSamples(RealtimeSubtitleModelCatalog.find("ja")));
     }
-    @Test
-    public void adProfileHasOneThreadAndSubtitleKeepsItsPreviousBudget() {
-        assertEquals(1, RealtimeSubtitleRecognizer.threadCount(SpeechRecognitionFactory.ExecutionProfile.AD_AUDIO));
-        assertEquals(Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 2)),
-                RealtimeSubtitleRecognizer.threadCount(SpeechRecognitionFactory.ExecutionProfile.SUBTITLE));
-    }
-
     @Test(timeout = 10_000)
     public void interruptedReleaseWaitsForTheActualDecodeWorkerToExit() throws Exception {
         ExecutorService decode = Executors.newSingleThreadExecutor();

@@ -21,7 +21,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="16sp"
             tools:text="選擇字幕" />
 
@@ -29,12 +29,12 @@
             android:id="@+id/secondary"
             android:layout_width="wrap_content"
             android:layout_height="36dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_glass_icon_action"
             android:focusable="true"
             android:gravity="center"
             android:paddingHorizontal="12dp"
             android:text="@string/play_track_secondary_subtitle"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="13sp"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -43,8 +43,9 @@
             android:id="@+id/choose"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_glass_icon_action"
             android:focusable="true"
+            android:padding="6dp"
             android:src="@drawable/ic_action_choose"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -54,9 +55,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_glass_icon_action"
             android:contentDescription="@string/subtitle_manual_search"
             android:focusable="true"
+            android:padding="6dp"
             android:src="@drawable/ic_action_search"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -66,9 +68,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_glass_icon_action"
             android:contentDescription="@string/subtitle_ai_translate_action"
             android:focusable="true"
+            android:padding="6dp"
             android:src="@drawable/ic_action_ai"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -78,9 +81,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_glass_icon_action"
             android:contentDescription="@string/subtitle_realtime_action"
             android:focusable="true"
+            android:padding="6dp"
             android:src="@drawable/ic_action_realtime_subtitle"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -90,9 +94,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_glass_icon_action"
             android:contentDescription="@string/subtitle_ai_regenerate_action"
             android:focusable="true"
+            android:padding="6dp"
             android:src="@drawable/ic_action_refresh"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -102,8 +107,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_glass_icon_action"
             android:focusable="true"
+            android:padding="6dp"
             android:src="@drawable/ic_action_subtitle"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -113,8 +119,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_glass_icon_action"
             android:focusable="true"
+            android:padding="6dp"
             android:src="@drawable/ic_action_offset"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -142,7 +149,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/subtitle_realtime_source_language"
-            android:textColor="@color/white_90"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="16sp" />
 
         <com.google.android.material.textview.MaterialTextView
@@ -150,7 +157,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="end"
-            android:textColor="@color/white_70"
+            android:textColor="@color/webhtv_color_player_control_muted"
             android:textSize="16sp"
             tools:text="English" />
 
@@ -163,7 +170,7 @@
         android:paddingStart="24dp"
         android:paddingEnd="24dp"
         android:paddingBottom="12dp"
-        android:textColor="@color/white_70"
+        android:textColor="@color/webhtv_color_player_control_muted"
         android:textSize="13sp"
         android:visibility="gone"
         tools:text="AI 正在翻譯：1/3 分塊，約剩 20s"

@@ -65,7 +65,7 @@
 
 ## 接受标准
 
-- [x] TV 首页默认功能按钮包含“站点注入”。
+- [x] TV 首页按钮目录包含“站点注入”（id `9`），但**默认不开启**：新安装/重置默认值时首页不显示该按钮。“个性设置 → 首页按钮”中的复选框默认未勾选，用户手动启用后才加入首页。
 - [x] “个性设置 → 首页按钮”可看到、启用/禁用和排序“站点注入”；旧的自定义列表不会被强制覆盖。
 - [x] 点击按钮打开现有站点注入管理界面，不能静默切换或无反馈。
 - [x] 在管理界面内修改全局 `enabled` 后，由现有保存流程重新加载当前 VOD/直播配置，使注入开关对当前页面生效。
@@ -77,7 +77,7 @@
 
 ## 验证计划
 
-- 定向源测试：`SiteInjectHomeButtonSourceTest`，覆盖新按钮 id/默认值、状态文案、`CustomCspDialog` 打开入口、权限检查以及旧去广告入口移除。
+- 定向源测试：`SiteInjectHomeButtonSourceTest`，覆盖新按钮 id、默认值（站点注入默认不开启）、状态文案、`CustomCspDialog` 打开入口、权限检查以及旧去广告入口移除。
 - 编译：`:app:compileLeanbackArm64_v8aDebugJavaWithJavac`。
 - 测试：`:app:testLeanbackArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.bean.SiteInjectHomeButtonSourceTest`。
 - 静态检查：`git diff --check` 和 task guard scope 检查。
@@ -93,4 +93,36 @@
 - 2026-09-09 点击修复：将首页按钮从静默调用注册表切换改为调用现有 `CustomCspDialog.show(this, this::setFunc)`；站点注入界面、全局开关和保存重载统一由既有对话框负责。
 - 2026-09-09 用户反馈的根因：首页按钮原先只修改注册表并重载配置，没有打开任何可见界面，因此用户看不到反馈；修复为复用增强功能页已有的权限申请和 `CustomCspDialog` 入口。
 - 点击修复最终验证（2026-09-09）：`bash .codex/scripts/task_guard.sh check` 通过；`:app:testLeanbackArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.bean.SiteInjectHomeButtonSourceTest` 通过；`:app:compileLeanbackArm64_v8aDebugJavaWithJavac` 通过；`git diff --check` 通过。
-- 状态：点击行为修复和定向验证完成；待原子提交与恢复 tag。
+- 状态（2026-09-09 阶段）：点击行为修复和定向验证完成并已提交。
+
+## 2026-09-27：站点注入首页按钮改为默认不开启
+
+- 用户需求：`电视版个性设置-首页按钮-站点注入默认不开启`。
+- 根因：`HomeButton.getDefaultButtons()` 在默认按钮串末尾追加 id `9`，因此新安装和“重置”后 `站点注入` 复选框默认处于勾选状态、首页直接显示该按钮。
+- 判定：需求指向“个性设置 → 首页按钮”列表内该条目的默认勾选状态，不是 `CustomCspSetting.Registry.enabled`（默认 `true` 仅决定注入是否生效，且其唯一入口在“增强功能 → 站点注入”，在无任何条目时不会产生注入）。因此只改默认勾选集合，不改注册表开关与注入语义。
+- 改动：`HomeButton.getDefaultButtons()` 移除 `ids.add("9")`；`HomeButton.all()`、`ALL` 排序串和“个性设置 → 首页按钮”条目保持不变，用户仍可手动启用、排序。
+- 兼容：已显式保存过首页按钮列表的用户保留原配置（含此前保存的 `9`）；未保存过列表（含新安装与点过“重置”）的用户默认不再显示站点注入按钮。
+- 未改动：`HomeButton.ALL`（完整目录）、`Func` 状态文案、`HomeActivity` 点击入口、`CustomCspSetting` 及其注入路径、手机端行为。
+- 验证：见下方“2026-09-27 验证结果”。
+
+### 2026-09-27 验证结果
+
+- 定向源测试：`SiteInjectHomeButtonSourceTest#siteInjectionIsNotEnabledByDefault`，断言 `getDefaultButtons()` 方法体内不出现 id `9`，同时断言 id `9` 仍在 `all()` 目录中（可手动启用）。
+- 运行时单元测试（新增）：`app/src/testLeanback/java/com/fongmi/android/tv/ui/bean/SiteInjectHomeButtonDefaultStateTest.java`，Robolectric 真实执行 `HomeButton`：
+  - `freshInstallDoesNotSelectSiteInjection`：未保存过首页按钮时 `getButtons()`/`getVisibleButtons()` 均不含站点注入，其余既有按钮保留。
+  - `siteInjectionStaysSelectableInTheButtonDialog`：`sortedAll()`/`all()` 仍含站点注入，可手动启用。
+  - `userCanStillEnableSiteInjectionManually`：手动勾选后 `getButtons()`/`getVisibleButtons()` 恢复含站点注入。
+  - `legacySavedSelectionKeepingSiteInjectionIsPreserved`：已保存的旧列表不被强制改写。
+  - `resetFallsBackToTheDefaultWithoutSiteInjection`：“重置”后回到站点注入不开启的默认值。
+- 测试结果：`:app:testLeanbackArm64_v8aDebugUnitTest --tests ...SourceTest --tests ...DefaultStateTest` → `BUILD SUCCESSFUL`，`SiteInjectHomeButtonSourceTest` 4/4、`SiteInjectHomeButtonDefaultStateTest` 5/5，无 failure/error。
+- 回归：`:app:testLeanbackArm64_v8aDebugUnitTest` 全量 → `BUILD SUCCESSFUL`，630 个测试类 / 4051 个测试、0 failure、0 error、2 skipped。
+- 编译与打包：`:app:compileLeanbackArm64_v8aDebugJavaWithJavac` 通过；`bash scripts/build_arm64_debug_install.sh --flavor leanback --serial 192.168.50.3:5555` 打包并 `adb install -r` 覆盖安装成功（未卸载）。
+
+### 2026-09-27 设备实测（dev1 分配设备 192.168.50.3:5555，Android 9 / sdk 28，TV(leanback) 包 `com.silent.android.webhtv`）
+
+- 设备原本保存过自定义首页按钮 `0,8,6,1,2,3,4,7`；先备份 `shared_prefs/com.silent.android.webhtv_preferences.xml`（md5 `374cac5b5fb8fced84f8dc1303f4eb5a`），验收后已原样恢复并校验 md5 一致。
+- 首页功能按钮行（保存列表）未出现“站点注入”，与旧列表一致。
+- 个性设置 → 首页按钮：点“重置”写入默认值后，界面摘要从 `已启用 8/10`（旧自定义列表）变为 **`已启用 6/10`**；把列表滚到底，**“站点注入”行复选框为未勾选（checked=false）**，且该行仍存在于列表中可手动启用。旧行为为默认 `7/10`，因此设备侧直接证明默认不开启。
+- 手动启用：DPAD 确认“站点注入”后摘要变为 `已启用 7/10`；返回首页，功能按钮行出现「站点注入：开」（位于“设置”右侧），证明只改变默认值而不改变可启用能力。
+- 新安装默认态直测：临时移除设备上的 `home_button`/`home_button_sorted` 两个 key（先备份）后重新启动应用，首页功能按钮行实测为 `点播、直播、搜索、收藏、追更、推送、设置` **7 项，不含“站点注入”**（改动前默认包含，共 8 项）；同时个性设置 → 首页按钮摘要为 `已启用 6/10`。随后已将 prefs 原样恢复并校验 md5 一致。
+- 设备状态：验收后已 force-stop 并还原原 prefs 文件，设备侧临时 dump 文件已清理；未卸载现有包，未占用 dev2/dev3/dev4 模拟器。

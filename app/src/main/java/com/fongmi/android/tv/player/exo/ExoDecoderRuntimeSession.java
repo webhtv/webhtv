@@ -13,6 +13,15 @@ public final class ExoDecoderRuntimeSession {
     public static final int MAX_RUNTIME_FALLBACKS_PER_PLAYBACK = 1;
     public static final long STABLE_PLAYBACK_WINDOW_MS = 30_000L;
     private static final long MAX_HEALTHY_DROPPED_FRAMES = 23;
+    /**
+     * The health window is 30s, so 23 frames over that window is what
+     * {@link #MAX_HEALTHY_DROPPED_FRAMES} has always meant. Keeping the same budget as a
+     * rate lets a shorter or longer window be judged on equal terms: media3 settles its
+     * dropped-frame accumulator whenever the renderer stops, so a bare count also carries
+     * whatever a pause flushed out.
+     */
+    private static final double MAX_HEALTHY_DROPPED_FRAMES_PER_SECOND =
+            MAX_HEALTHY_DROPPED_FRAMES * 1000d / STABLE_PLAYBACK_WINDOW_MS;
 
     private final ProfileAccess profiles;
     private final Set<ExoDecoderRuntimeKey.Key> failedThisPlayback;
@@ -109,7 +118,7 @@ public final class ExoDecoderRuntimeSession {
         ExoDecoderRuntimeProfileStore.Metrics metrics = metrics(evidence, nowElapsedMs);
         if (metrics.observedDurationMs() < STABLE_PLAYBACK_WINDOW_MS) return;
         boolean healthy = evidence.recoverableCodecErrors() == 0
-                && evidence.droppedFrames() <= MAX_HEALTHY_DROPPED_FRAMES;
+                && withinHealthyDropRate(evidence);
         if (healthy) profiles.recordStableSuccess(key, metrics, nowEpochMs);
         else profiles.recordObservation(key, metrics, nowEpochMs);
         if (healthy && pendingFallbackKey != null) {
@@ -185,6 +194,17 @@ public final class ExoDecoderRuntimeSession {
                 currentOutput);
     }
 
+    /**
+     * Same budget as the old fixed count, measured per played second. Without a measured
+     * played time a rate cannot be formed at all, so the historical fixed count still
+     * applies: an unmeasured session must not silently become healthier than before.
+     */
+    private static boolean withinHealthyDropRate(Evidence evidence) {
+        if (evidence.playTimeMs() <= 0) return evidence.droppedFrames() <= MAX_HEALTHY_DROPPED_FRAMES;
+        double rate = evidence.droppedFrames() * 1000d / evidence.playTimeMs();
+        return rate <= MAX_HEALTHY_DROPPED_FRAMES_PER_SECOND;
+    }
+
     private ExoDecoderRuntimeProfileStore.Metrics metrics(
             Evidence evidence,
             long nowElapsedMs) {
@@ -240,12 +260,24 @@ public final class ExoDecoderRuntimeSession {
             @Nullable Format format,
             boolean secure,
             long droppedFrames,
-            int recoverableCodecErrors) {
+            int recoverableCodecErrors,
+            long playTimeMs) {
 
         public Evidence {
             decoderName = decoderName == null ? "" : decoderName;
             droppedFrames = Math.max(0, droppedFrames);
             recoverableCodecErrors = Math.max(0, recoverableCodecErrors);
+            playTimeMs = Math.max(0, playTimeMs);
+        }
+
+        /** Evidence whose played time was not measured; judged against the fixed count. */
+        public Evidence(
+                String decoderName,
+                @Nullable Format format,
+                boolean secure,
+                long droppedFrames,
+                int recoverableCodecErrors) {
+            this(decoderName, format, secure, droppedFrames, recoverableCodecErrors, 0);
         }
     }
 

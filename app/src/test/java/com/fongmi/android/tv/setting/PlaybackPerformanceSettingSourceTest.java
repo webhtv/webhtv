@@ -110,6 +110,99 @@ public class PlaybackPerformanceSettingSourceTest {
         assertFalse(buildPlayer.contains("buildLoadControl()"));
     }
 
+    @Test
+    public void lateDropThresholdSwitchCanActuallyDisableDropping() throws Exception {
+        // media3 defaults lateThresholdToDropDecoderInputUs to 15 ms, which is exactly the value
+        // this build passes when the switch is on. If the wiring skipped the setter when the
+        // switch is off, the default would keep dropping input frames and the switch would lie.
+        String util = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "ExoUtil.java"));
+        String renderer = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "ExoRuntimeAwareVideoRenderer.java"));
+
+        assertContainsAll(util,
+                "ENHANCED_LATE_THRESHOLD_TO_DROP_INPUT_US = 15_000L",
+                "PlaybackPerformanceSetting.isLateDropInputEnabled()",
+                "C.TIME_UNSET");
+        // Both renderer paths must read the one shared accessor so they cannot drift apart.
+        assertContainsAll(renderer, "ExoUtil.effectiveLateDropThresholdUs()");
+        assertDoesNotContainAny(renderer, "isLateDropInputEnabled()");
+    }
+
+    @Test
+    public void frameSchedulingConfigurationReachesTheDiagnosticLog() throws Exception {
+        // A dropped-frame report is unattributable while exported logs carry no configuration,
+        // so the player build must emit one line naming what actually reached the factory.
+        String util = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "ExoUtil.java"));
+        String diagnostics = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "ExoPlaybackDiagnostics.java"));
+        String settings = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "ExoFrameSchedulingRendererSettings.java"));
+
+        assertContainsAll(util,
+                "long lateDropThresholdUs = effectiveLateDropThresholdUs();",
+                "ExoPlaybackDiagnostics.logFrameScheduling(",
+                "frameSchedulingSettings.codecQueueModeLabel()",
+                "frameSchedulingSettings.dynamicSchedulingEnabled()");
+        assertContainsAll(diagnostics, "static void logFrameScheduling(", "ExoFrameSchedulingRendererSettings.describe(");
+        assertContainsAll(settings,
+                "static String describe(",
+                "durationToProgress=",
+                "earlySchedulingUs=",
+                "lateDropInputUs=",
+                "\"unset\"",
+                "metricScope=settings-applied-only");
+    }
+
+    @Test
+    public void inputSideDropCountersReachTheDiagnosticLog() throws Exception {
+        // The 「输入丢帧阈值」 switch drops decoder input frames before they are decoded. Reporting
+        // only the output counters let that happen invisibly, which is the one question a
+        // dropped-frame report has to answer.
+        String collector = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "ExoDiagnosticCollector.java"));
+
+        assertContainsAll(collector,
+                "droppedInputBufferCount",
+                "skippedInputBufferCount",
+                "droppedToKeyframeCount",
+                "droppedInputBuffers are pre-decoder drops");
+    }
+
+    @Test
+    public void frameLatenessHistogramDoesNotRequireExperimentEnrollment() throws Exception {
+        // The per-frame lateness distribution used to be collected only for devices enrolled in
+        // the frame-scheduling A/B experiment, so an ordinary report could not say how late frames
+        // were. Diagnostics-on must be enough, and stop-only delivery must not be the only trigger:
+        // media3 reports the offset from onStopped() alone.
+        String listener = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "PlaybackAnalyticsListener.java"));
+        String collector = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "ExoDiagnosticCollector.java"));
+
+        assertContainsAll(listener,
+                "frameSchedulingExperimentActive || SpiderDebug.isEnabled()",
+                "static void logFrameTimingIfDue()",
+                "\"exo-frame-timing\"",
+                "FRAME_TIMING_LOG_INTERVAL_MS");
+        assertContainsAll(collector, "PlaybackAnalyticsListener.logFrameTimingIfDue();");
+    }
+
+    @Test
+    public void telemetryNamesTheRenderedFpsScope() throws Exception {
+        // 58.824 in the telemetry line is a presentation-timestamp cadence, not rendered
+        // throughput; a stuttering 60 fps stream still reports it. Name the scope in the line.
+        String mapper = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "PlaybackTelemetryMapper.java"));
+
+        assertContainsAll(mapper, "renderedFpsScope=pts-cadence-estimate;not-throughput");
+    }
+
+    @Test
+    public void durationProgressKeepsUpstreamDefaultUntilMigrated() throws Exception {
+        String source = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "setting", "PlaybackPerformanceSetting.java"));
+        String getter = methodBody(source, "public static boolean isVideoDurationProgressEnabled()", "public static void putVideoDurationProgressEnabled");
+        String recommended = methodBody(source, "private static void putRecommendedFlags()", "private static int clampProfile(int profile)");
+        String init = methodBody(source, "public static void ensureInitialized()", "public static int getProfile()");
+
+        assertTrue(getter.contains("Prefers.getBoolean(KEY_VIDEO_DURATION_PROGRESS, false)"));
+        assertFalse(recommended.contains("put(KEY_VIDEO_DURATION_PROGRESS, true)"));
+        assertTrue(recommended.contains("put(KEY_VIDEO_DURATION_PROGRESS, false)"));
+        assertTrue(init.contains("migrateExoFrameSchedulingParity();"));
+    }
+
     private static void assertContainsAll(String source, String... values) {
         for (String value : values) assertTrue("Missing: " + value, source.contains(value));
     }

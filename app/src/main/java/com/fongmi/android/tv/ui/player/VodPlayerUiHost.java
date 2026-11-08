@@ -15,6 +15,15 @@ public interface VodPlayerUiHost {
         return false;
     }
 
+    /**
+     * 当前是否全屏播放。媒体信息徽标只在全屏画面出现，因为半屏 / 小窗里它会把
+     * 本来就拥挤的控件再挤一层；默认 false 让未显式覆盖的宿主（例如详情页内嵌小窗）
+     * 天然不显示。
+     */
+    default boolean isFullscreen() {
+        return false;
+    }
+
     default boolean restoreDiagnosticsOnStart() {
         return true;
     }

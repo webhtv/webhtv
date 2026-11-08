@@ -233,6 +233,48 @@ public class CatWebWiringTest {
     }
 
     @Test
+    public void tmdbExternalLinksPreferInAppBrowserOnTv() throws IOException {
+        String source = read("com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
+        int method = source.indexOf("private void openExternalLink(String url)");
+        int nextMethod = source.indexOf("private void addRatingChip(String key", method);
+        String body = method >= 0 && nextMethod > method ? source.substring(method, nextMethod) : "";
+
+        assertTrue("TMDB 外链必须区分 TV 场景", method >= 0 && body.contains("Util.isLeanback()"));
+        assertTrue("TV 端必须先弹打开方式选择", body.contains("ChoiceDialog.showSingle(")
+                && body.contains("detail_external_open_builtin")
+                && body.contains("detail_external_open_external"));
+        assertTrue("TV 选择内置后才走 CatWebActivity", body.contains("openExternalLinkBuiltIn(url)")
+                && body.contains("WebViewUtil.support()")
+                && body.contains("CatWebActivity.browserIntent("));
+        assertTrue("内置页启动失败后仍要保留系统浏览器兜底",
+                body.indexOf("Intent.ACTION_VIEW") > body.indexOf("openExternalLinkBuiltIn(url)"));
+        assertTrue("外部链接失败提示必须使用本地化资源",
+                body.contains("R.string.detail_external_open_failed"));
+    }
+
+    @Test
+    public void catWebActivityUsesDesktopViewportForTvBrowser() throws IOException {
+        String source = read("com/fongmi/android/tv/ui/web/CatWebActivity.java");
+        int configure = source.indexOf("private void configure()");
+        int client = source.indexOf("private WebViewClient client()", configure);
+        String body = configure >= 0 && client > configure ? source.substring(configure, client) : "";
+
+        assertTrue("内置浏览器必须使用桌面 UA，避免 TMDB 等响应式站点按手机窄视口降级",
+                body.contains("DESKTOP_UA") && body.contains("s.setUserAgentString(DESKTOP_UA)"));
+        assertTrue("内置浏览器必须固定宽视口和 100% 文本缩放",
+                body.contains("s.setUseWideViewPort(true)")
+                        && body.contains("s.setLoadWithOverviewMode(true)")
+                        && body.contains("s.setTextZoom(100)"));
+        assertTrue("内置浏览器必须把初始缩放固定在 100%，避免 WebView 自动放大破坏布局",
+                body.contains("webView.setInitialScale(100)"));
+        assertTrue("内置浏览器必须按 WebView 能力关闭系统算法深色化，避免浅色网页的加载框变成黑底灰字",
+                body.contains("WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)")
+                        && body.contains("WebSettingsCompat.setAlgorithmicDarkeningAllowed(s, false)")
+                        && body.contains("WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)")
+                        && body.contains("WebSettingsCompat.setForceDark(s, WebSettingsCompat.FORCE_DARK_OFF)"));
+    }
+
+    @Test
     public void bothFlavorsYieldDetailToWebview() throws IOException {
         for (String flavor : new String[]{"leanback", "mobile"}) {
             String source = readFlavor(flavor, "com/fongmi/android/tv/ui/activity/VideoActivity.java");

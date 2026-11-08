@@ -43,4 +43,5 @@
     <string name="timer_60">1 小時</string>
     <string name="timer_delay">延長 5 分鐘</string>
     <string name="timer_cancel">取消定時器</string>
+    <string name="filter_reset">已重置篩選</string>
 </resources>

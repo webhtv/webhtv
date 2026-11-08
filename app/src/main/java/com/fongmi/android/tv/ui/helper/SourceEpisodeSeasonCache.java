@@ -5,7 +5,9 @@ import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.bean.Vod;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.ToIntFunction;
@@ -29,8 +31,9 @@ public final class SourceEpisodeSeasonCache {
         if (flag == null || flag.getEpisodes() == null) return -1;
         Integer cached = flagSeasons.get(flag);
         if (cached != null) return cached;
+        List<Episode> episodes = snapshot(flag.getEpisodes());
         Integer season = null;
-        for (Episode episode : flag.getEpisodes()) {
+        for (Episode episode : episodes) {
             int candidate = episodeResolver.applyAsInt(episode);
             if (candidate < 0) continue;
             if (season != null && season != candidate) {
@@ -77,13 +80,19 @@ public final class SourceEpisodeSeasonCache {
     public boolean hasMixedSeasons(Flag flag) {
         if (flag == null || flag.getEpisodes() == null) return false;
         Integer season = null;
-        for (Episode episode : flag.getEpisodes()) {
+        for (Episode episode : snapshot(flag.getEpisodes())) {
             int candidate = episodeResolver.applyAsInt(episode);
             if (candidate < 0) continue;
             if (season != null && season != candidate) return true;
             season = candidate;
         }
         return false;
+    }
+
+    private static List<Episode> snapshot(List<Episode> episodes) {
+        synchronized (episodes) {
+            return new ArrayList<>(episodes);
+        }
     }
 
     private static int resolveEpisodeSeason(Episode episode) {

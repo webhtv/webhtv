@@ -1,11 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」选集弹窗分页条（dialog_episode / adapter_episode_page）的统一焦点环。
+
+    环宽唯一来源：@dimen/webhtv_focus_ring_width。此前写死 3dp（当时与 token 同值，但不是
+    唯一来源），改为引用 token，让「TV 只有一个焦点环宽度来源」这条规范真正成立。
+
+    环色统一为白色：宿主面板 shape_episode_dialog_panel 是固定深色（#DD111820），
+    按「宿主机明暗固定 → 环色与调色板无关」的规则取白。同时修掉此前
+    focused #2196F3 填充 vs #0077FF 环 = 1.32:1、selected 环与填充同色 = 1.00:1 的
+    「焦点看不见」缺陷；改白后分别为 3.12:1 / 3.12:1，达到 3:1 门槛。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape>
             <solid android:color="#552196F3" />
             <stroke
-                android:width="3dp"
-                android:color="#0077FF" />
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="@color/white" />
             <corners android:radius="6dp" />
         </shape>
     </item>
@@ -14,7 +25,7 @@
             <solid android:color="#332196F3" />
             <stroke
                 android:width="2dp"
-                android:color="#2196F3" />
+                android:color="@color/white" />
             <corners android:radius="6dp" />
         </shape>
     </item>

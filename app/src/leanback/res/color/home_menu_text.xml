@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    首页菜单键弹窗（HomeMenuDialog）条目的文字色。
+
+    条目的焦点底色由 selector_config_history_item 提供，聚焦/按下时是
+    shape_config_history_item_focused 的 colorPrimary 实心填充，因此焦点文字必须
+    取 colorOnPrimary；一旦这里再写 colorPrimary，文字与底色就是同一个角色 ——
+    默认浅色表下两者同为 #0B57D0（1.00:1，完全看不见），自定义主题下
+    ThemeBinder 只改写颜色状态列表而不改写 StateListDrawable 里的填充，
+    文字会变成主题主色（实测 #006876）压在仍为基线的蓝色 #0B57D0 上（1.01:1）。
+    这是对比度缺陷本身，不是主题风格问题。
+
+    常态底色是 colorSurfaceVariant，文字沿用 colorOnSurface。
+    与 config_history_icon.xml（焦点 colorOnPrimary）、site_item_text.xml 保持同一约定；
+    config_history_text.xml 不能共用：它同时服务于 dialog_history 的描边按钮，
+    那里的焦点底色是 colorPrimaryContainer，需要 colorPrimary 文字。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/colorOnPrimary" android:state_focused="true" />
+    <item android:color="?attr/colorOnPrimary" android:state_pressed="true" />
+    <item android:color="?attr/colorOnSurface" />
+</selector>

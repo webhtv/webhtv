@@ -30,11 +30,11 @@ import androidx.fragment.app.FragmentManager;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.mpv.MpvConfigStore;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -83,7 +83,7 @@ public class MpvCustomButtonDialog extends DialogFragment {
         scroll.addView(list, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         refresh();
-        return new MaterialAlertDialogBuilder(requireContext(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(root).create();
+        return new WebHtvAlertDialogBuilder(requireContext(), R.style.ThemeOverlay_WebHTV_Dialog).setView(root).create();
     }
 
     private void refresh() {
@@ -157,7 +157,7 @@ public class MpvCustomButtonDialog extends DialogFragment {
     }
 
     private void confirmDelete(MpvConfigStore.CustomButton button) {
-        new MaterialAlertDialogBuilder(requireContext())
+        new WebHtvAlertDialogBuilder(requireContext())
                 .setTitle(R.string.mpv_config_custom_button_delete)
                 .setMessage(getString(R.string.mpv_config_custom_button_delete_message, button.title))
                 .setNegativeButton(android.R.string.cancel, null)
@@ -265,8 +265,8 @@ public class MpvCustomButtonDialog extends DialogFragment {
         Window window = dialog == null ? null : dialog.getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
-        params.width = Math.min((int) (ResUtil.getScreenWidth(requireContext()) * (Util.isLeanback() ? 0.68f : 0.94f)), ResUtil.dp2px(760));
-        params.height = (int) (ResUtil.getScreenHeight(requireContext()) * (Util.isLeanback() ? 0.88f : 0.9f));
+        params.width = Math.min((int) (DialogSafeArea.width(requireActivity(), window) * (Util.isLeanback() ? 0.68f : 0.94f)), ResUtil.dp2px(760));
+        params.height = (int) (DialogSafeArea.height(requireActivity(), window) * (Util.isLeanback() ? 0.88f : 0.9f));
         params.dimAmount = 0.58f;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
@@ -391,7 +391,7 @@ public class MpvCustomButtonDialog extends DialogFragment {
             root.addView(actions, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             ScrollView scroll = new ScrollView(requireContext());
             scroll.addView(root, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            return new MaterialAlertDialogBuilder(requireContext(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(scroll).create();
+            return new WebHtvAlertDialogBuilder(requireContext(), R.style.ThemeOverlay_WebHTV_Dialog).setView(scroll).create();
         }
 
         private void save() {
@@ -439,8 +439,8 @@ public class MpvCustomButtonDialog extends DialogFragment {
             Window window = dialog == null ? null : dialog.getWindow();
             if (window == null) return;
             WindowManager.LayoutParams params = window.getAttributes();
-            params.width = Math.min((int) (ResUtil.getScreenWidth(requireContext()) * (Util.isLeanback() ? 0.68f : 0.94f)), ResUtil.dp2px(760));
-            params.height = (int) (ResUtil.getScreenHeight(requireContext()) * (Util.isLeanback() ? 0.9f : 0.92f));
+            params.width = Math.min((int) (DialogSafeArea.width(requireActivity(), window) * (Util.isLeanback() ? 0.68f : 0.94f)), ResUtil.dp2px(760));
+            params.height = (int) (DialogSafeArea.height(requireActivity(), window) * (Util.isLeanback() ? 0.9f : 0.92f));
             params.dimAmount = 0.58f;
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.getDecorView().setPadding(0, 0, 0, 0);

@@ -14,6 +14,7 @@ import android.view.inputmethod.EditorInfo;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
@@ -24,6 +25,8 @@ import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.databinding.DialogConfigBinding;
 import com.fongmi.android.tv.impl.ConfigListener;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
+import com.fongmi.android.tv.playback.PlaybackIdentityResolver;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.Notify;
@@ -31,11 +34,16 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.utils.Path;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ConfigDialog extends BaseAlertDialog {
 
     private DialogConfigBinding binding;
+    private Config config;
     private boolean append = true;
     private boolean edit;
+    private ConfigListener listener;
     private String ori;
     private int type;
 
@@ -63,8 +71,19 @@ public class ConfigDialog extends BaseAlertDialog {
         return this;
     }
 
+    public ConfigDialog target(Config config) {
+        this.config = config;
+        return this;
+    }
+
     public void show(Fragment fragment) {
+        listener = fragment instanceof ConfigListener ? (ConfigListener) fragment : null;
         show(fragment.getChildFragmentManager(), null);
+    }
+
+    public void show(FragmentActivity activity) {
+        listener = activity instanceof ConfigListener ? (ConfigListener) activity : null;
+        show(activity.getSupportFragmentManager(), null);
     }
 
     @Override
@@ -74,17 +93,18 @@ public class ConfigDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
     protected void initView() {
-        Config config = getConfig();
+        if (config == null) config = edit ? getConfig() : Config.create(type);
         binding.title.setText(getDialogTitle());
         binding.positive.setText(edit ? R.string.dialog_edit : R.string.dialog_positive);
         binding.name.setText(config.getName());
         binding.url.setText(ori = config.getUrl());
         binding.url.setSelection(TextUtils.isEmpty(ori) ? 0 : ori.length());
+        binding.addresses.setText(addressesText(config));
     }
 
     @Override
@@ -179,29 +199,50 @@ public class ConfigDialog extends BaseAlertDialog {
     private void onPositive() {
         String url = binding.url.getText().toString().trim();
         String name = binding.name.getText().toString().trim();
-        Config config = saveConfig(url, name);
+        Config config = saveConfig(url, name, binding.addresses.getText().toString());
         if (config == null) {
             Notify.show(R.string.remote_trust_config_url_required);
             binding.url.requestFocus();
             return;
         }
-        ((ConfigListener) requireParentFragment()).setConfig(config);
+        ConfigListener target = listener;
+        if (target == null && getParentFragment() instanceof ConfigListener) target = (ConfigListener) getParentFragment();
+        if (target == null && requireActivity() instanceof ConfigListener) target = (ConfigListener) requireActivity();
+        if (target != null) target.setConfig(config);
+        PlaybackIdentityResolver.resolveSaved(config);
         dismiss();
     }
 
-    private Config saveConfig(String url, String name) {
-        Config config;
+    private Config saveConfig(String url, String name, String addresses) {
+        Config saved;
         if (url.isEmpty()) {
             if (!edit) return null;
             if (!TextUtils.isEmpty(ori)) Config.delete(ori, type);
             return getStoredConfig();
         } else if (edit) {
-            config = Config.find(ori, type).url(url).name(name).update();
+            saved = Config.find(config.getId()).url(url).name(name).update();
         } else {
             Config exists = AppDatabase.get().getConfigDao().find(url, type);
-            config = exists != null ? exists.name(name).update() : Config.create(type).url(url).name(name).update();
+            saved = exists != null ? exists.name(name).update() : null;
+            if (saved == null) {
+                return config = Config.create(type).url(url).name(name)
+                        .urls(addresses(url, addresses)).insert().update();
+            }
         }
-        return config;
+        return config = saved.urls(addresses(url, addresses)).update();
+    }
+
+    private List<String> addresses(String primary, String text) {
+        List<String> result = new ArrayList<>();
+        result.add(primary);
+        for (String item : text.split("\\R")) if (!TextUtils.isEmpty(item.trim())) result.add(item.trim());
+        return result;
+    }
+
+    private String addressesText(Config config) {
+        List<String> addresses = new ArrayList<>(config.getUrls());
+        addresses.remove(config.getUrl());
+        return TextUtils.join("\n", addresses);
     }
 
     private void configureWindow() {
@@ -228,7 +269,7 @@ public class ConfigDialog extends BaseAlertDialog {
             return;
         }
         String url = "file:/" + path.replace(Path.rootPath(), "");
-        ((ConfigListener) requireParentFragment()).setConfig(saveConfig(url, name));
+        ((ConfigListener) requireParentFragment()).setConfig(saveConfig(url, name, binding.addresses.getText().toString()));
         dismiss();
     });
 }

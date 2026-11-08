@@ -98,6 +98,7 @@
                     android:layout_height="48dp"
                     android:layout_marginTop="16dp"
                     android:text="下载安装"
+                    android:nextFocusDown="@+id/btnTerminal"
                     app:backgroundTint="@color/accent"
                     app:cornerRadius="8dp"/>
                 <com.google.android.material.button.MaterialButton
@@ -109,6 +110,7 @@
                     android:layout_height="48dp"
                     android:layout_marginTop="16dp"
                     android:text="卸载"
+                    android:nextFocusDown="@+id/btnTerminal"
                     app:backgroundTint="@null"
                     app:cornerRadius="8dp"/>
                 <LinearLayout
@@ -132,28 +134,34 @@
                             android:layout_weight="1"/>
                         <ImageView
                             android:id="@+id/btnTerminal"
-                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:background="@drawable/selector_lab_icon_btn"
                             android:padding="4dp"
                             android:layout_width="28dp"
                             android:layout_height="28dp"
                             android:src="@drawable/ic_action_terminal"
+                            android:nextFocusUp="@+id/btnDownload"
+                            android:nextFocusRight="@+id/btnAddCommand"
                             app:tint="@color/white_50"/>
                         <ImageView
                             android:id="@+id/btnAddCommand"
-                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:background="@drawable/selector_lab_icon_btn"
                             android:padding="4dp"
                             android:layout_width="28dp"
                             android:layout_height="28dp"
                             android:src="@drawable/ic_action_plus"
+                            android:nextFocusLeft="@+id/btnTerminal"
+                            android:nextFocusRight="@+id/btnRefreshCommand"
                             app:tint="@color/white_50"/>
                         <ImageView
                             android:id="@+id/btnRefreshCommand"
-                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:background="@drawable/selector_lab_icon_btn"
                             android:padding="4dp"
                             android:layout_width="28dp"
                             android:layout_height="28dp"
                             android:src="@drawable/ic_action_refresh"
                             android:layout_marginStart="4dp"
+                            android:nextFocusLeft="@+id/btnAddCommand"
+                            android:nextFocusUp="@+id/btnDownload"
                             app:tint="@color/white_50"/>
                     </LinearLayout>
                     <TextView

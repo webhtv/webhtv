@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版退出确认弹窗「次按钮」（dialog_exit_confirm）的焦点态。
+
+    只统一**宽度**：@dimen/webhtv_focus_ring_width（此前写死 2dp）。
+    填充/描边保持与调色板无关的字面量，理由见 selector_exit_confirm_primary.xml：
+    面板颜色随表变化，填充若改走调色板会在夜间表把浅底按钮变成深底，
+    与其固定深色文字配成低对比度。
+
+    文字必须使用同一族的固定深色 @color/exit_confirm_secondary_text
+    （默认 #202124、焦点/按下 #174EA6），不得改用 ?attr/colorOnSurfaceVariant：
+    该角色在夜间/深色调色板下接近白色，压在 #F8FAFD 固定浅底上只有约 1.6:1，
+    实机上按钮文字会几乎不可见（2026-10-24 电视端复现）。
+    回归守卫见 TvFixedLightSurfaceContrastTest。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item android:state_focused="true">
@@ -6,7 +20,7 @@
             <solid android:color="#DCEAFF" />
             <corners android:radius="10dp" />
             <stroke
-                android:width="2dp"
+                android:width="@dimen/webhtv_focus_ring_width"
                 android:color="#0B57D0" />
         </shape>
     </item>
@@ -16,7 +30,7 @@
             <solid android:color="#DCEAFF" />
             <corners android:radius="10dp" />
             <stroke
-                android:width="2dp"
+                android:width="@dimen/webhtv_focus_ring_width"
                 android:color="#0B57D0" />
         </shape>
     </item>

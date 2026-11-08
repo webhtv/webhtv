@@ -16,11 +16,11 @@ public class TmdbSourceDialogLayoutTest {
         String layout = read(findMainResPath().resolve(Path.of("layout", "dialog_tmdb_source.xml")));
 
         assertTrue("TMDB source dialog should use the same light panel background as AI config",
-                layout.contains("android:background=\"#F6F8FC\""));
+                layout.contains("android:background=\"?attr/colorSurfaceContainerLow\""));
         assertTrue("TMDB source dialog should group fields into light dialog cards",
                 layout.contains("com.google.android.material.card.MaterialCardView")
                         && layout.contains("app:cardCornerRadius=\"18dp\"")
-                        && layout.contains("app:strokeColor=\"#D8E0EA\""));
+                        && layout.contains("app:strokeColor=\"?attr/colorOutlineVariant\""));
         assertTrue("TMDB source dialog controls should use AI config's stable TV heights",
                 layout.contains("android:layout_height=\"44dp\"")
                         && layout.contains("android:layout_height=\"48dp\"")

@@ -5,12 +5,15 @@ import android.text.TextUtils;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.title.MediaTitleParser;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
+import com.github.catvod.utils.Trans;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public class TmdbMatchCache {
 
@@ -32,14 +35,16 @@ public class TmdbMatchCache {
     }
 
     public TmdbItem find(String siteKey, String vodId) {
-        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return null;
-        Entry entry = getItems().get(key(siteKey, vodId));
-        return entry == null ? null : entry.toItem();
+        return find(siteKey, vodId, "", "");
     }
 
     public TmdbItem find(String siteKey, String vodId, String sourceTitle) {
+        return find(siteKey, vodId, sourceTitle, "");
+    }
+
+    public TmdbItem find(String siteKey, String vodId, String sourceTitle, String targetLanguage) {
         Entry entry = findEntry(siteKey, vodId, sourceTitle);
-        return entry == null ? null : entry.toItem();
+        return entry == null ? null : entry.toDisplayItem(targetLanguage);
     }
 
     /**
@@ -47,8 +52,12 @@ public class TmdbMatchCache {
      * 所以它既不受标题兼容性校验约束，也不该被后续自动匹配覆盖。
      */
     public TmdbItem findManual(String siteKey, String vodId, String sourceTitle) {
+        return findManual(siteKey, vodId, sourceTitle, "");
+    }
+
+    public TmdbItem findManual(String siteKey, String vodId, String sourceTitle, String targetLanguage) {
         Entry entry = findManualEntry(siteKey, vodId, sourceTitle);
-        return entry == null ? null : entry.toItem();
+        return entry == null ? null : entry.toDisplayItem(targetLanguage);
     }
 
     public boolean isManual(String siteKey, String vodId, String sourceTitle) {
@@ -61,10 +70,14 @@ public class TmdbMatchCache {
         Entry manual = findManualEntry(siteKey, vodId, sourceTitle);
         if (manual != null) return manual;
         Entry scoped = getItems().get(key(siteKey, vodId, sourceTitle));
+        // 缓存键在某一版才加进简繁归一；此前写入的条目挂在旧格式键上，这里再兜一次，
+        // 免得升级后所有历史匹配结果一次性失效、用户要重新匹配一遍。
+        if (scoped == null) scoped = getItems().get(legacyKey(siteKey, vodId, sourceTitle));
         if (scoped != null) return scoped;
         Entry legacy = getItems().get(key(siteKey, vodId));
         if (isCompatible(legacy, sourceTitle)) return legacy;
         Entry title = getItems().get(titleKey(sourceTitle));
+        if (title == null) title = getItems().get(legacyTitleKey(sourceTitle));
         return isCompatible(title, sourceTitle) ? title : null;
     }
 
@@ -79,7 +92,7 @@ public class TmdbMatchCache {
         // 条目级锚点：站源标题会被 TMDB 富集改写成 TMDB 标题，手动选择必须能在标题变化后仍被读回。
         // 但同一 vodId 下可能挂着多个不同作品（见 TmdbMatchCacheTest 的共享 vodId 用例），
         // 所以锚点只在标题确实指向同一作品时才生效。
-        return isManual(anchor) && anchor.matchesManualTitle(matchTitle(sourceTitle)) ? anchor : null;
+        return isManual(anchor) && matchesManualTitle(anchor, sourceTitle) ? anchor : null;
     }
 
     private boolean isManual(Entry entry) {
@@ -87,12 +100,20 @@ public class TmdbMatchCache {
     }
 
     public void put(String siteKey, String vodId, TmdbItem item) {
+        put(siteKey, vodId, item, "");
+    }
+
+    public void put(String siteKey, String vodId, TmdbItem item, String language) {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
         if (isManual(getItems().get(key(siteKey, vodId)))) return;
-        getItems().put(key(siteKey, vodId), Entry.from(item));
+        getItems().put(key(siteKey, vodId), Entry.from(item, language));
     }
 
     public void put(String siteKey, String vodId, String sourceTitle, TmdbItem item) {
+        put(siteKey, vodId, sourceTitle, item, "");
+    }
+
+    public void put(String siteKey, String vodId, String sourceTitle, TmdbItem item, String language) {
         if (TextUtils.isEmpty(sourceTitle)) {
             put(siteKey, vodId, item);
             return;
@@ -100,7 +121,7 @@ public class TmdbMatchCache {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
         // 自动匹配不得覆盖用户的手动选择，否则下次进场读回的是自动猜测。
         if (findManualEntry(siteKey, vodId, sourceTitle) != null) return;
-        Entry entry = Entry.from(item);
+        Entry entry = Entry.from(item, language);
         getItems().put(key(siteKey, vodId, sourceTitle), entry);
         putTitle(sourceTitle, entry);
     }
@@ -112,8 +133,12 @@ public class TmdbMatchCache {
      * 但 findManualEntry 不看标题域，所以"手动"的排他性只作用于当前条目。
      */
     public void putManual(String siteKey, String vodId, List<String> sourceTitles, TmdbItem item) {
+        putManual(siteKey, vodId, sourceTitles, item, "");
+    }
+
+    public void putManual(String siteKey, String vodId, List<String> sourceTitles, TmdbItem item, String language) {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
-        Entry entry = Entry.manual(item);
+        Entry entry = Entry.manual(item, language);
         if (sourceTitles != null) {
             for (String sourceTitle : sourceTitles) entry.addManualTitle(matchTitle(sourceTitle));
         }
@@ -187,8 +212,50 @@ public class TmdbMatchCache {
         return normalize(new MediaTitleParser().cleanTitle(text));
     }
 
+    /** 旧版本的标题归一（不做简繁归一），只用于读旧缓存；写入一律走新格式。 */
+    private String legacyMatchTitle(String text) {
+        return legacyNormalize(new MediaTitleParser().cleanTitle(text));
+    }
+
+    private String legacyKey(String siteKey, String vodId, String sourceTitle) {
+        return key(siteKey, vodId) + AppDatabase.SYMBOL + legacyNormalize(sourceTitle).replace(AppDatabase.SYMBOL, " ");
+    }
+
+    private String legacyTitleKey(String sourceTitle) {
+        String title = legacyMatchTitle(sourceTitle);
+        return TextUtils.isEmpty(title) ? "" : TITLE_SCOPE + AppDatabase.SYMBOL + title;
+    }
+
+    /** 手动选择记录下来的别名也可能是旧格式，两种都认。 */
+    private boolean matchesManualTitle(Entry entry, String sourceTitle) {
+        return entry.matchesManualTitle(matchTitle(sourceTitle)) || entry.matchesManualTitle(legacyMatchTitle(sourceTitle));
+    }
+
+    /**
+     * 缓存键/标题比较用的归一：先做简繁归一，再走常规标点与大小写归一。
+     *
+     * <p>站源标题在繁体界面下会被 {@code Vod.trans()} 改成繁体，而 TMDB 标题按
+     * {@code TmdbConfig.language}（默认 zh-CN）返回简体。如果不归一，同一部作品在两种界面语言下
+     * 会算成两个不同的键：写入的条目另一种语言读不回来，每次切语言都要重新匹配一遍。
+     */
     private String normalize(String text) {
+        return legacyNormalize(canonicalTitle(text));
+    }
+
+    /** 旧版本写入的键（未做简繁归一）。只用于读旧缓存时兜底，不要用于写入。 */
+    private String legacyNormalize(String text) {
         return text == null ? "" : text.replaceAll("[\\s·•:：\\-_/\\\\|()（）\\[\\]【】]+", "").trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 把任意简/繁标题统一转成繁体字形。必须显式传 {@code pass = false}：
+     * {@code Trans.s2t(String)} 会按当前界面语言短路，简体态下等于没归一。
+     *
+     * <p>只能单向转繁：反向 {@code t2s} 在「多简对一繁」的 10 组字上会坍缩，
+     * 把「余罪/强势/线上」这类常用简体词改写成异体字。
+     */
+    private static String canonicalTitle(String text) {
+        return Trans.s2t(false, Objects.toString(text, ""));
     }
 
     public static class Entry {
@@ -204,6 +271,7 @@ public class TmdbMatchCache {
         private double rating;
         private String originalLanguage;
         private String originCountry;
+        private String language;
         private String department;
         private boolean manual;
         private List<String> manualTitles;
@@ -217,7 +285,11 @@ public class TmdbMatchCache {
         }
 
         public static Entry manual(TmdbItem item) {
-            Entry entry = from(item);
+            return manual(item, "");
+        }
+
+        public static Entry manual(TmdbItem item, String language) {
+            Entry entry = from(item, language);
             entry.manual = true;
             entry.manualTitles = new ArrayList<>();
             return entry;
@@ -241,7 +313,12 @@ public class TmdbMatchCache {
         }
 
         public static Entry from(TmdbItem item) {
+            return from(item, "");
+        }
+
+        public static Entry from(TmdbItem item, String language) {
             Entry entry = new Entry();
+            entry.language = TmdbLanguagePolicy.normalize(language);
             entry.tmdbId = item.getTmdbId();
             entry.mediaType = item.getMediaType();
             entry.title = item.getTitle();
@@ -259,6 +336,15 @@ public class TmdbMatchCache {
 
         public TmdbItem toItem() {
             return new TmdbItem(tmdbId, mediaType, title, subtitle, overview, posterUrl, backdropUrl, credit, rating, originalLanguage, originCountry, null, department);
+        }
+
+        public TmdbItem toDisplayItem(String targetLanguage) {
+            if (TextUtils.isEmpty(targetLanguage) || TmdbLanguagePolicy.matchesTarget(targetLanguage, language)) return toItem();
+            return new TmdbItem(tmdbId, mediaType, "", "", "", posterUrl, backdropUrl, credit, rating, originalLanguage, originCountry, null, department);
+        }
+
+        public String getLanguage() {
+            return language == null ? "" : language;
         }
     }
 }

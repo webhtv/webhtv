@@ -20,7 +20,7 @@
         android:paddingStart="14dp"
         android:paddingEnd="14dp"
         android:singleLine="true"
-        android:textColor="#202124"
+        android:textColor="@color/fixed_light_focus_text"
         android:textSize="13sp"
         tools:text="https://gh-proxy.com/" />
 
@@ -31,7 +31,7 @@
         android:layout_marginStart="8dp"
         android:gravity="center"
         android:minWidth="74dp"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="12sp"
         tools:text="123 ms" />
 
@@ -45,6 +45,6 @@
         android:padding="10dp"
         android:scaleType="center"
         android:src="@drawable/ic_action_delete"
-        app:tint="#C5221F" />
+        app:tint="@color/fixed_light_error" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

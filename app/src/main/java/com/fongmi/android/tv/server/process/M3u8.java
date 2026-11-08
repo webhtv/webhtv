@@ -116,9 +116,7 @@ public class M3u8 implements Process {
                 url.host(), clean.removedDurationSec(), clean.removedSegmentDetails());
         if (!HlsAdblockNotice.shouldNotify(url.toString(), System.currentTimeMillis())) return;
         int removed = clean.removedSegments() > 0 ? clean.removedSegments() : (int) fallbackCount;
-        String message = clean.structured() && clean.removedDurationSec() > 0
-                ? String.format(Locale.US, "已跳过 %d 个广告片段（%.1f 秒）", removed, clean.removedDurationSec())
-                : "已跳过 " + removed + " 个广告片段";
+        String message = HlsAdblockNotice.message(removed, clean.removedDurationSec());
         App.post(() -> Notify.show(message));
     }
 

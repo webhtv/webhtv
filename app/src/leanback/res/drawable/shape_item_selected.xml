@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」列表项的选中态描边。当前无消费者（selector_item 只引用 focused/activated/
+    normal），但与本目录的 shape_item_focused.xml / shape_item_activated.xml 同属一套列表项外观，
+    必须保持同一份取值，否则以后接回选中态时会重新引入「蓝色 1.5dp」这套旧规范。
+    统一规范见 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
@@ -13,7 +19,7 @@
         android:top="8dp" />
 
     <stroke
-        android:width="1.5dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvFocusRing" />
 
 </shape>

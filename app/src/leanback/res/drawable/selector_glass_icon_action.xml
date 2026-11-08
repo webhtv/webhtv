@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「固定深色玻璃面板上的图标按钮」的统一焦点环（弹幕选择行 / 音轨行 / 增强设置图标）。
+
+    缺陷背景：这些按钮此前只挂 ?attr/selectableItemBackgroundBorderless —— 只有点击涟漪，
+    **没有任何焦点态描边**。D-pad 移上去完全看不出焦点，用户改主题「焦点色」时它们也
+    纹丝不动（这几个控件连"环"都不存在），是「不管怎么调都是原始颜色」的一条独立成因。
+
+    取值判据（沿用仓库既有规范，不新造一套）：
+      - 环宽：@dimen/webhtv_focus_ring_width（唯一宽度来源，禁止写死 1.5dp/2dp/3dp）；
+      - 环色：?attr/tvPlayerRing —— **跟随用户「焦点色」槽**。它由 ThemeResolver 从
+        focus 派生：浅色表在固定深靛玻璃上夹取到 ≥3:1（#447BF5），深色表取与应用表面
+        焦点环同值的近白（#F5F7FF）。用户改焦点色时两者都跟着变。
+        同族先例：selector_control_sheet_button.xml、shape_chip_focused.xml。
+
+    为什么最外层是 selector 而不是 ripple：先前版本用 <ripple><item><selector> 包裹，
+    实测 API 28 上内层 selector 的 state_focused **不生效**（真机复核：焦点落上去没有环），
+    因此这里改为最外层 selector。点击反馈仍由各控件自身的 foreground/ripple 提供。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="@color/white_30" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="?attr/tvPlayerCurrentRing" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="@color/white_15" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="?attr/tvPlayerRing" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="@color/white_30" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="?attr/tvPlayerCurrentRing" />
+        </shape>
+    </item>
+    <item android:state_activated="true">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="@color/white_30" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="?attr/tvPlayerCurrentRing" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>

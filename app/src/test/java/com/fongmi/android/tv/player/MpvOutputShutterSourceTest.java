@@ -13,8 +13,8 @@ import static org.junit.Assert.assertTrue;
 /**
  * The automatic MPV output shutter hides the direct probe frame before a GPU
  * rebuild. That frame only exists when automatic output can actually reach
- * surface direct, so while the stability guard pins automatic mode to GPU the
- * shutter would only delay the first frame while audio already plays.
+ * surface direct, so when the per-device zero-copy guard blocks direct output
+ * the shutter would only delay the first frame while audio already plays.
  */
 public class MpvOutputShutterSourceTest {
 
@@ -31,6 +31,26 @@ public class MpvOutputShutterSourceTest {
         // so a released shutter has to be visible on this side too.
         assertTrue("a probe that gave up must also open this side of the shutter",
                 method.contains("!mpvAutoOutputProbeGaveUp"));
+    }
+
+    /**
+     * 快门必须与 {@code resolveSurfaceDirect} 同口径，否则会在手机版上白等。
+     *
+     * <p>{@code isAutoSurfaceDirectEnabled()} 只回答「设备是否被零拷贝保护拦住」，
+     * 它**不**包含电视版与硬解两个条件；而 {@code resolveSurfaceDirect()} 要求
+     * {@code leanback && autoEligible} 才可能返回 true。手机版上前者为真、后者恒假，
+     * 快门因此会遮住一个永远不会出现的探测帧——声音先出来、画面晚几秒，
+     * 正是 {@code 6a458ec11c} 修掉的回归（该提交当时靠全局开关恒 false 才遮住）。
+     */
+    @Test
+    public void shutterAsksTheSameGatesAsTheDirectOutputDecision() throws Exception {
+        String method = methodBody(readPlayerManager(),
+                "public boolean shouldKeepVideoShutterClosed()", "public boolean isExo()");
+
+        assertTrue("phones never reach surface direct, so the shutter must not close there",
+                method.contains("Util.isLeanback()"));
+        assertTrue("a software-decoded session cannot reach surface direct either",
+                method.contains("engine.isHard()"));
     }
 
     @Test

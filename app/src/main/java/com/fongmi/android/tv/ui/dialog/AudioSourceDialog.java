@@ -16,9 +16,9 @@ import com.fongmi.android.tv.bean.AudioConfig;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -76,7 +76,7 @@ public class AudioSourceDialog {
         manageBtn.setOnClickListener(v -> showSiteManage());
         resetBtn.setOnClickListener(v -> resetToDefault());
 
-        dialog = new MaterialAlertDialogBuilder(activity)
+        dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.setting_audio_source)
                 .setView(view)
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> onSave())
@@ -111,7 +111,7 @@ public class AudioSourceDialog {
             checked[i] = matchesRule(enabledRules, site);
         }
 
-        new MaterialAlertDialogBuilder(activity)
+        new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.dialog_audio_site_manage)
                 .setMultiChoiceItems(labels, checked, (d, which, isChecked) -> checked[which] = isChecked)
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> applySiteManage(sites, enabledRules, checked))

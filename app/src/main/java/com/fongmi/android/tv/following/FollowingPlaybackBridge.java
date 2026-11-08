@@ -151,10 +151,12 @@ public final class FollowingPlaybackBridge {
         }
         Task.execute(() -> {
             try {
-                Following existing = FollowingStore.find(item.identityKey);
-                if (existing == null) {
+                // 活行存在：直接返回；墓碑存在或不存在：saveNew 复活/新建（保留进度水线并重置 createdAt，使重追意图在下次同步中胜过墓碑）。
+                Following existing = FollowingStore.findAny(item.identityKey);
+                if (existing == null || existing.isDeleted()) {
                     FollowingStore.saveNew(item, source);
-                    existing = item;
+                    existing = FollowingStore.find(item.identityKey);
+                    if (existing == null) existing = item;
                 }
                 final Following result = existing;
                 if (callback != null) App.post(() -> callback.onResult(result, null));

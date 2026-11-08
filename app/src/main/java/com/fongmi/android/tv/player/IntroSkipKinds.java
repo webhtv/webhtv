@@ -7,11 +7,11 @@ import androidx.appcompat.app.AlertDialog;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.service.IntroSkipService.Segment;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.crawler.SpiderDebug;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 /**
  * 片段类型（回顾/片头/片尾/预告）的名称、提示与多选框，三个播放页共用一份。
@@ -95,7 +95,7 @@ public final class IntroSkipKinds {
             labels[i] = ResUtil.getString(LABELS[i]);
             checked[i] = (kinds & FLAGS[i]) != 0;
         }
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.setting_intro_skip_kinds)
                 .setMultiChoiceItems(labels, checked, (d, which, isChecked) -> checked[which] = isChecked)
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> {

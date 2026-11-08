@@ -943,11 +943,24 @@ public class PreCache implements Player.Listener {
                 decision.reason());
     }
 
-    private static boolean isHardAutomaticPause(String reason) {
+    /**
+     * 自动档下**必须真的停**的暂停原因；其余原因只降级（缩任务），不停止磁盘预载。
+     *
+     * <p>为什么这个名单必须跟着 {@link AutoPreloadPolicy.Reason} 一起长：本方法是
+     * 「降级为 1 线程 / 10 s 继续跑」这条分支的唯一否决点。新增一个语义上属于**硬暂停**
+     * 的原因却忘了登记，{@code evaluate()} 的暂停会被这里静默改回「继续预载」——
+     * 策略单测仍全绿（它们直接调 {@code evaluate()}，不经过 {@link #effectiveAutoDecision}），
+     * 生产上却完全失效。
+     *
+     * <p>具体实例：{@code FOREGROUND_EOF_RECOVERY}（前台连接被截断时让位）加入时漏登，
+     * 于是「让预加载给前台恢复让路」退化成「照旧抢同一条脆弱连接」。由
+     * {@code PreCachePolicyTest} 的让位用例与标签一致性用例共同锁定。
+     */
+    static boolean isHardAutomaticPause(String reason) {
         return switch (reason == null ? "" : reason) {
             case "session-mismatch", "memory-pressure", "network-unavailable",
                     "network-unvalidated", "data-saver", "power-save",
-                    "thermal-pressure" -> true;
+                    "thermal-pressure", "foreground-eof-recovery" -> true;
             default -> false;
         };
     }

@@ -90,7 +90,26 @@ public class ExoStartupRecoveryIntegrationTest {
         runPlayback(false, 0);
     }
 
+    @Test
+    public void unreadableBufferMetricsStillRecoverFirstSilentDirectOutput() throws Exception {
+        runPlayback(true, 0, false);
+    }
+
+    @Test
+    public void unreadableBufferMetricsNeverRecoverHealthyDirectOutput() throws Exception {
+        runPlayback(false, 0, false);
+    }
+
     private void runPlayback(boolean failDirect, long startMs) throws Exception {
+        runPlayback(failDirect, startMs, true);
+    }
+
+    /**
+     * @param readableMetrics when false the fake track reports no capacity/size/threshold, as the
+     *     vendor track in the field log did, so only the accepted payload and the pinned playback
+     *     head remain as evidence.
+     */
+    private void runPlayback(boolean failDirect, long startMs, boolean readableMetrics) throws Exception {
         AtomicInteger opens = new AtomicInteger();
         AtomicInteger opensAtDirect = new AtomicInteger();
         AtomicInteger directCreations = new AtomicInteger();
@@ -110,7 +129,9 @@ public class ExoStartupRecoveryIntegrationTest {
                     @Override public ExoAudioDirectFailureMemory.Route actualRoute(AudioOutput output) { return route; }
                     @Override public long rawPlaybackHead(AudioOutput output) { return failDirect ? 0 : 1; }
                     @Override public ExoCompressedAudioDirectPolicy.StartupBuffer startupBuffer(AudioOutput output) {
-                        return new ExoCompressedAudioDirectPolicy.StartupBuffer(4096, 4096, 4096);
+                        return readableMetrics
+                                ? new ExoCompressedAudioDirectPolicy.StartupBuffer(4096, 4096, 4096)
+                                : ExoCompressedAudioDirectPolicy.StartupBuffer.UNKNOWN;
                     }
                 });
         policy.prepareForPlayback("memory:///first-playback", false);
@@ -151,7 +172,9 @@ public class ExoStartupRecoveryIntegrationTest {
             if (failDirect) {
                 assertTrue("Must replay the first pending audio sample",
                         Math.abs(audio.firstPcmTimeUs - audio.firstDirectTimeUs) <= SAMPLE_US);
-                assertTrue("The 10 second watchdog must not drive recovery", audio.pcmCreatedAtMs - audio.directCreatedAtMs < 2000);
+                long recoveryBudgetMs = readableMetrics ? 2000 : 3000;
+                assertTrue("The 10 second watchdog must not drive recovery",
+                        audio.pcmCreatedAtMs - audio.directCreatedAtMs < recoveryBudgetMs);
             }
         } finally {
             player.release();

@@ -1,7 +1,6 @@
 package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -42,6 +41,7 @@ import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.audio.AudioHistory;
 import com.fongmi.android.tv.ui.audio.AudioMiniPlayer;
 import com.fongmi.android.tv.ui.audio.AudioPlaybackReconciliation;
@@ -751,7 +751,7 @@ public class AudioActivity extends PlaybackActivity {
                 }
                 String[] labels = new String[options.size()];
                 for (int i = 0; i < options.size(); i++) labels[i] = options.get(i).getLabel();
-                new AlertDialog.Builder(this)
+                new WebHtvAlertDialogBuilder(this)
                         .setTitle("选择歌词")
                         .setItems(labels, (dialog, which) -> applyManualLyric(request, options.get(which), title, subtitle, duration))
                         .show();

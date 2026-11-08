@@ -17,7 +17,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/setting_home_buttons"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="22sp" />
 
         <com.google.android.material.textview.MaterialTextView
@@ -27,7 +27,7 @@
             android:layout_marginStart="16dp"
             android:layout_weight="1"
             android:gravity="end"
-            android:textColor="@color/white_60"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="16sp"
             tools:text="5/8 enabled" />
 

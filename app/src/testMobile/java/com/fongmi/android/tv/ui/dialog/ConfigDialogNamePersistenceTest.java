@@ -22,6 +22,30 @@ public class ConfigDialogNamePersistenceTest {
         assertPrefillsCurrentConfigName("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/ConfigDialog.java");
     }
 
+    @Test
+    public void mobileAndTvDialogsEditOrderedBackupAddresses() throws Exception {
+        assertAddressEditor("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ConfigDialog.java");
+        assertAddressEditor("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/ConfigDialog.java");
+    }
+
+    @Test
+    public void newlySavedConfigBecomesTheDialogPrefillSource() throws Exception {
+        assertSavedConfigBecomesCurrent("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ConfigDialog.java");
+        assertSavedConfigBecomesCurrent("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/ConfigDialog.java");
+    }
+
+    private static void assertSavedConfigBecomesCurrent(String file) throws Exception {
+        String source = read(file);
+        assertTrue(file, source.contains("return config = saved.urls(addresses("));
+    }
+
+    private static void assertAddressEditor(String file) throws Exception {
+        String source = read(file);
+        assertTrue(file, source.contains("binding.addresses.setText(addressesText(config));"));
+        assertTrue(file, source.contains("saved.urls(addresses("));
+        assertTrue(file, source.contains("TextUtils.join(\"\\n\", addresses)"));
+    }
+
     private static void assertUpdatesExistingName(String file) throws Exception {
         String source = read(file);
         assertTrue(file, source.contains("exists != null ? exists.name(name).update() :"));

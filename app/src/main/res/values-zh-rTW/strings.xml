@@ -13,6 +13,7 @@
     <string name="live_refresh">刷新</string>
     <string name="live_line">來源 <xliff:g name="name">%s</xliff:g></string>
     <string name="live_control_source">直播源</string>
+    <string name="live_control_source_named">直播源：<xliff:g name="name">%s</xliff:g></string>
 
     <!-- Detail -->
     <string name="detail_title"><xliff:g name="name">%s</xliff:g>：<xliff:g name="name">%s</xliff:g></string>
@@ -41,6 +42,14 @@
     <string name="keep">收藏</string>
     <string name="keep_add">已收藏</string>
     <string name="keep_del">已取消收藏</string>
+    <!-- 收藏頁空態：設計文件 §9.9 要求「標題 + 解釋 + 一個主動作」。 -->
+    <string name="keep_empty_title">還沒有收藏</string>
+    <string name="keep_empty_description">在任意詳情頁按「收藏」，就會出現在這裡。</string>
+    <string name="keep_empty_action">去點播</string>
+    <!-- 歷史頁空態：設計文件 §9.9 要求「標題 + 解釋 + 一個主動作」。 -->
+    <string name="history_empty_title">還沒有觀看記錄</string>
+    <string name="history_empty_description">播放過的內容會自動出現在這裡，方便繼續觀看。</string>
+    <string name="history_empty_action">去點播</string>
     <string name="exit_confirm_title">退出應用</string>
     <string name="exit_confirm_message">應用將關閉，播放和後台服務也會停止。</string>
     <string name="exit_confirm_playing_message">目前正在播放；後台播放會繼續播放，完全退出會停止播放和後台服務。</string>
@@ -172,6 +181,11 @@
     <string name="push">推送</string>
 
     <!-- Setting -->
+    <!-- TV 設定頁的分組標題；此前 17 項平鋪、無分組，只能整屏掃。 -->
+    <string name="setting_group_sources">內容源</string>
+    <string name="setting_group_playback">播放與內容</string>
+    <string name="setting_group_personal">個人化與智慧</string>
+    <string name="setting_group_data">資料與網路</string>
     <string name="setting_vod">點播</string>
     <string name="setting_live">直播</string>
     <string name="setting_wall">壁紙</string>
@@ -744,6 +758,8 @@
     <string name="setting_custom_csp_recognize_empty">請先貼上站點 JSON</string>
     <string name="setting_custom_csp_recognize_invalid">未識別到有效站點 JSON</string>
     <string name="setting_custom_csp_recognize_done">已加入 %1$d 個條目</string>
+    <string name="setting_custom_csp_search_hint">搜尋站點注入…</string>
+    <string name="setting_custom_csp_search_empty">沒有符合的站點注入</string>
     <string name="setting_custom_csp_count">%1$d/%2$d 可用</string>
     <string name="setting_custom_csp_api">api</string>
     <string name="setting_custom_csp_code">代碼</string>
@@ -844,9 +860,111 @@
     <string name="site_name_reset_title">重設自訂站源名稱？</string>
     <string name="site_name_reset_message">將清除目前介面的全部自訂名稱和分組。</string>
     <string name="setting_short_drama_source">短劇源配置</string>
+    <string name="setting_theme_mode">主題模式</string>
+    <string name="setting_theme_mode_system">跟隨系統</string>
+    <string name="setting_theme_mode_light">淺色</string>
+    <string name="setting_theme_mode_dark">深色</string>
     <string name="setting_theme_color">主題色彩</string>
+    <string name="setting_theme_editor">自訂主題</string>
+    <string name="theme_editor_edit_mode">預覽與編輯</string>
+    <string name="theme_editor_dark">深色</string>
+    <string name="theme_editor_light">淺色</string>
+    <string name="theme_editor_preview">即時預覽</string>
+    <string name="theme_editor_inherit">繼承預設</string>
+    <string name="theme_editor_clear">恢復自動</string>
+    <string name="theme_editor_dirty">僅在本頁預覽，尚未儲存</string>
+    <string name="theme_editor_reset_done">預設配色已載入草稿，儲存後生效</string>
+    <string name="theme_editor_save_failed">儲存失敗：%1$s</string>
+    <string name="theme_editor_apply">儲存套用</string>
+    <string name="theme_editor_reset">恢復預設</string>
+    <string name="theme_editor_cancel">取消</string>
+    <string name="theme_editor_confirm">確定</string>
+    <string name="theme_editor_hex_label">精確十六進位</string>
+    <string name="theme_editor_hex_hint">#RRGGBB</string>
+    <string name="theme_editor_hex_apply">使用此顏色</string>
+    <string name="theme_editor_hex_invalid">請輸入 #RRGGBB</string>
+    <string name="theme_editor_preset_default">預設配置</string>
+    <string name="theme_editor_preset_wallpaper">桌布取色</string>
+    <string name="theme_editor_preset_blue">澄海藍</string>
+    <string name="theme_editor_preset_teal">碧灣青</string>
+    <string name="theme_editor_preset_green">松林綠</string>
+    <string name="theme_editor_preset_orange">暖砂金</string>
+    <string name="theme_editor_preset_red">薔薇紅</string>
+    <string name="theme_editor_preset_purple">鳶尾紫</string>
+    <string name="theme_editor_preview_title">標題文字</string>
+    <string name="theme_editor_preview_body">內文文字</string>
+    <string name="theme_editor_preview_secondary">次要文字</string>
+    <string name="theme_editor_preview_filled">填充按鈕</string>
+    <string name="theme_editor_preview_tonal">色調按鈕</string>
+    <string name="theme_editor_slot_primary">主色</string>
+    <string name="theme_editor_slot_primary_container">主色容器</string>
+    <string name="theme_editor_slot_secondary_container">次色容器</string>
+    <string name="theme_editor_slot_focus">焦點色</string>
+    <string name="theme_editor_slot_player_current">播放中環色</string>
+    <string name="theme_editor_slot_surface">表面色</string>
+    <string name="theme_editor_slot_surface_container">卡片表面色</string>
+    <string name="theme_editor_slot_surface_container_high">對話框表面色</string>
+    <string name="theme_editor_slot_on_surface">內文顏色</string>
+    <string name="theme_editor_slot_on_surface_variant">次要文字顏色</string>
+    <string name="theme_editor_slot_outline">輪廓色</string>
+    <string name="theme_editor_slot_error">錯誤色</string>
+    <string name="theme_editor_slot_success">成功色</string>
+    <string name="theme_editor_slot_warning">警告色</string>
+    <string name="theme_editor_slot_scrim_opacity">遮罩透明度</string>
+    <string name="theme_editor_slot_dialog_opacity">對話框透明度</string>
+    <string name="theme_editor_slot_overlay_opacity">浮層透明度（僅 Web 主題生效）</string>
+    <string name="theme_editor_slot_player_scrim_opacity">播放選單遮罩不透明度</string>
+    <string name="theme_editor_slot_live_list_scrim_opacity">直播列表遮罩不透明度</string>
+    <string name="theme_editor_import">匯入配色</string>
+    <string name="theme_editor_palette_style">配色風格 · 保留手動修改</string>
+    <string name="theme_editor_palette_tonal">柔和</string>
+    <string name="theme_editor_palette_vibrant">鮮豔</string>
+    <string name="theme_editor_palette_expressive">表現力</string>
+    <string name="theme_editor_palette_rainbow">彩虹</string>
+    <string name="theme_editor_palette_fidelity">保真</string>
+    <string name="theme_editor_palette_content">內容</string>
+    <string name="theme_editor_palette_fruit_salad">果園</string>
+    <string name="theme_editor_palette_neutral">中性</string>
+    <string name="theme_editor_palette_monochrome">單色</string>
+    <string name="theme_editor_inline_hint">調整即在本頁暫時生效，儲存後才套用至全域。</string>
+    <string name="theme_editor_presets">內建主題 · 完整淺深配色</string>
+    <string name="theme_editor_preset_graphite">石墨灰</string>
+    <string name="theme_editor_preset_pair">淺色 + 深色</string>
+    <string name="theme_editor_preset_original">原始配色</string>
+    <string name="theme_editor_preset_dynamic">隨桌布自動更新</string>
+    <string name="theme_editor_preset_modified">已微調</string>
+    <string name="theme_editor_selected">已選擇</string>
+    <string name="theme_editor_saved_state">正在編輯已儲存的配色 · 修改後可直接預覽</string>
+    <string name="theme_editor_clear_short">↺</string>
+    <string name="theme_editor_value_auto">%1$s · 自動</string>
+    <string name="theme_editor_value_adjusted">輸入 %1$s\n顯示 %2$s</string>
+    <string name="theme_editor_group_accent">強調與互動</string>
+    <string name="theme_editor_group_surfaces">背景與表面</string>
+    <string name="theme_editor_group_text">文字與輪廓</string>
+    <string name="theme_editor_group_states">狀態提示</string>
+    <string name="theme_editor_group_player">播放器</string>
+    <string name="theme_editor_group_layers">透明度與浮層</string>
+    <string name="theme_editor_group_item_overlay">條目遮罩與選中</string>
+    <string name="theme_editor_slot_item_overlay">條目遮罩色</string>
+    <string name="theme_editor_slot_on_item_overlay">選中文字色</string>
+    <string name="theme_editor_slot_item_overlay_opacity">條目遮罩不透明度</string>
+    <string name="theme_import_title">匯入配色</string>
+    <string name="theme_import_input_hint">貼上 TweakCN JSON 或 HTTPS JSON 連結</string>
+    <string name="theme_import_file">開啟 JSON</string>
+    <string name="theme_import_community">TweakCN 配色站</string>
+    <string name="theme_import_preview_action">預覽匯入</string>
+    <string name="theme_import_cancel">取消</string>
+    <string name="theme_import_use">套用至編輯器</string>
+    <string name="theme_import_empty">請先貼上 JSON 或 HTTPS JSON 連結。</string>
+    <string name="theme_import_failed">配色匯入失敗。</string>
+    <string name="theme_import_browser_unavailable">沒有可用的瀏覽器。</string>
+    <string name="theme_import_source_paste">貼上的 JSON</string>
+    <string name="theme_import_source_file">本機 JSON</string>
+    <string name="theme_import_preview">已就緒：%1$s</string>
+    <string name="theme_import_no_warnings">只會匯入支援的顏色角色。</string>
+    <string name="theme_import_warnings">匯入提示：\n%1$s</string>
     <string name="setting_appearance">外觀與語言</string>
-    <string name="setting_appearance_summary">4 項</string>
+    <string name="setting_appearance_summary">5 項</string>
     <string name="setting_auto">自動</string>
     <string name="setting_custom">自訂</string>
     <string name="setting_language">語言</string>
@@ -856,6 +974,73 @@
     <string name="setting_doh">DoH</string>
     <string name="setting_proxy">Proxy</string>
     <string name="setting_cache">暫存</string>
+    <string name="cache_management_title">暫存管理</string>
+    <string name="cache_management_scanning">計算中…</string>
+    <string name="cache_management_summary">共 %1$s</string>
+    <string name="cache_management_summary_with_quota">共 %1$s / 系統配額 %2$s</string>
+    <string name="cache_management_inline">%1$s / %2$s</string>
+    <string name="cache_management_module_detail">%1$s · %2$d 個檔案 · 最近 %3$s</string>
+    <string name="cache_management_scanned_at">掃描於 %1$s</string>
+    <string name="cache_management_partial">部分結果 · %1$d 項警告</string>
+    <string name="cache_management_refresh">重新整理</string>
+    <string name="cache_cleanup_light">輕度清理</string>
+    <string name="cache_cleanup_standard">標準清理</string>
+    <string name="cache_cleanup_deep">深度清理</string>
+    <string name="cache_cleanup_cancel">取消</string>
+    <string name="cache_cleanup_module">清理</string>
+    <string name="cache_cleanup_owner_managed">由模組管理</string>
+    <string name="cache_cleanup_confirm_module">清理 %1$s？可重建資料將在需要時重新下載。</string>
+    <string name="cache_limit_button">上限</string>
+    <string name="cache_limit_title">暫存上限</string>
+    <string name="cache_limit_unlimited">不限</string>
+    <string name="cache_auto_button">自動清理</string>
+    <string name="cache_auto_on">自動清理：開</string>
+    <string name="cache_auto_off">自動清理：關</string>
+    <string name="cache_retention_button">保留期</string>
+    <string name="cache_retention_title">暫存保留期</string>
+    <string name="cache_retention_summary">保留：%1$s</string>
+    <string name="cache_retention_7">7 天</string>
+    <string name="cache_retention_30">30 天</string>
+    <string name="cache_retention_90">90 天</string>
+    <string name="cache_retention_forever">永久</string>
+    <string name="cache_total_limit_button">總上限</string>
+    <string name="cache_total_limit_title">總暫存上限</string>
+    <string name="cache_total_limit_summary">總上限：%1$s</string>
+    <string name="cache_limit_title_exo">播放暫存上限</string>
+    <string name="cache_management_playback_budget">播放暫存 %1$s（退出播放後收至 %2$s）</string>
+    <string name="cache_cleanup_confirm_title">確認清理暫存？</string>
+    <string name="cache_cleanup_confirm_light">清理過期節目表、暫存檔與遺留暫存？</string>
+    <string name="cache_cleanup_confirm_standard">清理圖片、歌詞、K 歌與 WebHome 等可重建暫存？\n\n收藏、歷史與設定不會受到影響。</string>
+    <string name="cache_cleanup_confirm_deep">清理播放暫存及其他深度暫存？\n\n正在播放的內容會受保護；之後播放可能需要重新下載與緩衝。</string>
+    <string name="cache_cleanup_confirm_deep_final">深度清理無法復原，確定現在開始？</string>
+    <string name="cache_cleanup_continue">繼續</string>
+    <string name="cache_cleanup_deep_start">開始深度清理</string>
+    <string name="cache_cleanup_progress">正在清理 %1$s（%2$d/%3$d）</string>
+    <string name="cache_cleanup_done">清理完成\n釋放 %1$s · 刪除 %2$d 個檔案</string>
+    <string name="cache_cleanup_partial">部分完成\n釋放 %1$s · 刪除 %2$d 個檔案 · 跳過 %3$d 個檔案</string>
+    <string name="cache_cleanup_deferred">目前正在播放，播放暫存清理已延後。</string>
+    <string name="cache_cleanup_not_allowed">此暫存由所屬模組管理，無法直接刪除。</string>
+    <string name="cache_cleanup_failed">暫存清理失敗</string>
+    <string name="cache_cleanup_cancelled">暫存清理已取消</string>
+    <string name="cache_cleanup_full_started">正在清理全部暫存…</string>
+    <string name="cache_cleanup_busy">正在清理，請稍候</string>
+    <string name="cache_module_exo">Exo 播放暫存</string>
+    <string name="cache_module_mpv_hls">MPV HLS/ISO 分片</string>
+    <string name="cache_module_mpv_demuxer">MPV demuxer 預載</string>
+    <string name="cache_module_mpv_runtime">MPV shader/字型暫存</string>
+    <string name="cache_module_lyrics">歌詞與選源結果</string>
+    <string name="cache_module_karaoke">K 歌軌道</string>
+    <string name="cache_module_webhome_ext">WebHome 擴充</string>
+    <string name="cache_module_webhome_raw">WebHome HTTP 暫存</string>
+    <string name="cache_module_epg">EPG 節目表</string>
+    <string name="cache_module_glide">圖片與封面</string>
+    <string name="cache_module_plugin_scripts">JS/Python/Jar 資源</string>
+    <string name="cache_module_plugin_audit">外掛審計日誌</string>
+    <string name="cache_module_plugin_http_cache">外掛網路快取</string>
+    <string name="cache_module_temp_files">暫存檔</string>
+    <string name="cache_module_legacy_files">遺留路徑</string>
+    <string name="cache_module_diagnostic_logs">診斷日誌</string>
+    <string name="cache_module_unclassified">未歸類暫存</string>
     <string name="setting_backup">備份</string>
     <string name="setting_restore">還原</string>
     <string name="setting_about">關於</string>
@@ -927,7 +1112,6 @@
     <string name="sync_item_webhome">WebHome 主頁資料</string>
     <string name="sync_item_search">搜尋記錄</string>
     <string name="sync_item_history">觀看記錄</string>
-    <string name="history_watched_time">已看 %1$s</string>
     <string name="sync_item_keep">收藏資料</string>
     <string name="sync_item_settings">應用設定</string>
     <string name="sync_item_remote_relay">中轉服務配置</string>
@@ -1279,6 +1463,7 @@
     <string name="player_auto_play">點播自動播放</string>
     <string name="player_live_source_fallback">直播源失效自動切換</string>
     <string name="player_auto_change">自動換源</string>
+    <string name="player_defer_flag_switch">切換線路不自動播放</string>
     <string name="player_remember_brightness">記住播放亮度</string>
     <string name="player_failure_fallback">播放失敗回退</string>
     <string name="player_speed">長按倍速</string>
@@ -1405,6 +1590,9 @@
     <!-- Search -->
     <string name="search_keyword">關鍵字…</string>
     <string name="site_search_hint">搜尋站點…</string>
+    <string name="site_dialog_title">選擇站點</string>
+    <string name="site_dialog_title_action">管理站點</string>
+    <string name="site_dialog_count">共 %1$d 個站點</string>
     <string name="site_group_all">全部</string>
     <string name="site_group_sort_desc">%1$s，長按拖動排序</string>
     <string name="site_group_sort_tv_desc">%1$s，長按確定鍵排序</string>
@@ -1450,9 +1638,33 @@
     <string name="dialog_config_choose_failed">讀不到所選內容，請重新選擇包目錄或 zip</string>
     <string name="dialog_config_name">請輸入名稱…</string>
     <string name="dialog_config_url">請輸入網址…</string>
+    <string name="dialog_config_addresses">備用網址，每行一個…</string>
 
     <!-- Error -->
     <string name="error_config_get">配置取得失敗</string>
+    <!-- 內容源載入失敗時的錯誤態：設計文件 §9.9 要求「錯誤色 + 原因 + 重試動作」。 -->
+    <string name="error_config_load">內容源載入失敗</string>
+    <!-- 首頁空態（確實沒有內容，與「載入失敗」是兩件事）：設計文件 §9.9 的三件套。 -->
+    <string name="home_empty_title">暫時沒有內容</string>
+    <string name="home_empty_description">內容源沒有回傳可顯示的內容。</string>
+    <string name="home_empty_action">重新載入</string>
+    <!--
+        「還沒設定接口」空態：重置應用、重新安裝或恢復出廠後首次啟動就是這個狀態。
+        它**不是失敗**（沒有網址可請求，也沒有失敗原因，重試永遠不會成功），所以標題不用
+        錯誤色、主動作也不是「重試」而是「新增接口」——直接把使用者帶到接口管理清單。
+    -->
+    <string name="home_no_config_title">還沒有設定接口</string>
+    <string name="home_no_config_description">新增一個點播接口後即可瀏覽內容。</string>
+    <string name="home_no_config_action">新增接口</string>
+    <!--
+        本機檔案瀏覽器空態。主動作是**重新掃描目前目錄**，不是「返回上級」——因為：
+        根目錄沒有上級（返回會離開頁面），而「重新掃描」在任何目錄都成立，
+        且能反映外部變化（剛用其他應用放進來的檔案）。
+    -->
+    <string name="file_empty_title">這裡沒有內容</string>
+    <string name="file_empty_description">這個目錄下沒有可顯示的項目。如果是剛放進來的檔案，重新掃描即可看到。</string>
+    <string name="file_empty_action">重新掃描</string>
+    <string name="error_retry">重試</string>
     <string name="error_play_next">已經是最後一集了！</string>
     <string name="error_play_prev">已經是第一集了！</string>
     <string name="error_play_parse">播放網址解析失敗</string>
@@ -1565,6 +1777,15 @@
     <string name="crash_details_title">錯誤訊息</string>
     <string name="crash_details_message">應用版本：%1$s\n\n%2$s</string>
     <string name="crash_details_close">關閉</string>
+    <string name="crash_log_title">日誌下載位址</string>
+    <string name="crash_log_hint">用同一區域網路內的手機或電腦瀏覽器開啟上面的位址，即可檢視並下載本次崩潰日誌。</string>
+    <string name="crash_log_preparing">正在準備日誌服務…</string>
+    <string name="crash_log_unavailable">日誌服務未啟動，可點按「錯誤訊息」查看堆疊。</string>
+    <string name="crash_log_no_lan">目前沒有區域網路位址（未連線網路？），只能在本機開啟：\n%1$s</string>
+    <string name="crash_log_service_failed">日誌服務未啟動</string>
+    <string name="crash_log_copy">複製位址</string>
+    <string name="crash_log_copied">位址已複製</string>
+    <string name="crash_log_open">在瀏覽器開啟</string>
 
     <!-- Hint -->
     <string name="copied">已複製</string>
@@ -1759,6 +1980,7 @@
         <item>@string/display_mini</item>
         <item>@string/display_title</item>
         <item>播放參數</item>
+        <item>@string/display_media_badges</item>
     </string-array>
 
     <string-array name="select_live_player_osd">
@@ -1831,9 +2053,20 @@
     <string name="dialog_tmdb_api_key_tip">免費獲取 API Key: https://www.themoviedb.org/settings/api</string>
     <string name="dialog_tmdb_language_label">TMDB 語言</string>
     <string name="dialog_tmdb_language_hint">例如 zh-CN</string>
-    <string name="dialog_tmdb_api_host_label">API 域名</string>
-    <string name="dialog_tmdb_api_host_hint">例如 https://api.tmdb.org</string>
-    <string name="dialog_tmdb_image_host_label">圖片域名</string>
+    <string name="dialog_tmdb_api_host_label">TMDB API 線路</string>
+    <string name="dialog_tmdb_image_itv666">itv666 圖片代理</string>
+    <string name="dialog_tmdb_image_direct">官方圖片（直連）</string>
+    <string name="dialog_tmdb_api_itv666">itv666 API 代理</string>
+    <string name="dialog_tmdb_api_direct">官方 API（直連）</string>
+    <string name="dialog_tmdb_api_auto">自動（低延遲優先，失敗切換）</string>
+    <string name="dialog_tmdb_image_auto">自動（低延遲優先，失敗切換）</string>
+    <string name="dialog_tmdb_image_wsrv">wsrv.nl 圖片代理</string>
+    <string name="dialog_tmdb_route_custom">自訂</string>
+    <string name="dialog_tmdb_api_custom_hint">自訂 API 位址，例如 https://api.tmdb.org</string>
+    <string name="dialog_tmdb_image_custom_hint">自訂圖片位址，例如 https://images.tmdb.org</string>
+    <string name="dialog_tmdb_api_host_hint">預設 https://api.tmdb.org，可選擇內建代理或輸入自訂位址</string>
+    <string name="dialog_tmdb_proxy_host_help">API 和圖片線路可以分別選擇。自動模式會按已驗證線路的延遲排序，失敗時切換；已加入 itv666 和 wsrv.nl，也支援輸入自訂位址。</string>
+    <string name="dialog_tmdb_image_host_label">TMDB 圖片線路</string>
     <string name="dialog_tmdb_image_host_hint">例如 https://images.tmdb.org</string>
     <string name="dialog_tmdb_section_data">數據源</string>
     <string name="dialog_tmdb_section_ratings">評分擴展</string>
@@ -1909,6 +2142,10 @@
     <string name="detail_image_save_success">已儲存至：%1$s</string>
     <string name="detail_image_save_failed">圖片儲存失敗</string>
     <string name="detail_external_open_failed">無法開啟外部連結</string>
+    <string name="detail_external_opening">正在開啟外部頁面</string>
+    <string name="detail_external_open_title">開啟外部連結</string>
+    <string name="detail_external_open_builtin">內置瀏覽器</string>
+    <string name="detail_external_open_external">系統或外部瀏覽器</string>
     <string name="detail_image_permission_denied">儲存權限被拒絕</string>
 
     <string name="detail_tmdb_photos">劇照</string>
@@ -1925,6 +2162,15 @@
     <string name="display_progress">進度</string>
     <string name="display_mini">迷你</string>
     <string name="display_title">標題</string>
+    <string name="display_media_badges">媒體資訊</string>
+    <string name="osd_media_badge_position">媒體資訊位置</string>
+    <string-array name="select_media_badge_position">
+        <item>左上角</item>
+        <item>右上角</item>
+        <item>左下角</item>
+        <item>右下角</item>
+        <item>關閉</item>
+    </string-array>
     <string name="play_decode_idle">解碼</string>
     <string name="detail_close">關閉</string>
     <string name="detail_expand">展開</string>
@@ -2447,6 +2693,7 @@
     <string name="dialog_delete_global_history">確定刪除所有點播設定的歷史記錄嗎？</string>
     <string name="config_delete_title">刪除播放源？</string>
     <string name="config_delete_message">確定刪除「%1$s」嗎？相關播放歷史也可能遺失，此操作無法復原。</string>
+    <string name="config_current_delete_message">目前接口正在使用中，請先切換到其他接口再刪除。</string>
     <string name="setting_home_history">首頁最近觀看</string>
     <string name="site_health_report_ad_blocked">播放 %1$d 次 / 廣告攔截 %2$d 次</string>
     <string name="setting_custom_csp_sort">排序</string>
@@ -2482,6 +2729,19 @@
     <string name="reader_chapter_failed">章節載入失敗</string>
     <string name="reader_opening">正在開啟 %1$s</string>
     <string name="reader_opening_default">正在開啟閱讀器</string>
+    <string name="reader_tts_channel">語音朗讀</string>
+    <string name="reader_tts_playing">正在朗讀</string>
+    <string name="reader_tts_paused">朗讀已暫停</string>
+    <string name="reader_tts_error">朗讀失敗</string>
+    <string name="reader_tts_default_title">小說</string>
+    <string name="reader_tts_progress">第 %1$d/%2$d 段</string>
+    <string name="reader_tts_prev">上一段</string>
+    <string name="reader_tts_next">下一段</string>
+    <string name="reader_tts_pause">暫停</string>
+    <string name="reader_tts_resume">繼續</string>
+    <string name="reader_tts_stop">停止</string>
+    <string name="reader_tts_timer">剩餘 %1$d 分鐘</string>
+    <string name="reader_tts_timer_action">+30 分鐘</string>
     <string name="cat_web_opening">正在開啟設定中心</string>
     <string name="cat_web_failed">頁面載入失敗：%1$s</string>
     <string name="cat_web_external">已用瀏覽器開啟</string>
@@ -2613,6 +2873,7 @@
     <string-array name="select_fullscreen_menu_key">
         <item>控制欄</item>
         <item>選集</item>
+        <item>下一集</item>
     </string-array>
     <string-array name="select_home_menu_key">
         <item>選項彈窗</item>
@@ -2625,58 +2886,9 @@
         <item>投屏頁面</item>
         <item>收藏頁面</item>
         <item>設置頁面</item>
+        <item>追更頁面</item>
+        <item>站點注入</item>
     </string-array>
-    <string name="ad_audio_candidate_title">疑似廣告</string>
-    <string name="ad_audio_match_title">已匹配音訊廣告</string>
-    <string name="ad_audio_candidate_message">規則 %1$s 已匹配，是否略過約 %2$d 秒？</string>
-    <string name="ad_audio_skip">略過</string>
-    <string name="ad_audio_ignore">忽略</string>
-    <string name="ad_audio_skipped_title">已略過廣告</string>
-    <string name="ad_audio_skipped_message">可在 %1$d 秒內復原。</string>
-    <string name="ad_audio_undo">復原</string>
-    <string name="setting_ad_audio_title">音訊指紋去廣告（實驗）</string>
-    <string name="setting_ad_audio_no_rules">無規則</string>
-    <string name="setting_ad_audio_rule_error">規則錯誤</string>
-    <string name="setting_ad_audio_rule_count">規則 %1$d · %2$s</string>
-    <string name="setting_ad_audio_import">匯入規則 JSON</string>
-    <string name="setting_ad_audio_clear">清除規則</string>
-    <string name="setting_ad_audio_clear_confirm">確認清除已匯入的音訊指紋規則？</string>
-    <string name="setting_ad_audio_imported">已匯入 %1$d 條規則 · %2$s</string>
-    <string name="setting_ad_audio_import_failed">規則匯入失敗，已保留原規則。</string>
-    <string name="setting_ad_audio_clear_done">已清除音訊指紋規則</string>
-    <string name="speech_ad_enabled">語音廣告識別</string>
-    <string name="speech_ad_keywords">廣告關鍵詞</string>
-    <string name="speech_ad_keyword_count">%1$d 個關鍵詞</string>
-    <string name="speech_ad_rules">語音規則</string>
-    <string name="speech_ad_rules_none">暫無語音規則</string>
-    <string name="speech_ad_rules_summary">%1$d 條規則 · %2$s</string>
-    <string name="speech_ad_rules_error">規則設定錯誤：%1$s</string>
-    <string name="speech_ad_rules_manage">管理語音規則</string>
-    <string name="speech_ad_rules_edit">編輯規則</string>
-    <string name="speech_ad_rules_import">匯入文字規則</string>
-    <string name="speech_ad_rules_clear">清除自訂規則</string>
-    <string name="speech_ad_rules_view_builtin">查看內建規則</string>
-    <string name="speech_ad_rules_clear_confirm">確認清除目前的自訂語音規則？</string>
-    <string name="speech_ad_rules_clear_done">已清除自訂語音規則</string>
-    <string name="speech_ad_rules_saved">語音規則已儲存</string>
-    <string name="speech_ad_rules_imported">已匯入 %1$d 條語音規則</string>
-    <string name="speech_ad_rules_import_failed">語音規則匯入失敗：%1$s</string>
-    <string name="speech_ad_rules_source_none">無</string>
-    <string name="speech_ad_rules_source_builtin">內建</string>
-    <string name="speech_ad_rules_source_user">編輯</string>
-    <string name="speech_ad_rules_source_imported">匯入</string>
-    <string name="speech_ad_rules_source_combined">內建 + 自訂</string>
-    <string name="speech_ad_builtin">內建語音規則</string>
-    <string name="speech_ad_builtin_value">%1$s · %2$d 條規則</string>
-    <string name="speech_ad_skip_seconds">跳過時長</string>
-    <string name="speech_ad_skip_seconds_value">%1$d 秒</string>
-    <string name="speech_ad_skip_mode">跳過模式</string>
-    <string name="speech_ad_skip_mode_prompt">彈窗確認後跳過</string>
-    <string name="speech_ad_skip_mode_auto">自動跳過</string>
-    <string name="speech_ad_skip_seconds_invalid">請輸入 1 到 120 之間的整數。</string>
-    <string name="speech_ad_model_not_ready">模型未就緒</string>
-    <string name="ad_audio_speech_candidate_title">偵測到語音廣告</string>
-    <string name="ad_audio_speech_candidate_message">命中廣告關鍵詞，跳過約 %1$d 秒？</string>
     <string name="node_title">正在準備貓源</string>
     <string name="node_prepare">準備中…</string>
     <string name="node_hint">僅首次需要：Node 執行環境下載一次後即可重複使用。</string>
@@ -2692,26 +2904,11 @@
     <string name="node_speed">%1$s/s</string>
     <string name="node_size_pair">%1$s / %2$s</string>
     <string name="setting_ad">去廣告</string>
-    <string name="setting_ad_summary">總開關、規則、音訊識別、片頭片尾</string>
+    <string name="setting_ad_summary">總開關、規則、片頭片尾</string>
     <string name="setting_ad_group_basic">基礎</string>
     <string name="setting_ad_group_rule">規則與統計</string>
-    <string name="setting_ad_group_audio">音訊識別</string>
     <string name="setting_ad_group_segment">片段跳過</string>
     <string name="setting_ad_master">去廣告總開關</string>
-    <string name="setting_ad_audio_auto_skip">自動跳過</string>
-    <string name="setting_ad_probe_source">社群規則源</string>
-    <string name="setting_ad_probe_source_hint">必須是 https 位址。規則未簽名，只填你信任的來源。</string>
-    <string name="setting_ad_probe_source_default">預設源</string>
-    <string name="setting_ad_probe_source_off">未啟用</string>
-    <string name="setting_ad_probe_refresh">立即重新整理規則</string>
-    <string name="setting_ad_probe_refreshing">正在重新整理…</string>
-    <string name="setting_ad_probe_refreshed">已更新：%1$s · 共 %2$d 條規則</string>
-    <string name="setting_ad_probe_unchanged">已是最新，共 %1$d 條規則</string>
-    <string name="setting_ad_probe_failed">重新整理失敗：%1$s</string>
-    <string name="setting_ad_probe_revision">revision %1$d · %2$d 條規則</string>
-    <string name="setting_ad_probe_never">尚未拉取</string>
-    <string name="setting_ad_probe_url_invalid">規則源必須以 https:// 開頭</string>
-    <string name="setting_ad_probe_source_disabled">請先填寫社群規則源位址</string>
     <string name="dialog_tmdb_test_config">測試配置</string>
     <string name="dialog_tmdb_test_result_title">配置測試結果</string>
     <string name="dialog_tmdb_test_api_success">TMDB API：連線成功並傳回有效資料（%1$d 毫秒）</string>
@@ -2746,11 +2943,17 @@
     <string name="following_cancel">取消追更</string>
     <string name="following_delete_title">取消追更？</string>
     <string name="following_delete_message">觀看歷史和 TMDB 進度會繼續保留。</string>
+    <string name="following_canceled">已取消追更</string>
     <string name="following_official">官方已更新至第 %1$d 集</string>
+    <string name="following_season_total">本季共 %1$d 集</string>
+    <string name="following_series_total">全劇共 %1$d 集</string>
+    <string name="following_weekday">每週%1$s更新</string>
     <string name="following_official_unknown">官方狀態未知</string>
     <string name="following_source">目前來源可播至第 %1$d 集</string>
     <string name="following_source_unknown">目前來源尚未檢查</string>
+    <string name="following_source_failed">目前來源檢查失敗</string>
     <string name="following_watched">看到第 %1$d 集</string>
+    <string name="following_watched_unknown">尚未記錄觀看進度</string>
     <string name="following_unwatched">還有 %1$d 集未看</string>
     <string name="following_unwatched_none">已看完目前更新</string>
     <string name="following_new_count">新 %1$d 集</string>
@@ -2773,4 +2976,34 @@
     <string name="following_filter_failed">檢查失敗</string>
     <string name="setting_following">追更更新</string>
     <string name="following_next_season">追新季 S%1$d</string>
+    <string-array name="following_weekdays">
+        <item>日</item>
+        <item>一</item>
+        <item>二</item>
+        <item>三</item>
+        <item>四</item>
+        <item>五</item>
+        <item>六</item>
+    </string-array>
+    <string name="setting_plugin_manager">外掛管理</string>
+    <string name="plugin_manager_entry_count">%1$d 個外掛</string>
+    <string name="plugin_manager_import">匯入外掛包</string>
+    <string name="plugin_manager_reload">重新載入</string>
+    <string name="plugin_manager_empty">還沒有外掛。請匯入包含 manifest.json 的外掛包目錄。</string>
+    <string name="plugin_manager_permission_required">需要儲存權限才能選擇外掛目錄</string>
+    <string name="plugin_manager_invalid_path">所選目錄路徑無法辨識</string>
+    <string name="plugin_manager_import_ok">外掛已匯入並啟用：%1$s</string>
+    <string name="plugin_manager_import_failed">匯入失敗：%1$s</string>
+    <string name="plugin_manager_delete_title">刪除外掛</string>
+    <string name="plugin_manager_delete_message">將「%1$s」從清單移除，並刪除裝置上的外掛檔案，是否繼續？</string>
+    <string name="plugin_manager_save_failed">外掛設定儲存失敗：%1$s</string>
+    <string name="plugin_manager_delete_failed">已從清單移除，但外掛檔案刪除失敗：%1$s</string>
+    <string name="plugin_manager_load_failed">讀取外掛清單失敗：%1$s</string>
+    <string name="plugin_manager_entry_meta">版本 %1$s · 執行環境 %2$s · %3$s</string>
+    <string name="plugin_manager_params">參數</string>
+    <string name="plugin_manager_params_title">「%1$s」的參數</string>
+    <string name="plugin_manager_params_hint">JSON 物件，例如 {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
+    <string name="plugin_manager_params_invalid">參數必須是 JSON 物件</string>
+    <string name="plugin_manager_params_too_large">參數量超出儲存上限</string>
+    <string name="plugin_panel_title">外掛面板</string>
 </resources>

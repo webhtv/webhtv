@@ -9,7 +9,9 @@ public final class FollowingBackupCodec {
     }
 
     public static Payload capture() {
-        return new Payload(FollowingStore.list(), FollowingStore.database().getFollowingSourceDao().findAll());
+        // 必须用 findAll（含墓碑）：墓碑行是删除意图的同步载体，过滤后取消追更就无法传播到对端。
+        return new Payload(FollowingStore.database().getFollowingDao().findAll(),
+                FollowingStore.database().getFollowingSourceDao().findAll());
     }
 
     public static void restoreFull(List<Following> following, List<FollowingSource> sources) {

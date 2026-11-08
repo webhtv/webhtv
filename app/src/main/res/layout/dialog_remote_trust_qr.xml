@@ -18,7 +18,7 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="@string/remote_trust_server_qr"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -28,7 +28,7 @@
         android:layout_height="240dp"
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="14dp"
-        android:background="@color/white"
+        android:background="?attr/colorSurfaceContainerHigh"
         android:padding="10dp"
         android:scaleType="fitCenter"
         app:shapeAppearanceOverlay="@style/Vod.Grid.Large" />
@@ -40,7 +40,7 @@
         android:layout_marginTop="10dp"
         android:gravity="center"
         android:lineSpacingMultiplier="1.08"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textIsSelectable="true"
         android:textSize="12sp"
         tools:text="http://192.168.1.9:9978/remote/trust/setup" />
@@ -66,7 +66,7 @@
             android:text="@string/dialog_cancel"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

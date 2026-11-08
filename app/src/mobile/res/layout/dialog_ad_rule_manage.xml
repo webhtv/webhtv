@@ -17,7 +17,7 @@
         android:textColor="@color/dialog_outlined_button_text"
         android:textSize="14sp"
         app:backgroundTint="@color/dialog_outlined_button_bg"
-        app:strokeColor="@color/dialog_outlined_button_stroke" />
+        app:strokeColor="?attr/colorOutline" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/stats"
@@ -29,7 +29,7 @@
         android:textColor="@color/dialog_outlined_button_text"
         android:textSize="14sp"
         app:backgroundTint="@color/dialog_outlined_button_bg"
-        app:strokeColor="@color/dialog_outlined_button_stroke" />
+        app:strokeColor="?attr/colorOutline" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/importCandidates"
@@ -41,7 +41,7 @@
         android:textSize="14sp"
         android:visibility="gone"
         app:backgroundTint="@color/dialog_outlined_button_bg"
-        app:strokeColor="@color/dialog_outlined_button_stroke"
+        app:strokeColor="?attr/colorOutline"
         tools:text="待审核接口规则（2）"
         tools:visibility="visible" />
 
@@ -63,7 +63,7 @@
             android:textColor="@color/dialog_outlined_button_text"
             android:textSize="12sp"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/disableImported"
@@ -76,7 +76,7 @@
             android:textColor="@color/dialog_outlined_button_text"
             android:textSize="12sp"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -95,7 +95,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="@string/ad_rule_empty"
-        android:textColor="@color/white_60"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="12sp"
         android:visibility="gone"
         tools:visibility="visible" />
@@ -122,7 +122,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:textColor="@color/white_60"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="12sp"
         tools:text="来自配置 · 共 12 条（只读）" />
 

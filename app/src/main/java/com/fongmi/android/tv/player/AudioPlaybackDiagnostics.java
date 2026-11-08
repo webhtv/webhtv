@@ -376,7 +376,9 @@ public final class AudioPlaybackDiagnostics {
         if (containsAny(value, "eac3", "e-ac-3", "e-ac3")) return "E-AC-3";
         if (containsAny(value, "ac3", "ac-3")) return "AC-3";
         if (value.contains("dts")) return "DTS";
-        if (value.contains("aac")) return "AAC";
+        // media3 对 MP4/M4A 里的 AAC 上报的是编解码串 "mp4a.40.x"（不含 "aac"），
+        // 只匹配 "aac" 会把它原样当成徽标/诊断文本，这里补上 RFC 6381 的等价写法。
+        if (value.contains("aac") || value.contains("mp4a.40")) return "AAC";
         if (value.contains("opus")) return "Opus";
         if (value.contains("vorbis")) return "Vorbis";
         if (value.contains("flac")) return "FLAC";

@@ -77,4 +77,16 @@ public class TmdbConfigEffectiveTest {
         assertFalse(TmdbConfig.isOfficialApiBase("https://api.tmdb.org/3/proxy"));
         assertFalse(TmdbConfig.isOfficialApiBase("https://user@api.tmdb.org/3"));
     }
+    @Test
+    public void transientCredentialDisablesConfiguredProxy() {
+        TmdbConfig configured = TmdbConfig.objectFrom("{\"proxyBase\":\"https://mirror.example.com\",\"language\":\"en-US\"}");
+        SubscriptionTmdbCredentialStore.Scope scope = SubscriptionTmdbCredentialStore.beginSubscription(4, "https://source.example/config", "test");
+        assertTrue(SubscriptionTmdbCredentialStore.accept(SOURCE_KEY, 4, "https://source.example/config", scope.getEpoch(), "site", "vod"));
+
+        TmdbConfig effective = TmdbConfig.effective(configured, SubscriptionTmdbCredentialStore.snapshot(scope));
+
+        assertEquals("https://api.tmdb.org/3", effective.getApiBase());
+        assertFalse(effective.isProxyEnabled());
+    }
+
 }

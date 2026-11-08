@@ -1,25 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    原生增强「选集卡片」的统一焦点环（统一规范见 selector_video_item.xml）：
+    获得焦点 3dp ?attr/tvFocusRing，当前播放 2dp ?attr/tvCurrentRing；其余状态透明。
+
+    圆角 = 宿主圆角 − w/2：本 selector 是卡片（adapter_episode_card 的 CardView，
+    app:cardCornerRadius="@dimen/webhtv_card_radius_default" = 8dp）的 **foreground**。
+    描边型 `<shape>`（GradientDrawable）把描边中心线画在「bounds 内缩 w/2、圆角半径仍取声明值」
+    的路径上，所以环的**外边界**圆角半径 = 声明值 + w/2。声明 8dp 时外边界是 9.5dp，比卡片
+    自身的 8dp 弧大，卡片圆角会在环外露出一段（2026-10-10 实机复核）。
+    因此焦点态声明 8 − 1.5 = 6.5dp、当前态声明 8 − 1 = 7dp（各减去自己的 w/2）。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 获得焦点：白色边框，优先于当前播放态 -->
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="#00000000" />
-            <stroke android:width="3dp" android:color="#FFD166" />
-            <corners android:radius="8dp" />
+            <stroke android:width="3dp" android:color="?attr/tvFocusRing" />
+            <corners android:radius="6dp" />
         </shape>
     </item>
-    <!-- 当前播放：高亮黄边框 -->
+    <item android:state_activated="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+            <stroke android:width="2dp" android:color="?attr/tvCurrentRing" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
     <item android:state_selected="true">
         <shape android:shape="rectangle">
             <solid android:color="#00000000" />
-            <stroke android:width="2dp" android:color="#2CC56F" />
-            <corners android:radius="8dp" />
+            <stroke android:width="2dp" android:color="?attr/tvCurrentRing" />
+            <corners android:radius="6dp" />
         </shape>
     </item>
-    <!-- 默认：透明 -->
     <item>
         <shape android:shape="rectangle">
             <solid android:color="#00000000" />
+            <corners android:radius="6dp" />
         </shape>
     </item>
 </selector>

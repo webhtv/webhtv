@@ -1,23 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    版本更新弹窗里「稳定版 / 测试版」两张版本卡的背景状态表。
+
+    2026-10-19 第二轮修正：此前的 selected 态几乎不可辨识 ——
+      · selected 填充 surfaceContainerHigh #2A2F34 与 default 填充
+        surfaceContainerHighest #34393E 只有 1.16:1；
+      · selected 描边 outlineVariant #44474F 对 selected 自身填充只有 1.45:1。
+    也就是说"已选中"在视觉上等于"没选中"，与用户报告的"看不出是否选中"同源。
+
+    改后三态互为反相，不可能混淆：
+      · focused：浅色填充 colorPrimary + 深色环 colorOnPrimary（对填充 7.50:1）
+      · selected：深色填充 colorPrimaryContainer + 浅色环 colorPrimary（5.32:1 夜间 / 4.92:1 浅色）
+      · default：surfaceContainerHighest + outlineVariant 静态轮廓（不变）
+    focused 与 selected 的填充与环色恰好互换，所以"焦点在哪"与"选中哪个"
+    是两个互相独立的线索。
+
+    焦点环宽度同时收敛到唯一 token（原为写死的 2dp），与全库规范一致。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="#F4F8FF" />
-            <stroke android:width="2dp" android:color="#1A73E8" />
+            <solid android:color="?attr/colorPrimary" />
+            <stroke android:width="@dimen/webhtv_focus_ring_width" android:color="?attr/colorOnPrimary" />
             <corners android:radius="8dp" />
         </shape>
     </item>
     <item android:state_selected="true">
         <shape android:shape="rectangle">
-            <solid android:color="#F8FAFE" />
-            <stroke android:width="1dp" android:color="#E5E7EB" />
+            <solid android:color="?attr/colorPrimaryContainer" />
+            <stroke android:width="@dimen/webhtv_focus_ring_width" android:color="?attr/colorPrimary" />
             <corners android:radius="8dp" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#FFFFFF" />
-            <stroke android:width="1dp" android:color="#E5E7EB" />
+            <solid android:color="?attr/colorSurfaceContainerHighest" />
+            <stroke android:width="1dp" android:color="?attr/colorOutlineVariant" />
             <corners android:radius="8dp" />
         </shape>
     </item>

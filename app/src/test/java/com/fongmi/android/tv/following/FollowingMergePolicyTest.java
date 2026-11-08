@@ -6,6 +6,7 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class FollowingMergePolicyTest {
 
@@ -39,6 +40,66 @@ public class FollowingMergePolicyTest {
         remote.enabled = false;
 
         assertFalse(FollowingMergePolicy.mergeFollowing(List.of(local), List.of(remote)).get(0).enabled);
+    }
+
+    @Test
+    public void tombstoneSpreadsToActivePeerAndWins() {
+        Following local = following();
+        local.deletedAt = 500;
+        local.enabled = false;
+        Following remote = following();
+        remote.updatedAt = 900;
+
+        Following merged = FollowingMergePolicy.mergeFollowing(List.of(local), List.of(remote)).get(0);
+        assertTrue(merged.isDeleted());
+        assertEquals(500, merged.deletedAt);
+        assertFalse(merged.enabled);
+    }
+
+    @Test
+    public void newerTombstoneWinsBetweenTwoTombstones() {
+        Following local = following();
+        local.deletedAt = 500;
+        Following remote = following();
+        remote.deletedAt = 800;
+
+        assertEquals(800, FollowingMergePolicy.mergeFollowing(List.of(local), List.of(remote)).get(0).deletedAt);
+    }
+
+    @Test
+    public void reFollowAfterDeletionRevivesWhenCreatedAtIsNewer() {
+        Following local = following();
+        local.deletedAt = 500;
+        Following remote = following();
+        remote.createdAt = 700; // 重新追更发生在取消之后
+        remote.updatedAt = 700;
+
+        Following merged = FollowingMergePolicy.mergeFollowing(List.of(local), List.of(remote)).get(0);
+        assertFalse(merged.isDeleted());
+        assertTrue(merged.enabled);
+    }
+
+    @Test
+    public void deletionAfterReFollowReTombstonesTheRow() {
+        Following local = following();
+        local.createdAt = 700;
+        Following remote = following();
+        remote.deletedAt = 900; // 取消发生在重新追更之后
+
+        Following merged = FollowingMergePolicy.mergeFollowing(List.of(local), List.of(remote)).get(0);
+        assertTrue(merged.isDeleted());
+        assertEquals(900, merged.deletedAt);
+    }
+
+    @Test
+    public void legacyActiveRowWithoutCreatedAtDoesNotReviveTombstone() {
+        Following local = following();
+        local.deletedAt = 500;
+        Following remote = following();
+        remote.createdAt = 0; // 旧版本快照的活跃行，createdAt 缺失
+
+        Following merged = FollowingMergePolicy.mergeFollowing(List.of(local), List.of(remote)).get(0);
+        assertTrue(merged.isDeleted());
     }
 
     private static Following following() {

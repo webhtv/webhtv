@@ -104,6 +104,23 @@
         layout="@layout/view_progress"
         android:visibility="gone" />
 
+    <!--
+        空态/错误态容器（设计文档 §9.9）。
+
+        用 ProgressLayout 而不是自己拼一套视图：它已经实现了 CONTENT/PROGRESS/EMPTY/ERROR
+        四种状态、三件套内容注入（setEmptyContent）与错误态（showError），电视端与手机端其余
+        页面都在用它。这里故意**不塞子视图**——它需要的"内容视图"这一页已经有了（type/pager），
+        本容器只负责画状态，因此 CONTENT 态对它没有意义，由 VodFragment 显式隐藏它。
+
+        放在 CoordinatorLayout 里与既有的 @id/progress 同级：两者都是铺满的状态浮层，
+        绘制在 appBar 之上，和进度条的位置关系一致。
+    -->
+    <com.fongmi.android.tv.ui.custom.ProgressLayout
+        android:id="@+id/state"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/filter"
         android:layout_width="wrap_content"

@@ -20,6 +20,16 @@ public class PlayerDetailController extends BaseTmdbDetailModeController {
     }
 
     @Override
+    public boolean isCinemaStyle() {
+        return host.isCinemaStyle();
+    }
+
+    @Override
+    public boolean isPlayerMode() {
+        return true;
+    }
+
+    @Override
     protected boolean showInlinePlayer() {
         return false;
     }

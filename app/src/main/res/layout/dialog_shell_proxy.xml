@@ -24,7 +24,7 @@
             android:layout_marginEnd="16dp"
             android:layout_weight="1"
             android:text="@string/setting_shell_proxy_config"
-            android:textColor="@color/black"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -42,7 +42,7 @@
             android:text="@string/setting_order_reverse"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/proxyEnabled"
@@ -79,9 +79,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="@string/setting_proxy_default_url"
-                app:boxBackgroundColor="@color/white"
-                app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-                app:hintTextColor="#5F6368">
+                app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+                app:boxStrokeColor="?attr/colorOutline"
+                app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/defaultUrl"
@@ -93,8 +93,8 @@
                     android:scrollHorizontally="true"
                     android:selectAllOnFocus="false"
                     android:singleLine="true"
-                    android:textColor="@color/black"
-                    android:textColorHint="#666666" />
+                    android:textColor="?attr/colorOnSurface"
+                    android:textColorHint="?attr/colorOnSurfaceVariant" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -149,7 +149,7 @@
                     android:text="@string/setting_proxy_test"
                     android:textColor="@color/dialog_outlined_button_text"
                     app:backgroundTint="@color/dialog_outlined_button_bg"
-                    app:strokeColor="@color/dialog_outlined_button_stroke" />
+                    app:strokeColor="?attr/colorOutline" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -170,7 +170,7 @@
                     android:text="@string/setting_proxy_text_mode"
                     android:textColor="@color/dialog_toggle_button_text"
                     app:backgroundTint="@color/dialog_toggle_button_bg"
-                    app:strokeColor="@color/dialog_outlined_button_stroke" />
+                    app:strokeColor="?attr/colorOutline" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/uiMode"
@@ -181,7 +181,7 @@
                     android:text="@string/setting_proxy_ui_mode"
                     android:textColor="@color/dialog_toggle_button_text"
                     app:backgroundTint="@color/dialog_toggle_button_bg"
-                    app:strokeColor="@color/dialog_outlined_button_stroke" />
+                    app:strokeColor="?attr/colorOutline" />
 
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -190,17 +190,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="260dp"
                 android:layout_marginTop="12dp"
-                android:background="@color/white">
+                android:background="?attr/colorSurfaceContainerHigh">
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/rulesLayout"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:boxBackgroundColor="@color/white"
+                    app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
                     app:boxCollapsedPaddingTop="0dp"
-                    app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+                    app:boxStrokeColor="?attr/colorOutline"
                     app:hintEnabled="false"
-                    app:hintTextColor="#5F6368">
+                    app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/rules"
@@ -216,8 +216,8 @@
                         android:scrollHorizontally="true"
                         android:selectAllOnFocus="false"
                         android:singleLine="false"
-                        android:textColor="@color/black"
-                        android:textColorHint="#666666" />
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -242,11 +242,11 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:visibility="gone"
-                    app:boxBackgroundColor="@color/white"
+                    app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
                     app:boxCollapsedPaddingTop="0dp"
-                    app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+                    app:boxStrokeColor="?attr/colorOutline"
                     app:hintEnabled="true"
-                    app:hintTextColor="#5F6368">
+                    app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/recognizeInput"
@@ -262,8 +262,8 @@
                         android:scrollHorizontally="true"
                         android:selectAllOnFocus="false"
                         android:singleLine="false"
-                        android:textColor="@color/black"
-                        android:textColorHint="#666666" />
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -309,7 +309,7 @@
             android:text="@string/dialog_negative"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
@@ -324,7 +324,9 @@
             android:paddingEnd="4dp"
             android:text="@string/dialog_positive"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

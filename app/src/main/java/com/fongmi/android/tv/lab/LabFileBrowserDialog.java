@@ -8,8 +8,8 @@ import android.widget.ListView;
 import androidx.appcompat.app.AlertDialog;
 
 import com.fongmi.android.tv.R;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,7 +37,7 @@ public final class LabFileBrowserDialog {
         ListView list = new ListView(activity);
         adapter = new ArrayAdapter<>(activity, android.R.layout.simple_list_item_1, new ArrayList<>());
         list.setAdapter(adapter);
-        dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle(directory ? "选择目录" : "选择文件")
                 .setView(list)
                 .setNegativeButton("取消", null)

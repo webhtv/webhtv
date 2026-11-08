@@ -1,9 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「视频层」播放器画面容器的焦点环（VideoActivity 的 @+id/video 画面框）。
+
+    宽度：@dimen/webhtv_focus_ring_width。环色取 ?attr/tvPlayerRing（叠在视频/固定玻璃上的
+    控件族）：该控件是播放页的视频画面框，浅色表的 FOCUS 槽（深蓝）在视频/玻璃控制层上
+    没有可用对比度，所以取浅色表在固定玻璃上夹取出来的派生色；深色表则取与应用表面焦点环
+    同值的近白（与历史上写死的白色一致）。这是仓库既有契约
+    （docs/TV-FOCUS-RING-20261004-unified-theme-ring.md 非目标一节）明确保留的一层。
+
+    圆角 0dp（= 宿主圆角 − w/2，下限 0）：宿主是一个普通 FrameLayout（400dp x 225dp，
+    android:background="@color/black"），**没有**任何圆角。此前这里写 8dp，于是环的外边界
+    圆角（8 + 1.5/2 = 8.75dp）比画面框的直角还大，黑底的四个直角会露在白色环外一段
+    （2026-10-10 实机复核：density 2/3/4 下分别溢出 295/656/1128 像素）。
+    矩形宿主的正确取值就是 0dp：环外边界自然收成 w/2 的近似直角。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
+    <corners android:radius="0dp" />
+
     <stroke
-        android:width="1.5dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvPlayerRing" />
 
 </shape>

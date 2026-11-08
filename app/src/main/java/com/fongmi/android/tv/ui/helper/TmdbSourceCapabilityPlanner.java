@@ -1,10 +1,13 @@
 package com.fongmi.android.tv.ui.helper;
 
+import android.text.TextUtils;
+
 import androidx.annotation.Nullable;
 
 import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbSourcePayload;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -69,6 +72,11 @@ public final class TmdbSourceCapabilityPlanner {
     }
 
     public static Plan plan(@Nullable TmdbBundle bundle, @Nullable TmdbSourcePayload payload, @Nullable UiState state) {
+        return plan(bundle, payload, state, "");
+    }
+
+    public static Plan plan(@Nullable TmdbBundle bundle, @Nullable TmdbSourcePayload payload, @Nullable UiState state,
+                            @Nullable String targetLanguage) {
         UiState ui = state == null ? UiState.initialScreen() : state;
         Set<String> required = new TreeSet<>();
         if (ui.core()) required.add(CORE);
@@ -84,19 +92,26 @@ public final class TmdbSourceCapabilityPlanner {
         if (ui.episodeVideos() && ui.seasonNumber() >= 0 && ui.episodeNumber() > 0) required.add(episodeVideos(ui.seasonNumber(), ui.episodeNumber()));
 
         Set<String> available = new LinkedHashSet<>();
-        for (String group : required) if (isAvailable(bundle, payload, group, ui.seasonNumber(), ui.episodeNumber())) available.add(group);
+        for (String group : required) if (isAvailable(bundle, payload, group, ui.seasonNumber(), ui.episodeNumber(), targetLanguage)) available.add(group);
         Set<String> missing = new TreeSet<>(required);
         missing.removeAll(available);
         return new Plan(required, available, missing);
     }
 
     public static boolean isAvailable(@Nullable TmdbBundle bundle, @Nullable TmdbSourcePayload payload, String group, int seasonNumber, int episodeNumber) {
+        return isAvailable(bundle, payload, group, seasonNumber, episodeNumber, "");
+    }
+
+    public static boolean isAvailable(@Nullable TmdbBundle bundle, @Nullable TmdbSourcePayload payload, String group,
+                                      int seasonNumber, int episodeNumber, @Nullable String targetLanguage) {
         if (group == null || group.isEmpty()) return false;
+        if (group.equals(CORE) && payload != null && bundle != null && bundle.item() != null
+                && !coreLanguageAvailable(bundle.item(), bundle.detail(), payload, targetLanguage)) return false;
         if (payload != null && payload.hasCapability(group)) return true;
         if (bundle == null || bundle.item() == null) return false;
         JsonObject detail = bundle.detail() == null ? new JsonObject() : bundle.detail();
         return switch (group) {
-            case CORE -> coreAvailable(bundle.item(), detail);
+            case CORE -> coreAvailable(bundle.item(), detail, payload, targetLanguage);
             case CREDITS -> !bundle.cast().isEmpty() || !bundle.creators().isEmpty();
             case IMAGES -> !bundle.item().getPosterUrl().isEmpty() && !bundle.item().getBackdropUrl().isEmpty();
             case EXTERNAL_IDS -> externalIdsAvailable(detail);
@@ -140,10 +155,19 @@ public final class TmdbSourceCapabilityPlanner {
         return false;
     }
 
-    private static boolean coreAvailable(TmdbItem item, JsonObject detail) {
+    private static boolean coreAvailable(TmdbItem item, JsonObject detail, @Nullable TmdbSourcePayload payload, @Nullable String targetLanguage) {
         if (item.getTmdbId() <= 0 || item.getMediaType().isEmpty() || item.getTitle().isEmpty()) return false;
+        if (!coreLanguageAvailable(item, detail, payload, targetLanguage)) return false;
         if (string(detail, "overview").isEmpty() || date(detail).isEmpty() || !detail.has("vote_average") || !detail.has("genres")) return false;
         return !item.isTv() || (detail.has("number_of_seasons") && detail.has("number_of_episodes"));
+    }
+
+    private static boolean coreLanguageAvailable(TmdbItem item, JsonObject detail, @Nullable TmdbSourcePayload payload, @Nullable String targetLanguage) {
+        if (TextUtils.isEmpty(targetLanguage)) return true;
+        String normalized = TmdbLanguagePolicy.normalize(targetLanguage);
+        String declared = payload == null ? "" : payload.getLanguage();
+        if (!TextUtils.isEmpty(declared)) return TmdbLanguagePolicy.isDisplayLanguageCompatible(normalized, declared);
+        return TmdbLanguagePolicy.looksTargetLanguage(normalized, item.getTitle()) || TmdbLanguagePolicy.looksTargetLanguage(normalized, item.getOverview());
     }
 
     private static boolean pageOneAvailable(JsonObject detail, String field) {

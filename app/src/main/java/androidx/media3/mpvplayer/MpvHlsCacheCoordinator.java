@@ -206,6 +206,21 @@ public final class MpvHlsCacheCoordinator {
         }
     }
 
+    public boolean clearIfIdle() {
+        synchronized (lock) {
+            if (!writers.isEmpty() || !readers.isEmpty() || !clients.isEmpty()) return false;
+            File[] files = directory.listFiles();
+            if (files == null) return !directory.exists();
+            boolean success = true;
+            for (File file : files) {
+                if (!file.isFile()) continue;
+                if (!file.delete()) success = false;
+            }
+            if (success) circuitOpen = false;
+            return success;
+        }
+    }
+
     public long effectiveCapacityBytes(long configuredCapacityBytes) {
         synchronized (lock) {
             long configured = effectiveConfiguredCapacityLocked(configuredCapacityBytes);

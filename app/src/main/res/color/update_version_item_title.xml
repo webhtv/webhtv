@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    版本卡标题（渠道名 / 更新说明）的文字色。
+
+    版本卡的背景状态表 selector_update_version_item 在 state_focused 分支里
+    用 ?attr/colorPrimary 填充，而聚焦态的文字如果仍是静态的 colorOnSurface，
+    在浅色 primary 上只有 1.33:1（夜间）/ 2.68:1（浅色），完全不可读。
+    所以聚焦/按下时文字必须翻成填充色的配对 on-色，默认态回到表面色。
+    默认填充是 surfaceContainerHighest，on-色即 colorOnSurface。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/webhtv_color_on_primary" android:state_focused="true" />
+    <item android:color="@color/webhtv_color_on_primary" android:state_pressed="true" />
+    <item android:color="@color/webhtv_color_on_surface" />
+</selector>

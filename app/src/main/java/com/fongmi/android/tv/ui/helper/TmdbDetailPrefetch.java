@@ -11,17 +11,23 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 
-final class TmdbDetailPrefetch {
+/**
+ * TMDB 详情单槽预取：按规范化后的 {@code mediaType + tmdbId} 标识请求，负责复用、替换与取消。
+ *
+ * <p>两个使用方：{@code TmdbUIAdapter}（视频详情页的原生详情路径）与
+ * {@code TmdbDetailActivity}（原生 TMDB 详情页，站点详情与 TMDB 详情并行取回）。
+ */
+public final class TmdbDetailPrefetch {
 
     private final ListeningExecutorService executor;
     private Identity identity;
     private ListenableFuture<Result> future;
 
-    TmdbDetailPrefetch(ListeningExecutorService executor) {
+    public TmdbDetailPrefetch(ListeningExecutorService executor) {
         this.executor = executor;
     }
 
-    synchronized StartResult start(TmdbItem item, Callable<Result> task) {
+    public synchronized StartResult start(TmdbItem item, Callable<Result> task) {
         Identity next = Identity.from(item);
         if (next == null) return null;
         if (next.equals(identity) && future != null && !future.isCancelled()) {
@@ -34,7 +40,7 @@ final class TmdbDetailPrefetch {
         return new StartResult(state, future);
     }
 
-    synchronized ListenableFuture<Result> take(TmdbItem item) {
+    public synchronized ListenableFuture<Result> take(TmdbItem item) {
         Identity expected = Identity.from(item);
         if (expected == null || !expected.equals(identity)) return null;
         ListenableFuture<Result> result = future;
@@ -43,7 +49,7 @@ final class TmdbDetailPrefetch {
         return result;
     }
 
-    synchronized void cancel() {
+    public synchronized void cancel() {
         cancelLocked();
     }
 
@@ -53,13 +59,13 @@ final class TmdbDetailPrefetch {
         future = null;
     }
 
-    enum StartState {
+    public enum StartState {
         STARTED,
         REUSED,
         REPLACED
     }
 
-    static final class StartResult {
+    public static final class StartResult {
 
         private final StartState state;
         private final ListenableFuture<Result> future;
@@ -69,36 +75,36 @@ final class TmdbDetailPrefetch {
             this.future = future;
         }
 
-        StartState getState() {
+        public StartState getState() {
             return state;
         }
 
-        ListenableFuture<Result> getFuture() {
+        public ListenableFuture<Result> getFuture() {
             return future;
         }
     }
 
-    static final class Result {
+    public static final class Result {
 
         private final TmdbItem item;
         private final JsonObject detail;
         private final List<TmdbPerson> cast;
 
-        Result(TmdbItem item, JsonObject detail, List<TmdbPerson> cast) {
+        public Result(TmdbItem item, JsonObject detail, List<TmdbPerson> cast) {
             this.item = item;
             this.detail = detail;
             this.cast = cast == null ? new ArrayList<>() : new ArrayList<>(cast);
         }
 
-        TmdbItem getItem() {
+        public TmdbItem getItem() {
             return item;
         }
 
-        JsonObject getDetail() {
+        public JsonObject getDetail() {
             return detail;
         }
 
-        List<TmdbPerson> getCast() {
+        public List<TmdbPerson> getCast() {
             return new ArrayList<>(cast);
         }
     }

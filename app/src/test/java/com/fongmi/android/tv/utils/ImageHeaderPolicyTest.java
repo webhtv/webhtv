@@ -33,4 +33,29 @@ public class ImageHeaderPolicyTest {
         assertTrue(ImageHeaderPolicy.isReferer("referer"));
         assertFalse(ImageHeaderPolicy.isReferer("User-Agent"));
     }
+
+    // 锁住「正则只编译一次」这条约束：String.matches() 每次调用都重新编译，是详情页/播放页
+    // 图片列表在主线程上的固定开销。Pattern 换成常量后行为必须完全不变，包括这些边界。
+    @Test
+    public void doubanImageHostPatternIsCompiledOnceAndKeepsItsBoundaries() {
+        assertTrue(ImageHeaderPolicy.doubanImageReferer("https://img0.doubanio.com/p1.jpg", false).startsWith("https://movie.douban.com"));
+        assertEquals("host must require a digit run right after img",
+                "", ImageHeaderPolicy.doubanImageReferer("https://imgx.doubanio.com/p1.jpg", false));
+        assertEquals("host must match the whole name, not a prefix",
+                "", ImageHeaderPolicy.doubanImageReferer("https://img1.doubanio.com.evil.test/p1.jpg", false));
+        assertEquals("host must match the whole name, not a suffix",
+                "", ImageHeaderPolicy.doubanImageReferer("https://x.img1.doubanio.com/p1.jpg", false));
+        assertEquals("", ImageHeaderPolicy.doubanImageReferer(null, false));
+        assertEquals("", ImageHeaderPolicy.doubanImageReferer("", false));
+        assertEquals("", ImageHeaderPolicy.doubanImageReferer("not a url", false));
+    }
+
+    @Test
+    public void repeatedLookupsStayStable() {
+        for (int i = 0; i < 100; i++) {
+            assertEquals("https://movie.douban.com",
+                    ImageHeaderPolicy.doubanImageReferer("https://img3.doubanio.com/view/photo/p1.jpg", false));
+            assertEquals("", ImageHeaderPolicy.doubanImageReferer("https://img.example.com/p1.jpg", false));
+        }
+    }
 }

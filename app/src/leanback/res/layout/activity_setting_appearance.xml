@@ -25,7 +25,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
                 android:text="@string/setting_ui_scale"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -33,7 +33,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="end"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp"
                 tools:text="Follow system" />
 
@@ -54,7 +54,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
                 android:text="@string/setting_language"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -62,7 +62,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="end"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp"
                 tools:text="Simplified Chinese" />
 
@@ -83,7 +83,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
                 android:text="@string/setting_size"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -91,7 +91,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="end"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp"
                 tools:text="Large" />
 
@@ -121,7 +121,7 @@
                     android:layout_marginEnd="16dp"
                     android:layout_weight="0.3"
                     android:text="@string/setting_wall"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="18sp" />
 
                 <com.google.android.material.textview.MaterialTextView
@@ -132,7 +132,7 @@
                     android:ellipsize="middle"
                     android:gravity="end"
                     android:singleLine="true"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="18sp"
                     tools:text="Dream purple" />
 

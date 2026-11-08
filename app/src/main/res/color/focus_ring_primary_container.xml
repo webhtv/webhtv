@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    primary container 填充控件的统一边框环。
+
+    为什么主按钮需要自己的环色，而不能复用 `focus_ring_primary`：
+
+    主按钮的**默认**填充是 `colorPrimary`，那是一个**浅色**（夜间 #A8C7FA）。
+    环色若取它的配对 on-色（夜间 #062E6F，深色），环对填充确实有 7.50:1，
+    但环的**外沿**贴在弹窗面板（夜间 #2A2F34）上只有 1.05:1 —— 环看起来像
+    按钮自带的一圈深边，而不是"焦点高亮"。用户报告（2026-10-19 实机）：
+    「选中后的高亮边框颜色和按钮本身的颜色太接近」。
+
+    这不是"换一个更好的环色"能解决的，取值空间是**空集**：
+      · 深色表：环要 ≥3:1 对填充 #A8C7FA ⇒ 亮度 ≤ 0.1536；
+                环要 ≥3:1 对面板 #2A2F34 ⇒ 亮度 ≥ 0.1832。区间为空。
+      · 浅色表：同理（≤0.0048 与 ≥2.5280）。
+
+    所以修法必须是**让聚焦态填充与默认填充不同**：聚焦时填充翻成深色
+    `primaryContainer`（夜间 #0842A0），环取它的配对浅色 `onPrimaryContainer`
+    （夜间 #D3E3FD）。此时环同时满足两个方向：
+      · 对聚焦填充 7.04:1（夜间）/ 12.57:1（浅色）
+      · 对弹窗面板 10.40:1（夜间）/ 13.35:1（浅色）
+    并且聚焦填充与默认填充本身也有 5.32:1 / 4.92:1 的差异，焦点有两个独立线索。
+
+    这套约定在本仓库已有先例，主按钮此前是唯一的例外：
+    `dialog_outlined_button_bg` 与 `dialog_toggle_button_bg` 的 focused 分支
+    都取 `primary_container`，`dialog_card_action_text` 的 focused 分支取
+    `on_primary_container`。
+
+    擦除态用全透明而不是移除描边：MaterialButton 的 strokeWidth 是常量，
+    只切换 strokeColor 的颜色值即可避免任何布局/测量变化。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/focus_ring_on_primary_container" android:state_focused="true" />
+    <item android:color="@color/focus_ring_on_primary_container" android:state_pressed="true" />
+    <item android:color="@android:color/transparent" />
+</selector>

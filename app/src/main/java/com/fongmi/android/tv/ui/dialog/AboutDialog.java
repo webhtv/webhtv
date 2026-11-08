@@ -21,6 +21,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogAboutBinding;
 import com.fongmi.android.tv.databinding.DialogGithubProxyBinding;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.adapter.GithubProxyAdapter;
 import com.fongmi.android.tv.utils.AppVersion;
 import com.fongmi.android.tv.utils.GithubProxy;
@@ -68,7 +69,7 @@ public final class AboutDialog {
     }
 
     private static void showGithubProxy(FragmentActivity activity) {
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog);
+        MaterialAlertDialogBuilder builder = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog);
         Context context = builder.getContext();
         DialogGithubProxyBinding binding = DialogGithubProxyBinding.inflate(LayoutInflater.from(context));
         GithubProxyAdapter adapter = new GithubProxyAdapter(new GithubProxyAdapter.OnClickListener() {

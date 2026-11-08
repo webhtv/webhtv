@@ -43,7 +43,7 @@ public class TmdbSourcePayloadTest {
     @Test
     public void parserNormalizesIdentityCapabilitiesAndImages() {
         TmdbSourcePayload raw = GSON.fromJson("""
-                {"schema":1,"id":1399,"media_type":"TV","season_number":2,"language":" zh-CN ",
+                {"schema":1,"id":1399,"media_type":"TV","season_number":2,"language":" ZH-Hans ",
                  "fetched_at":"2026-09-19T00:00:00Z","complete":["images","season:02","unknown","images"],
                  "detail":{"id":1399,"season_number":2,"name":"Example","poster_path":"/p.jpg",
                    "backdrop_path":"http://example.test/b.jpg","images":{"posters":[]},
@@ -60,6 +60,21 @@ public class TmdbSourcePayloadTest {
         assertEquals("", parsed.getDetail().backdropPath());
         assertTrue(parsed.hasCapability("season:2"));
         assertFalse(parsed.hasCapability("unknown"));
+    }
+
+    @Test
+    public void parserKeepsUnknownLanguageEmptyAndNormalizesKnownAliases() {
+        TmdbSourcePayload raw = payload(550, "movie", 0, "{\"id\":550}");
+        raw.setLanguage(" zh-sg ");
+        TmdbSourcePayload simplified = TmdbSourcePayloadParser.parse(raw);
+        assertEquals("zh-CN", simplified.getLanguage());
+
+        raw.setLanguage("zh-Hant");
+        TmdbSourcePayload traditional = TmdbSourcePayloadParser.parse(raw);
+        assertEquals("zh-TW", traditional.getLanguage());
+
+        TmdbSourcePayload unknown = payload(550, "movie", 0, "{\"id\":550}");
+        assertEquals("", unknown.getLanguage());
     }
 
     @Test

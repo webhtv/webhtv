@@ -32,11 +32,9 @@ public class MultiThreadProxyDialogFocusTest {
         String cancel = controlTag(layout, "cancel");
         String save = controlTag(layout, "save");
 
-        assertTrue(extract.contains("app:backgroundTint=\"@color/dialog_outlined_button_bg\""));
-        assertTrue(extract.contains("app:strokeColor=\"@color/dialog_outlined_button_stroke\""));
-        assertTrue(cancel.contains("app:backgroundTint=\"@color/dialog_outlined_button_bg\""));
-        assertTrue(cancel.contains("app:strokeColor=\"@color/dialog_outlined_button_stroke\""));
-        assertTrue(save.contains("app:backgroundTint=\"@color/dialog_tonal_button_bg\""));
+        assertTrue(extract.contains("style=\"@style/Widget.WebHTV.Button.Outlined\""));
+        assertTrue(cancel.contains("style=\"@style/Widget.WebHTV.Button.Outlined\""));
+        assertTrue(save.contains("style=\"@style/Widget.WebHTV.Button.Tonal\""));
         assertTrue(resourceSource("color/dialog_outlined_button_bg.xml").contains("android:state_focused=\"true\""));
         assertTrue(resourceSource("color/dialog_outlined_button_stroke.xml").contains("android:state_focused=\"true\""));
         assertTrue(resourceSource("color/dialog_tonal_button_bg.xml").contains("android:state_focused=\"true\""));

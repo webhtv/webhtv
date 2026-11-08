@@ -41,6 +41,7 @@
             style="@style/Player.Vod"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            app:shutter_background_color="@android:color/black"
             app:surface_type="none" />
 
         <include

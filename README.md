@@ -16,7 +16,7 @@ WebHomeTV 是基于 [FongMi](https://github.com/FongMi/TV) / CatVod 生态二次
 - **观影记录同步**:增强功能中提供独立总览页,包含总开关、本机 API 修改开关、远端同步源和 Webhook 上报。爬虫可通过 `/api/playback/current` 读取当前播放记录,也可在用户开启修改后调用 `/api/playback/progress`、`/api/playback/progress/batch` 或 `/api/playback/progress/delete` 写入/清理本地进度;App 也可从用户配置的远端 API 拉取批量记录合并到本地历史,并通过删除墓碑同步清理记录。仓库内置的 Cloudflare、Deno、Vercel、Go、Rust 五种服务端都可用同一 URL 同时承接 Webhook 和增量拉取，分别使用 Durable Object SQLite、Deno KV、Redis REST 或本地原子文件持久化。完整协议见 `webhome-devkit/docs/应用完整开发文档.md` 的“观影记录同步”章节。
 - **登录态学习**:用户手动开启后学习 Cookie、Token、接口 Jar 网盘登录文件等登录态路径,待确认项可在管理页查看/编辑,并可参与一键同步。
 - **APP 代理**:配置代理地址和域名匹配规则,可按当前站点自动建议代理域名,用于改善特定站点、接口或播放链路的网络访问。
-- **调试日志**:本机和局域网日志查看入口,便于排查播放、代理、站源和 WebHome 相关问题。
+- **调试日志**:本机和局域网日志查看入口,便于排查播放、代理、站源和 WebHome 相关问题;崩溃界面会显示可复制的局域网日志地址,未开启调试日志时也会自动开启临时崩溃会话供下载。
 
 以上能力集中在设置页的"增强功能"入口,手机端和电视端均为独立设置页。
 

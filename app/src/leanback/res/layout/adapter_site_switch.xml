@@ -1,18 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版站点卡片（切换模式，无勾选框）。行高 52dp 必须与 SiteDialog.ROW_HEIGHT_DP 一致。
+    健康点紧贴站名（左对齐），不再让文字居中把点甩到卡片边缘。
+
+    水平内边距必须显式写在 View 上，原因见 adapter_site.xml：运行时背景会被
+    SiteDialogTheme 的程序化 drawable 整体替换，shape 里声明的 padding 会丢失。
+-->
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="46dp"
+    android:layout_height="52dp"
     android:background="@drawable/selector_site_item"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:orientation="horizontal"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp">
 
     <View
         android:id="@+id/health"
         android:layout_width="8dp"
         android:layout_height="8dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="10dp"
         android:background="@drawable/shape_site_health" />
 
     <com.google.android.material.textview.MaterialTextView
@@ -21,9 +30,9 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:ellipsize="marquee"
-        android:gravity="center"
+        android:gravity="start|center_vertical"
         android:singleLine="true"
-        android:textColor="@color/white"
-        android:textSize="18sp" />
+        android:textColor="@color/site_item_text"
+        android:textSize="17sp" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

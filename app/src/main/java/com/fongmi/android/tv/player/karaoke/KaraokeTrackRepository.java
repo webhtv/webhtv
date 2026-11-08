@@ -261,6 +261,20 @@ public class KaraokeTrackRepository {
         }
     }
 
+    public static boolean clearCache() {
+        File dir = trackDir();
+        File[] files = dir.listFiles();
+        if (files == null) return false;
+        boolean success = true;
+        for (File file : files) {
+            String name = file.getName();
+            if (!name.endsWith(".generated.txt") && !name.endsWith(".generated-pitch.txt")) continue;
+            if (!file.delete()) success = false;
+        }
+        clearSearchCache();
+        return success;
+    }
+
     public static String defaultKeyword(PlayerManager player) {
         String title = getTitle(player);
         if (!TextUtils.isEmpty(title)) return stripExtension(title);

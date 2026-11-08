@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 浅色模式：半透明浅色面板，承载 colorOnSurfaceVariant 摘要文字。 -->
+    <item android:alpha="0.45" android:color="?attr/colorSurfaceContainerHigh" />
+</selector>

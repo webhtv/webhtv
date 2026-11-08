@@ -13,7 +13,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.MaterialAutoCompleteTextView;
 import com.google.android.material.textfield.TextInputLayout;
@@ -99,7 +99,7 @@ public final class LabVariableDialog {
             switches.add(null);
         }
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(context, com.fongmi.android.tv.R.style.Theme_App_Lab_Dialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(context, com.fongmi.android.tv.R.style.Theme_App_Lab_Dialog)
                 .setTitle(title)
                 .setView(scroll)
                 .setNegativeButton("取消", null)

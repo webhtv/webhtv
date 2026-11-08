@@ -1,7 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    弹窗主按钮的填充状态表。
+
+    聚焦/按下时填充翻成**深色** primary_container，与默认的浅色 primary 形成
+    5.32:1（夜间）/ 4.92:1（浅色）的差异，焦点因此有「填充变深」这个独立线索；
+    配套的浅色环（focus_ring_primary_container）再提供第二个线索。
+
+    为什么不能保持"聚焦与默认同色、只靠环"：那样环色是唯一线索，而环色同时要
+    对浅色填充和深色面板都 ≥3:1 —— 取值空间是空集（证明见
+    color/focus_ring_primary_container.xml）。实机表现就是环看起来像按钮自带的
+    深边（环外沿对面板仅 1.05:1），用户报告「高亮边框颜色和按钮本身的颜色太接近」。
+
+    这套"聚焦填充 = primary_container"的写法在本仓库已有先例：
+    dialog_outlined_button_bg 与 dialog_toggle_button_bg 的 focused 分支同值。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="#0B57D0" android:state_focused="true" />
-    <item android:color="#0B57D0" android:state_pressed="true" />
-    <item android:alpha="0.38" android:color="#E8F0FE" android:state_enabled="false" />
-    <item android:color="#E8F0FE" />
+    <item android:color="@color/webhtv_color_surface_container_highest" android:state_enabled="false" />
+    <item android:color="@color/webhtv_color_primary_container" android:state_focused="true" />
+    <item android:color="@color/webhtv_color_primary_container" android:state_pressed="true" />
+    <item android:color="@color/webhtv_color_primary" />
 </selector>

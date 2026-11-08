@@ -8,6 +8,7 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.databinding.DialogApkPushMethodBinding;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class ApkPushMethodDialog extends BaseAlertDialog {
@@ -43,7 +44,7 @@ public class ApkPushMethodDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override

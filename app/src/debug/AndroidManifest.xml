@@ -4,5 +4,10 @@
         <activity android:name="com.fongmi.android.tv.player.exo.ass.AssPrototypeActivity"
             android:exported="true" android:screenOrientation="landscape"
             android:launchMode="singleTop" />
+        <activity
+            android:name="com.fongmi.android.tv.theme.TmdbScrimHostActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.Base" />
     </application>
 </manifest>

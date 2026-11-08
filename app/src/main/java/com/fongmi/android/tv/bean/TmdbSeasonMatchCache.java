@@ -4,6 +4,7 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.github.catvod.utils.Trans;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -11,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 /** Stores a user's explicit source-to-TMDB-season decision separately from media identity. */
 public class TmdbSeasonMatchCache {
@@ -57,8 +59,9 @@ public class TmdbSeasonMatchCache {
                       boolean allowLegacyFallback) {
         if (!hasScope(siteKey, vodId, sourceTitle) || tmdbId <= 0) return null;
         Entry entry = getItems().get(key(siteKey, vodId, sourceTitle, flagKey));
+        if (entry == null) entry = getLegacyEntry(siteKey, vodId, sourceTitle, flagKey);
         if (entry == null && allowLegacyFallback && !TextUtils.isEmpty(flagKey)) {
-            entry = getItems().get(key(siteKey, vodId, sourceTitle, ""));
+            entry = getLegacyEntry(siteKey, vodId, sourceTitle, "");
         }
         return entry != null && entry.matches(tmdbId) ? entry : null;
     }
@@ -138,9 +141,19 @@ public class TmdbSeasonMatchCache {
         if (!hasScope(siteKey, vodId, sourceTitle) || tmdbId <= 0) return false;
         String key = key(siteKey, vodId, sourceTitle, flagKey);
         Entry entry = getItems().get(key);
+        if (entry == null) {
+            String legacy = legacyKeyMatch(siteKey, vodId, sourceTitle, flagKey);
+            if (legacy != null) {
+                key = legacy;
+                entry = getItems().get(key);
+            }
+        }
         if (entry == null && allowLegacyFallback && !TextUtils.isEmpty(flagKey)) {
-            key = key(siteKey, vodId, sourceTitle, "");
-            entry = getItems().get(key);
+            String legacy = legacyKeyMatch(siteKey, vodId, sourceTitle, "");
+            if (legacy != null) {
+                key = legacy;
+                entry = getItems().get(key);
+            }
         }
         if (entry == null || entry.matches(tmdbId) && "tv".equalsIgnoreCase(mediaType)) return false;
         getItems().remove(key);
@@ -257,8 +270,55 @@ public class TmdbSeasonMatchCache {
         return normalize(sourceTitle).replace(AppDatabase.SYMBOL, " ");
     }
 
-    private String normalize(String text) {
+    /**
+     * 按「内容等价」而不是「键字面相等」找回旧条目。
+     *
+     * <p>旧键用的是写入当时的字形，无法从当前字形反推：{@code T2S} 方向在 10 组
+     * 「多简对一繁」的字上是多对一坍缩（{@code 餘 <= 余,馀}），拿 {@code t2s} 去反推会得到
+     * {@code 庆馀年} 这类不存在的键。所以这里改为遍历缓存，把两侧都做同一次单向
+     * {@code s2t} 归一（{@code s2t} 无坍缩）后按内容比较。分季缓存条目数是几十条量级，
+     * 遍历成本可忽略；命中仍需通过 tmdbId/mediaType 校验。
+     */
+    private String legacyKeyMatch(String siteKey, String vodId, String sourceTitle, String flagKey) {
+        String prefix = siteKey + AppDatabase.SYMBOL + vodId + AppDatabase.SYMBOL;
+        String title = segmentKey(sourceTitle);
+        String flag = TextUtils.isEmpty(flagKey) ? "" : segmentKey(flagKey);
+        for (String candidate : getItems().keySet()) {
+            if (candidate == null || !candidate.startsWith(prefix)) continue;
+            String[] parts = candidate.substring(prefix.length()).split(AppDatabase.SYMBOL, -1);
+            boolean matched = parts.length == (TextUtils.isEmpty(flag) ? 1 : 2)
+                    && segmentKey(parts[0]).equals(title)
+                    && (TextUtils.isEmpty(flag) || segmentKey(parts[1]).equals(flag));
+            if (matched) return candidate;
+        }
+        return null;
+    }
+
+    private Entry getLegacyEntry(String siteKey, String vodId, String sourceTitle, String flagKey) {
+        String key = legacyKeyMatch(siteKey, vodId, sourceTitle, flagKey);
+        return key == null ? null : getItems().get(key);
+    }
+
+    /** 与 {@link #sourceKey} 相同的归一，用于按内容比较键段（含简繁归一）。 */
+    private String segmentKey(String text) {
+        return normalize(text).replace(AppDatabase.SYMBOL, " ");
+    }
+
+    /** 旧版本的键归一（不做简繁归一），保留给需要「原始字形」的调用点使用。 */
+    private String legacyNormalize(String text) {
         return text == null ? "" : text.replaceAll("[\\s·•:：\\-_/\\\\|()（）\\[\\]【】]+", "").trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 分季缓存键必须与界面语言无关：站源标题在繁体界面会被 {@code Vod.trans()} 转成繁体，
+     * 键若不归一，简体界面保存的「分季结论」切到繁体界面就读不回来。
+     *
+     * <p>归一方向只用单向 {@code Trans.s2t}（简→繁）：反向 {@code t2s} 在「多简对一繁」的
+     * 10 组字上会坍缩，把「余罪/强势/线上」这类常用简体词改写成异体字。必须显式传
+     * {@code pass = false}，否则 {@code Trans.s2t(String)} 在简体态会短路返回原文而假绿。
+     */
+    private String normalize(String text) {
+        return legacyNormalize(Trans.s2t(false, Objects.toString(text, "")));
     }
 
     public static class Entry {

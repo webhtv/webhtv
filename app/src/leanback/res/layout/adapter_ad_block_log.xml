@@ -16,7 +16,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp"
                 android:textStyle="bold" />
             <com.google.android.material.textview.MaterialTextView
@@ -28,7 +28,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/playbackContext"
@@ -39,7 +39,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/lineName"
@@ -50,7 +50,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/episodeName"
@@ -61,7 +61,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/ruleDomain"
@@ -72,7 +72,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/adDomain"
@@ -83,7 +83,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/blockedAt"
@@ -94,7 +94,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/segmentStart"
@@ -105,7 +105,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/segmentEnd"
@@ -116,7 +116,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/segmentDuration"
@@ -127,7 +127,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/pipeline"
@@ -138,7 +138,7 @@
                 android:maxLines="2"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="13sp" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

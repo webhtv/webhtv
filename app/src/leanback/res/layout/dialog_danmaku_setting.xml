@@ -22,7 +22,7 @@
             android:layout_weight="1"
             android:text="@string/danmaku_setting"
             android:textAppearance="?attr/textAppearanceHeadlineSmall"
-            android:textColor="@color/white" />
+            android:textColor="?attr/webhtvColorOnWallpaper" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/reset"
@@ -33,7 +33,7 @@
             android:focusableInTouchMode="true"
             android:nextFocusDown="@id/tabAppearance"
             android:text="@string/danmaku_reset"
-            android:textColor="@color/white" />
+            android:textColor="?attr/webhtvColorOnWallpaper" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

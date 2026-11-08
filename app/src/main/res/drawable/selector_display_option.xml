@@ -1,39 +1,70 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视/手机共用的「屏显」弹窗芯片（DisplayControl 样式，dialog_display.xml）。
+
+    宿主是固定深色的 shape_display_dialog_panel（webhtv_color_player_scrim），
+    因此填充必须用**半透明黑/白叠加层**，不能再用 @color/webhtv_color_player_control_muted
+    （#CCFFFFFF，80% 白）：旧的默认态与焦点态都是「80% 白填充 + 80%/100% 白文字」，
+    合成到暗幕+画面上实测 1.32–1.51:1，文字与底色几乎同色（TvFocusStatePairContrastTest 会复现）。
+    改为 10%/20% 白叠加后：默认态约 7.7:1、焦点态约 5.7–8.4:1（中等亮度画面），
+    选中态保留琥珀填充 + 黑字（10.5:1）。
+
+    焦点环沿用播放器层语义 ?attr/tvPlayerRing（与 selector_control_sheet_button 同族），
+    宽度取唯一 token @dimen/webhtv_focus_ring_width。合并态（焦点+选中）保留琥珀底，
+    改用黑色环，避免白环/浅环压在琥珀底上看不见。
+
+    分支顺序按「焦点 > 选中」：Android 取首个匹配项。电视端确认键按下时 state_pressed 与
+    state_focused 同时成立，若把按下排在焦点之前，按住确认键的瞬间会顶掉焦点分支——
+    焦点环消失、填充从 white_20 退回更暗的 white_10，即「按下=失去焦点」的反向反馈；
+    选中早于按下，按压当前选中项也不会丢掉琥珀底。本文件因此不再单独声明按下分支
+    （理由见文件末尾）。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true">
+
+    <item android:state_focused="true" android:state_selected="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/display_option_bg_selected" />
+            <solid android:color="@color/webhtv_color_player_control_active" />
             <corners android:radius="8dp" />
             <stroke
-                android:width="1dp"
-                android:color="@color/display_option_stroke_selected" />
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="@android:color/black" />
         </shape>
     </item>
+
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/display_option_bg_focused" />
+            <solid android:color="@color/white_20" />
             <corners android:radius="8dp" />
             <stroke
-                android:width="1dp"
-                android:color="@color/display_option_stroke_selected" />
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="?attr/tvPlayerRing" />
         </shape>
     </item>
-    <item android:state_pressed="true">
+
+    <item android:state_selected="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/display_option_bg_focused" />
+            <solid android:color="@color/webhtv_color_player_control_active" />
             <corners android:radius="8dp" />
             <stroke
                 android:width="1dp"
-                android:color="@color/display_option_stroke_selected" />
+                android:color="@color/webhtv_color_player_control" />
         </shape>
     </item>
+
+    <!--
+        不设 state_pressed 分支：它要么与默认态完全同底（无反馈），要么必须比默认更亮，
+        而更亮的半透明白会把 muted 默认文字压到 4.5:1 以下（white_20 在 0x7C7C7C 亮画面上
+        只有 4.33:1，white_30 只有 3.38:1；white_10 为 5.58:1）。
+        按下态因此沿用默认分支，电视端由焦点分支表达「已聚焦 + 正在按」。
+    -->
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/display_option_bg_default" />
+            <solid android:color="@color/white_10" />
             <corners android:radius="8dp" />
             <stroke
                 android:width="1dp"
-                android:color="@color/display_option_stroke_default" />
+                android:color="@color/white_40" />
         </shape>
     </item>
+
 </selector>

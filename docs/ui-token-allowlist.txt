@@ -1,0 +1,201 @@
+# path-pattern|reason
+# Phase A starts with only canonical legacy palettes and shared fallback aliases allowed.
+# Entries must be removed as their owning phase migrates the file.
+app/src/main/res/values/colors.xml|System transparency, brand/player overlays, and legacy compatibility values removed in phase F
+app/src/main/res/values/lab_colors.xml|Lab palette migrated during phases C-F
+app/src/main/res/values-night/lab_colors.xml|Lab night palette migrated during phases C-F
+app/src/main/res/values/styles.xml|Legacy LightDialog and toolbar aliases retained for one release during phases B-F
+app/src/main/res/values/styles_disc_menu.xml|Disc menu fallback palette migrated during phase D-F
+app/src/main/assets/reader.html|Reader TTS/theme labels carry controlled reading-theme colors in page-generated JSON
+app/src/main/assets/webhome/eclipse.html|Eclipse placeholder artwork generates gradient colors for fallback posters when no image is available
+
+# Phase F exact legacy drawable exemptions (reviewed 2026-09-21)
+app/src/leanback/res/drawable/ic_banner_foreground.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/leanback/res/drawable/selector_ad_stats_item.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/leanback/res/drawable/selector_audio_action_icon.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/leanback/res/drawable/selector_control_sheet_button.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/selector_danmaku_result_item.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/selector_danmaku_search_action.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/selector_episode_dialog_item.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/leanback/res/drawable/selector_episode_dialog_page.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/leanback/res/drawable/selector_exit_confirm_primary.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/leanback/res/drawable/selector_exit_confirm_secondary.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/leanback/res/drawable/selector_player_child_sheet_button.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/selector_search_scope_item.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/leanback/res/drawable/selector_video_item.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_ad_rule_card.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_ad_stats_content.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_ad_stats_tabs.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_audio_action_icon_focused.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_config_history_item_focused.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_config_history_item_normal.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_danmaku_search_input.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/shape_danmaku_setting_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/shape_danmaku_sheet_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/shape_danmaku_source_badge.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/shape_dialog_control_glass_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/shape_dialog_control_glass_scrim.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/shape_dialog_danmaku_sheet_glass_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/shape_episode_dialog_panel.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_exit_confirm_badge.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_exit_confirm_dialog.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_group_button_focused.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_group_button_normal.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_group_button_selected.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_player_child_sheet_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/leanback/res/drawable/shape_quick_search_dialog.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_search_scope_popup.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_site_item_focused.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_site_item_normal.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/leanback/res/drawable/shape_site_item_selected.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/about_primary_icon_button.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/bg_backdrop_gradient.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/episode_card_focused.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/episode_card_normal.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/episode_card_selected.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/ic_action_back.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_choose.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_delete.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_drag.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_help.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_lab.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_more_vert.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_rename.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_send.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_setting.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_action_terminal.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_audio_lyric_mode.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_banner_history.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_control_danmaku_off.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_control_danmaku_on.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_control_pip.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_git_cloud_back.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_git_cloud_backup.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_git_cloud_download.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_git_cloud_edit.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_git_cloud_new.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_git_cloud_restore.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_git_cloud_upload.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_launcher_background.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_launcher_foreground.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_launcher_history.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_launcher_monochrome.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_login_state_file.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_mpv_import_config.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_mpv_rename.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_mpv_text_config.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_open.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_remote_copy.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_remote_qr.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_remote_scan.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_setting_clipboard.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_setting_folder.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_sync_arrow_left.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_sync_arrow_left_blue.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_sync_arrow_right.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_sync_arrow_right_blue.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_sync_phone.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/ic_sync_tv.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/main/res/drawable/selector_custom_csp_item.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_danmaku_source_tab.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/main/res/drawable/selector_dialog_glass_chip.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/main/res/drawable/selector_dialog_step_button.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_dialog_switch.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_episode_card.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_git_cloud_card.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_git_cloud_inline_focus.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_git_cloud_tree_item.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_light_dialog_item.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_mpv_icon_button.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_mpv_profile_card.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_mpv_script_disabled_card.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_mpv_tab_focus.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/selector_photo_viewer_save.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_disc_back.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_disc_center.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_more_item.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_more_sheet.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_play_button.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_player_background.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_playlist_item.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_playlist_panel.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_audio_stage.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_dialog_glass_chip_active.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/main/res/drawable/shape_dialog_glass_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/main/res/drawable/shape_dialog_glass_toolbar.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/main/res/drawable/shape_disc_menu_panel.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_douban_rating_chip_light.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_episode_card_badge.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_episode_card_overlay.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_episode_photo_focused.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_lab_auto_tag.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_bg_btn.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_bg_tag.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_click_btn.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_dialog.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_installed.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_new_version.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_not_installed.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_output_bg.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_run_btn.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_running_tag.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_sheet_bg.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_sheet_handle.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_size.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_spinner_bg.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_status_dot_idle.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_status_dot_running.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_stop_btn.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_type_tag.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_unavailable.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_uninstall_btn.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_update_btn.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_lab_version.xml|Lab-only palette retained for development tooling
+app/src/main/res/drawable/shape_login_state_badge.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_mpv_active_badge.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_multi_thread_proxy_input.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_player_osd_diagnostics.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_recommendation_source_chip.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_sync_device_item_focused.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_sync_device_item_normal.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_sync_direction.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/main/res/drawable/shape_warning_background.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/ic_action_change_shadow.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_action_menu.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_action_refresh.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_action_rename.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_control_danmaku_off.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_control_danmaku_on.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_popup_apk.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_popup_enhance.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_popup_history.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_popup_keep.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_popup_push.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_popup_refresh.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/ic_popup_sync.xml|Brand/legacy icon vector retains fixed palette; reviewed as asset rather than semantic UI surface
+app/src/mobile/res/drawable/selector_control_sheet_button.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/selector_danmaku_result_item.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/selector_live_action_button.xml|Legacy UI state-list drawable retained pending dedicated component cleanup
+app/src/mobile/res/drawable/selector_player_child_sheet_button.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shadow.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_control_sheet_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_control_sheet_scrim.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_danmaku_setting_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_danmaku_sheet_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_danmaku_source_badge.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_dialog_control_glass_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_dialog_control_glass_scrim.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_dialog_danmaku_sheet_glass_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_dialog_glass_input.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_light_dialog_item.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_live.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_live_embedded_list.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_player_child_sheet_input.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_player_child_sheet_panel.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/shape_quick_search_icon_button.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_quick_search_input.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_quick_search_item.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_quick_search_panel.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_toolbar_popup.xml|Legacy drawable shape retained pending dedicated component cleanup
+app/src/mobile/res/drawable/shape_video_context_scrim_light.xml|Player/immersive overlay uses fixed translucent colors over video content
+app/src/mobile/res/drawable/selector_tmdb_flag_item_dark.xml|Player/immersive overlay uses fixed translucent colors over video content

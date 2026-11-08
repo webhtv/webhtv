@@ -23,7 +23,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/about_title"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -38,7 +38,7 @@
             android:paddingTop="5dp"
             android:paddingEnd="10dp"
             android:paddingBottom="5dp"
-            android:textColor="#174EA6"
+            android:textColor="?attr/colorPrimary"
             android:textSize="12sp"
             android:textStyle="bold"
             android:text="@string/about_free_badge" />
@@ -50,7 +50,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         tools:text="版本 versionName (versionCode) · mobile/arm64" />
 
@@ -59,7 +59,7 @@
         android:layout_height="1dp"
         android:layout_marginTop="16dp"
         android:layout_marginBottom="14dp"
-        android:background="#E5E7EB" />
+        android:background="?attr/colorSurfaceContainer" />
 
     <com.fongmi.android.tv.ui.custom.CustomNestedScrollView
         android:id="@+id/contentScroll"
@@ -76,7 +76,7 @@
             android:layout_height="wrap_content"
             android:lineSpacingExtra="5dp"
             android:text="@string/about_disclaimer"
-            android:textColor="#303134"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="14sp" />
 
     </com.fongmi.android.tv.ui.custom.CustomNestedScrollView>
@@ -103,10 +103,12 @@
                 android:layout_weight="1"
                 android:minHeight="44dp"
                 android:text="@string/about_check_update"
-                android:textColor="@color/about_primary_action_text"
+                android:textColor="@color/dialog_primary_button_text"
                 android:textSize="14sp"
-                app:backgroundTint="@color/about_primary_action_bg"
-                app:cornerRadius="8dp" />
+                app:backgroundTint="@color/dialog_primary_button_bg"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/focus_ring_primary_container"
+                app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/githubProxy"
@@ -117,10 +119,12 @@
                 android:minHeight="44dp"
                 android:nextFocusUp="@id/checkUpdate"
                 android:text="@string/setting_github_proxy_short"
-                android:textColor="@color/about_primary_action_text"
+                android:textColor="@color/dialog_primary_button_text"
                 android:textSize="14sp"
-                app:backgroundTint="@color/about_primary_action_bg"
-                app:cornerRadius="8dp" />
+                app:backgroundTint="@color/dialog_primary_button_bg"
+                app:cornerRadius="8dp"
+                app:strokeColor="@color/focus_ring_primary_container"
+                app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -136,7 +140,9 @@
             android:textColor="@color/dialog_primary_button_text"
             android:textSize="14sp"
             app:backgroundTint="@color/dialog_primary_button_bg"
-            app:cornerRadius="8dp" />
+            app:cornerRadius="8dp"
+            app:strokeColor="@color/focus_ring_primary_container"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/updateSettings"

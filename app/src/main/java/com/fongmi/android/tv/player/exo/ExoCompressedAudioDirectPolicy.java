@@ -28,6 +28,7 @@ import androidx.media3.extractor.AacUtil;
 import androidx.media3.extractor.MpegAudioUtil;
 
 import com.github.catvod.crawler.SpiderDebug;
+import com.github.catvod.crawler.diagnostics.DiagnosticEvent;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -44,8 +45,16 @@ public final class ExoCompressedAudioDirectPolicy
 
     private static final int VENDOR_DIRECT_BUFFER_SIZE = 256 * 1024;
     private static final long OUTPUT_STALL_CONFIRMATION_MS = 2_000;
+    /** How long an offload output may accept payload and then stay silent before it is evidence. */
+    private static final long OFFLOAD_STALL_WINDOW_MS = 2_000;
     private static final long PCM_CONFIRMATION_MS = 2_000;
     static final long STARTUP_STALL_MS = 800;
+    /**
+     * How long a vendor output without readable buffer metrics may accept payload while its
+     * playback head stays at zero before it is treated as a startup stall. Such an output cannot be
+     * cross-checked against a start threshold, so it gets a longer window than the threshold path.
+     */
+    static final long ZERO_METRIC_STARTUP_STALL_MS = 1_200;
     private static final long STARTUP_AUDIO_US = 200_000;
     private static AudioDeviceCallback processDeviceCallback;
 
@@ -100,6 +109,12 @@ public final class ExoCompressedAudioDirectPolicy
     private final VendorDirectOutputFactory vendorDirectOutputFactory;
     private final Map<DirectKey, Format> vendorDirectConfigs;
     private final Set<DirectKey> failedVendorDirectConfigs;
+    /**
+     * Standard offload configurations whose output accepted payload and was then never consumed.
+     * Deliberately separate from {@link #failedVendorDirectConfigs}: the two are admitted by
+     * different methods and must not disable each other's path.
+     */
+    private final Set<DirectKey> failedOffloadConfigs;
     private final ExoAudioDirectFailureMemory failureMemory;
     private final OutputEnvironment environment;
     private volatile boolean audioPassthroughEnabled = true;
@@ -147,6 +162,7 @@ public final class ExoCompressedAudioDirectPolicy
         this.vendorDirectOutputFactory = vendorDirectOutputFactory;
         this.vendorDirectConfigs = new ConcurrentHashMap<>();
         this.failedVendorDirectConfigs = ConcurrentHashMap.newKeySet();
+        this.failedOffloadConfigs = ConcurrentHashMap.newKeySet();
         this.failureMemory = failureMemory;
         this.environment = environment;
     }
@@ -154,19 +170,30 @@ public final class ExoCompressedAudioDirectPolicy
     /** Configure before exposing the renderer's output provider to the playback thread. */
     void setAudioPassthroughEnabled(boolean enabled) {
         audioPassthroughEnabled = enabled;
-        if (!enabled) vendorDirectConfigs.clear();
+        if (!enabled) {
+            vendorDirectConfigs.clear();
+            failedOffloadConfigs.clear();
+        }
     }
 
     @Override
     public AudioOffloadSupport getAudioOffloadSupport(
             Format format, AudioAttributes audioAttributes) {
         if (!audioPassthroughEnabled) return AudioOffloadSupport.DEFAULT_UNSUPPORTED;
+        OutputKey key = OutputKey.from(format);
+        DirectKey directKey = key == null ? null
+                : new DirectKey(key, effectiveAttributes(audioAttributes));
+        // This exact configuration already accepted payload without ever being consumed.
+        // Withdrawing offload support is the only way to make track selection fall back to the
+        // decoder plus PCM path instead of repeating a configuration that provably does not play.
+        if (directKey != null && failedOffloadConfigs.contains(directKey)) {
+            logDecision(format, key, "offload-startup-stall-force-pcm");
+            return AudioOffloadSupport.DEFAULT_UNSUPPORTED;
+        }
         AudioOffloadSupport standard = standardProvider.getAudioOffloadSupport(
                 format, audioAttributes);
         if (standard.isFormatSupported) {
-            OutputKey key = OutputKey.from(format);
-            if (key != null) vendorDirectConfigs.remove(new DirectKey(key,
-                    effectiveAttributes(audioAttributes)));
+            if (directKey != null) vendorDirectConfigs.remove(directKey);
             logDecision(format, key, "standard-offload");
         }
         return standard;
@@ -182,6 +209,7 @@ public final class ExoCompressedAudioDirectPolicy
             private final Listener capabilityListener = () -> {
                 failureMemory.invalidate();
                 vendorDirectConfigs.clear();
+                failedOffloadConfigs.clear();
                 OutputAttempt attempt = outputAttempt.get();
                 attempt.cancelRecovery();
             };
@@ -321,6 +349,11 @@ public final class ExoCompressedAudioDirectPolicy
                     attempt.output.set(directOutput);
                     if (directOutput != null) {
                         output = directOutput;
+                    } else if (config.isOffload) {
+                        OffloadStartupProbe probe = new OffloadStartupProbe(
+                                output, raw, config, attempt, diagnostics);
+                        attempt.offloadProbe.set(probe);
+                        output = probe;
                     } else if ((attempt.recovery != null || attempt.startupRecoveryUsed)
                             && Util.isEncodingLinearPcm(config.encoding)
                             && !config.isTunneling && !config.isOffload) {
@@ -509,6 +542,39 @@ public final class ExoCompressedAudioDirectPolicy
             rememberPendingFailure(output);
             if (outputAttempt.get() != attempt) return false;
             disableVendorDirect(output.config, "playing-no-progress");
+            return true;
+        }
+    }
+
+    /**
+     * Evidence that this attempt's standard offload output accepted payload and was then never
+     * consumed. Read-only: it decides nothing and requests no recovery.
+     *
+     * <p>Package-private because it exists to let the evidence layer be asserted separately from
+     * the one-shot decision that consumes it.
+     */
+    boolean hasStalledOffloadOutput() {
+        OffloadStartupProbe probe = outputAttempt.get().offloadProbe.get();
+        return probe != null && probe.currentStall() != null;
+    }
+
+    /**
+     * One-shot per prepare: stop using the standard offload path for this exact configuration and
+     * let the caller restart the current item with PCM.
+     *
+     * <p>Returns {@code true} only when a stalled offload output was actually observed, so a caller
+     * that receives {@code false} keeps its normal fallback order untouched.
+     */
+    public boolean requestOffloadStallRecovery() {
+        synchronized (outputAttempt) {
+            OutputAttempt attempt = outputAttempt.get();
+            OffloadStartupProbe probe = attempt.offloadProbe.get();
+            if (probe == null || attempt.offloadRecoveryUsed) return false;
+            OffloadStartupStall stall = probe.currentStall();
+            if (stall == null) return false;
+            attempt.offloadRecoveryUsed = true;
+            failedOffloadConfigs.add(stall.key());
+            probe.reportStall(stall);
             return true;
         }
     }
@@ -761,12 +827,14 @@ public final class ExoCompressedAudioDirectPolicy
 
     private static final class OutputAttempt {
         final AtomicReference<VendorDirectAudioOutput> output = new AtomicReference<>();
+        final AtomicReference<OffloadStartupProbe> offloadProbe = new AtomicReference<>();
         final AtomicReference<AudioOutput> currentOutput = new AtomicReference<>();
         final String media;
         volatile Recovery recovery;
         volatile Recovery failure;
         volatile String selectedFormat;
         boolean startupRecoveryUsed;
+        boolean offloadRecoveryUsed;
         long fallbackAtMs = C.TIME_UNSET;
 
         OutputAttempt() {
@@ -975,9 +1043,15 @@ public final class ExoCompressedAudioDirectPolicy
         }
 
         private boolean isStartupStalled() {
+            // Some vendor tracks report capacity/size/threshold as zero, which is the only evidence a
+            // start threshold can be compared against. Accepted payload with a playback head that
+            // never leaves zero is the same conclusion, so a zero-metric output is judged on that
+            // instead of being left unprobed until the generic stuck-playing timeout fires.
+            boolean metricsAvailable = startupBuffer.effectiveThresholdBytes() > 0;
             if (!playing || startupComplete || format == null || lastPositionUs != 0
-                    || !acceptedData || startupBuffer.effectiveThresholdBytes() == 0
-                    || acceptedBytes < startupBuffer.effectiveThresholdBytes()) {
+                    || !acceptedData || acceptedBytes <= 0
+                    || (metricsAvailable
+                    && acceptedBytes < startupBuffer.effectiveThresholdBytes())) {
                 startupWindowAtMs = C.TIME_UNSET;
                 return false;
             }
@@ -988,7 +1062,10 @@ public final class ExoCompressedAudioDirectPolicy
                 startupRoute = environment.actualRoute(raw);
                 return false;
             }
-            if (nowMs - startupWindowAtMs < STARTUP_STALL_MS) return false;
+            if (nowMs - startupWindowAtMs
+                    < (metricsAvailable ? STARTUP_STALL_MS : ZERO_METRIC_STARTUP_STALL_MS)) {
+                return false;
+            }
             // Query the raw head and route only at the decision boundary, not every render.
             // A working head with stale timestamp feedback must not be replayed as silent audio.
             long head = environment.rawPlaybackHead(raw);
@@ -1004,8 +1081,18 @@ public final class ExoCompressedAudioDirectPolicy
             }
             // Re-read the real threshold: routing/HAL changes can alter it after construction.
             StartupBuffer current = environment.startupBuffer(raw);
-            if (current.effectiveThresholdBytes() == 0
-                    || acceptedBytes < current.effectiveThresholdBytes()) {
+            if (current.effectiveThresholdBytes() == 0) {
+                if (!metricsAvailable) {
+                    // Consistently unreadable metrics: accepted payload plus a head pinned at zero is
+                    // the whole verdict, so report it instead of waiting for the generic timeout.
+                    routeAtStall = route;
+                    return true;
+                }
+                startupBuffer = current;
+                startupWindowAtMs = C.TIME_UNSET;
+                return false;
+            }
+            if (acceptedBytes < current.effectiveThresholdBytes()) {
                 startupBuffer = current;
                 startupWindowAtMs = C.TIME_UNSET;
                 return false;
@@ -1157,6 +1244,135 @@ public final class ExoCompressedAudioDirectPolicy
             if (recovery != null) recovery.cancelled = true;
             super.release();
         }
+    }
+
+    /**
+     * Observes one standard offload output. It only records what the output did; the startup
+     * decision reads that evidence later, on the existing startup guard, so a merely slow start is
+     * never turned into a premature fallback here.
+     */
+    private final class OffloadStartupProbe extends ForwardingAudioOutput {
+        private final AudioOutput raw;
+        private final OutputAttempt attempt;
+        private final DirectKey key;
+        private final ExoDiagnosticCollector diagnostics;
+        // The playback thread records and the controller thread reads these, and armeabi-v7a is a
+        // shipped ABI, so torn 64-bit reads are possible without volatile.
+        private volatile long acceptedBytes;
+        private volatile long zeroWrites;
+        private volatile long firstAcceptedAtMs = C.TIME_UNSET;
+        private boolean reported;
+
+        OffloadStartupProbe(AudioOutput output, AudioOutput raw,
+                            AudioOutputProvider.OutputConfig config, OutputAttempt attempt,
+                            ExoDiagnosticCollector diagnostics) {
+            super(output);
+            this.raw = raw;
+            this.attempt = attempt;
+            this.key = new DirectKey(
+                    new OutputKey(config.encoding, config.sampleRate, config.channelMask),
+                    effectiveAttributes(config.audioAttributes));
+            this.diagnostics = diagnostics;
+        }
+
+        @Override
+        public boolean write(ByteBuffer buffer, int accessUnitCount, long presentationTimeUs)
+                throws AudioOutput.WriteException {
+            int position = buffer.position();
+            boolean handled = super.write(buffer, accessUnitCount, presentationTimeUs);
+            if (buffer.position() > position) {
+                acceptedBytes += buffer.position() - position;
+                if (firstAcceptedAtMs == C.TIME_UNSET) firstAcceptedAtMs = clock.elapsedRealtime();
+            } else if (firstAcceptedAtMs != C.TIME_UNSET) {
+                // Only refusals *after* payload was first accepted count: a backend that refuses
+                // the opening write and then consumes normally is not evidence of a stall.
+                zeroWrites++;
+            }
+            return handled;
+        }
+
+        @Override
+        public void flush() {
+            resetEpoch();
+            super.flush();
+        }
+
+        @Override
+        public void stop() {
+            resetEpoch();
+            super.stop();
+        }
+
+        /**
+         * A flush or stop resets the hardware playback head to zero, so counters recorded before
+         * one would combine with a post-flush zero head and masquerade as a stall. The sibling
+         * {@link VendorDirectAudioOutput} keeps the same discipline: a seek is not a fresh
+         * first-playback probe.
+         *
+         * <p>{@code release()} deliberately keeps the evidence instead of resetting it, because
+         * Media3 can release the output before the App is told about a timeout.
+         */
+        private void resetEpoch() {
+            acceptedBytes = 0;
+            zeroWrites = 0;
+            firstAcceptedAtMs = C.TIME_UNSET;
+        }
+
+        /**
+         * Null unless this output accepted payload, was then refused every further write, and
+         * still reports a zero playback head.
+         *
+         * <p>A negative head means the backend cannot report one and a positive head proves the
+         * hardware did consume data, so neither may be reported as a stall.
+         */
+        OffloadStartupStall currentStall() {
+            // Read once: the playback thread keeps updating these while the controller reads them.
+            long firstAccepted = firstAcceptedAtMs;
+            if (firstAccepted == C.TIME_UNSET || acceptedBytes <= 0 || zeroWrites <= 0) {
+                return null;
+            }
+            long windowMs = clock.elapsedRealtime() - firstAccepted;
+            if (windowMs < OFFLOAD_STALL_WINDOW_MS) return null;
+            if (environment.rawPlaybackHead(raw) != 0) return null;
+            return new OffloadStartupStall(key, acceptedBytes, zeroWrites, windowMs);
+        }
+
+        void reportStall(OffloadStartupStall stall) {
+            if (reported) return;
+            reported = true;
+            if (SpiderDebug.isEnabled()) {
+                SpiderDebug.log("exo-audio-direct",
+                        "event=offload-startup-stall encoding=%d sampleRate=%d channelMask=0x%X acceptedBytes=%d zeroWrites=%d windowMs=%d",
+                        stall.key().output().encoding(), stall.key().output().sampleRate(),
+                        stall.key().output().channelMask(), stall.acceptedBytes(),
+                        stall.zeroWrites(), stall.windowMs());
+            }
+            if (diagnostics == null) return;
+            // Reuses the registered `audio.output.write` schema and its existing `stage`
+            // discriminator (already used for `first-payload-accepted`). A dedicated event name
+            // would require a new entry in the catvod diagnostics allowlist, which rejects unknown
+            // events and fields and would silently drop this evidence.
+            diagnostics.log.emit("audio.output.write", "audio-output", e -> {
+                e.inferred()
+                        .observed("stage", "offload-startup-stall")
+                        .observed("encoding", stall.key().output().encoding())
+                        .observed("sampleRate", stall.key().output().sampleRate())
+                        .observed("channelMask", stall.key().output().channelMask())
+                        .observed("acceptedBytes", stall.acceptedBytes())
+                        .observed("zeroWrites", stall.zeroWrites())
+                        .observed("headRaw", 0L)
+                        .observed("windowMs", stall.windowMs())
+                        .observed("reason", "offload-accepted-payload-never-consumed")
+                        .observed("note", "restart-current-item-with-pcm")
+                        .observed("metricScope", "AudioOutput payload consumption; retried requests included")
+                        .unknown("audibility", DiagnosticEvent.Status.NOT_OBSERVABLE);
+                if (attempt.media != null) e.pin("offload-startup-stall-" + attempt.media);
+            });
+        }
+    }
+
+    private record OffloadStartupStall(DirectKey key, long acceptedBytes, long zeroWrites,
+                                       long windowMs) {
     }
 
     private record OutputKey(int encoding, int sampleRate, int channelMask) {

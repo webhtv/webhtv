@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    版本卡的强调文字色（展开 / 收起）。
+
+    这里是最严重的一处：默认态强调色取 colorPrimary，而聚焦填充恰好也是
+    colorPrimary，两者 1.00:1，聚焦后文字完全消失。所以聚焦/按下时必须
+    翻成填充的配对 on-色，默认态才回到 colorPrimary。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/webhtv_color_on_primary" android:state_focused="true" />
+    <item android:color="@color/webhtv_color_on_primary" android:state_pressed="true" />
+    <item android:color="@color/webhtv_color_primary" />
+</selector>

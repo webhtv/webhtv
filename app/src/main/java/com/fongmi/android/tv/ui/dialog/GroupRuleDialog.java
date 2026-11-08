@@ -33,6 +33,7 @@ import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.setting.GroupRuleStore;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteNameStore;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
@@ -510,8 +511,8 @@ public final class GroupRuleDialog {
     private void configureAiPreviewWindow(AlertDialog dialog, NestedScrollView contentScroll) {
         Window window = dialog.getWindow();
         if (window == null) return;
-        int screenWidth = ResUtil.getScreenWidth(activity);
-        int screenHeight = ResUtil.getScreenHeight(activity);
+        int screenWidth = DialogSafeArea.width(activity, window);
+        int screenHeight = DialogSafeArea.height(activity, window);
         boolean landscape = screenWidth >= screenHeight;
         AiGroupRulePreviewSizing.Size size = AiGroupRulePreviewSizing.calculate(
                 screenWidth, screenHeight, dp(landscape ? 24 : 12), dp(landscape ? 170 : 190));
@@ -592,7 +593,7 @@ public final class GroupRuleDialog {
     }
 
     private MaterialAlertDialogBuilder builder() {
-        return new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog);
+        return new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog);
     }
 
     private static void wireDpadFocus(View view, View up, View down, View left, View right) {

@@ -34,6 +34,7 @@ import com.fongmi.android.tv.browse.BrowseTree;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
+import com.fongmi.android.tv.player.PlaybackOwnershipKeys;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.engine.PlaySpec;
 import com.fongmi.android.tv.player.lyrics.DesktopLyricsWindow;
@@ -447,8 +448,15 @@ private AudioHistory.Record audioHistoryRecord;
         setNavigationCallback(null, null);
     }
 
+    /**
+     * 导航归属：本服务记录的 {@link #navigationKey} 是否就是当前播放会话。
+     *
+     * <p>自动连播时服务自己用「浏览下一集」的 {@code VE:...} 键起播，而 {@code navigationKey}
+     * 仍是页面写入的记录键；两者字符串不等但同属一次会话。旧实现按字符串判假，后果是下一次
+     * ENDED 被当成「无主」事件，服务直接再 {@code navigateItem(1)} 跳一集，连播变成连跳。
+     */
     private boolean isNavigationOwner() {
-        return isPlayerAvailable() && (navigationKey == null || navigationKey.equals(player.getKey()));
+        return isPlayerAvailable() && PlaybackOwnershipKeys.sameSession(navigationKey, player.getKey());
     }
 
     public void addPlayerCallback(PlayerCallback callback) {

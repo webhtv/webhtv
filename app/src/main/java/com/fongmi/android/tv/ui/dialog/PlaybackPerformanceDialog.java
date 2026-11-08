@@ -26,6 +26,8 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.setting.PlaybackPerformanceCatalog;
@@ -72,7 +74,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
     @Override
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
         PlaybackPerformanceSetting.ensureInitialized();
-        Dialog dialog = new Dialog(requireActivity(), R.style.Theme_WebHTV_LightDialog);
+        Dialog dialog = new Dialog(requireActivity(), R.style.Theme_WebHTV_Dialog);
         dialog.setContentView(createView(LayoutInflater.from(requireContext())));
         return dialog;
     }
@@ -104,7 +106,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
 
         MaterialTextView title = new MaterialTextView(requireContext());
         title.setText(getString(R.string.player_performance) + " · " + playerName());
-        title.setTextColor(Color.parseColor("#202124"));
+        title.setTextColor(ThemeController.current().colorOnSurface());
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER_VERTICAL);
         titleBar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -134,7 +136,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         list = new LinearLayout(requireContext());
         list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(dp(460), Math.max(dp(300), ResUtil.getScreenHeight(requireContext()) * 2 / 3)));
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(dp(460), Math.max(dp(300), DialogSafeArea.height(requireContext()) * 2 / 3)));
         scrollParams.topMargin = dp(16);
         root.addView(scroll, scrollParams);
         refreshRows();
@@ -155,7 +157,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
 
         MaterialTextView title = new MaterialTextView(requireContext());
         title.setText(getString(R.string.player_performance_help_title) + " · " + playerName());
-        title.setTextColor(Color.parseColor("#202124"));
+        title.setTextColor(ThemeController.current().colorOnSurface());
         title.setTextSize(18);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         title.setGravity(Gravity.CENTER_VERTICAL);
@@ -177,7 +179,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(4), dp(12), dp(4), dp(8));
         scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(dp(560), ResUtil.getScreenHeight(requireContext()) * 3 / 5));
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(dp(560), DialogSafeArea.height(requireContext()) * 3 / 5));
         scrollParams.topMargin = dp(10);
         root.addView(scroll, scrollParams);
 
@@ -202,7 +204,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             addHelpItem(content, option.title(), option.description());
         }
 
-        Dialog dialog = new Dialog(requireContext(), R.style.Theme_WebHTV_LightDialog);
+        Dialog dialog = new Dialog(requireContext(), R.style.Theme_WebHTV_Dialog);
         dialog.setContentView(root);
         dialog.setCanceledOnTouchOutside(true);
         dialog.setOnShowListener(ignored -> resizeHelpDialog(dialog));
@@ -239,7 +241,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
     private void addHelpIntro(LinearLayout content, String text) {
         MaterialTextView intro = new MaterialTextView(requireContext());
         intro.setText(text);
-        intro.setTextColor(Color.parseColor("#3C4043"));
+        intro.setTextColor(ThemeController.current().colorOnSurfaceVariant());
         intro.setTextSize(13);
         intro.setLineSpacing(dp(3), 1f);
         content.addView(intro, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -248,7 +250,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
     private void addHelpSection(LinearLayout content, String text) {
         MaterialTextView section = new MaterialTextView(requireContext());
         section.setText(text);
-        section.setTextColor(Color.parseColor("#174EA6"));
+        section.setTextColor(ThemeController.current().colorPrimary());
         section.setTextSize(15);
         section.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -260,14 +262,14 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
     private void addHelpItem(LinearLayout content, String title, String description) {
         MaterialTextView name = new MaterialTextView(requireContext());
         name.setText(title);
-        name.setTextColor(Color.parseColor("#202124"));
+        name.setTextColor(ThemeController.current().colorOnSurface());
         name.setTextSize(14);
         name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         content.addView(name, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         MaterialTextView detail = new MaterialTextView(requireContext());
         detail.setText(description);
-        detail.setTextColor(Color.parseColor("#5F6368"));
+        detail.setTextColor(ThemeController.current().colorOnSurfaceVariant());
         detail.setTextSize(13);
         detail.setLineSpacing(dp(3), 1f);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -299,9 +301,9 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         button.setFocusable(true);
         button.setFocusableInTouchMode(Util.isLeanback());
         button.setCornerRadius(dp(6));
-        button.setTextColor(ColorStateList.valueOf(Color.parseColor("#174EA6")));
-        button.setBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
-        button.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#8AB4F8")));
+        button.setTextColor(ColorStateList.valueOf(ThemeController.current().colorPrimary()));
+        button.setBackgroundTintList(ColorStateList.valueOf(ThemeController.current().colorSurfaceContainerLowest()));
+        button.setStrokeColor(ColorStateList.valueOf(ThemeController.current().colorOutline()));
         button.setStrokeWidth(dp(1));
         button.setOnFocusChangeListener((view, hasFocus) -> styleAction(button, hasFocus));
         button.setOnClickListener(listener);
@@ -325,15 +327,16 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         button.setFocusable(true);
         button.setFocusableInTouchMode(Util.isLeanback());
         button.setBackgroundTintList(ContextCompat.getColorStateList(requireContext(), R.color.dialog_outlined_button_bg));
-        button.setTextColor(Color.parseColor("#5F6368"));
+        button.setTextColor(ThemeController.current().colorOnSurfaceVariant());
         button.setOnClickListener(listener);
         return button;
     }
 
     private void styleAction(MaterialButton button, boolean focused) {
-        button.setTextColor(ColorStateList.valueOf(Color.parseColor(focused ? "#FFFFFF" : "#174EA6")));
-        button.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor(focused ? "#1A73E8" : "#FFFFFF")));
-        button.setStrokeColor(ColorStateList.valueOf(Color.parseColor(focused ? "#1A73E8" : "#8AB4F8")));
+        ThemeTokens tokens = ThemeController.current();
+        button.setTextColor(ColorStateList.valueOf(focused ? tokens.colorOnPrimary() : tokens.colorPrimary()));
+        button.setBackgroundTintList(ColorStateList.valueOf(focused ? tokens.colorPrimary() : tokens.colorSurfaceContainerLowest()));
+        button.setStrokeColor(ColorStateList.valueOf(focused ? tokens.colorPrimary() : tokens.colorOutline()));
         button.setStrokeWidth(dp(1));
     }
 
@@ -363,8 +366,8 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         tabs.setBackgroundColor(Color.TRANSPARENT);
         tabs.setTabMode(TabLayout.MODE_FIXED);
         tabs.setTabGravity(TabLayout.GRAVITY_FILL);
-        tabs.setSelectedTabIndicatorColor(Color.parseColor("#1A73E8"));
-        tabs.setTabTextColors(Color.parseColor("#5F6368"), Color.parseColor("#1A73E8"));
+        tabs.setSelectedTabIndicatorColor(ThemeController.current().colorPrimary());
+        tabs.setTabTextColors(ThemeController.current().colorOnSurfaceVariant(), ThemeController.current().colorPrimary());
         tabs.setTabRippleColor(ColorStateList.valueOf(Color.TRANSPARENT));
         tabs.setUnboundedRipple(false);
         tabs.setFocusable(false);
@@ -804,7 +807,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
     private void addHeader(String text) {
         MaterialTextView header = new MaterialTextView(requireContext());
         header.setText(text);
-        header.setTextColor(Color.parseColor("#5F6368"));
+        header.setTextColor(ThemeController.current().colorOnSurfaceVariant());
         header.setTextSize(13);
         header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28));
@@ -825,12 +828,12 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         button.setInsetBottom(0);
         button.setText(label + "    " + value);
         button.setTextSize(14);
-        button.setTextColor(ColorStateList.valueOf(Color.parseColor("#202124")));
+        button.setTextColor(ColorStateList.valueOf(ThemeController.current().colorOnSurface()));
         button.setBackgroundTintList(ColorStateList.valueOf(overridden
-                ? Color.parseColor("#E8F0FE") : Color.WHITE));
+                ? ThemeController.current().colorPrimaryContainer() : ThemeController.current().colorSurfaceContainerLowest()));
         button.setCornerRadius(dp(6));
-        button.setStrokeColor(ColorStateList.valueOf(Color.parseColor(overridden
-                ? "#8AB4F8" : "#C4C7C5")));
+        button.setStrokeColor(ColorStateList.valueOf(overridden
+                ? ThemeController.current().colorPrimary() : ThemeController.current().colorOutlineVariant()));
         button.setStrokeWidth(dp(1));
         button.setFocusable(true);
         button.setFocusableInTouchMode(Util.isLeanback());
@@ -845,12 +848,14 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
 
     private void styleRow(MaterialButton button, boolean enabled,
                           boolean overridden, boolean focused) {
-        int text = focused ? Color.WHITE : enabled ? Color.parseColor("#202124") : Color.parseColor("#5F6368");
-        int bg = focused ? Color.parseColor("#1A73E8")
-                : overridden ? Color.parseColor("#E8F0FE") : Color.WHITE;
-        int stroke = focused ? Color.parseColor("#1A73E8")
-                : overridden ? Color.parseColor("#8AB4F8")
-                : Color.parseColor("#C4C7C5");
+        ThemeTokens tokens = ThemeController.current();
+        int text = focused ? tokens.colorOnPrimary()
+                : enabled ? tokens.colorOnSurface() : tokens.colorOnSurfaceVariant();
+        int bg = focused ? tokens.colorPrimary()
+                : overridden ? tokens.colorPrimaryContainer() : tokens.colorSurfaceContainerLowest();
+        int stroke = focused ? tokens.colorPrimary()
+                : overridden ? tokens.colorPrimary()
+                : tokens.colorOutlineVariant();
         button.setTextColor(ColorStateList.valueOf(text));
         button.setBackgroundTintList(ColorStateList.valueOf(bg));
         button.setStrokeColor(ColorStateList.valueOf(stroke));

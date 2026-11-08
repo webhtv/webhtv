@@ -111,6 +111,28 @@ public class ExoFrameTimingMetricsTest {
     }
 
     @Test
+    public void bucketsSeparateLateFramesFromEarlyFrames() {
+        // media3 reports one offset sample per processed frame: positive = processed early enough,
+        // negative = the position had already passed the frame. These buckets are what turns a
+        // "掉帧" report into "frames delivered 30-100 ms late" — the measurement shape
+        // androidx/media#3347 needed to tell a skip apart from a hold.
+        ExoFrameTimingMetrics metrics = new ExoFrameTimingMetrics();
+        metrics.observeProcessingOffset(-30_000, 1, true);
+        metrics.observeProcessingOffset(-5_000, 1, true);
+        metrics.observeProcessingOffset(10_000, 1, true);
+        metrics.observeProcessingOffset(60_000, 1, true);
+
+        ExoFrameTimingMetrics.SignedTimingBuckets buckets =
+                metrics.snapshot().processingOffsetBuckets();
+        assertEquals(1, buckets.earlierThanMinus20Ms());
+        assertEquals(1, buckets.minus20MsToZero());
+        assertEquals(1, buckets.zeroTo20Ms());
+        assertEquals(1, buckets.fiftyTo75Ms());
+        assertEquals(4, buckets.total());
+        assertEquals("1/1/1/0/1/0/0", buckets.compact());
+    }
+
+    @Test
     public void extremeTimestampsSaturateWithoutNegativeJitterOrCounts() {
         ExoFrameTimingMetrics metrics = new ExoFrameTimingMetrics();
         metrics.observeProcessingOffset(Long.MAX_VALUE, 1);

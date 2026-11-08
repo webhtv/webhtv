@@ -29,7 +29,7 @@
             android:scaleType="fitCenter"/>
         <TextView
             android:textSize="10sp"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:layout_gravity="start|top"
             android:id="@+id/version"
             android:background="@drawable/shape_lab_version"
@@ -48,7 +48,7 @@
         <TextView
             android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:ellipsize="end"
             android:id="@+id/title"
             android:layout_width="match_parent"
@@ -56,7 +56,7 @@
             android:maxLines="1"/>
         <TextView
             android:textSize="12sp"
-            android:textColor="@color/white_70"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:ellipsize="end"
             android:id="@+id/info"
             android:layout_width="match_parent"
@@ -71,14 +71,14 @@
             android:layout_marginTop="8dp">
             <TextView
                 android:textSize="11sp"
-                android:textColor="@color/white"
+                android:textColor="?attr/colorOnSurface"
                 android:id="@+id/status"
                 android:background="@drawable/shape_lab_installed"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
             <TextView
                 android:textSize="11sp"
-                android:textColor="@color/white"
+                android:textColor="?attr/colorOnSurface"
                 android:id="@+id/size"
                 android:background="@drawable/shape_lab_size"
                 android:layout_width="wrap_content"
@@ -86,7 +86,7 @@
                 android:layout_marginStart="8dp"/>
             <TextView
                 android:textSize="11sp"
-                android:textColor="@color/white"
+                android:textColor="?attr/colorOnSurface"
                 android:id="@+id/newVersion"
                 android:background="@drawable/shape_lab_new_version"
                 android:visibility="gone"

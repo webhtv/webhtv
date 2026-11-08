@@ -2,9 +2,13 @@ package com.fongmi.android.tv.db;
 
 import android.content.Context;
 
+import androidx.annotation.NonNull;
 import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
+import androidx.sqlite.db.SupportSQLiteDatabase;
+import androidx.sqlite.db.SupportSQLiteOpenHelper;
+import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Config;
@@ -33,19 +37,26 @@ import com.github.catvod.utils.Path;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-@Database(entities = {Keep.class, Site.class, Live.class, Track.class, Config.class, Device.class, History.class, PlaybackDeleteTombstone.class, TmdbSeasonProgress.class}, version = AppDatabase.VERSION)
+@Database(entities = {Keep.class, Site.class, Live.class, Track.class, Config.class, Device.class, History.class, PlaybackDeleteTombstone.class, TmdbSeasonProgress.class}, version = AppDatabase.VERSION, exportSchema = true)
 public abstract class AppDatabase extends RoomDatabase {
 
-    public static final int VERSION = 45;
+    // VERSION = 47 was the pre-identity-alias schema; 48 adds migration clues.
+    public static final int VERSION = 48;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
     private static final int BACKUP_KEEP_COUNT = 7;
     private static final int PARTIAL_BACKUP_KEEP_COUNT = 1;
     private static final String BACKUP_TEMP_FILE = ".backup.tmp";
+    private static final String QUARANTINE_SUFFIX = ".incompatible-";
+    private static final int QUARANTINE_KEEP_COUNT = 2;
+    private static final String[] DATABASE_SUFFIXES = {"", "-wal", "-shm", "-journal"};
     private static final Object BACKUP_LOCK = new Object();
     private static final AtomicBoolean AUTO_BACKUP_PENDING = new AtomicBoolean();
 
@@ -179,8 +190,148 @@ public abstract class AppDatabase extends RoomDatabase {
                 .addMigrations(Migrations.MIGRATION_42_43)
                 .addMigrations(Migrations.MIGRATION_43_44)
                 .addMigrations(Migrations.MIGRATION_44_45)
+                .addMigrations(Migrations.MIGRATION_45_46)
+                .addMigrations(Migrations.MIGRATION_46_47)
+                .addMigrations(Migrations.MIGRATION_47_48)
+                .openHelperFactory(new IntegrityRecoveringOpenHelperFactory(new FrameworkSQLiteOpenHelperFactory()))
                 .fallbackToDestructiveMigration(true)
                 .allowMainThreadQueries().build();
+    }
+
+    /**
+     * Keeps Room's data-integrity check from turning into a permanent crash loop.
+     *
+     * <p>Room refuses to open a database whose stored identity hash does not match the schema this
+     * build expects and reports it as an {@link IllegalStateException}. Two builds that publish the
+     * same {@code versionCode} but different entities hit exactly that state, and because the
+     * failure happens while the database is being opened it also breaks every later launch that
+     * touches it. Nothing in the app can catch it at the call sites, so it is handled while the
+     * connection is opened: the database is moved aside so the original file survives for manual
+     * recovery (its {@code -wal}/{@code -shm}/{@code -journal} sidecars are cleared, and a file that
+     * cannot be moved is deleted, because the rebuild needs the path free) and a fresh database is
+     * created, which keeps the app usable.
+     *
+     * <p>Only Room's identity failure is recovered. Any other open failure is rethrown unchanged.
+     */
+    static final class IntegrityRecoveringOpenHelperFactory implements SupportSQLiteOpenHelper.Factory {
+
+        private final SupportSQLiteOpenHelper.Factory delegate;
+
+        IntegrityRecoveringOpenHelperFactory(SupportSQLiteOpenHelper.Factory delegate) {
+            this.delegate = delegate;
+        }
+
+        @NonNull
+        @Override
+        public SupportSQLiteOpenHelper create(@NonNull SupportSQLiteOpenHelper.Configuration configuration) {
+            return new IntegrityRecoveringOpenHelper(delegate, configuration);
+        }
+    }
+
+    private static final class IntegrityRecoveringOpenHelper implements SupportSQLiteOpenHelper {
+
+        private final SupportSQLiteOpenHelper.Factory factory;
+        private final SupportSQLiteOpenHelper.Configuration configuration;
+        private SupportSQLiteOpenHelper delegate;
+        private boolean recovered;
+
+        IntegrityRecoveringOpenHelper(SupportSQLiteOpenHelper.Factory factory, SupportSQLiteOpenHelper.Configuration configuration) {
+            this.factory = factory;
+            this.configuration = configuration;
+            this.delegate = factory.create(configuration);
+        }
+
+        @NonNull
+        @Override
+        public String getDatabaseName() {
+            return delegate.getDatabaseName();
+        }
+
+        @Override
+        public void setWriteAheadLoggingEnabled(boolean enabled) {
+            delegate.setWriteAheadLoggingEnabled(enabled);
+        }
+
+        @NonNull
+        @Override
+        public SupportSQLiteDatabase getWritableDatabase() {
+            return open(true);
+        }
+
+        @NonNull
+        @Override
+        public SupportSQLiteDatabase getReadableDatabase() {
+            return open(false);
+        }
+
+        @Override
+        public void close() {
+            delegate.close();
+        }
+
+        private SupportSQLiteDatabase open(boolean writable) {
+            try {
+                return writable ? delegate.getWritableDatabase() : delegate.getReadableDatabase();
+            } catch (IllegalStateException e) {
+                if (recovered || !isIdentityFailure(e)) throw e;
+                recovered = true;
+                SpiderDebug.log("database", "integrity check failed, rebuilding %s error=%s",
+                        getDatabaseName(), e.getMessage());
+                quarantine(configuration, getDatabaseName());
+                try {
+                    delegate.close();
+                } catch (RuntimeException ignored) {
+                    // The failed helper must not mask the rebuild below.
+                }
+                delegate = factory.create(configuration);
+                return writable ? delegate.getWritableDatabase() : delegate.getReadableDatabase();
+            }
+        }
+    }
+
+    private static boolean isIdentityFailure(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            String message = current.getMessage();
+            if (message != null && message.contains("Room cannot verify the data integrity")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Moves the unreadable database aside so the rebuild starts clean while the original file stays
+     * on disk; only a file that cannot be moved is deleted.
+     */
+    static void quarantine(SupportSQLiteOpenHelper.Configuration configuration, String name) {
+        File file = databaseFile(configuration, name);
+        File directory = file == null ? null : file.getParentFile();
+        if (file == null || directory == null) return;
+        String stamp = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(new Date());
+        for (String suffix : DATABASE_SUFFIXES) {
+            File source = new File(file.getPath() + suffix);
+            if (!source.isFile()) continue;
+            if (!suffix.isEmpty()) {
+                Path.clear(source);
+                continue;
+            }
+            File target = new File(directory, file.getName() + QUARANTINE_SUFFIX + stamp);
+            if (!source.renameTo(target)) Path.clear(source);
+        }
+        trimQuarantine(directory, file.getName());
+    }
+
+    private static void trimQuarantine(File directory, String databaseName) {
+        File[] files = directory.listFiles((dir, name) -> name.startsWith(databaseName + QUARANTINE_SUFFIX));
+        if (files == null || files.length <= QUARANTINE_KEEP_COUNT) return;
+        List<File> items = new ArrayList<>(List.of(files));
+        items.sort((left, right) -> Long.compare(right.lastModified(), left.lastModified()));
+        for (int index = QUARANTINE_KEEP_COUNT; index < items.size(); index++) Path.clear(items.get(index));
+    }
+
+    private static File databaseFile(SupportSQLiteOpenHelper.Configuration configuration, String name) {
+        Context context = configuration == null ? null : configuration.context;
+        if (context == null || name == null || name.isEmpty()) return null;
+        if (configuration.useNoBackupDirectory) return new File(context.getNoBackupFilesDir(), name);
+        return context.getDatabasePath(name);
     }
 
     public abstract KeepDao getKeepDao();

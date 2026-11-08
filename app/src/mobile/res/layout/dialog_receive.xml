@@ -16,7 +16,7 @@
             android:id="@+id/image"
             android:layout_width="90dp"
             android:layout_height="120dp"
-            android:background="@color/black_10"
+            android:background="@color/webhtv_color_scrim"
             app:shapeAppearanceOverlay="@style/Vod.Grid.Large" />
 
         <include
@@ -47,7 +47,7 @@
         android:layout_toEndOf="@+id/frame"
         android:ellipsize="end"
         android:maxLines="3"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="16sp"
         tools:text="狂飆" />
 
@@ -59,7 +59,7 @@
         android:layout_alignStart="@+id/name"
         android:layout_marginTop="2dp"
         android:singleLine="true"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="14sp"
         tools:text="Xiaomi 13" />
 

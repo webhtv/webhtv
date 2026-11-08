@@ -72,6 +72,14 @@ public class Prefers {
         }
     }
 
+    public static boolean contains(String key) {
+        try {
+            return getPrefers().contains(key);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public static void put(String key, Object obj) {
         if (obj == null) return;
         if (obj instanceof String val) {

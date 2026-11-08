@@ -23,6 +23,9 @@ public interface DetailModeHost {
      */
     ViewBinding binding();
 
+    /** Whether the selected detail theme should use the cinema presentation. */
+    boolean isCinemaStyle();
+
     void closeDetailFullscreenPlayer();
 
     void playInline();

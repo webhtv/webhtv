@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.fragment;
 
 import android.net.Uri;
+import android.app.Activity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -428,10 +429,26 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         if (event.type() == ConfigEvent.Type.VOD) setLogo();
     }
 
+    /**
+     * 状态浮层只能被「又一次启动 / 点重试」收掉，而配置可能在别的路径上变得可用：
+     * 恢复备份、远程指令切换接口、设置页切换接口、接收推送接口。这些路径发的是
+     * {@link RefreshEvent#home()} 而不是 StateEvent，于是用户在这些页面上操作完回到首页，
+     * 首页仍顶着那张状态卡，**必须杀进程冷启动才恢复**（用户反馈的"杀进程后重进才行"）。
+     *
+     * <p>这里把「配置真的可用了」当成收卡的唯一判据：HOME 刷新意味着本 Fragment 马上会
+     * 重新加载首页内容，此时若还处在空态/错误态就直接收起，不依赖任何调用方记得收。
+     */
+    private void dismissStateIfConfigured() {
+        if (mBinding.state.getVisibility() != View.VISIBLE) return;
+        if (VodConfig.get().getSites().isEmpty()) return;
+        hideState();
+    }
+
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
         switch (event.getType()) {
             case HOME:
+                dismissStateIfConfigured();
                 if (mWeb != null && mWeb.isVisible()) {
                     Site home = getHome();
                     WebHomeChromeStartup.remember(getConfig(), home);
@@ -460,12 +477,91 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
     public void onStateEvent(StateEvent event) {
         switch (event.type()) {
             case EMPTY:
+                // 空态：确实没有内容（与"加载失败"是两件事）。
+                // 改动前这里只 hideProgress()，于是首页同样是一片空白。
                 hideProgress();
+                showEmpty();
                 break;
             case PROGRESS:
+                hideState();
                 showProgress();
                 break;
+            case CONTENT:
+                hideState();
+                break;
+            case ERROR:
+                // 设计文档 §9.9：错误态要给出「错误色 + 原因 + 重试动作」。
+                // 改动前这里只 hideProgress()——于是内容源加载失败后首页是**一片空白**，
+                // 用户只看到一个会消失的吐司，既不知道原因也没有重试入口。
+                hideProgress();
+                showError(event.message());
+                break;
+            case NO_CONFIG:
+                // 还没配接口：不是失败，所以不给"重试"（它永远不会成功），也不接管首页——
+                // 收起状态浮层回到原生内容态，底部导航照常可用；添加接口走既有的
+                // 「设置 → 点播」管理面板。
+                hideProgress();
+                showNoConfig();
+                break;
         }
+    }
+
+    /**
+     * 显示空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。
+     *
+     * <p>与错误态的区别是**没有失败原因**、标题也不用错误色——它表达的是"确实没有内容"。
+     * 主动作与错误态的重试一样复用 {@link #homeContent()}。
+     */
+    private void showEmpty() {
+        mBinding.state.setVisibility(View.VISIBLE);
+        mBinding.state.setEmptyContent(
+                R.string.home_empty_title,
+                R.string.home_empty_description,
+                R.string.home_empty_action,
+                view -> homeContent());
+        mBinding.state.showEmpty();
+    }
+
+    /**
+     * 显示错误态：错误色标题 + 失败原因 + 重试。
+     *
+     * <p><b>重试必须回到失败的那一步。</b>首页的错误来自承载本 Fragment 的 Activity 的
+     * **内容源配置加载**（`HomeActivity.initConfig()`），不是本 Fragment 的内容加载——
+     * 实机验证时最初把重试接成 `homeContent()`，结果点了重试页面毫无变化，因为配置根本没被重新拉取。
+     * 因此这里通过 {@link ConfigRetry} 把动作交回 Activity；Activity 未实现时退回内容重载，
+     * 至少不会变成一个死按钮。
+     */
+    private void showError(String message) {
+        mBinding.state.setVisibility(View.VISIBLE);
+        mBinding.state.showError(R.string.error_config_load, message, R.string.error_retry, view -> retryConfig());
+    }
+
+    /**
+     * 还没配接口：这不是失败，也不该由本 Fragment 独占整屏。
+     *
+     * <p>配置为空时首页仍然是"正常首页"：底部导航（点播/设置）照常可用，只是没有内容。
+     * 状态浮层只留给真正的加载失败——用它接管首页会把顶栏和内容一起盖掉。
+     */
+    private void showNoConfig() {
+        hideState();
+        showNativeContent();
+    }
+
+    /** 重新加载内容源配置：交给承载本 Fragment 的 Activity（失败的那一步在它那里）。 */
+    private void retryConfig() {
+        Activity activity = getActivity();
+        if (activity instanceof ConfigRetry) ((ConfigRetry) activity).retryConfig();
+        else homeContent();
+    }
+
+    /** 由承载本 Fragment 的 Activity 实现：重新加载内容源配置。 */
+    public interface ConfigRetry {
+        void retryConfig();
+    }
+
+    /** 收起状态浮层，回到正常内容。 */
+    private void hideState() {
+        mBinding.state.setVisibility(View.GONE);
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)

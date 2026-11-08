@@ -93,7 +93,7 @@ public class AiRecommendationInfoDialog {
         ImgUtil.load(item.getTitle(), image, fallbackImage, poster, true, 300, 450);
 
         int dialogHeightPx = calculateDialogHeightPx(
-                ResUtil.getScreenHeight(activity),
+                DialogSafeArea.height(activity),
                 dp(activity, DIALOG_VERTICAL_MARGIN_DP));
         Dialog dialog = LightDialog.create(
                 activity,

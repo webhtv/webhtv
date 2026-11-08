@@ -1,6 +1,8 @@
 package com.fongmi.android.tv.following;
 
+import java.util.Calendar;
 import java.util.Locale;
+import java.util.TimeZone;
 
 public final class FollowingMetadataSnapshot {
 
@@ -20,6 +22,7 @@ public final class FollowingMetadataSnapshot {
     public int nextAirSeason;
     public int nextAirEpisode;
     public long nextAirAt;
+    public int nextAirWeekday;
     public long fetchedAt;
 
     public static String normalizeStatus(String value) {
@@ -43,7 +46,23 @@ public final class FollowingMetadataSnapshot {
         item.nextAirSeason = nextAirSeason;
         item.nextAirEpisode = nextAirEpisode;
         item.nextAirAt = nextAirAt;
+        item.nextAirWeekday = nextAirWeekday;
         item.fetchedAt = fetchedAt;
         return item;
+    }
+
+    public static int weekday(String utcDate) {
+        if (utcDate == null || utcDate.length() < 10) return 0;
+        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.US);
+        calendar.setLenient(false);
+        try {
+            calendar.set(Integer.parseInt(utcDate.substring(0, 4)),
+                    Integer.parseInt(utcDate.substring(5, 7)) - 1,
+                    Integer.parseInt(utcDate.substring(8, 10)), 0, 0, 0);
+            calendar.set(Calendar.MILLISECOND, 0);
+            return calendar.get(Calendar.DAY_OF_WEEK);
+        } catch (Throwable ignored) {
+            return 0;
+        }
     }
 }

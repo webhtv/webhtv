@@ -14,9 +14,9 @@ import androidx.appcompat.app.AlertDialog;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.web.GameWebActivity;
 import com.github.catvod.net.OkHttp;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -41,7 +41,6 @@ import java.util.concurrent.Executors;
 public final class ActionCardHelper {
 
     private static final ExecutorService executor = Executors.newFixedThreadPool(2);
-    private static final Handler main = new Handler(Looper.getMainLooper());
 
     /** 点击动作卡片入口：siteKey 为站点 key，actionJson 为卡片 vod_id JSON 或原生 action 字段内容。 */
     public static void handleAction(Activity activity, String siteKey, String actionJson) {
@@ -75,7 +74,7 @@ public final class ActionCardHelper {
     private static void submit(Activity activity, String siteKey, String actionJson) {
         executor.execute(() -> {
             String resp = callSpider(siteKey, actionJson);
-            main.post(() -> dispatch(activity, siteKey, resp));
+            new Handler(Looper.getMainLooper()).post(() -> dispatch(activity, siteKey, resp));
         });
     }
 
@@ -91,16 +90,16 @@ public final class ActionCardHelper {
     private static String callSpider(String siteKey, String actionJson) {
         try {
             Site site = VodConfig.get().getSite(siteKey);
-            if (site == null) return "";
+            if (site == null) return error("站点不存在");
             if (site.getType() == 3) return site.recent().spider().action(actionJson);
             if (site.getType() == 4) return OkHttp.string(actionJson);
+            return error("站点不支持动作");
         } catch (Throwable e) {
             return error(e.getMessage());
         }
-        return "";
     }
 
-    private static String error(String message) {
+    static String error(String message) {
         JsonObject obj = new JsonObject();
         obj.addProperty("msg", TextUtils.isEmpty(message) ? "动作执行失败" : message);
         return obj.toString();
@@ -112,7 +111,10 @@ public final class ActionCardHelper {
         if (activity == null || activity.isFinishing()) return;
         JsonObject obj = parse(resp);
         if (obj == null) {
-            Toast.makeText(activity, "动作无响应", Toast.LENGTH_SHORT).show();
+            // 动作接口允许以 null / 空串表示“已执行但无回传内容”，不能把成功动作误报为无响应。
+            // 非空文本仍原样提示，保留服务端返回的失败原因。
+            String message = nonJsonResponse(resp);
+            if (!TextUtils.isEmpty(message)) Toast.makeText(activity, message, Toast.LENGTH_SHORT).show();
             return;
         }
         // 嵌套变体：{"action":{...}}（py 端 _open_url_action / toast 响应）→ 取内层对象分发，
@@ -146,6 +148,11 @@ public final class ActionCardHelper {
         Toast.makeText(activity, TextUtils.isEmpty(msg) ? "操作完成" : msg, Toast.LENGTH_LONG).show();
     }
 
+    static String nonJsonResponse(String response) {
+        String value = response == null ? "" : response.trim();
+        return "null".equals(value) ? "" : value;
+    }
+
     /** 解析响应中的 browser 动作对象：顶层 type:browser，或嵌套在 action 字段里。 */
     private static JsonObject browserAction(JsonObject obj) {
         if ("browser".equals(stringOf(obj, "type"))) return hasUrl(obj) ? obj : null;
@@ -173,7 +180,7 @@ public final class ActionCardHelper {
         if (!TextUtils.isEmpty(value)) edit.setText(value);
         if (!TextUtils.isEmpty(tip)) edit.setHint(tip.replace("\\n", "\n"));
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(title)
                 .setView(view)
                 .setPositiveButton(android.R.string.ok, null)
@@ -209,7 +216,7 @@ public final class ActionCardHelper {
             if (!TextUtils.isEmpty(remarks)) sb.append("\n").append(remarks);
         }
         if (sb.length() == 0) sb.append("操作完成");
-        new MaterialAlertDialogBuilder(activity)
+        new WebHtvAlertDialogBuilder(activity)
                 .setTitle("执行结果")
                 .setMessage(sb.toString())
                 .setPositiveButton(android.R.string.ok, null)

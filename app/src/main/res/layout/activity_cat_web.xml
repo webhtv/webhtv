@@ -9,19 +9,19 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF101216"
+    android:background="?attr/colorSurface"
     android:orientation="vertical">
 
     <TextView
         android:id="@+id/address"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#FF1B1F26"
+        android:background="?attr/colorSurfaceContainerHigh"
         android:ellipsize="middle"
         android:paddingHorizontal="16dp"
         android:paddingVertical="8dp"
         android:singleLine="true"
-        android:textColor="#FF9AA2AF"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="12sp"
         tools:text="http://127.0.0.1:9988/website" />
 
@@ -48,7 +48,7 @@
             android:id="@+id/loading"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#FF101216"
+            android:background="?attr/colorSurface"
             android:gravity="center"
             android:orientation="vertical">
 
@@ -64,7 +64,7 @@
                 android:layout_marginTop="20dp"
                 android:gravity="center"
                 android:paddingHorizontal="32dp"
-                android:textColor="#FFE6E8EC"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="16sp"
                 tools:text="正在打开设置中心" />
 

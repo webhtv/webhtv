@@ -1,11 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」内容卡片（首页最近观看/更新推荐、搜索结果、收藏网格、文件列表）的
+    统一焦点环。统一规范见 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md：
+    - 环宽唯一来源：@dimen/webhtv_focus_ring_width，禁止写死宽度字面量；
+    - 环色唯一来源：?attr/tvFocusRing（= @color/tv_item_focus_ring = 主题 FOCUS 用户槽）。
+
+    此前这里是 `1.5dp @color/white`：同一个电视首页上，功能按钮（shape_item_focused）是蓝色
+    1.5dp，内容卡片是白色 1.5dp，用户报告「上面两行按钮是蓝色边框，下面的是白色边框」。
+    白色还完全不随主题走——用户改主题的「焦点色」槽时卡片边框纹丝不动。
+
+    圆角必须比宿主表面小 w/2：本 drawable 是卡片的 **foreground**（adapter_vod 等 6 个布局），
+    卡片的可见表面另有自己的 8dp 圆角（图片走 @style/Vod.Grid 上圆角 8dp、标题块走
+    shape_vod_name 下圆角 8dp；列表型宿主走 shape_vod_list 四角 8dp）。描边型 `<shape>`
+    （GradientDrawable）把描边中心线画在「内缩 w/2、但圆角半径仍取声明值」的路径上，所以环的
+    **外边界**圆角半径 = 声明值 + w/2。声明 8dp 时外边界是 8+1.5 = 9.5dp，比卡片自身的 8dp 弧
+    更大，于是沿角落对角线卡片弧反而更靠外，实机就是「卡片圆角露出一节」的 1–2px 月牙
+    （2026-10-10 dev1 实机像素复核：卡片表面右边界 396.5px、环外边界 403.46px、环外弧半径
+    ≈ 9dp vs 卡片 8dp 弧）。
+
+    取值 7dp = 8dp − w/2 − 像素取整余量：理论值 7.25dp，但描边宽度按整数像素向上取整
+    （1.5dp @ density 3 = 4.5px → 5px，实际 w/2 = 2.5px），7.25dp 时外边界会超出宿主弧
+    0.25–0.5px，在部分密度下仍会露出亚像素月牙。7dp 在 density 1/1.75/2/2.353/3/4 下实测均
+    为 0 溢出（Robolectric 栅格化扫描，见 TvAppSurfaceFocusRingDeviceTest）。
+    改动环宽或宿主圆角时必须同步此值，TvFocusRingContractTest 与
+    TvAppSurfaceFocusRingDeviceTest 会同时失败。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <corners android:radius="8dp" />
+    <corners android:radius="7dp" />
 
     <stroke
-        android:width="1.5dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvFocusRing" />
 
 </shape>

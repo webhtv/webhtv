@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    次级容器填充（secondary container）控件的统一边框环，规则同
+    `focus_ring_primary.xml`：环色取该填充的配对 on-色，始终受主题控制。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/focus_ring_on_secondary_container" android:state_focused="true" />
+    <item android:color="@color/focus_ring_on_secondary_container" android:state_pressed="true" />
+    <item android:color="@android:color/transparent" />
+</selector>

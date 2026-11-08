@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:alpha="0.38" android:color="#DADCE0" android:state_enabled="false" />
-    <item android:color="#AECBFA" android:state_checked="true" />
-    <item android:color="#DADCE0" />
+    <item android:color="@color/webhtv_color_outline_variant" android:state_enabled="false" />
+    <item android:color="@color/webhtv_color_primary_container" android:state_checked="true" />
+    <item android:color="@color/webhtv_color_surface_container_highest" />
 </selector>

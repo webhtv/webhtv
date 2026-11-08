@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」自带主题色填充的胶囊按钮（首页菜单/设置菜单行、站点操作按钮）的焦点态。
+
+    填充 = ?attr/colorPrimary，环色 = ?attr/colorOnPrimary。这正是统一规范里
+    「环色 = 该控件焦点态实际填充色的配对 on-色」那一条：两者都由主题解析器从用户 seed 重新
+    生成并做过对比度校验，因此换任何主题环都仍然可见（见 docs 焦点环规范）。
+
+    环宽改为唯一来源 @dimen/webhtv_focus_ring_width：此前写死 2dp，与同一电视端
+    其它焦点环写死的取值（1.5dp/3dp）不一致，正是用户报告「边框粗细也貌似不一样」的一族。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="#2F6FED" />
+    <solid android:color="?attr/colorPrimary" />
 
     <corners android:radius="22dp" />
 
@@ -13,7 +23,7 @@
         android:top="8dp" />
 
     <stroke
-        android:width="2dp"
-        android:color="#D7E5FF" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/colorOnPrimary" />
 
 </shape>

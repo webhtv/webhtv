@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 浅色模式：半透明浅色面板，壁纸透出且深色正文保持可读（黑纱会让深色文字对比度跌到 2:1 以下）。
+         卡片信息密度高于顶栏，故比顶栏略实一档。 -->
+    <item android:alpha="0.60" android:color="?attr/colorSurfaceContainerHigh" />
+</selector>

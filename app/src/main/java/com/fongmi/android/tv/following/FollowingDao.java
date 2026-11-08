@@ -18,11 +18,19 @@ public abstract class FollowingDao {
     @Query("SELECT * FROM following ORDER BY has_update DESC, updated_at DESC")
     public abstract List<Following> findAll();
 
-    @Query("SELECT * FROM following WHERE enabled = 1 AND next_check_at <= :now ORDER BY next_check_at ASC LIMIT :limit")
-    public abstract List<Following> findDue(long now, int limit);
+    /** 活跃行（含被禁用但未取消的），不含墓碑行。 */
+    @Query("SELECT * FROM following WHERE deleted_at = 0 ORDER BY has_update DESC, updated_at DESC")
+    public abstract List<Following> findActive();
+
+    @Query("SELECT * FROM following WHERE enabled = 1 AND deleted_at = 0 AND next_check_at <= :now ORDER BY next_check_at ASC")
+    public abstract List<Following> findDue(long now);
 
     @Query("SELECT * FROM following WHERE identity_key = :identityKey LIMIT 1")
     public abstract Following find(String identityKey);
+
+    /** 仅命中活跃行；墓碑行返回 null，让 UI 走“重新追更”路径。 */
+    @Query("SELECT * FROM following WHERE identity_key = :identityKey AND deleted_at = 0 LIMIT 1")
+    public abstract Following findActive(String identityKey);
 
     @Query("SELECT * FROM following WHERE tmdb_id = :tmdbId AND media_type = :mediaType AND tracked_season = :season LIMIT 1")
     public abstract Following findByTmdb(int tmdbId, String mediaType, int season);
@@ -30,10 +38,10 @@ public abstract class FollowingDao {
     @Query("SELECT * FROM following WHERE cid = :cid AND site_key = :siteKey AND vod_id = :vodId AND tracked_season = :season LIMIT 1")
     public abstract Following findBySource(int cid, String siteKey, String vodId, int season);
 
-    @Query("SELECT * FROM following WHERE cid = :cid AND site_key = :siteKey AND vod_id = :vodId AND tmdb_id = 0 ORDER BY tracked_season ASC")
+    @Query("SELECT * FROM following WHERE cid = :cid AND site_key = :siteKey AND vod_id = :vodId AND tmdb_id = 0 AND deleted_at = 0 ORDER BY tracked_season ASC")
     public abstract List<Following> findUnmatchedBySource(int cid, String siteKey, String vodId);
 
-    @Query("SELECT COUNT(*) FROM following WHERE enabled = 1 AND has_update = 1")
+    @Query("SELECT COUNT(*) FROM following WHERE enabled = 1 AND deleted_at = 0 AND has_update = 1")
     public abstract int unreadCount();
 
     @Query("UPDATE following SET read_watermark_episode = MAX(read_watermark_episode, :episode), has_update = CASE WHEN latest_released_episode > MAX(read_watermark_episode, :episode) THEN 1 ELSE 0 END, updated_at = :now WHERE identity_key = :identityKey")
@@ -44,6 +52,10 @@ public abstract class FollowingDao {
 
     @Query("UPDATE following SET enabled = :enabled, updated_at = :now WHERE identity_key = :identityKey")
     public abstract int setEnabled(String identityKey, boolean enabled, long now);
+
+    /** 写入墓碑：保留行与来源绑定，仅标记 deletedAt。 */
+    @Query("UPDATE following SET deleted_at = :deletedAt, enabled = 0, updated_at = :now WHERE identity_key = :identityKey AND deleted_at = 0")
+    public abstract int markDeleted(String identityKey, long deletedAt, long now);
 
     @Query("DELETE FROM following WHERE identity_key = :identityKey")
     public abstract int delete(String identityKey);

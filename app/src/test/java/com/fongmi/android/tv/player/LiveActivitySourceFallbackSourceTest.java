@@ -23,7 +23,7 @@ public class LiveActivitySourceFallbackSourceTest {
         for (Path path : List.of(
                 Path.of("src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"),
                 Path.of("src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"))) {
-            String source = Files.readString(path, StandardCharsets.UTF_8);
+            String source = read(path);
             assertTrue(path.toString(), source.contains("private boolean mFailedThisSession;"));
             assertTrue(path.toString(), source.contains("mFailedThisSession = true;"));
             assertTrue(path.toString(), source.contains("mFailedThisSession = false;"));
@@ -35,7 +35,7 @@ public class LiveActivitySourceFallbackSourceTest {
         for (Path path : List.of(
                 Path.of("src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"),
                 Path.of("src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"))) {
-            String source = Files.readString(path, StandardCharsets.UTF_8);
+            String source = read(path);
             assertTrue(path.toString(), source.contains(
                     "case Player.STATE_BUFFERING:\n                mFailedThisSession = false;"));
             assertFalse(path.toString(), source.contains("if (mFailedThisSession) return;"));
@@ -49,7 +49,7 @@ public class LiveActivitySourceFallbackSourceTest {
     @Test
     public void mobileSelectionWaitsForAsyncParseBeforeDecidingFallback() throws Exception {
         Path path = Path.of("src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java");
-        String source = Files.readString(path, StandardCharsets.UTF_8);
+        String source = read(path);
         String body = section(source, "private void getLive()", "private void renderLive(Live live)");
 
         assertTrue(path.toString(), body.contains("Live live = getHome();"));
@@ -63,16 +63,22 @@ public class LiveActivitySourceFallbackSourceTest {
         for (Path path : List.of(
                 Path.of("src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"),
                 Path.of("src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"))) {
-            String source = Files.readString(path, StandardCharsets.UTF_8);
+            String source = read(path);
             assertFalse(path.toString(), source.contains("if (item.isSelected()) item.getGroups().clear();"));
         }
     }
 
     private static void assertFetchTimeoutIsReplaced(Path path) throws Exception {
-        String source = Files.readString(path, StandardCharsets.UTF_8);
+        String source = read(path);
         String expected = "App.removeCallbacks(mBufferingTimeout);\n"
                 + "        App.post(mBufferingTimeout, LIVE_BUFFERING_TIMEOUT);";
         assertEquals(path.toString(), 2, occurrences(source, expected));
+    }
+
+    private static String read(Path path) throws Exception {
+        // 工作区行尾随平台而变（Windows autocrlf=true 时为 CRLF），归一化后再比对，
+        // 让多行 contains/occurrences 断言在 LF/CRLF 检出下行为一致（CI ubuntu 与本地 Windows 都能通过）。
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8).replace("\r\n", "\n");
     }
 
     private static int occurrences(String source, String target) {

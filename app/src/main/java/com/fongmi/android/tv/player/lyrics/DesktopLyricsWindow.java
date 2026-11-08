@@ -122,16 +122,16 @@ public class DesktopLyricsWindow {
     private boolean canShow(PlayerManager player) {
         boolean activityForeground = App.activity() != null;
         boolean enabled = PlayerSetting.isDesktopLyrics();
-        boolean overlay = canDrawOverlays();
         boolean ready = player != null && !player.isEmpty();
         boolean playing = ready && player.isPlaying();
         boolean inferredAudio = ready && LyricsController.isAudioContent(player);
-        boolean canShow = !foreground && !activityForeground && enabled && overlay && playing && (audioContent || inferredAudio);
+        boolean eligible = !foreground && !activityForeground && enabled && playing && (audioContent || inferredAudio);
+        boolean canShow = eligible && canDrawOverlays();
         String state = "show=" + canShow
                 + " foreground=" + foreground
                 + " activity=" + activityForeground
                 + " enabled=" + enabled
-                + " overlay=" + overlay
+                + " eligible=" + eligible
                 + " ready=" + ready
                 + " playing=" + playing
                 + " explicitAudio=" + audioContent

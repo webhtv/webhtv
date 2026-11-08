@@ -96,7 +96,7 @@ public class SiteHealthReportSourceTest {
         assertTrue(statsStoreSource.contains("hls.legacy-fallback"));
         assertTrue(statsStoreSource.contains("内置兜底规则"));
         String clearConfirmationBody = methodBody(reportSource, "private void showClearConfirmation(");
-        assertTrue(clearConfirmationBody.contains("R.style.Theme_WebHTV_LightDialog"));
+        assertTrue(clearConfirmationBody.contains("R.style.Theme_WebHTV_Dialog"));
         assertTrue(clearConfirmationBody.contains("LightDialog.apply(dialog)"));
         String refreshBody = methodBody(reportSource, "private void refreshReport()");
         assertTrue(refreshBody.indexOf("report = SiteHealthStore.report()") < refreshBody.indexOf("render()"));
@@ -138,8 +138,11 @@ public class SiteHealthReportSourceTest {
         String dialog = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "SiteHealthReportDialog.java")));
 
         assertTrue(dialog.contains("int margin = ResUtil.dp2px(ResUtil.isLand(requireContext()) ? 24 : 16);"));
-        assertTrue(dialog.contains("ResUtil.getScreenWidth(requireContext()) - margin * 2"));
-        assertTrue(dialog.contains("ResUtil.getScreenHeight(requireContext()) - margin * 2"));
+        // The window is sized from the system-bar-safe area, not from the raw display: sizing from
+        // the raw display put this dialog's cancel button under the navigation bar on phones.
+        assertTrue(dialog.contains("DialogSafeArea.area(requireActivity(), window)"));
+        assertTrue(dialog.contains("ThemeDialogLayout.width(area.width(), margin)"));
+        assertTrue(dialog.contains("ThemeDialogLayout.height(area.height(), margin)"));
         assertTrue(dialog.contains("window.getDecorView().setPadding(0, 0, 0, 0)"));
         assertTrue(!dialog.contains("ResUtil.getScreenWidth(requireContext()) * (ResUtil.isLand(requireContext()) ? 0.62f : 0.94f)"));
         assertTrue(!dialog.contains("ResUtil.getScreenHeight(requireContext()) * (ResUtil.isLand(requireContext()) ? 0.78f : 0.82f)"));

@@ -18,7 +18,7 @@
         android:layout_height="8dp"/>
     <TextView
         android:textSize="14sp"
-        android:textColor="@color/white"
+        android:textColor="?attr/colorOnSurface"
         android:ellipsize="end"
         android:id="@+id/name"
         android:layout_width="0dp"
@@ -28,7 +28,7 @@
         android:layout_marginStart="10dp"/>
     <TextView
         android:textSize="10sp"
-        android:textColor="@color/white"
+        android:textColor="?attr/colorOnSurface"
         android:id="@+id/runningTag"
         android:background="@drawable/shape_lab_running_tag"
         android:paddingTop="2dp"
@@ -42,7 +42,7 @@
         android:layout_marginStart="8dp"/>
     <TextView
         android:textSize="12sp"
-        android:textColor="@color/white"
+        android:textColor="?attr/colorOnSurface"
         android:gravity="center"
         android:id="@+id/btnAction"
         android:background="@drawable/shape_lab_run_btn"

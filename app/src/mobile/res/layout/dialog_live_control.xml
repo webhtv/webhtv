@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/shape_dialog_control_glass_panel"
-    tools:background="#1F1F1F">
+    tools:background="?attr/colorSurfaceContainerLow">
 
     <com.fongmi.android.tv.ui.custom.ContextWallImageView
         android:id="@+id/sheetWall"

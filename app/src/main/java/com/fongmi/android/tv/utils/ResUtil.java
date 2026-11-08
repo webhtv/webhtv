@@ -18,6 +18,7 @@ import android.view.animation.AnimationUtils;
 import androidx.annotation.AnimRes;
 import androidx.annotation.ArrayRes;
 import androidx.annotation.ColorRes;
+import androidx.annotation.DimenRes;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.StringRes;
 import androidx.core.content.ContextCompat;
@@ -88,6 +89,20 @@ public class ResUtil {
 
     public static int dp2px(int dp) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, getDisplayMetrics());
+    }
+
+    /**
+     * The dp value a dimension resource resolves to.
+     *
+     * <p>TV row presenters take a dp spacing and convert it themselves
+     * ({@code CustomRowPresenter} calls {@link #dp2px(int)}), so a call site that must read a
+     * design token instead of a literal needs the dp value. Deriving it from the resource keeps
+     * the token authoritative on every density, instead of a second hardcoded number drifting
+     * away from it.
+     */
+    public static int dpOf(@DimenRes int resId) {
+        float density = getDisplayMetrics().density;
+        return density <= 0f ? 0 : Math.round(App.get().getResources().getDimension(resId) / density);
     }
 
     public static String getString(@StringRes int resId) {

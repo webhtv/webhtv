@@ -39,6 +39,7 @@ import com.fongmi.android.tv.bean.Word;
 import com.fongmi.android.tv.databinding.FragmentSearchBinding;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.setting.SiteGroupOrderStore;
 import com.fongmi.android.tv.ui.adapter.HotWordAdapter;
 import com.fongmi.android.tv.ui.adapter.RecordAdapter;
@@ -345,8 +346,12 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
     }
 
     private GradientDrawable getScopePopupBackground() {
+        // 面板不能再写死 Color.WHITE：item 文字取主题的 colorOnSurface，深色模式下那是近白色
+        // (#E2E2E9)，压在写死的白底上实测只有 1.29:1，就是用户报告的「深色模式搜索界面
+        // 的分组下拉界面看不清文字」。面板改用 M3 菜单容器角色 colorSurfaceContainer，与 item
+        // 文字来自同一张日夜表，ThemeResolver 另有一道 onSurface/surfaceContainer ≥ 4.5:1 的门。
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.WHITE);
+        drawable.setColor(ThemeController.current().colorSurfaceContainer());
         drawable.setCornerRadius(ResUtil.dp2px(6));
         return drawable;
     }
@@ -373,7 +378,7 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
         view.setSingleLine(true);
         view.setGravity(Gravity.CENTER_VERTICAL);
         view.setIncludeFontPadding(false);
-        view.setTextColor(0xFF202124);
+        view.setTextColor(ThemeController.current().colorOnSurface());
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         view.setPadding(ResUtil.dp2px(18), 0, ResUtil.dp2px(18), 0);
         view.setBackgroundResource(getSelectableItemBackground());

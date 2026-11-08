@@ -1,18 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版站点选择面板。窗口尺寸由 SiteDialog.applyWindow() 设定为「屏宽 90%、居中、
+    高度 wrap_content」，对齐仓库既有大弹窗惯例（CacheManagementDialog.SCREEN_FRACTION）：
+    根布局只负责内容排布，不声明 match_parent 高度，面板贴合内容；
+    超出安全区时由 SiteDialog.gridHeight() 把网格高度收敛到整数行。
+-->
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:background="@drawable/shape_site_dialog"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:paddingStart="20dp"
+    android:paddingTop="16dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="16dp">
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="@string/site_dialog_title"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:singleLine="true"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="13sp"
+            tools:text="共 42 个站点" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/searchBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
+        android:layout_marginTop="12dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -30,8 +70,8 @@
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:singleLine="true"
-            android:textColor="@color/white"
-            android:textColorHint="@color/text"
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
             android:textSize="16sp"
             app:drawableStartCompat="@drawable/ic_site_search" />
 
@@ -48,7 +88,7 @@
         android:id="@+id/groupScroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="6dp"
+        android:layout_marginTop="14dp"
         android:clipToPadding="false"
         android:overScrollMode="never"
         android:scrollbars="none"
@@ -66,40 +106,38 @@
         android:id="@+id/groupHint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="10dp"
+        android:layout_marginTop="8dp"
         android:accessibilityLiveRegion="polite"
         android:importantForAccessibility="yes"
         android:text="@string/site_group_sort_tv_hint"
-        android:textColor="@color/text"
-        android:textSize="14sp"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textSize="13sp"
         android:visibility="gone" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
         android:orientation="horizontal">
 
         <com.fongmi.android.tv.ui.custom.CustomRecyclerView
             android:id="@+id/recycler"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:layout_weight="1"
             android:clipChildren="false"
             android:clipToPadding="false"
             android:overScrollMode="never"
-            android:paddingStart="4dp"
-            android:paddingTop="0dp"
+            android:paddingStart="2dp"
             android:paddingEnd="8dp"
-            android:paddingBottom="4dp"
-            app:maxHeight="360dp"
-            tools:itemCount="5"
+            tools:itemCount="6"
             tools:listitem="@layout/adapter_site" />
 
         <androidx.appcompat.widget.LinearLayoutCompat
             android:id="@+id/action"
             android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
             android:layout_marginStart="16dp"
             android:orientation="vertical"
             android:visibility="gone"
@@ -116,13 +154,13 @@
                 android:nextFocusDown="@id/search"
                 android:padding="8dp"
                 android:src="@drawable/ic_site_config"
-                app:tint="@color/site_action_icon" />
+                app:tint="?attr/colorOnSurfaceVariant" />
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/search"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
@@ -130,13 +168,13 @@
                 android:nextFocusDown="@id/change"
                 android:padding="8dp"
                 android:src="@drawable/ic_site_search"
-                app:tint="@color/site_action_icon" />
+                app:tint="?attr/colorOnSurfaceVariant" />
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/change"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
@@ -144,13 +182,13 @@
                 android:nextFocusDown="@id/select"
                 android:padding="8dp"
                 android:src="@drawable/ic_site_change"
-                app:tint="@color/site_action_icon" />
+                app:tint="?attr/colorOnSurfaceVariant" />
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/select"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
@@ -158,13 +196,13 @@
                 android:nextFocusDown="@id/cancel"
                 android:padding="8dp"
                 android:src="@drawable/ic_site_select"
-                app:tint="@color/site_action_icon" />
+                app:tint="?attr/colorOnSurfaceVariant" />
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/cancel"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
@@ -172,20 +210,20 @@
                 android:nextFocusDown="@id/mode"
                 android:padding="8dp"
                 android:src="@drawable/ic_site_cancel"
-                app:tint="@color/site_action_icon" />
+                app:tint="?attr/colorOnSurfaceVariant" />
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/mode"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:nextFocusUp="@id/cancel"
                 android:nextFocusDown="@id/mode"
                 android:padding="8dp"
-                app:tint="@color/site_action_icon"
+                app:tint="?attr/colorOnSurfaceVariant"
                 tools:src="@drawable/ic_site_list" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>

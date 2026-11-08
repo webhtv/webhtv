@@ -27,6 +27,9 @@ import androidx.media3.exoplayer.analytics.PlayerId;
 import org.junit.Test;
 import org.junit.Ignore;
 
+import com.github.catvod.crawler.diagnostics.DiagnosticEvent;
+
+import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -109,16 +112,38 @@ public class ExoCompressedAudioDirectPolicyTest {
     }
 
     @Test
-    public void unknownThresholdOrRawHeadDoesNotDeclareStartupFailure() throws Exception {
+    public void unreadableStartupMetricsRecoverFromAcceptedPayloadAndPinnedHead() throws Exception {
+        // Vendor tracks can report capacity/size/threshold as zero, which leaves no threshold to
+        // compare against; accepted payload plus a head that never leaves zero must still recover.
         StartupFixture f = new StartupFixture(0);
         f.write(256 * 1024, 32);
         assertNull(f.poll(0, true));
+        assertNull(f.poll(ExoCompressedAudioDirectPolicy.ZERO_METRIC_STARTUP_STALL_MS - 1, true));
+        assertSame(f.memory.format, f.poll(1, true));
         assertNull(f.poll(10_000, true));
+        assertEquals(Long.MAX_VALUE, f.memory.policy.startupProgressIntervalUs());
+        assertTrue(f.memory.policy.consumePcmFallbackRequest());
+        assertFalse(f.memory.policy.consumePcmFallbackRequest());
+
+        // Without accepted payload there is no evidence at all, so nothing may be declared.
+        StartupFixture silent = new StartupFixture(0);
+        assertNull(silent.poll(10_000, true));
+    }
+
+    @Test
+    public void unknownRawHeadNeverDeclaresStartupFailure() throws Exception {
         StartupFixture unknownHead = new StartupFixture(4096);
         unknownHead.memory.environment.rawHead = C.LENGTH_UNSET;
         unknownHead.write(4096, 10);
         assertNull(unknownHead.poll(0, true));
         assertNull(unknownHead.poll(800, true));
+        assertEquals(Long.MAX_VALUE, unknownHead.memory.policy.startupProgressIntervalUs());
+
+        StartupFixture unreadableAndUnknownHead = new StartupFixture(0);
+        unreadableAndUnknownHead.memory.environment.rawHead = C.LENGTH_UNSET;
+        unreadableAndUnknownHead.write(256 * 1024, 32);
+        assertNull(unreadableAndUnknownHead.poll(0, true));
+        assertNull(unreadableAndUnknownHead.poll(10_000, true));
     }
 
     @Test
@@ -199,6 +224,26 @@ public class ExoCompressedAudioDirectPolicyTest {
     }
 
     @Test
+    public void unreadableThresholdAfterReadableStartAbandonsEvidenceAndRenewsWindow() throws Exception {
+        StartupFixture f = new StartupFixture(4096);
+        f.write(4096, 10);
+        // Arm the startup window; nothing can be decided at the first visit.
+        assertNull(f.poll(0, true));
+        f.memory.environment.buffer = ExoCompressedAudioDirectPolicy.StartupBuffer.UNKNOWN;
+        // Metrics turned unreadable: the readable-metric budget is already spent, so the stale
+        // readable-threshold evidence is abandoned here instead of being judged as a stall.
+        assertNull(f.poll(800, true));
+        // Abandoning that evidence cleared the window; this visit re-arms it for zero metrics.
+        assertNull(f.poll(0, true));
+        // Probe inside the zero-metric budget. A window that was never cleared would still be armed
+        // at 0 ms and would already decide here, so only this poll pins the renewal itself.
+        assertNull(f.poll(400, true));
+        // The renewed window expires after the full 1200 ms zero-metric budget (800 -> 2000), so the
+        // accepted payload plus a head pinned at zero is finally reported as a startup stall.
+        assertSame(f.memory.format, f.poll(800, true));
+    }
+
+    @Test
     public void internalPcmRecoveryConfirmsWithoutNewMediaPreparation() throws Exception {
         StartupFixture f = new StartupFixture(4096);
         f.memory.policy.setSelectedAudioFormat(f.memory.format);
@@ -239,6 +284,7 @@ public class ExoCompressedAudioDirectPolicyTest {
         f.memory.nowMs.set(800);
         f.output.getPositionUs();
         ExoPlaybackException error = assertThrows(ExoPlaybackException.class, () -> wrapped.render(0, 800_000));
+        assertTrue(isRecoverable(error));
         assertEquals(ExoPlaybackException.TYPE_RENDERER, error.type);
         assertEquals(PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED, error.errorCode);
         assertTrue(error.getCause() instanceof ExoStartupAudioRenderer.StartupStallException);
@@ -1090,6 +1136,136 @@ public class ExoCompressedAudioDirectPolicyTest {
         assertTrue(fixture.freshEngineUsesDirect(fixture.url, fixture.format, AudioAttributes.DEFAULT));
     }
 
+    @Test
+    public void stalledOffloadOutputIsOnlyClaimedAfterAcceptedPayloadStopsBeingConsumed()
+            throws Exception {
+        OffloadStallFixture f = new OffloadStallFixture(true, false);
+        f.consumeFirstPayloadThenStall(392);
+        assertFalse(f.policy.hasStalledOffloadOutput());
+        f.nowMs.addAndGet(1_999);
+        assertFalse(f.policy.hasStalledOffloadOutput());
+        f.nowMs.addAndGet(1);
+        assertTrue(f.policy.hasStalledOffloadOutput());
+    }
+
+    @Test
+    public void advancingOrUnobservableOffloadHeadIsNeverAStall() throws Exception {
+        OffloadStallFixture advancing = new OffloadStallFixture(true, false);
+        advancing.consumeFirstPayloadThenStall(392);
+        advancing.environment.rawHead = 512;
+        advancing.nowMs.addAndGet(30_000);
+        assertFalse(advancing.policy.hasStalledOffloadOutput());
+        assertFalse(advancing.policy.requestOffloadStallRecovery());
+
+        OffloadStallFixture unobservable = new OffloadStallFixture(true, false);
+        unobservable.consumeFirstPayloadThenStall(392);
+        unobservable.environment.rawHead = C.LENGTH_UNSET;
+        unobservable.nowMs.addAndGet(30_000);
+        assertFalse(unobservable.policy.hasStalledOffloadOutput());
+    }
+
+    @Test
+    public void refusedWritesWithoutAcceptedPayloadAreNotAnOffloadStall() throws Exception {
+        OffloadStallFixture f = new OffloadStallFixture(true, false);
+        f.raw.acceptWrites = false;
+        f.write(392);
+        f.write(392);
+        f.nowMs.addAndGet(30_000);
+        assertFalse(f.policy.hasStalledOffloadOutput());
+    }
+
+    @Test
+    public void pcmOutputsAreNotWatchedForOffloadStall() throws Exception {
+        OffloadStallFixture f = new OffloadStallFixture(false, false);
+        f.raw.acceptWrites = false;
+        f.write(392);
+        f.nowMs.addAndGet(30_000);
+        assertFalse(f.policy.hasStalledOffloadOutput());
+        assertFalse(f.policy.requestOffloadStallRecovery());
+    }
+
+    @Test
+    public void offloadStallRecoveryIsOneShotAndWithdrawsOnlyThatConfiguration() throws Exception {
+        OffloadStallFixture f = new OffloadStallFixture(true, true);
+        f.consumeFirstPayloadThenStall(392);
+        f.nowMs.addAndGet(30_000);
+        assertTrue(f.policy.getAudioOffloadSupport(f.format, AudioAttributes.DEFAULT).isFormatSupported);
+        assertTrue(f.policy.requestOffloadStallRecovery());
+        assertFalse(f.policy.requestOffloadStallRecovery());
+        assertFalse(f.policy.getAudioOffloadSupport(f.format, AudioAttributes.DEFAULT).isFormatSupported);
+        // A different sample rate is a different output configuration and must stay untouched.
+        assertTrue(f.policy.getAudioOffloadSupport(aacStereo(), AudioAttributes.DEFAULT).isFormatSupported);
+        // Vendor-direct admission is a separate decision that this recovery must not consume.
+        assertEquals(AudioOutputProvider.FORMAT_SUPPORTED_DIRECTLY,
+                f.policy.wrapOutputProvider(new StandardAudioOutputProvider(f.config, f.raw.output))
+                        .getFormatSupport(formatConfig(f.format)).supportLevel);
+    }
+
+    @Test
+    public void acceptedPayloadWithNoRefusedWriteIsNotAnOffloadStall() throws Exception {
+        // An output that keeps accepting everything is healthy however long it has been running.
+        // Only an accepted-then-refused sequence is evidence, so this guards the requirement that
+        // a refusal actually happened after the first acceptance.
+        OffloadStallFixture f = new OffloadStallFixture(true, false);
+        f.write(392);
+        f.write(392);
+        f.nowMs.addAndGet(30_000);
+        assertFalse(f.policy.hasStalledOffloadOutput());
+        assertFalse(f.policy.requestOffloadStallRecovery());
+    }
+
+    @Test
+    public void flushDiscardsOffloadEvidenceFromBeforeTheSeek() throws Exception {
+        OffloadStallFixture f = new OffloadStallFixture(true, false);
+        f.consumeFirstPayloadThenStall(392);
+        f.nowMs.addAndGet(30_000);
+        assertTrue(f.policy.hasStalledOffloadOutput());
+        // A seek flushes the output and resets the hardware head to zero, so counters from before
+        // the flush must not be replayed against a post-flush head of zero.
+        f.output.flush();
+        assertFalse(f.policy.hasStalledOffloadOutput());
+        assertFalse(f.policy.requestOffloadStallRecovery());
+        // Fresh evidence recorded after the flush is still usable.
+        f.raw.acceptWrites = true;
+        f.consumeFirstPayloadThenStall(392);
+        f.nowMs.addAndGet(30_000);
+        assertTrue(f.policy.hasStalledOffloadOutput());
+    }
+
+    @Test
+    public void offloadStallDiagnosticUsesOnlyRegisteredEventAndFields() {
+        // The catvod diagnostics schema rejects unknown event and field names with an
+        // IllegalArgumentException, and PlaybackDiagnosticCollector.emit swallows that into a
+        // silent collectorFailure. Assert the exact event/field set the policy emits is registered,
+        // so this evidence can never be dropped invisibly again.
+        DiagnosticEvent event = new DiagnosticEvent("audio.output.write", "trace", "instance", 1, 1);
+        event.inferred()
+                .observed("stage", "offload-startup-stall")
+                .observed("encoding", C.ENCODING_AAC_LC)
+                .observed("sampleRate", 22_050)
+                .observed("channelMask", Util.getAudioTrackChannelConfig(aacStereo()))
+                .observed("acceptedBytes", 392L)
+                .observed("zeroWrites", 1338L)
+                .observed("headRaw", 0L)
+                .observed("windowMs", 15_000L)
+                .observed("reason", "offload-accepted-payload-never-consumed")
+                .observed("note", "restart-current-item-with-pcm")
+                .observed("metricScope", "AudioOutput payload consumption; retried requests included")
+                .unknown("audibility", DiagnosticEvent.Status.NOT_OBSERVABLE)
+                .pin("offload-startup-stall-media");
+        String json = event.json();
+        assertTrue(json.contains("offload-startup-stall"));
+        assertTrue(json.contains("\"evidenceClass\":\"inferred\""));
+        // Self-proof that this guard is not vacuous: the validator really does reject the
+        // unregistered names, which is exactly why the original `audio.offload.stall` event and
+        // its `recovery` field were being dropped silently.
+        assertThrows(IllegalArgumentException.class,
+                () -> new DiagnosticEvent("audio.offload.stall", "trace", "instance", 1, 1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new DiagnosticEvent("audio.output.write", "trace", "instance", 1, 1)
+                        .observed("recovery", "restart-current-item-with-pcm"));
+    }
+
     private static ExoAudioDirectFailureMemory.Route route(int id) {
         return new ExoAudioDirectFailureMemory.Route(id, 2, 3, 4, 5);
     }
@@ -1283,6 +1459,54 @@ public class ExoCompressedAudioDirectPolicyTest {
         }
     }
 
+    /**
+     * A standard (non-vendor-direct) audio output whose writes can be accepted and then refused,
+     * which is exactly the shape reported by the failing device log.
+     */
+    private static final class OffloadStallFixture {
+        final ExoAudioDirectFailureMemory memory = new ExoAudioDirectFailureMemory();
+        final TestEnvironment environment = new TestEnvironment();
+        final AtomicLong nowMs = new AtomicLong();
+        final Format format = aacStereo().buildUpon().setSampleRate(22_050).build();
+        final FakeAudioOutput raw = new FakeAudioOutput();
+        final AudioOutputProvider.OutputConfig config;
+        final ExoCompressedAudioDirectPolicy policy;
+        final AudioOutput output;
+
+        OffloadStallFixture(boolean offload, boolean vendorDirectSupported) throws Exception {
+            config = new AudioOutputProvider.OutputConfig.Builder()
+                    .setEncoding(C.ENCODING_AAC_LC)
+                    .setSampleRate(22_050)
+                    .setChannelMask(Util.getAudioTrackChannelConfig(aacStereo()))
+                    .setBufferSize(4096)
+                    .setAudioAttributes(AudioAttributes.DEFAULT)
+                    .setIsOffload(offload)
+                    .build();
+            Clock clock = (Clock) Proxy.newProxyInstance(Clock.class.getClassLoader(),
+                    new Class<?>[]{Clock.class}, (proxy, method, args) -> {
+                        if (method.getName().equals("elapsedRealtime")) return nowMs.get();
+                        throw new AssertionError("Unexpected Clock call: " + method.getName());
+                    });
+            policy = new ExoCompressedAudioDirectPolicy(
+                    (ignored, attributes) -> supported(false, false),
+                    (ignored, attributes) -> vendorDirectSupported,
+                    clock, ignored -> raw.output, memory, environment);
+            policy.prepareForPlayback("https://example.invalid/music?token=private", false);
+            output = policy.wrapOutputProvider(new StandardAudioOutputProvider(config, raw.output))
+                    .getAudioOutput(config);
+        }
+
+        void write(int bytes) throws Exception {
+            output.write(ByteBuffer.allocateDirect(bytes), 1, 0);
+        }
+
+        void consumeFirstPayloadThenStall(int bytes) throws Exception {
+            write(bytes);
+            raw.acceptWrites = false;
+            write(bytes);
+        }
+    }
+
     private static final class FakeAudioOutput {
         long positionUs;
         boolean acceptWrites = true;
@@ -1358,6 +1582,12 @@ public class ExoCompressedAudioDirectPolicyTest {
                 .setIsGaplessSupported(gapless)
                 .setIsSpeedChangeSupported(speedChange)
                 .build();
+    }
+
+    private static boolean isRecoverable(ExoPlaybackException error) throws ReflectiveOperationException {
+        Field field = ExoPlaybackException.class.getDeclaredField("isRecoverable");
+        field.setAccessible(true);
+        return field.getBoolean(error);
     }
 
     private static class UnsupportedAudioOutputProvider

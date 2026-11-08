@@ -13,8 +13,8 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogViewingReportRangeBinding;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.viewing.ViewingReportRange;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,7 +35,7 @@ public class ViewingReportRangeDialog {
         binding = DialogViewingReportRangeBinding.inflate(activity.getLayoutInflater());
         adapter = new RangeAdapter();
         binding.recycler.setAdapter(adapter);
-        dialog = new MaterialAlertDialogBuilder(activity)
+        dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.viewing_report_select_range)
                 .setView(binding.getRoot())
                 .setNegativeButton(R.string.dialog_negative, null)

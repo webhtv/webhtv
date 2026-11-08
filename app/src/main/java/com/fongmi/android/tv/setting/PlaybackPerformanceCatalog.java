@@ -110,9 +110,9 @@ public final class PlaybackPerformanceCatalog {
         options.add(option(LOAD_SELECTED_TRACKS, BUFFER, "只加载选中轨道", "作用：只请求当前音视频轨道，减少带宽和内存。网速/内存紧张建议开启；经常切换清晰度、音轨时可关闭以减少重新请求。代价：切换轨道可能需要重新缓冲。"));
         addPreload(options, false);
         options.add(option(CODEC_ASYNC, DECODE, "MediaCodec 队列", "作用：决定解码输出由异步还是同步队列驱动。保持自动（默认）通常吞吐最高；只有旧设备异步回调异常时才改同步。代价：同步可能更稳，但会增加等待和 CPU 调度压力。"));
-        options.add(option(DYNAMIC_SCHEDULING, DECODE, "Media3 动态调度", "作用：按渲染器可工作时间调度播放循环。保持开启（默认）通常更省 CPU、掉帧更少；遇到特定机型时序异常再关闭。代价：关闭后可能增加无效唤醒。"));
-        options.add(option(DURATION_PROGRESS, DECODE, "解码耗时推进", "作用：把异步解码耗时反馈给播放器，减少无效等待。异步队列下建议开启（默认）；同步队列不生效。代价很小，关闭只用于排查时序问题。"));
-        options.add(option(LATE_DROP, DECODE, "输入丢帧阈值", "作用：输入帧明显迟到时提前丢弃，优先保证“跟上进度”。CPU不足、4K掉帧时建议开启；希望保留每一帧可关闭。代价：画面可能跳帧，但通常比持续延迟更容易接受。"));
+        options.add(option(DYNAMIC_SCHEDULING, DECODE, "Media3 动态调度", "作用：按渲染器可工作时间调度播放循环。开启后通常更省 CPU；是否“掉帧更少”取决于机型时序精度，电视盒上不保证，出现卡顿可先关此项对比。代价：关闭后可能增加无效唤醒。"));
+        options.add(option(DURATION_PROGRESS, DECODE, "解码耗时推进", "作用：把异步解码耗时反馈给播放器，让播放循环按预计出帧时间推迟唤醒。默认关闭（与上游一致）：它只在动态调度开启且解码器为异步时生效，省 CPU 但会把唤醒预算压到很近，时序精度较差的设备上可能表现为掉帧。仅在确认设备时序稳定时可开启；同步队列不生效。"));
+        options.add(option(LATE_DROP, DECODE, "输入丢帧阈值", "作用：输入帧迟到超过阈值（15 毫秒，与上游默认一致）时提前丢弃，优先保证“跟上进度”。CPU不足、4K掉帧时建议开启（默认）；希望保留每一帧可关闭。代价：开启时画面可能跳帧，但通常比持续延迟更容易接受；关闭后不丢输入帧，解码跟不上时可能累积音画延迟。"));
         options.add(option(SURFACE_FIXED_SIZE, DECODE, "Surface 固定尺寸", "作用：按视频尺寸创建 Surface，减少超高分辨率合成压力。电视4K建议开启（默认）；切清晰度/旋转出现画面尺寸异常时关闭。代价：少数设备切换分辨率需要重建 Surface。"));
         options.add(option(DECODER_FALLBACK, DECODE, "解码器兜底", "作用：首选硬解初始化失败时尝试其他解码器。兼容性优先建议开启（默认）；只想快速暴露硬件问题可关闭。代价：可能多等待一次初始化，且备用解码器性能可能较低。"));
         options.add(option(DV7_HDR10_FALLBACK, DECODE, "DV7处理", "默认“升级P8.1”：设备不支持当前DV7硬解、但支持P8.1硬解时，使用libdovi mode 2实时改写RPU并丢弃增强层；原生DV7可硬解时保持原样。P8.1模式会锁定整次播放，不会自动降级HDR10；转换数据无效时会停止播放。选择“降级HDR10”会整次使用基底层，兼容性更高但失去Dolby Vision动态元数据。"));

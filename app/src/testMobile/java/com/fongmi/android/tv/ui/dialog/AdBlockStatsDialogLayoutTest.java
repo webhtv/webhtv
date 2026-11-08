@@ -33,14 +33,14 @@ public class AdBlockStatsDialogLayoutTest {
         String mobile = read(root.resolve(Path.of("app", "src", "mobile", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "AdBlockStatsDialog.java")));
         String leanback = read(root.resolve(Path.of("app", "src", "leanback", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "AdBlockStatsDialog.java")));
 
-        assertTrue(mobile.contains("metrics.widthPixels - horizontalMargin * 2"));
-        assertTrue(mobile.contains("metrics.heightPixels - verticalMargin * 2"));
+        assertTrue(mobile.contains("DialogSafeArea.width(activity, window) - horizontalMargin * 2"));
+        assertTrue(mobile.contains("DialogSafeArea.height(activity, window) - verticalMargin * 2"));
         assertTrue(mobile.contains("window.getDecorView().setPadding(0, 0, 0, 0)"));
         assertTrue(mobile.contains("params.height = height"));
         assertTrue(mobile.contains("binding.getRoot().setMinimumHeight(height)"));
-        assertTrue(leanback.contains("ResUtil.getScreenWidth(activity) - horizontalMargin * 2"));
+        assertTrue(leanback.contains("DialogSafeArea.width(activity, window) - horizontalMargin * 2"));
         assertTrue(leanback.contains("binding.getRoot().setMinimumHeight(height)"));
-        assertTrue(leanback.contains("ResUtil.getScreenHeight(activity) - verticalMargin * 2"));
+        assertTrue(leanback.contains("DialogSafeArea.height(activity, window) - verticalMargin * 2"));
         assertTrue(!mobile.contains("metrics.widthPixels * 0.94f"));
         assertTrue(!mobile.contains("metrics.heightPixels * 0.92f"));
         assertTrue(!leanback.contains("ResUtil.getScreenWidth(activity) * 0.94f"));

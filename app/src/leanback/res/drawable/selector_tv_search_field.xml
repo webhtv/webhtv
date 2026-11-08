@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    搜索输入框外观：聚焦时显示统一焦点环，其余状态显示 1dp 调色板轮廓。
+    两个 item 都是 shape，环色与宽度分别来自 @dimen/webhtv_focus_ring_width / ?attr/tvFocusRing。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/shape_tv_search_field_focused" android:state_focused="true" />
+    <item android:drawable="@drawable/shape_tv_search_field" />
+</selector>

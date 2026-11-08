@@ -57,7 +57,15 @@ public class HomeCategoryNavigationSourceTest {
         String edge = method(home, "public void onCategoryContentHorizontalEdge(Class item, int contentRow, boolean towardEnd)", "private Class getAdjacentCategory(Class item, boolean towardEnd)");
         String adjacent = method(home, "private Class getAdjacentCategory(Class item, boolean towardEnd)", "private void showHomeContent()");
 
-        assertTrue("category card rows must report horizontal edge navigation", type.contains("new CustomRowPresenter(16, this::onContentHorizontalEdge)"));
+        // 断言的是「卡片行把水平边缘导航接给宿主」这个语义，不是当时的间距字面量：
+        // fad60a9b1e6 已把间距改成 @dimen/webhtv_size_tv_card_gap（token），钉死 16 只会
+        // 让守卫与实现脱钩，并在真正改间距时产生假失败。「间距必须来自 token」那一条由
+        // UiLayoutSourceTest 钉住；这里只认同一个 presenter 注册里确实装了自己的边缘回调，
+        // 间距参数写成什么值不影响判定（[^\n]* 允许参数里再嵌括号）。
+        assertTrue("category card rows must report horizontal edge navigation",
+                java.util.regex.Pattern
+                        .compile("new CustomRowPresenter\\([^\\n]*this::onContentHorizontalEdge\\)")
+                        .matcher(type).find());
         assertTrue("filter rows must retain their edge focus without switching categories", type.contains("HorizontalGridView.FOCUS_SCROLL_ALIGNED, true)"));
         assertTrue("row grids must consume the boundary key and report its logical direction", row.contains("edgeListener.onHorizontalEdge(towardEnd)") && row.contains("isHorizontalEdge(grid, event)"));
         assertTrue("content rows must be relative to the filter-row offset", type.contains("getContentRow()") && type.contains("mBinding.recycler.getSelectedPosition() - (filterVisible ? mFilters.size() : 0)"));
@@ -180,7 +188,7 @@ public class HomeCategoryNavigationSourceTest {
         assertTrue("a stale category switch must not reclaim focus", restoreFocus.contains("mBinding.typeRecycler.getSelectedPosition() != position"));
         assertTrue("the selected type item must regain focus after its page appears", restoreFocus.contains("mBinding.typeRecycler.requestFocus();"));
         assertTrue("category switches must restore the type row before reclaiming focus", restoreFocus.contains("mBinding.typeRecycler.setVisibility(View.VISIBLE);"));
-        assertTrue("category switches must restore the toolbar with the focused type row", restoreFocus.contains("updateToolbarVisibility(true);"));
+        assertTrue("category switches must keep requesting the home toolbar for the focused type row", restoreFocus.contains("updateToolbarVisibility(true);"));
         assertFalse("nested folder navigation must retain its existing content-focus behavior", hiddenChanged.contains("shouldFocusContentOnShow"));
     }
 
@@ -229,6 +237,42 @@ public class HomeCategoryNavigationSourceTest {
         assertFalse("folder fragment must not cast every host to VodActivity", folder.contains("(VodActivity) getActivity()"));
         assertTrue("home must implement the folder filter contract", home.contains("FolderFragment.FilterHost"));
         assertTrue("the existing VOD screen must implement the same contract", vod.contains("FolderFragment.FilterHost"));
+    }
+
+    @Test
+    public void inlineCategoryPagesHideTheHomeToolbarButKeepTheTypeRow() throws Exception {
+        String home = homeActivity();
+        String layout = read(source("leanback", "res", "layout", "activity_home.xml"));
+        String applyToolbar = method(home, "private void applyToolbarVisibility()", "private void syncNativeContentInset()");
+        String requestToolbar = method(home, "private void updateToolbarVisibility(boolean visible)", "private void applyToolbarVisibility()");
+        String inset = method(home, "private void syncNativeContentInset()", "private void syncWebOverlayLayout()");
+        String showHome = method(home, "private void showHomeContent()", "private void showCategoryContent(Class item)");
+        String showCategory = method(home, "private void showCategoryContent(Class item, boolean toggleFilter)", "private void restoreTypeFocus(boolean keepTypeFocus, Class item)");
+        String clearCategory = method(home, "private void clearCategoryContent()", "private void removeCategoryFragments()");
+
+        assertTrue(
+                "the toolbar band must be its own view so it can hide independently of the category row",
+                layout.contains("@+id/toolbar") && layout.contains("@+id/typeRecycler"));
+        assertTrue("callers must only record what they want, not the final visibility", requestToolbar.contains("toolbarRequestedVisible = visible;"));
+        assertTrue(
+                "the home toolbar band must never show while an inline category is the current content",
+                applyToolbar.contains("boolean show = toolbarRequestedVisible && webToolbarVisible && !isCategoryVisible();"));
+        assertTrue("the effective toolbar state must still drive the native content inset", applyToolbar.contains("syncNativeContentInset();"));
+        assertTrue("the effective toolbar state must still drive the overlay constraints", applyToolbar.contains("syncWebOverlayLayout();"));
+        assertTrue("entering an inline category must re-evaluate the toolbar band", showCategory.contains("mFolder = target;\n        mCurrentType = item;\n        applyToolbarVisibility();"));
+        assertTrue("returning to the home content must restore the requested toolbar band", showHome.contains("applyToolbarVisibility();"));
+        assertTrue("clearing category content must restore the requested toolbar band", clearCategory.contains("applyToolbarVisibility();"));
+        assertTrue(
+                "a scroll-driven hide inside a category page must not survive the trip back home",
+                showHome.indexOf("toolbarRequestedVisible = true;") >= 0
+                        && showHome.indexOf("toolbarRequestedVisible = true;") < showHome.indexOf("applyToolbarVisibility();"));
+        assertTrue(
+                "clearing category content must drop a scroll-driven hide as well",
+                clearCategory.indexOf("toolbarRequestedVisible = true;") >= 0
+                        && clearCategory.indexOf("toolbarRequestedVisible = true;") < clearCategory.indexOf("applyToolbarVisibility();"));
+        assertTrue(
+                "a hidden toolbar must leave the category row its own top inset, in pixels: setPadding takes pixels, so a dp value would shrink on higher densities",
+                inset.contains("getDimensionPixelSize(R.dimen.webhtv_space_6)") && !inset.contains("dpOf(R.dimen.webhtv_space_6)"));
     }
 
     private static String homeActivity() throws Exception {

@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「视频层 / 固定深玻璃宿主」图标按钮的焦点环 —— 与
+    selector_glass_icon_action.xml（弹幕选择行、音轨行）保持**同一套视觉**：
+    8dp 圆角矩形 + 半透明白底 + 唯一宽度 token + ?attr/tvPlayerRing。
+
+    此前这里是 shape="oval"（椭圆、无底色），于是同一台电视上字幕工具栏是椭圆环、
+    弹幕/音轨行是圆角矩形环，用户报告「效果不对、和弹幕那边不一样」。现统一为矩形族。
+
+    环色 ?attr/tvPlayerRing 跟随用户「焦点色」槽：浅色表在固定深靛玻璃上夹取到 ≥3:1，
+    深色表取与应用表面焦点环同值的近白。判据同 shape_chip_focused.xml。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
+    android:shape="rectangle">
+
+    <solid android:color="@color/white_15" />
+
+    <corners android:radius="8dp" />
 
     <stroke
-        android:width="1.5dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvPlayerRing" />
 
 </shape>

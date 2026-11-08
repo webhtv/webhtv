@@ -21,11 +21,11 @@ import com.fongmi.android.tv.databinding.ActivityHistoryBinding;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.adapter.HistoryAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.SyncDialog;
 import com.fongmi.android.tv.utils.MobileWindow;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -53,8 +53,29 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     @Override
     protected void initView(Bundle savedInstanceState) {
         setSupportActionBar(mBinding.toolbar);
+        setEmptyContent();
         setRecyclerView();
         getHistory();
+    }
+
+    /**
+     * 空态内容：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。
+     *
+     * <p>历史页与收藏页一样，新用户第一次进来时必为空。改动前只有一句
+     * {@code error_empty}（「这里什麽都没有 👀」），既不解释为什么空，也不给出下一步。
+     */
+    private void setEmptyContent() {
+        mBinding.progressLayout.setEmptyContent(
+                R.string.history_empty_title,
+                R.string.history_empty_description,
+                R.string.history_empty_action,
+                view -> goHome());
+    }
+
+    /** 空态主按钮：回点播首页去挑一部。与收藏页/播放页的回首页写法一致。 */
+    private void goHome() {
+        startActivity(new Intent(this, HomeActivity.class).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
     }
 
     private void setRecyclerView() {
@@ -62,6 +83,9 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.setLayoutManager(new GridLayoutManager(this, column));
         mBinding.recycler.setAdapter(mAdapter = new HistoryAdapter(this));
+        // 列表数量变化后统一驱动状态机（BaseDiffAdapter 的钩子）：注册一次，之后无论从哪条
+        // 路径改动列表（单条删除、删除全部、刷新）状态都会跟着列表走，宿主不可能再忘。
+        mAdapter.setOnCountChanged(count -> mBinding.progressLayout.showContent(true, count));
         mBinding.recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
@@ -76,7 +100,6 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     private void getHistory() {
         mAdapter.setItems(History.getForDisplay(), (hasChange) -> {
-            mBinding.progressLayout.showContent(true, mAdapter.getItemCount());
             if (hasChange) mBinding.recycler.scrollToPosition(0);
             mBinding.recycler.post(this::updateMarquee);
         });
@@ -116,7 +139,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     private void onDelete() {
         if (mAdapter.isDelete()) {
-            new MaterialAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(Setting.isGlobalHistoryEnabled() ? R.string.dialog_delete_global_history : R.string.dialog_delete_history).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> mAdapter.clear()).show();
+            new WebHtvAlertDialogBuilder(this).setTitle(R.string.dialog_delete_record).setMessage(Setting.isGlobalHistoryEnabled() ? R.string.dialog_delete_global_history : R.string.dialog_delete_history).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> mAdapter.clear()).show();
         } else if (mAdapter.getItemCount() > 0) {
             mAdapter.setDelete(true);
         }

@@ -10,11 +10,11 @@
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:stateListAnimator="@null"
-    app:cardBackgroundColor="#B314202A"
-    app:cardCornerRadius="8dp"
+    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+    app:cardCornerRadius="@dimen/webhtv_card_radius_default"
     app:cardElevation="0dp"
     app:rippleColor="@android:color/transparent"
-    app:strokeColor="#33FFFFFF"
+    app:strokeColor="?attr/colorOutlineVariant"
     app:strokeWidth="1dp">
 
     <FrameLayout
@@ -25,7 +25,7 @@
             android:id="@+id/poster"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#14202A"
+            android:background="?attr/colorSurfaceContainerHigh"
             android:contentDescription="@null"
             android:scaleType="centerCrop"
             tools:src="@color/black" />
@@ -73,7 +73,7 @@
                 android:layout_marginTop="4dp"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#B3FFFFFF"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp"
                 tools:text="Trailer ? ???" />
 

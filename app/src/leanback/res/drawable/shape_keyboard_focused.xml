@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」搜索键盘按键的统一焦点环（SearchActivity 软键盘文字/图标键）。
+    取值与 shape_item_focused.xml 完全一致：@dimen/webhtv_focus_ring_width + ?attr/tvFocusRing。
+    此前这里是 `1.5dp @color/white`：搜索页里输入框、范围按钮、热搜词、键盘各自一套焦点边框，
+    是用户报告「统一风格并受到主题色彩控制」的同一族缺陷。
+    统一规范见 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
@@ -7,7 +14,7 @@
     <corners android:radius="4dp" />
 
     <stroke
-        android:width="1.5dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvFocusRing" />
 
 </shape>

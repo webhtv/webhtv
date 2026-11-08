@@ -27,7 +27,7 @@
             android:layout_weight="1"/>
         <TextView
             android:textSize="11sp"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:id="@+id/sheetRunningTag"
             android:background="@drawable/shape_lab_running_tag"
             android:paddingTop="3dp"
@@ -133,7 +133,7 @@
         android:paddingEnd="20dp">
         <TextView
             android:textSize="14sp"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:gravity="center"
             android:id="@+id/sheetBtnEdit"
             android:background="@drawable/shape_lab_click_btn"
@@ -148,7 +148,7 @@
             android:layout_weight="1"/>
         <TextView
             android:textSize="14sp"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:gravity="center"
             android:id="@+id/sheetBtnStop"
             android:background="@drawable/shape_lab_stop_btn"
@@ -161,7 +161,7 @@
             android:layout_marginEnd="10dp"/>
         <TextView
             android:textSize="14sp"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:gravity="center"
             android:id="@+id/sheetBtnOutput"
             android:background="@drawable/shape_lab_click_btn"
@@ -174,7 +174,7 @@
             android:layout_marginEnd="10dp"/>
         <TextView
             android:textSize="14sp"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:gravity="center"
             android:id="@+id/sheetBtnRun"
             android:background="@drawable/shape_lab_run_btn"

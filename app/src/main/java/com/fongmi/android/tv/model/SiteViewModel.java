@@ -17,6 +17,7 @@ import com.fongmi.android.tv.setting.SiteBlockSetting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.utils.Task;
 import com.google.common.util.concurrent.FluentFuture;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -32,6 +33,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -57,6 +59,13 @@ public class SiteViewModel extends ViewModel {
     private ListenableFuture<Result> isolatedPlayerFuture;
     private KaraokeResult karaokeResult;
     private int karaokeResultAction;
+    /**
+     * onCleared() 会用 shutdownNow() 终止两个串行执行器。此后任何 submit 都会抛
+     * RejectedExecutionException，并顺着宿主（播放页、阅读器）的调用栈冒出去打崩 App。
+     * 清理后的提交一律降级为「本次请求作废」：调用方拿到取消结果或直接不发请求，
+     * 宿主不再需要为 ViewModel 的生命周期兜异常。
+     */
+    private volatile boolean cleared;
 
     public SiteViewModel() {
         result = new MutableLiveData<>();
@@ -182,11 +191,18 @@ public class SiteViewModel extends ViewModel {
             int playerType,
             Consumer<Result> onSuccess,
             Consumer<Throwable> onError) {
+        if (cleared) return cancelledFuture();
         int requestId = isolatedPlayerId.incrementAndGet();
         cancelIsolatedFuture();
-        FluentFuture<Result> future = FluentFuture.from(isolatedPlayerExecutor.submit(
-                () -> SiteApi.playerContentIsolated(key, flag, id, playerType)))
-                .withTimeout(Constant.TIMEOUT_VOD, TimeUnit.MILLISECONDS, Task.scheduler());
+        FluentFuture<Result> future;
+        try {
+            future = FluentFuture.from(isolatedPlayerExecutor.submit(
+                    () -> SiteApi.playerContentIsolated(key, flag, id, playerType)))
+                    .withTimeout(Constant.TIMEOUT_VOD, TimeUnit.MILLISECONDS, Task.scheduler());
+        } catch (RejectedExecutionException e) {
+            // 与 onCleared() 的竞态窗口：执行器已终止，本次请求作废即可。
+            return cancelledFuture();
+        }
         synchronized (isolatedPlayerLock) {
             isolatedPlayerFuture = future;
         }
@@ -206,6 +222,11 @@ public class SiteViewModel extends ViewModel {
                 }
         ), MoreExecutors.directExecutor());
         return future;
+    }
+
+    /** 已取消的占位 future：让「ViewModel 已清理」与「请求已作废」在调用方看来是同一件事。 */
+    private ListenableFuture<Result> cancelledFuture() {
+        return Futures.immediateCancelledFuture();
     }
 
     /** Cancels only the outstanding next-item resolver, leaving the foreground PLAYER request intact. */
@@ -244,6 +265,8 @@ public class SiteViewModel extends ViewModel {
 
     public void searchContent(List<Site> sites, String keyword, boolean quick) {
         synchronized (searchLock) {
+            // 清理后不再新建搜索执行器：否则会为已死的 ViewModel 起一批无人接收的搜索。
+            if (cleared) return;
             int epoch = stopSearchLocked();
             List<Site> tasks = new ArrayList<>();
             for (Site site : sites) {
@@ -296,12 +319,19 @@ public class SiteViewModel extends ViewModel {
     }
 
     private void execute(TaskType type, MutableLiveData<Result> liveData, Callable<Result> callable, Consumer<Result> onSuccess, Consumer<Throwable> onError) {
+        if (cleared) return;
         AtomicInteger taskId = Objects.requireNonNull(taskIds.get(type));
         int currentId = taskId.incrementAndGet();
         ListenableFuture<?> old = futures.get(type);
         if (old != null) old.cancel(true);
         ListeningExecutorService executor = type == TaskType.PLAYER ? playerExecutor : Task.executor();
-        FluentFuture<Result> future = FluentFuture.from(executor.submit(callable)).withTimeout(Constant.TIMEOUT_VOD, TimeUnit.MILLISECONDS, Task.scheduler());
+        FluentFuture<Result> future;
+        try {
+            future = FluentFuture.from(executor.submit(callable)).withTimeout(Constant.TIMEOUT_VOD, TimeUnit.MILLISECONDS, Task.scheduler());
+        } catch (RejectedExecutionException e) {
+            // 与 onCleared() 的竞态窗口：执行器已终止，本次请求作废即可。
+            return;
+        }
         futures.put(type, future);
         future.addCallback(Task.callback(
                 result -> {
@@ -354,6 +384,8 @@ public class SiteViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
+        // 必须先置位再关池：反过来会留下「池已终止但 cleared=false」的窗口。
+        cleared = true;
         stopSearch();
         futures.values().forEach(future -> future.cancel(true));
         cancelPlayerContentIsolated();

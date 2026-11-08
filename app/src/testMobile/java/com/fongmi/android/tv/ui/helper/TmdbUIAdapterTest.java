@@ -95,6 +95,30 @@ public class TmdbUIAdapterTest {
                 "same#1", "target-url", "same"));
     }
 
+    /**
+     * 稳定键命中了真实线路，但那一集的 URL 已换（源站刷新、换源、带时效签名都可能发生）。
+     * 线路名对得上就必须复用这条线路：早期实现这里直接返回 null，调用方会把 null 当成
+     * 「解析不了」而退回 flags.get(0)，表现就是杀进程重进后线路强行回到第一条。
+     */
+    @Test
+    public void matchedStableFlagKeySurvivesRefreshedEpisodeUrl() {
+        Flag firstLine = Flag.create("线路1", "E1$one");
+        Flag chosenLine = Flag.create("线路4", "E1$four-old");
+
+        assertSame(chosenLine, TmdbUIAdapter.selectPlaybackFlag(
+                List.of(firstLine, chosenLine), "线路4#1", "E1$four-new", "线路4"));
+    }
+
+    /** 稳定键根本不存在时不靠线路名猜，仍由上层（偏好/历史）决定。 */
+    @Test
+    public void staleStableFlagKeyWithUnmatchedNameStaysUnresolved() {
+        Flag firstLine = Flag.create("线路1", "E1$one");
+        Flag secondLine = Flag.create("线路2", "E1$two");
+
+        assertNull(TmdbUIAdapter.selectPlaybackFlag(
+                List.of(firstLine, secondLine), "线路2#9", "E1$gone", "线路2"));
+    }
+
     @Test
     public void explicitMultiSeasonSegmentsApplySecondSeasonMetadata() {
         List<Episode> source = List.of(
@@ -694,7 +718,14 @@ public class TmdbUIAdapterTest {
         int directReturn = applyBody.indexOf("return;", directGuard);
         int suppress = applyBody.indexOf("suppressTmdbNativeTextFields();");
         int hideSynopsisButton = applyBody.indexOf("mBinding.content.setVisibility(View.GONE);");
-        int replaceWithOverview = applyBody.indexOf("mBinding.tmdbOverview.setVisibility(View.VISIBLE);");
+        // 简介文本的写入者已从本方法内联挪到 updateOverviewPreview()（PR #452：影视原生也要
+        // 显示简介预览）。这里断言的是「直接播放的早退仍然发生在接管之前」这个不变式，而不是
+        // 当时那句话恰好写在哪个方法里，否则实现重构后守卫会假红。接管点取两个写入者中
+        // 实际存在的那个：新实现是 updateOverviewPreview()，旧写法是内联的 VISIBLE 赋值。
+        int replaceWithOverview = applyBody.indexOf("updateOverviewPreview();");
+        if (replaceWithOverview < 0) {
+            replaceWithOverview = applyBody.indexOf("mBinding.tmdbOverview.setVisibility(View.VISIBLE);");
+        }
         int suppressMethod = source.indexOf("private void suppressTmdbNativeTextFields()");
         int suppressEnd = source.indexOf("\n    }", suppressMethod);
         String suppressBody = source.substring(suppressMethod, suppressEnd);
@@ -725,9 +756,12 @@ public class TmdbUIAdapterTest {
                         && hydrateBody.contains("getTmdbVodContent()")
                         && hydrateBody.contains("mBinding.content.setTag(content);"));
         assertTrue("direct TMDB playback should consume colorful detail's cached TMDB detail for synopsis",
-                source.contains("TmdbDetailCache.take(getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), getTmdbItem())")
+                source.contains("TmdbDetailCache.take(getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), getTmdbItem(), currentTmdbLanguage())")
                         && source.contains("cachedTmdbOverview(detail)")
-                        && source.contains("cachedTmdbOverviewForLanguage(translations, \"zh-CN\")"));
+                        // The overview now goes through TmdbService's unified language
+                        // policy; the per-call zh-CN fallback chain was replaced by it
+                        // (see TmdbDetailDirectPlayTransitionSourceTest).
+                        && source.contains("translatedOverview(detail, currentTmdbConfig())"));
         assertTrue("fast hydration must keep direct colorful-detail playback on the native right-panel layout",
                 hydrateBody.contains("if (isTmdbMode() && !isIntentTmdbPlayback())")
                         && hydrateBody.contains("mBinding.tmdbOverview.setSingleLine(false);")
@@ -817,8 +851,10 @@ public class TmdbUIAdapterTest {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int method = source.indexOf("private void playDefaultPlayback()");
-        int put = source.indexOf("TmdbDetailCache.put(playbackTmdbItem(), matchedTmdbDetail, detailCastItems)", method);
-        if (put < 0) put = source.indexOf("TmdbDetailCache.put(item, matchedTmdbDetail, detailCastItems)", method);
+        // The cache key carries the request language, so match the call prefix and
+        // tolerate the trailing language argument added by the display-identity fix.
+        int put = source.indexOf("TmdbDetailCache.put(playbackTmdbItem(), matchedTmdbDetail, detailCastItems", method);
+        if (put < 0) put = source.indexOf("TmdbDetailCache.put(item, matchedTmdbDetail, detailCastItems", method);
         int start = source.indexOf("VideoActivity.startDirectTmdb", put);
         int keyArg = source.indexOf("tmdbDetailCacheKey", start);
         int fastTitles = source.indexOf("fastPlaybackEpisodeTitles()", start);

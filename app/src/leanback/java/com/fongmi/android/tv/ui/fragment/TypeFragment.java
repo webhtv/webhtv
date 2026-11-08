@@ -156,7 +156,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private void setRecyclerView() {
         CustomSelector selector = new CustomSelector();
         selector.addPresenter(Vod.class, new VodPresenter(this, Style.list()));
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(16, this::onContentHorizontalEdge), VodPresenter.class);
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(ResUtil.dpOf(R.dimen.webhtv_size_tv_card_gap), this::onContentHorizontalEdge), VodPresenter.class);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(8, FocusHighlight.ZOOM_FACTOR_NONE, HorizontalGridView.FOCUS_SCROLL_ALIGNED, true), FilterPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setHeader(getActivity(), getParent().getScrollHeaderIds());
@@ -276,6 +276,29 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         if (adapterSize > filterSize) mAdapter.removeItems(filterSize, mAdapter.size() - filterSize);
         if (adapterSize == 0) mBinding.progressLayout.showProgress();
         else mBinding.swipeLayout.setRefreshing(true);
+    }
+
+    public boolean resetFilter() {
+        if (mFilters.isEmpty()) return false;
+        boolean changed = !mExtends.isEmpty();
+        for (Filter filter : mFilters) {
+            for (Value value : filter.getValue()) {
+                if (value.isSelected()) changed = true;
+                value.setSelected(false);
+            }
+        }
+        mExtends.clear();
+        if (changed) {
+            // Rebuilding the rows is what makes the chips render as unselected; skip it when
+            // nothing was selected so a no-op long press does not scroll the panel back to row 0.
+            if (filterVisible) {
+                hideFilter();
+                showFilter();
+            }
+            onRefresh();
+            Notify.show(R.string.filter_reset);
+        }
+        return changed;
     }
 
     public void onRefresh() {

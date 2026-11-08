@@ -11,17 +11,17 @@
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:stateListAnimator="@null"
-    app:cardBackgroundColor="#CC16202A"
-    app:cardCornerRadius="8dp"
+    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+    app:cardCornerRadius="@dimen/webhtv_card_radius_default"
     app:cardElevation="0dp"
-    app:strokeColor="#33FFFFFF"
+    app:strokeColor="?attr/colorOutlineVariant"
     app:strokeWidth="1dp">
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/photo"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#1C2530"
+        android:background="?attr/colorSurfaceContainerHigh"
         android:contentDescription="@null"
         android:scaleType="centerCrop"
         tools:src="@color/black" />

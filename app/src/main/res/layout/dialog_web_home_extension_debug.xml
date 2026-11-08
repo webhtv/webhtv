@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/web_home_extension_debug_title"
-            android:textColor="@color/black"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -50,7 +50,7 @@
             android:textColor="@color/dialog_toggle_button_text"
             android:textSize="13sp"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tabConsole"
@@ -67,7 +67,7 @@
             android:textColor="@color/dialog_toggle_button_text"
             android:textSize="13sp"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tabElements"
@@ -84,7 +84,7 @@
             android:textColor="@color/dialog_toggle_button_text"
             android:textSize="13sp"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tabNetwork"
@@ -101,7 +101,7 @@
             android:textColor="@color/dialog_toggle_button_text"
             android:textSize="13sp"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tabCode"
@@ -118,7 +118,7 @@
             android:textColor="@color/dialog_toggle_button_text"
             android:textSize="13sp"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -139,8 +139,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone"
-            app:boxBackgroundColor="@color/white"
-            app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+            app:boxStrokeColor="?attr/colorOutline"
             app:hintEnabled="false">
 
             <com.fongmi.android.tv.ui.custom.SafeScrollEditText
@@ -153,7 +153,7 @@
                 android:scrollHorizontally="true"
                 android:scrollbars="none"
                 android:singleLine="false"
-                android:textColor="@color/black" />
+                android:textColor="?attr/colorOnSurface" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -162,8 +162,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone"
-            app:boxBackgroundColor="@color/white"
-            app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+            app:boxStrokeColor="?attr/colorOutline"
             app:hintEnabled="false">
 
             <com.fongmi.android.tv.ui.custom.SafeScrollEditText
@@ -176,7 +176,7 @@
                 android:scrollHorizontally="true"
                 android:scrollbars="none"
                 android:singleLine="false"
-                android:textColor="@color/black" />
+                android:textColor="?attr/colorOnSurface" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -184,7 +184,7 @@
             android:id="@+id/networkLayout"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@color/white"
+            android:background="?attr/colorSurfaceContainerHigh"
             android:orientation="vertical"
             android:padding="8dp"
             android:visibility="gone">
@@ -213,7 +213,7 @@
                         android:text="@string/web_home_extension_network_all"
                         android:textColor="@color/dialog_toggle_button_text"
                         app:backgroundTint="@color/dialog_toggle_button_bg"
-                        app:strokeColor="@color/dialog_outlined_button_stroke" />
+                        app:strokeColor="?attr/colorOutline" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/filterWeb"
@@ -225,7 +225,7 @@
                         android:text="@string/web_home_extension_network_web"
                         android:textColor="@color/dialog_toggle_button_text"
                         app:backgroundTint="@color/dialog_toggle_button_bg"
-                        app:strokeColor="@color/dialog_outlined_button_stroke" />
+                        app:strokeColor="?attr/colorOutline" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/filterScript"
@@ -237,7 +237,7 @@
                         android:text="@string/web_home_extension_network_script"
                         android:textColor="@color/dialog_toggle_button_text"
                         app:backgroundTint="@color/dialog_toggle_button_bg"
-                        app:strokeColor="@color/dialog_outlined_button_stroke" />
+                        app:strokeColor="?attr/colorOutline" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/filterError"
@@ -249,7 +249,7 @@
                         android:text="@string/web_home_extension_network_error"
                         android:textColor="@color/dialog_toggle_button_text"
                         app:backgroundTint="@color/dialog_toggle_button_bg"
-                        app:strokeColor="@color/dialog_outlined_button_stroke" />
+                        app:strokeColor="?attr/colorOutline" />
 
                 </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -260,9 +260,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:hint="@string/web_home_extension_network_filter"
-                app:boxBackgroundColor="@color/white"
-                app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-                app:hintTextColor="#5F6368">
+                app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+                app:boxStrokeColor="?attr/colorOutline"
+                app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/networkSearch"
@@ -273,8 +273,8 @@
                     android:scrollHorizontally="true"
                     android:scrollbars="none"
                     android:singleLine="true"
-                    android:textColor="@color/black"
-                    android:textColorHint="#666666" />
+                    android:textColor="?attr/colorOnSurface"
+                    android:textColorHint="?attr/colorOnSurfaceVariant" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -283,7 +283,7 @@
                 android:layout_height="0dp"
                 android:layout_marginTop="8dp"
                 android:layout_weight="1"
-                android:background="#FAFAFA">
+                android:background="?attr/colorSurfaceContainerLow">
 
                 <com.fongmi.android.tv.ui.custom.CustomNestedScrollView
                     android:id="@+id/networkRowsVertical"
@@ -326,7 +326,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/web_home_extension_network_detail"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -345,7 +345,7 @@
                     app:iconPadding="0dp"
                     app:iconTint="@color/dialog_outlined_button_text"
                     app:backgroundTint="@color/dialog_outlined_button_bg"
-                    app:strokeColor="@color/dialog_outlined_button_stroke" />
+                    app:strokeColor="?attr/colorOutline" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/detailBigger"
@@ -363,7 +363,7 @@
                     app:iconPadding="0dp"
                     app:iconTint="@color/dialog_outlined_button_text"
                     app:backgroundTint="@color/dialog_outlined_button_bg"
-                    app:strokeColor="@color/dialog_outlined_button_stroke" />
+                    app:strokeColor="?attr/colorOutline" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -371,7 +371,7 @@
                 android:id="@+id/networkDetailFrame"
                 android:layout_width="match_parent"
                 android:layout_height="128dp"
-                android:background="#FAFAFA">
+                android:background="?attr/colorSurfaceContainerLow">
 
                 <com.fongmi.android.tv.ui.custom.SafeScrollEditText
                     android:id="@+id/networkDetail"
@@ -385,7 +385,7 @@
                     android:scrollHorizontally="true"
                     android:scrollbars="none"
                     android:singleLine="false"
-                    android:textColor="@color/black"
+                    android:textColor="?attr/colorOnSurface"
                     android:textIsSelectable="true"
                     android:textSize="12sp" />
 
@@ -398,8 +398,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone"
-            app:boxBackgroundColor="@color/white"
-            app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+            app:boxStrokeColor="?attr/colorOutline"
             app:hintEnabled="false">
 
             <com.fongmi.android.tv.ui.custom.SafeScrollEditText
@@ -413,8 +413,8 @@
                 android:scrollHorizontally="true"
                 android:scrollbars="none"
                 android:singleLine="false"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -443,7 +443,7 @@
             android:textSize="13sp"
             android:visibility="gone"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/inspect"
@@ -491,7 +491,9 @@
             android:textColor="@color/dialog_primary_button_text"
             android:textSize="13sp"
             android:visibility="gone"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/close"
@@ -508,7 +510,7 @@
             android:textColor="@color/dialog_outlined_button_text"
             android:textSize="13sp"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

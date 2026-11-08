@@ -48,6 +48,7 @@ import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.google.common.net.HttpHeaders;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonParser;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -1137,6 +1138,13 @@ public class HomeWebController {
         client.addProperty("height", webView.getHeight());
         client.addProperty("density", density);
         root.add("client", client);
+
+        // Read-only semantic token snapshot for built-in and remote WebTheme
+        // pages. ThemeWebBridge is the single source of truth and Web pages
+        // must consume these variables without writing back to native state.
+        root.add("tokens", JsonParser.parseString(
+                com.fongmi.android.tv.theme.ThemeWebBridge.snapshotJson(
+                        com.fongmi.android.tv.theme.ThemeController.current())).getAsJsonObject());
 
         Site contentSite = page.site();
         if (contentSite == null) contentSite = VodConfig.get().getHome();

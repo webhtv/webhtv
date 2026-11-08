@@ -13,7 +13,7 @@ import static org.junit.Assert.assertTrue;
 public class MpvStabilityGuardSourceTest {
 
     @Test
-    public void runtimeAutoEvaluationAppliesStabilityGuardBeforeTransition() throws Exception {
+    public void runtimeAutoEvaluationAppliesDeviceGuardBeforeTransition() throws Exception {
         String method = methodBody(readPlayerManager(), "private boolean evaluateMpvAutoOutput()", "private boolean hasRequestedSubtitle");
 
         assertTrue(method.contains("boolean effectiveEligible = MpvPerformanceSetting.isAutoSurfaceDirectEnabled() && decision.eligible();"));
@@ -21,10 +21,29 @@ public class MpvStabilityGuardSourceTest {
     }
 
     @Test
-    public void stickyAutoDirectRequiresStabilityGuardPermission() throws Exception {
+    public void stickyAutoDirectRequiresDeviceGuardPermission() throws Exception {
         String method = methodBody(readPlayerManager(), "private void prepareMpvOutputForNewItem()", "private void resetMpvOutputRuntime()");
 
         assertTrue(method.contains("automaticOutput && MpvPerformanceSetting.isAutoSurfaceDirectEnabled()"));
+    }
+
+    /**
+     * 全局暂停开关必须保持删除状态。
+     *
+     * <p>该开关（`SURFACE_AUTO_STABILITY_GUARD_ENABLED`）会让自动档在电视上永久退化为
+     * GPU 合成 + 拷贝，与 22f2333317「生产环境保留自动直出」的结论相反；只要它被重新
+     * 引入，自动直出就会再次静默失效，因此这里做源码级回归保护。
+     */
+    @Test
+    public void automaticSurfaceDirectIsNotPermanentlyPausedByAGlobalSwitch() throws Exception {
+        String source = readMpvPerformanceSetting();
+
+        assertFalse("a global pause switch silently disables automatic TV direct output",
+                source.contains("SURFACE_AUTO_STABILITY_GUARD_ENABLED"));
+        String method = methodBody(source,
+                "public static boolean isAutoSurfaceDirectEnabled()", "public static boolean isZeroCopyBlocked()");
+        assertTrue("the only remaining veto must be the per-device zero-copy guard",
+                method.contains("return !isZeroCopyBlocked();"));
     }
 
     @Test
@@ -74,6 +93,13 @@ public class MpvStabilityGuardSourceTest {
         if (!Files.exists(source)) source = root.resolve(Path.of("src", "main", "java", "com", "fongmi", "android", "tv", "player", "engine", "MpvPlayerEngine.java"));
         return Files.readString(source, StandardCharsets.UTF_8).replace("\r\n", "\n");
     }
+    private static String readMpvPerformanceSetting() throws IOException {
+        Path root = Path.of("").toAbsolutePath();
+        Path source = root.resolve(Path.of("app", "src", "main", "java", "com", "fongmi", "android", "tv", "setting", "MpvPerformanceSetting.java"));
+        if (!Files.exists(source)) source = root.resolve(Path.of("src", "main", "java", "com", "fongmi", "android", "tv", "setting", "MpvPerformanceSetting.java"));
+        return Files.readString(source, StandardCharsets.UTF_8).replace("\r\n", "\n");
+    }
+
     private static String readPlayerManager() throws IOException {
         Path root = Path.of("").toAbsolutePath();
         Path source = root.resolve(Path.of("app", "src", "main", "java", "com", "fongmi", "android", "tv", "player", "PlayerManager.java"));

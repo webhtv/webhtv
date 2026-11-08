@@ -25,52 +25,65 @@ public final class FollowingScheduler {
     }
 
     public static void ensurePeriodic(Context context) {
-        if (!FollowingSettings.isEnabled()) {
-            cancelAll(context);
-            return;
-        }
-        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(
-                FollowingUpdateWorker.class, 6, TimeUnit.HOURS, 1, TimeUnit.HOURS)
-                .setConstraints(networkConstraints())
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
-                .addTag(TAG)
-                .build();
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                PERIODIC_WORK, ExistingPeriodicWorkPolicy.UPDATE, request);
+        FollowingWorkManager.withManager(context, manager -> {
+            if (!FollowingSettings.isEnabled()) {
+                cancelAll(manager);
+                return;
+            }
+            PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(
+                    FollowingUpdateWorker.class, 6, TimeUnit.HOURS, 1, TimeUnit.HOURS)
+                    .setConstraints(networkConstraints())
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
+                    .addTag(TAG)
+                    .build();
+            manager.enqueueUniquePeriodicWork(PERIODIC_WORK, ExistingPeriodicWorkPolicy.UPDATE, request);
+        });
     }
 
     public static void enqueueDueNow(Context context) {
-        if (!FollowingSettings.isEnabled()) return;
-        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FollowingUpdateWorker.class)
-                .setConstraints(networkConstraints())
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
-                .addTag(TAG)
-                .build();
-        WorkManager.getInstance(context).enqueueUniqueWork(ONE_SHOT_WORK, ExistingWorkPolicy.KEEP, request);
+        FollowingWorkManager.withManager(context, manager -> {
+            if (!FollowingSettings.isEnabled()) return;
+            OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FollowingUpdateWorker.class)
+                    .setConstraints(networkConstraints())
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
+                    .addTag(TAG)
+                    .build();
+            manager.enqueueUniqueWork(ONE_SHOT_WORK, ExistingWorkPolicy.KEEP, request);
+        });
     }
 
     public static void scheduleNext(Context context, Following item) {
-        if (item == null || !item.enabled || !FollowingSettings.isEnabled()) {
-            if (item != null) cancelNext(context, item.identityKey);
-            return;
-        }
-        long delay = Math.max(FollowingSchedulePolicy.MIN_ONE_SHOT_DELAY, item.nextCheckAt - System.currentTimeMillis());
-        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FollowingUpdateWorker.class)
-                .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-                .setConstraints(networkConstraints())
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
-                .addTag(TAG)
-                .build();
-        WorkManager.getInstance(context).enqueueUniqueWork(oneShotName(item.identityKey), ExistingWorkPolicy.REPLACE, request);
+        if (item == null) return;
+        // Snapshot the request instead of retaining a mutable Following or an Activity until unlock.
+        String identityKey = item.identityKey;
+        boolean enabled = item.enabled;
+        long nextCheckAt = item.nextCheckAt;
+        FollowingWorkManager.withManager(context, manager -> {
+            if (!enabled || !FollowingSettings.isEnabled()) {
+                if (identityKey != null && !identityKey.isBlank()) manager.cancelUniqueWork(oneShotName(identityKey));
+                return;
+            }
+            long delay = Math.max(FollowingSchedulePolicy.MIN_ONE_SHOT_DELAY, nextCheckAt - System.currentTimeMillis());
+            OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(FollowingUpdateWorker.class)
+                    .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                    .setConstraints(networkConstraints())
+                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.MINUTES)
+                    .addTag(TAG)
+                    .build();
+            manager.enqueueUniqueWork(oneShotName(identityKey), ExistingWorkPolicy.REPLACE, request);
+        });
     }
 
     public static void cancelNext(Context context, String identityKey) {
         if (identityKey == null || identityKey.isBlank()) return;
-        WorkManager.getInstance(context).cancelUniqueWork(oneShotName(identityKey));
+        FollowingWorkManager.withManager(context, manager -> manager.cancelUniqueWork(oneShotName(identityKey)));
     }
 
     public static void cancelAll(Context context) {
-        WorkManager manager = WorkManager.getInstance(context);
+        FollowingWorkManager.withManager(context, FollowingScheduler::cancelAll);
+    }
+
+    private static void cancelAll(WorkManager manager) {
         manager.cancelUniqueWork(PERIODIC_WORK);
         manager.cancelUniqueWork(ONE_SHOT_WORK);
         manager.cancelAllWorkByTag(TAG);

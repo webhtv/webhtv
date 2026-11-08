@@ -35,8 +35,11 @@ public final class MpvPerformanceSetting {
     public static final int VULKAN_BACKEND_LEGACY = 2;
     public static final int VULKAN_BACKEND_STABLE = 3;
 
-    // Keep automatic Surface direct output paused independently from hardware decoder quirks.
-    private static final boolean SURFACE_AUTO_STABILITY_GUARD_ENABLED = true;
+    // 自动电视直出只由「设备是否支持零拷贝」决定，不再有全局暂停开关。
+    // 历史上 506639c9b0 曾用全局 kill switch 暂停自动直出（当时 native Surface 拆除
+    // 尚未加固），但 22f2333317 已明确要求生产环境保留自动直出，且 P4-1/P4-3 已修好
+    // 拆除与终态释放；残留的开关会让自动档在电视上永久退化为 GPU 合成 + 拷贝，
+    // 4K 高帧率下更容易掉帧/音频欠载。
     private static final boolean ZERO_COPY_DEVICE_GUARD_ENABLED = true;
     private static final String KEY_OUTPUT_MODE = "perf_mpv_output_mode";
     private static final String KEY_HWDEC = "perf_mpv_hwdec";
@@ -76,8 +79,13 @@ public final class MpvPerformanceSetting {
         };
     }
 
+    /**
+     * 自动档是否允许进入电视直出。只剩设备级零拷贝保护这一个否决条件：
+     * 命中 {@link MpvHardwarePolicy} 的已知不兼容设备（Kirin/HiSilicon、x86 转译、
+     * 模拟器）时仍强制 GPU + 兼容复制，其余设备恢复自动直出。
+     */
     public static boolean isAutoSurfaceDirectEnabled() {
-        return !SURFACE_AUTO_STABILITY_GUARD_ENABLED && !isZeroCopyBlocked();
+        return !isZeroCopyBlocked();
     }
 
     public static boolean isZeroCopyBlocked() {
@@ -97,7 +105,7 @@ public final class MpvPerformanceSetting {
         return switch (clamp(outputMode, OUTPUT_AUTO, OUTPUT_SURFACE_DIRECT)) {
             case OUTPUT_SURFACE_DIRECT -> true;
             case OUTPUT_GPU -> false;
-            default -> !SURFACE_AUTO_STABILITY_GUARD_ENABLED && leanback && autoEligible;
+            default -> leanback && autoEligible;
         };
     }
 

@@ -10,7 +10,7 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/add"
-        style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+        style="@style/Widget.WebHTV.Button.Outlined"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/ad_rule_add_manual"
@@ -19,7 +19,7 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/stats"
-        style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+        style="@style/Widget.WebHTV.Button.Outlined"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
@@ -29,7 +29,7 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/importCandidates"
-        style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+        style="@style/Widget.WebHTV.Button.Outlined"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
@@ -49,7 +49,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/enableImported"
-            style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+            style="@style/Widget.WebHTV.Button.Outlined"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -58,7 +58,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/disableImported"
-            style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+            style="@style/Widget.WebHTV.Button.Outlined"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
@@ -83,7 +83,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:text="@string/ad_rule_empty"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         android:visibility="gone"
         tools:visibility="visible" />
@@ -110,7 +110,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         tools:text="来自配置 · 共 12 条（只读）" />
 

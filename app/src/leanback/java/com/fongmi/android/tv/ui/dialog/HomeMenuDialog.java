@@ -26,7 +26,7 @@ import java.util.List;
 public class HomeMenuDialog extends BaseAlertDialog {
 
     private static final String TAG = "home_menu_dialog";
-    // 9 项按 3 列排布，正好一屏显示完，与参考实现一致
+    // 菜单项按 3 列排布；去掉首项后 11 项共 4 行，仍在 maxHeight 一屏内显示完
     private static final int GRID_COUNT = 3;
 
     private DialogHomeMenuBinding binding;
@@ -35,7 +35,7 @@ public class HomeMenuDialog extends BaseAlertDialog {
     public interface Listener {
 
         /**
-         * @param index select_home_menu_key 中的下标，取值 1..9
+         * @param index select_home_menu_key 中的下标，取值 1..11
          */
         void onHomeMenuItem(int index);
     }

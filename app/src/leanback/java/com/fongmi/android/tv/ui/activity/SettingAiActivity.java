@@ -14,13 +14,13 @@ import com.fongmi.android.tv.databinding.ActivitySettingAiBinding;
 import com.fongmi.android.tv.service.RecommendationFeedbackStore;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.RealtimeSubtitleController;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.AiConfigDialog;
 import com.fongmi.android.tv.ui.dialog.RecommendationFeedbackDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleSettingsDialog;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class SettingAiActivity extends BaseActivity {
 
@@ -86,7 +86,7 @@ public class SettingAiActivity extends BaseActivity {
             setText();
             return;
         }
-        new MaterialAlertDialogBuilder(this)
+        new WebHtvAlertDialogBuilder(this)
                 .setTitle(R.string.personal_recommendation_confirm_title)
                 .setMessage(R.string.personal_recommendation_confirm_message)
                 .setNegativeButton(R.string.dialog_negative, null)

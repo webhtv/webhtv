@@ -22,6 +22,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.service.ReaderTtsService;
 import com.fongmi.android.tv.ui.novel.NovelReaderHost;
 import com.fongmi.android.tv.ui.novel.NovelRouter;
 import com.fongmi.android.tv.ui.novel.ReaderHistory;
@@ -1459,6 +1460,285 @@ public class WebReaderActivity extends AppCompatActivity {
         }
     }
 
+    /* ---------------- 朗读（TTS）JS 桥 ---------------- */
+
+    /**
+     * 朗读状态回调：把原生朗读的进度送回 WebView 面板（高亮跟随、状态文案、章末续读）。
+     * 阅读页销毁时会清空（见 onDestroy），避免服务把状态发给已销毁的 WebView。
+     */
+    private final ReaderTtsService.WebCallback ttsWebCallback = new ReaderTtsService.WebCallback() {
+        @Override
+        public void onTtsState(String state, int paragraph, int total, String message, String title) {
+            JSONObject json = new JSONObject();
+            try {
+                json.put("state", state);
+                json.put("paragraph", paragraph);
+                json.put("total", total);
+                json.put("message", message == null ? "" : message);
+                json.put("title", title == null ? "" : title);
+            } catch (Throwable ignore) {
+            }
+            evalJs("window.__onTtsState && window.__onTtsState(" + jsSafe(json.toString()) + ");");
+        }
+
+        @Override
+        public void onTtsParagraph(int paragraph, int total, String text) {
+            JSONObject json = new JSONObject();
+            try {
+                json.put("paragraph", paragraph);
+                json.put("total", total);
+                json.put("text", text == null ? "" : text);
+            } catch (Throwable ignore) {
+            }
+            evalJs("window.__onTtsProgress && window.__onTtsProgress(" + jsSafe(json.toString()) + ");");
+        }
+
+        @Override
+        public void onTtsChapterEnd() {
+            evalJs("window.__onTtsChapterEnd && window.__onTtsChapterEnd();");
+        }
+
+        @Override
+        public void onTtsVoices(java.util.List<com.fongmi.android.tv.tts.TtsVoice> voices) {
+            evalJs("window.__onTtsVoices && window.__onTtsVoices(" + jsSafe(voicesJson(voices)) + ");");
+        }
+    };
+
+    private void evalJs(String script) {
+        runOnUiThread(() -> {
+            WebView view = webView;
+            if (view == null) return;
+            try {
+                view.evaluateJavascript(script, null);
+            } catch (Throwable ignore) {
+            }
+        });
+    }
+
+    private static String voicesJson(java.util.List<com.fongmi.android.tv.tts.TtsVoice> voices) {
+        JSONArray array = new JSONArray();
+        if (voices != null) {
+            for (com.fongmi.android.tv.tts.TtsVoice voice : voices) {
+                JSONObject json = new JSONObject();
+                try {
+                    json.put("id", voice.id);
+                    json.put("name", voice.name.isEmpty() ? voice.id : voice.name);
+                    json.put("lang", voice.lang);
+                } catch (Throwable ignore) {
+                }
+                array.put(json);
+            }
+        }
+        return array.toString();
+    }
+
+    /**
+     * 朗读面板初始化信息：当前状态 + 音源可用性 + 自定义引擎配置 + 内置音色。
+     * 面板打开时调用一次，避免把长配置放在 HTML 里维护两份真相。
+     */
+    @JavascriptInterface
+    public String ttsInfo() {
+        JSONObject info = new JSONObject();
+        try {
+            ReaderTtsService service = ReaderTtsService.get();
+            info.put("state", service == null ? "stopped" : service.state());
+            info.put("paragraph", service == null ? -1 : service.currentParagraph());
+            info.put("total", service == null ? 0 : service.paragraphCount());
+            info.put("timer", service == null ? 0 : service.timerMinutes());
+            info.put("activeSource", service == null ? "" : service.sourceId());
+            boolean systemAvailable = com.fongmi.android.tv.tts.TtsEngines.systemAvailable(this);
+            info.put("systemAvailable", systemAvailable);
+            info.put("systemDetail", systemAvailable ? "设备系统语音" : "设备未安装系统 TTS 引擎");
+            info.put("edgeVoices", new JSONArray(voicesJson(
+                    com.fongmi.android.tv.tts.TtsEngines.staticVoices(com.fongmi.android.tv.tts.TtsEngines.SOURCE_EDGE))));
+            com.fongmi.android.tv.tts.TtsEngineConfig custom =
+                    com.fongmi.android.tv.tts.TtsEngines.loadCustomConfig();
+            info.put("custom", custom == null ? JSONObject.NULL : new JSONObject(custom.toJson()));
+        } catch (Throwable e) {
+            SpiderDebug.log(TAG, "ttsInfo failed %s", e.getMessage());
+        }
+        return info.toString();
+    }
+
+    /**
+     * 取某个音源的音色列表。
+     *
+     * 系统音色必须等 TextToSpeech 初始化完成（异步），因此这里返回空数组，
+     * 就绪后通过 {@code window.__onTtsVoices} 异步推送；其余音源为静态列表。
+     */
+    @JavascriptInterface
+    public String ttsVoices(String source) {
+        String id = source == null ? "" : source;
+        try {
+            if (com.fongmi.android.tv.tts.TtsEngines.SOURCE_SYSTEM.equals(id)) {
+                com.fongmi.android.tv.tts.TtsEngines.probeSystemVoices(this, voices ->
+                        evalJs("window.__onTtsVoices && window.__onTtsVoices(" + jsSafe(voicesJson(voices)) + ");"));
+                return "[]";
+            }
+            return voicesJson(com.fongmi.android.tv.tts.TtsEngines.staticVoices(id));
+        } catch (Throwable e) {
+            SpiderDebug.log(TAG, "ttsVoices failed %s", e.getMessage());
+            return "[]";
+        }
+    }
+
+    /** 保存自定义在线朗读引擎（legado 规则子集）。 */
+    @JavascriptInterface
+    public boolean ttsSaveEngine(String json) {
+        com.fongmi.android.tv.tts.TtsEngineConfig config =
+                com.fongmi.android.tv.tts.TtsEngineConfig.fromJson(json);
+        if (config == null || !com.fongmi.android.tv.tts.TtsHttpRule.parse(config.url, config.contentType).isUsable()) {
+            return false;
+        }
+        com.fongmi.android.tv.tts.TtsEngines.saveCustomConfig(config);
+        return true;
+    }
+
+    /**
+     * 开始朗读。
+     *
+     * payload：{source, voice, rate, pitch, timer, index, title, rule, paragraphs:[...]}
+     * 正文段落不走 Intent（可能很长），而是经静态 StartRequest 传给服务。
+     */
+    @JavascriptInterface
+    public void ttsStart(String payload) {
+        try {
+            JSONObject json = new JSONObject(payload == null ? "{}" : payload);
+            String source = json.optString("source", com.fongmi.android.tv.tts.TtsEngines.SOURCE_SYSTEM);
+            float rate = (float) json.optDouble("rate", 1d);
+            float pitch = (float) json.optDouble("pitch", 1d);
+            String voice = json.optString("voice", "");
+            int timer = json.optInt("timer", 0);
+            int index = Math.max(0, json.optInt("index", 0));
+            String title = json.optString("title", vodName);
+            com.fongmi.android.tv.tts.TtsEngineConfig rule = null;
+            if (com.fongmi.android.tv.tts.TtsEngines.SOURCE_CUSTOM.equals(source)) {
+                rule = com.fongmi.android.tv.tts.TtsEngineConfig.fromJson(json.optString("rule", ""));
+                if (rule == null) {
+                    pushTtsError("请先配置在线朗读引擎");
+                    return;
+                }
+            }
+            JSONArray array = json.optJSONArray("paragraphs");
+            ArrayList<String> paragraphs = new ArrayList<>();
+            if (array != null) {
+                for (int i = 0; i < array.length(); i++) {
+                    String text = array.optString(i, "");
+                    if (!TextUtils.isEmpty(text)) paragraphs.add(text);
+                }
+            }
+            if (paragraphs.isEmpty()) {
+                pushTtsError("没有可朗读的内容");
+                return;
+            }
+            com.fongmi.android.tv.tts.TtsOptions options =
+                    new com.fongmi.android.tv.tts.TtsOptions(rate, pitch, voice);
+            final com.fongmi.android.tv.tts.TtsEngineConfig startRule = rule;
+            final ReaderTtsService.StartRequest request = new ReaderTtsService.StartRequest(
+                    source, options, startRule, paragraphs, index, timer, title);
+            // 下发任务同样回主线程：控制器/服务要求主线程语义（见 postToService 的注释），
+            // 在主线程内「先登记任务再 startForegroundService」也让这次交接天然有序。
+            runOnUiThread(() -> {
+                ReaderTtsService.setPendingStart(request);
+                ReaderTtsService.setPendingWebCallback(ttsWebCallback);
+                ReaderTtsService service = ReaderTtsService.get();
+                if (service != null) service.setWebCallback(ttsWebCallback);
+                Intent intent = new Intent(this, ReaderTtsService.class).setAction(ReaderTtsService.ACTION_START);
+                androidx.core.content.ContextCompat.startForegroundService(this, intent);
+            });
+        } catch (Throwable e) {
+            SpiderDebug.log(TAG, "ttsStart failed %s", e.getMessage());
+            pushTtsError("朗读启动失败：" + e.getMessage());
+        }
+    }
+
+    private void pushTtsError(String message) {
+        JSONObject json = new JSONObject();
+        try {
+            json.put("state", "error");
+            json.put("paragraph", -1);
+            json.put("total", 0);
+            json.put("message", message);
+        } catch (Throwable ignore) {
+        }
+        evalJs("window.__onTtsState && window.__onTtsState(" + jsSafe(json.toString()) + ");");
+    }
+
+    /**
+     * 朗读控制桥统一回主线程执行。
+     *
+     * {@code @JavascriptInterface} 方法在 WebView 的 JavaBridge 线程被调用，而朗读控制器与
+     * 前台服务都要求主线程语义（引擎回调也一律经 {@code onMain} 归一到主线程：下游要改
+     * MediaPlayer、起/停前台通知、向 WebView 注入脚本）。若直接在 JS 线程改控制器状态，
+     * 就会与主线程的引擎回调并发：既可能读到被 {@code stop()} 换成空表的队列（控制器里
+     * size 与 get 的竞态），也会让 startForeground/通知更新发生在非主线程。
+     */
+    private void postToService(java.util.function.Consumer<ReaderTtsService> action) {
+        runOnUiThread(() -> {
+            ReaderTtsService service = ReaderTtsService.get();
+            if (service != null) action.accept(service);
+        });
+    }
+
+    @JavascriptInterface
+    public void ttsPause() {
+        postToService(ReaderTtsService::pauseReadAloud);
+    }
+
+    @JavascriptInterface
+    public void ttsResume() {
+        postToService(ReaderTtsService::resumeReadAloud);
+    }
+
+    @JavascriptInterface
+    public void ttsToggle() {
+        postToService(ReaderTtsService::toggleReadAloud);
+    }
+
+    @JavascriptInterface
+    public void ttsPrev() {
+        postToService(ReaderTtsService::prevParagraph);
+    }
+
+    @JavascriptInterface
+    public void ttsNext() {
+        postToService(ReaderTtsService::nextParagraph);
+    }
+
+    @JavascriptInterface
+    public void ttsSeek(int paragraph) {
+        postToService(service -> service.seekParagraph(paragraph));
+    }
+
+    @JavascriptInterface
+    public void ttsSetRate(float rate) {
+        postToService(service -> service.setRate(rate));
+    }
+
+    @JavascriptInterface
+    public void ttsSetPitch(float pitch) {
+        postToService(service -> service.setPitch(pitch));
+    }
+
+    @JavascriptInterface
+    public void ttsSetVoice(String voice) {
+        postToService(service -> service.setVoice(voice));
+    }
+
+    @JavascriptInterface
+    public void ttsSetTimer(int minutes) {
+        postToService(service -> service.setTimer(minutes));
+    }
+
+    @JavascriptInterface
+    public void ttsStop() {
+        runOnUiThread(() -> {
+            ReaderTtsService service = ReaderTtsService.get();
+            if (service != null) service.shutdown();
+            else ReaderTtsService.stopAndQuit();
+        });
+    }
+
     @Override
     public void onBackPressed() {
         // 直接关闭阅读页返回播放器（兼容旧 API；新 API 走 OnBackPressedDispatcher）
@@ -1510,6 +1790,12 @@ public class WebReaderActivity extends AppCompatActivity {
         // onPause 已处理返回场景，这里兜住系统回收等不经过 finish() 的销毁。
         markClosed();
         picTokens.clear();
+        // 朗读与阅读页同生命周期：离开阅读页就停播（通知栏控制只服务于仍在阅读的会话）
+        if (isFinishing()) {
+            ReaderTtsService service = ReaderTtsService.get();
+            if (service != null) service.clearWebCallback(ttsWebCallback);
+            ReaderTtsService.stopAndQuit();
+        }
         // 只在真正结束时清缓存：配置变更 / 系统回收导致的重建会再次用同一个 cacheKey
         // 读取正文与章节列表（Intent 里只带 key，不带数据），提前清掉会渲染成空章。
         if (isFinishing() && !cacheKey.isEmpty()) {

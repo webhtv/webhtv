@@ -52,7 +52,7 @@ public class ShortDramaConfig {
     public boolean isSiteEnabled(String key, String name) {
         sanitize();
         if (isBlacklisted(key)) return false;
-        List<String> rules = !enabledSites.isEmpty() ? enabledSites : DEFAULT_ENABLED_RULES;
+        List<String> rules = isConfigured() ? enabledSites : DEFAULT_ENABLED_RULES;
         return matches(rules, key) || matches(rules, name);
     }
 
@@ -65,12 +65,12 @@ public class ShortDramaConfig {
     }
 
     public String getDisplayRules() {
-        List<String> rules = !getEnabledSites().isEmpty() ? getEnabledSites() : DEFAULT_ENABLED_RULES;
+        List<String> rules = isConfigured() ? getEnabledSites() : DEFAULT_ENABLED_RULES;
         return rules.isEmpty() ? "" : String.join(";", rules);
     }
 
     public String getDisplayRulesWithNames() {
-        List<String> rules = !getEnabledSites().isEmpty() ? getEnabledSites() : DEFAULT_ENABLED_RULES;
+        List<String> rules = isConfigured() ? getEnabledSites() : DEFAULT_ENABLED_RULES;
         if (rules.isEmpty()) return "";
         List<String> display = new ArrayList<>();
         for (String rule : rules) {
@@ -97,6 +97,10 @@ public class ShortDramaConfig {
 
     public static String defaultRulesText() {
         return String.join(";", DEFAULT_ENABLED_RULES);
+    }
+
+    public static List<String> defaultRules() {
+        return new ArrayList<>(DEFAULT_ENABLED_RULES);
     }
 
     private static List<String> cleanList(List<String> values) {

@@ -1,13 +1,55 @@
 <resources>
 
-    <style name="Theme.Base" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">@color/white</item>
-        <item name="materialAlertDialogTheme">@style/ThemeOverlay.WebHTV.LightDialog</item>
+    <style name="Theme.Base" parent="Theme.WebHTV.TV">
+        <!--
+            原生增强播放页统一焦点/选中语义色。TV 侧 colorPrimary 由 Theme.WebHTV 统一定义，
+            且同时驱动全局聚焦文字色，因此焦点环单独走这三个主题属性；
+            自定义主题（ThemeBinder / ThemeController）可在运行时覆写它们。
+        -->
+        <item name="tvFocusRing">@color/tv_item_focus_ring</item>
+        <item name="tvCurrentRing">@color/tv_item_current_ring</item>
+        <item name="tvNormalStroke">@color/tv_item_normal_stroke</item>
+        <!--
+            播放页（视频层）环色。不能直接用 ?attr/tvFocusRing：浅色表 FOCUS 深蓝在固定深靛
+            玻璃上仅 1.83:1。这里绑的是派生值：浅色表为 ThemeResolver 夹取到 ≥3:1 的结果
+            （#447BF5），深色表直接与应用表面焦点环同值（近白）——深色表两类宿主的底色都是
+            深色，近白对它们都可读，于是播放页只剩一种高亮色（主题改 FOCUS / playerCurrent
+            槽时同步派生）。
+        -->
+        <item name="tvPlayerRing">@color/tv_player_focus_ring</item>
+        <item name="tvPlayerCurrentRing">@color/tv_player_current_ring</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.WebHTV.Dialog</item>
         <item name="android:windowBackground">?attr/colorSurface</item>
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:windowTranslucentNavigation">true</item>
         <item name="android:windowAnimationStyle">@style/NoAnim</item>
+    </style>
+
+    <!--
+        固定深色玻璃宿主（面板 = shape_quick_search_dialog，#E62F315E→#CC303463，两张表里
+        都是深色，见 ThemeBaseWiringTest 的 DARK_GLASS_SHEETS）的芯片环色覆盖层。
+
+        dialog_episode_list / dialog_quick_search 复用播放页那批芯片布局
+        （adapter_flag / adapter_array / adapter_episode / adapter_quick → selector_video_item）。
+        该 selector 的默认族是「应用表面」(?attr/tvFocusRing = 调色板 FOCUS 槽)，画在这块
+        深玻璃上只有 1.83:1（浅色表），焦点环会看不见。本覆盖层在**该对话框子树内**把
+        tvFocusRing / tvCurrentRing 重新绑到视频层派生色，使同一份芯片布局在两类宿主上
+        各自拿到可读的环色：
+
+          - 页面内容区（壁纸/磨砂底，调色板表面）→ 调色板 FOCUS 槽（默认族）
+          - 固定深色玻璃对话框 → 视频层派生色（本覆盖层）
+
+        实现方式：宿主布局根上写 android:theme，子视图（含 RecyclerView 的 item）
+        由带本覆盖层的 Context 填充，因此 ?attr 在该子树内解析成玻璃可读色，
+        而无需给共享的芯片布局再复制一份 drawable。
+
+        parent="" 是刻意留的：ContextThemeWrapper 会把本 style 叠加在既有主题之上，
+        只覆盖这两项，其余属性仍从 Theme.Base / Theme.WebHTV 继承。
+    -->
+    <style name="ThemeOverlay.WebHTV.GlassFocusRings" parent="">
+        <item name="tvFocusRing">@color/tv_player_focus_ring</item>
+        <item name="tvCurrentRing">@color/tv_player_current_ring</item>
     </style>
 
     <style name="Theme.Splash" parent="Theme.Base">
@@ -42,7 +84,7 @@
         <item name="android:focusable">true</item>
         <item name="android:focusableInTouchMode">true</item>
         <item name="android:nextFocusDown">@id/timeBar</item>
-        <item name="android:textColor">@color/text</item>
+        <item name="android:textColor">@color/player_control_text</item>
         <item name="android:textSize">14sp</item>
     </style>
 
@@ -51,7 +93,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">13dp</item>
         <item name="android:layout_marginBottom">7dp</item>
-        <item name="android:textColor">@color/white_70</item>
+        <item name="android:textColor">@color/webhtv_color_player_control_muted</item>
         <item name="android:textSize">13sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -75,7 +117,7 @@
         <item name="android:layout_weight">1</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
         <item name="android:gravity">center</item>
-        <item name="android:textColor">@color/white</item>
+        <item name="android:textColor">@color/webhtv_color_player_control</item>
         <item name="android:textSize">12sp</item>
         <item name="android:focusable">true</item>
     </style>
@@ -87,7 +129,7 @@
         <item name="android:focusable">true</item>
         <item name="android:padding">8dp</item>
         <item name="android:scaleType">center</item>
-        <item name="android:tint">@color/white</item>
+        <item name="android:tint">@color/webhtv_color_player_control</item>
     </style>
 
     <style name="ShapeAppearance.WebHTV.AudioCover" parent="">
@@ -96,8 +138,27 @@
     </style>
 
     <!-- Keep TV dialogs aligned with the active app theme instead of pinning a fixed palette. -->
-    <style name="ThemeOverlay.WebHTV.LightDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
-        <item name="alertDialogStyle">@style/MaterialAlertDialog.WebHTV.Rounded</item>
+    <style name="ThemeOverlay.WebHTV.LightDialog" parent="ThemeOverlay.WebHTV.Dialog" />
+
+    <!--
+        电视设置页的分组标题。
+
+        颜色必须用纯白的 webhtvColorOnWallpaper，不能用次级角色
+        webhtvColorOnWallpaperVariant：标题直接画在壁纸上（没有色带承载），80% 白在
+        实测壁纸上只有 3.84:1，低于正文 4.5:1 门槛；而它在色带上的取值（5.12:1）才合规。
+        所以分组的层级靠字号（14sp 对 18sp 正文）、字距和间距表达，不靠降低亮度。
+
+        间距遵循「标题上方留白大于下方」：上 32dp、下 0dp；紧随其后的行自带
+        {@code layout_marginTop="16dp"}，所以标题下实际留白 16dp，仍小于上方的 32dp。
+    -->
+    <style name="Widget.WebHTV.TvGroupHeader">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">32dp</item>
+        <item name="android:layout_marginBottom">0dp</item>
+        <item name="android:textColor">?attr/webhtvColorOnWallpaper</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">0.1</item>
     </style>
 
 </resources>

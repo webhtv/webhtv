@@ -62,6 +62,21 @@ public class TmdbSourceMergerTest {
     }
 
     @Test
+    public void incompatibleEnglishSourceCoreAllowsChineseNetworkOverride() {
+        TmdbItem sourceItem = new TmdbItem(1, "movie", "Source English", "", "Source English overview", "", "");
+        TmdbBundle source = bundle(sourceItem, "{\"id\":1,\"title\":\"Source English\",\"overview\":\"Source English overview\"}", List.of(), List.of());
+        TmdbBundle network = bundle(new TmdbItem(1, "movie", "中文标题", "", "中文简介", "", ""), "{\"id\":1,\"title\":\"中文标题\",\"overview\":\"中文简介\"}", List.of(), List.of());
+        TmdbSourcePayload payload = GSON.fromJson("{\"schema\":1,\"id\":1,\"media_type\":\"movie\",\"language\":\"en-US\",\"complete\":[\"core\"],\"detail\":{\"id\":1}}", TmdbSourcePayload.class);
+
+        TmdbSourceMerger.MergedBundle merged = TmdbSourceMerger.merge(source, payload, null, network, "zh-CN");
+
+        assertEquals("中文标题", merged.bundle().item().getTitle());
+        assertEquals("中文简介", merged.bundle().item().getOverview());
+        assertEquals(TmdbSourceMerger.Origin.REMOTE_TMDB_LANGUAGE, merged.origin("item.title"));
+        assertEquals(TmdbSourceMerger.Origin.REMOTE_TMDB_LANGUAGE, merged.origin("item.overview"));
+    }
+
+    @Test
     public void identityMismatchLeavesSourceBundleUntouched() {
         TmdbBundle source = bundle(item("Source", "Overview", ""), "{\"id\":1,\"overview\":\"Overview\"}", List.of(), List.of());
         TmdbBundle network = bundle(item("Wrong", "Wrong", "wrong.jpg"), "{\"id\":1,\"overview\":\"Wrong\"}", List.of(new TmdbPerson(9, "Actor", "", "", "", "")), List.of());

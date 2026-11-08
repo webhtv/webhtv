@@ -12,7 +12,7 @@
     <View
         android:layout_width="3dp"
         android:layout_height="16dp"
-        android:background="#FF4A8DFF" />
+        android:background="@color/webhtv_color_primary" />
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/source"
@@ -23,7 +23,7 @@
         android:ellipsize="end"
         android:gravity="center_vertical"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="@color/webhtv_color_on_surface"
         android:textSize="15sp"
         android:textStyle="bold"
         tools:text="YOUKU" />
@@ -33,7 +33,7 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:gravity="center_vertical"
-        android:textColor="@color/white_60"
+        android:textColor="@color/webhtv_color_on_surface_variant"
         android:textSize="13sp"
         tools:text="3" />
 

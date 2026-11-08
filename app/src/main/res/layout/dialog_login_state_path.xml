@@ -26,7 +26,7 @@
             android:ellipsize="end"
             android:singleLine="true"
             android:text="@string/login_state_paths_title"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -40,7 +40,7 @@
             android:paddingEnd="10dp"
             android:text="@string/sync_paths_refresh"
             android:textColor="@color/dialog_text_button"
-            app:rippleColor="#1A1A73E8" />
+            app:rippleColor="?attr/colorOnSurfaceVariant" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -50,7 +50,7 @@
         android:layout_height="wrap_content"
         android:ellipsize="end"
         android:maxLines="2"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         tools:text="已选 3 条，可同步 3 条，缺失 0 条，待确认 2 条" />
 
@@ -83,7 +83,7 @@
                 android:gravity="center_vertical"
                 android:singleLine="true"
                 android:text="@string/login_state_tree_app"
-                android:textColor="#202124"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -124,7 +124,7 @@
                 android:gravity="center_vertical"
                 android:singleLine="true"
                 android:text="@string/login_state_tree_sdcard"
-                android:textColor="#202124"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -153,7 +153,7 @@
         android:gravity="center"
         android:padding="10dp"
         android:text="@string/login_state_empty"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp"
         android:visibility="gone"
         tools:visibility="visible" />
@@ -173,7 +173,7 @@
             android:minWidth="0dp"
             android:text="@string/login_state_reveal_pending"
             android:textColor="@color/dialog_text_button"
-            app:rippleColor="#1A1A73E8" />
+            app:rippleColor="?attr/colorOnSurfaceVariant" />
 
         <Space
             android:layout_width="0dp"
@@ -190,7 +190,7 @@
             android:text="@string/dialog_negative"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
@@ -201,7 +201,9 @@
             android:minHeight="40dp"
             android:text="@string/dialog_positive"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

@@ -34,7 +34,7 @@ public class AdRuleManageDialogLayoutTest {
         assertTrue("TV rule row focus must have a visible light-dialog highlight",
                 item.contains("android:background=\"@drawable/selector_light_dialog_item\"")
                         && count(item, "android:background=\"@drawable/selector_dialog_switch\"") >= 2);
-        assertTrue(dialog.contains("Widget.WebHTV.LightDialog.Button.Outlined"));
+        assertTrue(dialog.contains("Widget.WebHTV.Button.Outlined"));
         assertFalse("statistics dialog must not use white text on its light panel",
                 stats.contains("android:textColor=\"@color/white\"")
                         || stats.contains("android:textColor=\"@color/white_50\""));
@@ -42,7 +42,7 @@ public class AdRuleManageDialogLayoutTest {
                 statsItem.contains("android:textColor=\"@color/white\"")
                         || statsItem.contains("android:textColor=\"@color/white_50\""));
         assertTrue("candidate picker must use the full light dialog theme",
-                source.contains("new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)\n                .setTitle(R.string.ad_rule_import_title)"));
+                source.contains("new WebHtvAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_Dialog)\n                .setTitle(R.string.ad_rule_import_title)"));
         assertTrue("rule manager buttons must bridge DPAD focus into the first rule row",
                 source.contains("binding.stats.setOnKeyListener")
                         && source.contains("binding.importCandidates.getVisibility() == View.VISIBLE")
@@ -74,9 +74,9 @@ public class AdRuleManageDialogLayoutTest {
                 edit.contains("android:textColor=\"@color/white")
                         || edit.contains("android:textColorHint=\"@color/white"));
         assertTrue("rule editor inputs need an explicit light-dialog stroke",
-                edit.contains("app:boxStrokeColor=\"@color/dialog_outlined_button_stroke\""));
+                edit.contains("style=\"@style/Widget.WebHTV.Input\"") || edit.contains("app:boxStrokeColor=\"?attr/colorOutline\""));
         assertTrue("rule editor cancel action must expose a TV focus state",
-                edit.contains("style=\"@style/Widget.WebHTV.LightDialog.Button.Outlined\""));
+                edit.contains("style=\"@style/Widget.WebHTV.Button.Outlined\""));
         assertTrue("rule editor confirm action must expose a TV focus state",
                 edit.contains("app:backgroundTint=\"@color/dialog_primary_button_bg\""));
 
@@ -84,7 +84,7 @@ public class AdRuleManageDialogLayoutTest {
                 preview.contains("android:textColor=\"@color/white"));
         assertTrue("rule preview actions must use the light-dialog button palette",
                 preview.contains("@color/dialog_primary_button_bg")
-                        && preview.contains("Widget.WebHTV.LightDialog.Button.Outlined"));
+                        && preview.contains("Widget.WebHTV.Button.Outlined"));
     }
 
     @Test
@@ -186,7 +186,7 @@ public class AdRuleManageDialogLayoutTest {
         int end = source.indexOf("\n    @Override", start + 1);
         String handler = source.substring(start, end);
 
-        assertTrue(handler.contains("new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)"));
+        assertTrue(handler.contains("new WebHtvAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_Dialog)"));
         assertTrue(handler.contains(".setPositiveButton(R.string.ad_rule_delete_confirm, (dialog, which) -> deleteUserRule(item))"));
         assertTrue(handler.contains(".setNegativeButton(android.R.string.cancel, null)"));
         assertFalse("delete must only happen after confirmation", handler.contains("UserAdRuleStore.delete"));

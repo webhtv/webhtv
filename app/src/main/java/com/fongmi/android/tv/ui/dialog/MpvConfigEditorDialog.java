@@ -14,6 +14,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogMpvConfigEditorBinding;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -46,7 +47,7 @@ public class MpvConfigEditorDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
@@ -105,8 +106,8 @@ public class MpvConfigEditorDialog extends BaseAlertDialog {
         if (window == null) return;
         boolean land = ResUtil.isLand(requireContext());
         WindowManager.LayoutParams params = window.getAttributes();
-        params.width = (int) (ResUtil.getScreenWidth(requireContext()) * (land ? 0.72f : 0.96f));
-        params.height = (int) (ResUtil.getScreenHeight(requireContext()) * (land ? 0.9f : 0.88f));
+        params.width = (int) (DialogSafeArea.width(requireActivity(), window) * (land ? 0.72f : 0.96f));
+        params.height = (int) (DialogSafeArea.height(requireActivity(), window) * (land ? 0.9f : 0.88f));
         params.dimAmount = 0.58f;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);

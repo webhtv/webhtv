@@ -16,7 +16,7 @@
         android:paddingStart="8dp"
         android:paddingEnd="8dp"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="13sp"
         tools:text="熱搜詞" />
 </FrameLayout>

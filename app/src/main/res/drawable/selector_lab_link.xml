@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    实验室弹窗里文字链接（如「选择离线包文件」）的遥控聚焦背景。
+
+    这类链接是程序化创建的 TextView + setClickable(true)：可以聚焦，但只有文字颜色，
+    遥控聚焦时画面完全不变；而所在弹窗的初始焦点此前又落在多行粘贴框里出不来，
+    用户既看不到焦点也到不了这个动作。
+
+    环色必须用语义 token，不能用固定的 @color/accent：这个链接长在 Theme.App.Lab.DayNight.Dialog
+    里（LabActivity.showImportDialog），浅色系统下面板是 lab_surface = #E7E8EF，而 accent 是固定的
+    #2196F3 —— 只有 2.56:1，低于仓库既有的「焦点环 ≥3:1」对比度门，环几乎看不见（同 lab_styles.xml
+    对 colorPrimary 的要求：弹窗必须用语义 token 才能跟随深浅色与主题覆写）。
+    webhtv_color_primary 实测浅色 5.23:1、深色 7.86:1，并且与链接自身的文字色
+    （LabActivity 里 select.setTextColor(R.color.webhtv_color_primary)）同源。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/black_40"/>
+            <stroke
+                android:width="2dp"
+                android:color="@color/webhtv_color_primary"/>
+            <corners android:radius="6dp"/>
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/black_40"/>
+            <corners android:radius="6dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent"/>
+            <corners android:radius="6dp"/>
+        </shape>
+    </item>
+</selector>

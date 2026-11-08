@@ -8,11 +8,11 @@
     android:defaultFocusHighlightEnabled="false"
     android:focusable="true"
     android:stateListAnimator="@null"
-    app:cardBackgroundColor="#CC16202A"
-    app:cardCornerRadius="8dp"
+    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+    app:cardCornerRadius="@dimen/webhtv_card_radius_default"
     app:cardElevation="0dp"
     app:rippleColor="@android:color/transparent"
-    app:strokeColor="#33FFFFFF"
+    app:strokeColor="?attr/colorOutlineVariant"
     app:strokeWidth="1dp">
 
     <FrameLayout
@@ -133,7 +133,7 @@
                 android:ellipsize="end"
                 android:lineSpacingExtra="1dp"
                 android:maxLines="2"
-                android:textColor="#E6FFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="10sp" />
         </LinearLayout>
 

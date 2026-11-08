@@ -25,7 +25,7 @@
             android:layout_marginEnd="16dp"
             android:layout_weight="1"
             android:text="@string/playback_webhook"
-            android:textColor="@color/black"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -48,7 +48,7 @@
         android:id="@+id/summary"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp" />
 
     <com.fongmi.android.tv.ui.custom.CustomNestedScrollView
@@ -80,7 +80,7 @@
                     android:paddingTop="28dp"
                     android:paddingBottom="28dp"
                     android:text="@string/playback_webhook_empty"
-                    android:textColor="#5F6368"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="14sp" />
 
                 <androidx.appcompat.widget.LinearLayoutCompat
@@ -111,7 +111,7 @@
                         android:layout_marginEnd="12dp"
                         android:layout_weight="1"
                         android:text="@string/playback_webhook_edit"
-                        android:textColor="@color/black"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="16sp"
                         android:textStyle="bold" />
 
@@ -136,9 +136,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:hint="@string/playback_webhook_name"
-                    app:boxBackgroundColor="@color/white"
-                    app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-                    app:hintTextColor="#5F6368">
+                    app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+                    app:boxStrokeColor="?attr/colorOutline"
+                    app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/name"
@@ -150,8 +150,8 @@
                         android:scrollHorizontally="true"
                         android:selectAllOnFocus="false"
                         android:singleLine="true"
-                        android:textColor="@color/black"
-                        android:textColorHint="#666666" />
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -161,9 +161,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:hint="@string/playback_webhook_url"
-                    app:boxBackgroundColor="@color/white"
-                    app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-                    app:hintTextColor="#5F6368">
+                    app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+                    app:boxStrokeColor="?attr/colorOutline"
+                    app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/url"
@@ -175,8 +175,8 @@
                         android:scrollHorizontally="true"
                         android:selectAllOnFocus="false"
                         android:singleLine="true"
-                        android:textColor="@color/black"
-                        android:textColorHint="#666666" />
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -186,9 +186,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:hint="@string/playback_webhook_token_optional"
-                    app:boxBackgroundColor="@color/white"
-                    app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-                    app:hintTextColor="#5F6368">
+                    app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+                    app:boxStrokeColor="?attr/colorOutline"
+                    app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/token"
@@ -200,8 +200,8 @@
                         android:scrollHorizontally="true"
                         android:selectAllOnFocus="false"
                         android:singleLine="true"
-                        android:textColor="@color/black"
-                        android:textColorHint="#666666" />
+                        android:textColor="?attr/colorOnSurface"
+                        android:textColorHint="?attr/colorOnSurfaceVariant" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -229,7 +229,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
                         android:text="@string/playback_webhook_preset"
-                        android:textColor="#5F6368"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="12sp" />
 
                     <com.google.android.material.button.MaterialButtonToggleGroup
@@ -254,7 +254,7 @@
                             android:textColor="@color/dialog_toggle_button_text"
                             android:textSize="12sp"
                             app:backgroundTint="@color/dialog_toggle_button_bg"
-                            app:strokeColor="@color/dialog_outlined_button_stroke" />
+                            app:strokeColor="?attr/colorOutline" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/presetStandard"
@@ -270,7 +270,7 @@
                             android:textColor="@color/dialog_toggle_button_text"
                             android:textSize="12sp"
                             app:backgroundTint="@color/dialog_toggle_button_bg"
-                            app:strokeColor="@color/dialog_outlined_button_stroke" />
+                            app:strokeColor="?attr/colorOutline" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/presetFull"
@@ -286,7 +286,7 @@
                             android:textColor="@color/dialog_toggle_button_text"
                             android:textSize="12sp"
                             app:backgroundTint="@color/dialog_toggle_button_bg"
-                            app:strokeColor="@color/dialog_outlined_button_stroke" />
+                            app:strokeColor="?attr/colorOutline" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/presetCustom"
@@ -302,7 +302,7 @@
                             android:textColor="@color/dialog_toggle_button_text"
                             android:textSize="12sp"
                             app:backgroundTint="@color/dialog_toggle_button_bg"
-                            app:strokeColor="@color/dialog_outlined_button_stroke" />
+                            app:strokeColor="?attr/colorOutline" />
 
                     </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -311,7 +311,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="5dp"
-                        android:textColor="#5F6368"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="12sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -326,7 +326,7 @@
                         android:textColor="@color/dialog_outlined_button_text"
                         android:visibility="gone"
                         app:backgroundTint="@color/dialog_outlined_button_bg"
-                        app:strokeColor="@color/dialog_outlined_button_stroke" />
+                        app:strokeColor="?attr/colorOutline" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/siteKeysLayout"
@@ -334,9 +334,9 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:hint="@string/playback_webhook_site_keys"
-                        app:boxBackgroundColor="@color/white"
-                        app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-                        app:hintTextColor="#5F6368">
+                        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+                        app:boxStrokeColor="?attr/colorOutline"
+                        app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/siteKeys"
@@ -348,8 +348,8 @@
                             android:scrollHorizontally="true"
                             android:selectAllOnFocus="false"
                             android:singleLine="true"
-                            android:textColor="@color/black"
-                            android:textColorHint="#666666" />
+                            android:textColor="?attr/colorOnSurface"
+                            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -365,9 +365,9 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:hint="@string/playback_webhook_interval"
-                            app:boxBackgroundColor="@color/white"
-                            app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-                            app:hintTextColor="#5F6368">
+                            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+                            app:boxStrokeColor="?attr/colorOutline"
+                            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                             <com.google.android.material.textfield.TextInputEditText
                                 android:id="@+id/interval"
@@ -378,8 +378,8 @@
                                 android:inputType="number"
                                 android:selectAllOnFocus="true"
                                 android:singleLine="true"
-                                android:textColor="@color/black"
-                                android:textColorHint="#666666" />
+                                android:textColor="?attr/colorOnSurface"
+                                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -390,9 +390,9 @@
                             android:layout_marginStart="8dp"
                             android:layout_weight="1"
                             android:hint="@string/playback_webhook_retries"
-                            app:boxBackgroundColor="@color/white"
-                            app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-                            app:hintTextColor="#5F6368">
+                            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+                            app:boxStrokeColor="?attr/colorOutline"
+                            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                             <com.google.android.material.textfield.TextInputEditText
                                 android:id="@+id/retries"
@@ -403,8 +403,8 @@
                                 android:inputType="number"
                                 android:selectAllOnFocus="true"
                                 android:singleLine="true"
-                                android:textColor="@color/black"
-                                android:textColorHint="#666666" />
+                                android:textColor="?attr/colorOnSurface"
+                                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
                         </com.google.android.material.textfield.TextInputLayout>
 
@@ -436,10 +436,10 @@
             android:minHeight="40dp"
             android:minWidth="0dp"
             android:text="@string/setting_delete"
-            android:textColor="#B3261E"
+            android:textColor="?attr/colorError"
             android:visibility="gone"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/negative"
@@ -452,7 +452,7 @@
             android:text="@string/dialog_negative"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
@@ -465,7 +465,9 @@
             android:minWidth="0dp"
             android:text="@string/dialog_positive"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

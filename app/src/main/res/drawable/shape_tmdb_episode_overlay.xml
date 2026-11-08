@@ -2,7 +2,7 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <gradient
         android:angle="90"
-        android:endColor="#00000000"
-        android:centerColor="#66000000"
-        android:startColor="#B3000000" />
+        android:endColor="@android:color/transparent"
+        android:centerColor="@color/webhtv_color_overlay_dark"
+        android:startColor="@color/webhtv_color_player_scrim" />
 </shape>

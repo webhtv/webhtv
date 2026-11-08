@@ -15,7 +15,7 @@
     android:paddingStart="18dp"
     android:paddingEnd="18dp"
     android:singleLine="true"
-    android:textColor="@color/white"
+    android:textColor="?attr/webhtvColorOnWallpaper"
     android:textSize="15sp"
     android:textStyle="bold"
     tools:text="1 - 12" />

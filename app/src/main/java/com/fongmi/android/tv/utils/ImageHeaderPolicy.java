@@ -3,12 +3,18 @@ package com.fongmi.android.tv.utils;
 import com.google.common.net.HttpHeaders;
 
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 import okhttp3.HttpUrl;
 
 public class ImageHeaderPolicy {
 
     static final String DOUBAN_IMAGE_REFERER = "https://movie.douban.com";
+
+    // 预编译：String.matches() 每调用一次都会重新编译同一个正则。详情页/播放页的图片列表
+    // 会成百次地走 doubanImageReferer()，编译开销全落在主线程上；Pattern 是线程安全的，
+    // 复用一个实例即可，语义与旧写法 String.matches(...) 完全相同。
+    private static final Pattern DOUBAN_IMAGE_HOST = Pattern.compile("img\\d+\\.doubanio\\.com");
 
     private ImageHeaderPolicy() {
     }
@@ -23,7 +29,7 @@ public class ImageHeaderPolicy {
     }
 
     private static boolean isDoubanImageHost(String host) {
-        return host != null && host.matches("img\\d+\\.doubanio\\.com");
+        return host != null && DOUBAN_IMAGE_HOST.matcher(host).matches();
     }
 
     private static String host(String url) {

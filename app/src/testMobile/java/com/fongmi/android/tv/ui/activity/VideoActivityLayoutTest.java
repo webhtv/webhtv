@@ -158,6 +158,49 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileVodControlOverlayShowsBatteryIconLikeFusionMode() throws Exception {
+        // 影视原生/详情直放模式播放器要像沉浸融合内联播放器一样显示「电池电量 + 当前时间」。
+        // 锁定四件事：布局里有 @+id/batteryInfo 竖排容器（含 battery 图标与 batteryTime 文本）、
+        // 可见性只由全屏/锁定/播放状态决定、图标档位与时间格式复用沉浸融合同一套工具
+        // （BatteryUtil / Formatters.TIME，不另造一份映射）。
+        Path controlLayout = findMobileResPath().resolve(Path.of("layout", "view_control_vod.xml"));
+        Set<String> ids = collectAndroidIds(controlLayout.toFile());
+        for (String requiredId : List.of("batteryInfo", "battery", "batteryTime")) {
+            assertTrue(controlLayout + " is missing @+id/" + requiredId, ids.contains(requiredId));
+        }
+        // 时间文本必须嵌在 batteryInfo 容器里（融合模式是同构的竖排块，不是两个并列控件）。
+        assertTrue("the clock text must live inside the batteryInfo container",
+                hasAncestorAndroidId(findAndroidId(controlLayout.toFile(), "batteryTime"), "batteryInfo"));
+        assertTrue("the battery icon must live inside the batteryInfo container",
+                hasAncestorAndroidId(findAndroidId(controlLayout.toFile(), "battery"), "batteryInfo"));
+        // view_widget_vod 已有 @id/time 且与 view_control_vod 同处 activity_video 视图树；
+        // 重名会让 ViewBinding 按 id 查找时命错控件。这里锁定本布局不得再引入 time。
+        assertFalse("view_control_vod must not redeclare @id/time (view_widget_vod already owns it)",
+                ids.contains("time"));
+
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int visibility = source.indexOf("mBinding.control.batteryInfo.setVisibility(");
+        assertTrue("missing battery visibility wiring in " + sourcePath, visibility >= 0);
+        String statement = source.substring(visibility, source.indexOf(';', visibility));
+        assertTrue("battery block must show only in fullscreen: " + statement,
+                statement.contains("isFullscreen()") && statement.contains("!isLock()") && statement.contains("mHistory != null"));
+        assertFalse("battery is an overlay icon, it must not follow PlayerButtonSetting: " + statement,
+                statement.contains("PlayerButtonSetting"));
+
+        String helper = methodBody(source, "private void updateBatteryInfo()", "private void setOrient()");
+        assertTrue("battery icon must reuse BatteryUtil level/icon mapping",
+                helper.contains("BatteryUtil.getLevel(this)") && helper.contains("BatteryUtil.getIcon(level)"));
+        assertTrue("the clock text must reuse the shared time formatter like fusion mode does",
+                helper.contains("LocalDateTime.now().format(Formatters.TIME)"));
+        assertTrue("an unreadable battery level must hide the whole block instead of showing a wrong bucket",
+                helper.contains("level < 0") && helper.contains("View.GONE"));
+        assertTrue("the clock tick must refresh the battery/time block while the control bar is up",
+                methodBody(source, "public void onTimeChanged(long time)", "private void updatePlaybackHistoryPosition()")
+                        .contains("updateBatteryInfo()"));
+    }
+
+    @Test
     public void mobileVodControlOverlayRoutesBlankTouchesToGestureDetector() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -812,9 +855,19 @@ public class VideoActivityLayoutTest {
 
         assertTrue("CustomKeyDownVod must expose the guarded speed release state", keyDown.contains("public boolean isChangingSpeed()") && keyDown.contains("public void releaseSpeed()"));
         assertTrue("releaseSpeed must clear the flag and end the boost", releaseBody.contains("changeSpeed = false;") && releaseBody.contains("listener.onSpeedEnd();"));
-        assertTrue("dispatchKeyEvent must release the boost when a key is released outside the state machine", methodBody(leanback, "public boolean dispatchKeyEvent(KeyEvent event)", "private boolean dispatchLutQuickKey(KeyEvent event)").contains("mKeyDown.releaseSpeed()"));
+        String dispatchBody = methodBody(leanback, "public boolean dispatchKeyEvent(KeyEvent event)", "private boolean dispatchLutQuickKey(KeyEvent event)");
+
+        assertTrue("dispatchKeyEvent must release the boost when a key is released outside the state machine", dispatchBody.contains("mKeyDown.releaseSpeed()"));
         assertTrue("onWindowFocusChanged must release the boost when window focus is lost", methodBody(leanback, "public void onWindowFocusChanged(boolean hasFocus)", "private boolean isInitAuto()").contains("mKeyDown.releaseSpeed()"));
         assertTrue("onStop must release the boost", methodBody(leanback, "protected void onStop()", "protected void onBackInvoked()").contains("mKeyDown.releaseSpeed()"));
+        int boostStart = dispatchBody.indexOf("if (mKeyDown.isChangingSpeed() &&");
+        int boostStop = dispatchBody.indexOf("}", boostStart);
+        assertTrue("the boost release branch must exist", boostStart >= 0 && boostStop > boostStart);
+        String boostRelease = dispatchBody.substring(boostStart, boostStop);
+        assertTrue("a speed boost must end only on an up-key release, not on every key release", boostRelease.contains("if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {"));
+        assertTrue("a released speed boost must not fall through to the menu-opening key-up path", boostRelease.trim().endsWith("return true;"));
+        assertFalse("the boost state must not be mirrored into a second owner", leanback.contains("mSpeedBoostEngaged"));
+        assertTrue("a plain up key press must still open the menu", methodBody(leanback, "public void onKeyUp()", "public void onKeyDown()").contains("showControl(getFocus2());"));
     }
 
     @Test
@@ -1306,6 +1359,60 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackPlaybackLoadingIgnoresStaleReadyBeforeNewPlayerStarts() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String getPlayer = methodBody(source, "private void getPlayer(Flag flag, Episode episode)", "private void setPlayer(Result result)");
+        String request = methodBody(source, "private void beginPlayerContentRequest(String key, String flag, String episode)", "private boolean isShortDramaSource()");
+        String setPlayer = methodBody(source, "private void setPlayer(Result result)", "private int danmakuTmdbId()");
+        String state = methodBody(source, "protected void onStateChanged(int state)", "public void onMediaItemTransition");
+        String error = methodBody(source, "protected void onError(String msg)", "protected void onReload(String msg)");
+        int startPlayer = setPlayer.indexOf("startPlayer(getHistoryKey(), result");
+        int markStarted = setPlayer.indexOf("mPlaybackPlayerStarted = true;");
+
+        assertTrue("a new TV episode request must enter the loading state before the player result arrives",
+                getPlayer.contains("beginPlayerContentRequest(getKey(), playFlag, episode.getUrl());")
+                        && getPlayer.contains("showProgress();")
+                        && request.contains("mPlaybackRequestActive = true;")
+                        && request.contains("mPlaybackPlayerStarted = false;"));
+        assertTrue("the new player session must be marked started before startPlayer can synchronously emit READY",
+                markStarted >= 0 && startPlayer > markStarted);
+        // 取流请求被作废时 ViewModel 会向 PLAYER LiveData 写入 null（cancelPlayerContent）：那次回调
+        // 不会再有任何结果，守卫必须在这里释放，否则两条清除路径同样被永久挡下。
+        int nullResultReturn = setPlayer.indexOf("if (result == null)");
+        assertTrue("the null-result branch must exist", nullResultReturn >= 0);
+        String nullResultBranch = setPlayer.substring(nullResultReturn, setPlayer.indexOf("if (isFinishing()", nullResultReturn));
+        assertTrue("an invalidated request has no later result callback, so it must clear the guard itself",
+                nullResultBranch.contains("mPlaybackRequestActive = false;")
+                        && nullResultBranch.contains("mPlaybackPlayerStarted = false;")
+                        && nullResultBranch.contains("return;"));
+        assertTrue("a stale READY callback must not hide the new episode loading spinner before startPlayer",
+                state.contains("if (mPlaybackRequestActive && !mPlaybackPlayerStarted) break;")
+                        && state.indexOf("mPlaybackRequestActive = false;") > state.indexOf("if (mPlaybackRequestActive && !mPlaybackPlayerStarted) break;"));
+        assertTrue("playback errors must clear the request guard together with the loading overlay",
+                error.contains("mPlaybackRequestActive = false;")
+                        && error.contains("mPlaybackPlayerStarted = false;")
+                        && error.contains("showError(msg);"));
+        // 未绑定详情就丢弃结果的分支同样必须释放守卫：本次不会走 startPlayer，没有新的 READY 回调，
+        // 守卫留下就等于「画面在动、圈不走」——与下面「同一结果已在播」分支同源。
+        int notReadyReturn = setPlayer.indexOf("if (!canApplyPlayerResult())");
+        assertTrue("the drop-before-detail-ready early return must exist", notReadyReturn >= 0);
+        String notReadyBranch = setPlayer.substring(notReadyReturn, setPlayer.indexOf("if (result == mAppliedPlayerResult", notReadyReturn));
+        assertTrue("a dropped result before detail binding has no later READY callback, so it must clear the guard itself",
+                notReadyBranch.contains("mPlaybackRequestActive = false;")
+                        && notReadyBranch.contains("mPlaybackPlayerStarted = false;")
+                        && notReadyBranch.contains("return;"));
+        // 早退分支同样必须释放守卫：同一结果已在播时不会再走 startPlayer，没有新的 READY 回调，
+        // 守卫留下就等于「画面在动、圈不走」——两个清除点都被它自己挡下。
+        int duplicateResultReturn = setPlayer.indexOf("if (result == mAppliedPlayerResult && !player().isEmpty())");
+        assertTrue("the duplicate-result early return must release the loading guard", duplicateResultReturn >= 0);
+        String duplicateResultBranch = setPlayer.substring(duplicateResultReturn, setPlayer.indexOf("mAppliedPlayerResult = result;", duplicateResultReturn));
+        assertTrue("a duplicate result that is already playing has no later READY callback, so it must clear the guard itself",
+                duplicateResultBranch.contains("mPlaybackRequestActive = false;")
+                        && duplicateResultBranch.contains("mPlaybackPlayerStarted = false;"));
+    }
+
+    @Test
     public void introSkipCallbackWaitsForReadyBeforeSeeking() throws Exception {
         Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
@@ -1444,20 +1551,82 @@ public class VideoActivityLayoutTest {
         int arrayKey = source.indexOf("private boolean onArrayKey(KeyEvent event)");
         int arrayKeyEnd = source.indexOf("private boolean onEpisodeKey(KeyEvent event)", arrayKey);
         String arrayKeyBody = arrayKey >= 0 && arrayKeyEnd > arrayKey ? source.substring(arrayKey, arrayKeyEnd) : "";
-        assertTrue("segment DPAD down must explicitly focus the current episode", eventBody.contains("mArrayAdapter.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));")
+        assertTrue("segment DPAD down must explicitly hand focus to the declared lower target", eventBody.contains("mArrayAdapter.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));")
                 && eventBody.contains("mBinding.array.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));")
                 && arrayKeyBody.contains("!KeyUtil.isActionDown(event) || !KeyUtil.isDownKey(event)")
-                && arrayKeyBody.contains("selectEpisodeSegment(position, true);"));
+                // 分段行向下必须先落到集数表头（“选集 · 第 N 季”），不能直接跳进选集列表；
+                // 装载分段不抢焦点，否则遥控会跳过季度按钮（用户报告的问题）。
+                && arrayKeyBody.contains("selectEpisodeSegment(position, false);")
+                && arrayKeyBody.indexOf("focusEpisodeHeaderTool(View.FOCUS_DOWN)")
+                < arrayKeyBody.indexOf("scrollToEpisode(getSelectedEpisodePosition(mEpisodeAdapter.getItems()), true)"));
         assertTrue("segment focus handoff must preserve history fallback when no episode is marked selected", source.contains("if (requestEpisodeFocus) scrollToEpisode(getSelectedEpisodePosition(mEpisodeAdapter.getItems()), true);"));
+        // 切线路会整体重建分段行，重建后 HorizontalGridView 自身的焦点搜索不再在子项之间移动，
+        // 遥控在分段行按左右没有反应（用户报告"切线路后分组按钮选不到"），必须显式接管左右。
+        assertTrue("segment DPAD left/right must move focus explicitly after the segment row is rebuilt", source.contains("private boolean moveArraySelection(int delta)")
+                && arrayKeyBody.contains("KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)")
+                && arrayKeyBody.contains("moveArraySelection(KeyUtil.isLeftKey(event) ? -1 : 1)"));
+        // 分段行会在布局期被 BaseGridView 的 focusToViewInLayout 反复回焦，触发
+        // onSegmentFocus -> selectEpisodeSegment -> showEpisodeSegment -> addAll 的 ~20Hz 自激循环，
+        // 循环里左右键刚移动的选中位会被立刻弹回，因此装载同一段集数必须直接返回。
+        int showSegmentStart = source.indexOf("private void showEpisodeSegment(int position)");
+        assertTrue("segment reload must be idempotent so the layout-driven relayout loop cannot reset the focused range",
+                showSegmentStart >= 0
+                        && source.contains("private boolean isSegmentDisplayed(List<Episode> items)")
+                        && source.indexOf("if (isSegmentDisplayed(items)) return;", showSegmentStart) > showSegmentStart);
+        // 同一条自激循环还会经 selectEpisodeSegment 反复回写选中位，必须整条链路都在状态未变时提前返回，
+        // 否则分段行刚拿到的焦点会在下一帧被 focusToViewInLayout 按旧选中位重新回焦。
+        assertTrue("unchanged segment selection must be a no-op so the layout loop cannot rewrite the selected position",
+                source.contains("position == mBinding.array.getSelectedPosition() && isSegmentContentDisplayed(position)")
+                        && source.contains("private boolean isSegmentContentDisplayed(int position)"));
+        // 线路/选集重建回调只允许在焦点不在分段行时校准选中位，用户正在分段行上操作时以焦点位为准。
+        int segPosStart = source.indexOf("private void selectEpisodeSegmentPosition(int position)");
+        assertTrue("segment position sync must not fight the user while focus is inside the segment row",
+                segPosStart >= 0
+                        && source.indexOf("if (focused >= 0 && focused != position && isFocusInside(mBinding.array)) return;", segPosStart) > segPosStart);
+        // 集数卡片根视图不可聚焦、adapter 也不写水平 nextFocus，左右键若交回系统 FocusFinder，
+        // 焦点会直接跳出选集网格（实测落到上方的“简介”按钮）。必须由 onEpisodeKey 接管水平移动。
+        int episodeKeyStart = source.indexOf("private boolean onEpisodeKey(KeyEvent event)", arrayKeyEnd);
+        int episodeKeyEnd = episodeKeyStart >= 0 ? source.indexOf("\n    private ", episodeKeyStart + 1) : -1;
+        String episodeKeyBody = episodeKeyStart >= 0 && episodeKeyEnd > episodeKeyStart ? source.substring(episodeKeyStart, episodeKeyEnd) : "";
+        assertTrue("episode grid DPAD left/right must stay inside the current row",
+                episodeKeyBody.contains("KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)")
+                        && episodeKeyBody.contains("TmdbEpisodeGridPolicy.horizontalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), KeyUtil.isRightKey(event))")
+                        && episodeKeyBody.contains("if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return true;"));
+
+        // 焦点校正只能补「焦点真的丢了」这一种情况。曾经允许「焦点落到预览框就抢回选集」，
+        // 与 RecyclerView 回收后 rootViewRequestFocus 把焦点交回预览框互相拉锯，
+        // 用户实测：切线路后向下到集数按钮，焦点在播放器和集数按钮之间来回跳。
+        int gridListenerStart = source.indexOf("private void ensureEpisodeGridFocusListener()");
+        int gridListenerEnd = gridListenerStart >= 0 ? source.indexOf("\n    private ", gridListenerStart + 1) : -1;
+        String gridListenerBody = gridListenerStart >= 0 && gridListenerEnd > gridListenerStart
+                ? source.substring(gridListenerStart, gridListenerEnd) : "";
+        assertTrue("episode focus correction must give up as soon as any view holds focus, so it never fights the player window",
+                gridListenerBody.contains("if (getCurrentFocus() != null) {")
+                        && gridListenerBody.contains("cancelPendingEpisodeGridFocus();")
+                        && !gridListenerBody.contains("isFocusInside(mBinding.video)"));
+        assertTrue("episode focus correction must be bounded instead of acting as a permanent watchdog",
+                gridListenerBody.contains("EPISODE_GRID_FOCUS_MAX_ATTEMPTS"));
+        // 全局焦点看门狗必须不存在：它会在任何时刻把焦点从播放器拽回选集。
+        assertFalse("no root focus watchdog may reclaim focus from the player window",
+                source.contains("addOnGlobalFocusChangeListener")
+                        && source.contains("mManualFocusRedirectPending"));
 
         Path arrayAdapterPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "ArrayAdapter.java"));
         String arrayAdapter = new String(Files.readAllBytes(arrayAdapterPath), StandardCharsets.UTF_8);
         Path segmentSelectorPath = findLeanbackResPath().resolve(Path.of("drawable", "selector_video_item.xml"));
         String segmentSelector = new String(Files.readAllBytes(segmentSelectorPath), StandardCharsets.UTF_8);
-        assertTrue("original detail modes must keep the active episode range highlighted after focus moves to an episode", source.contains("mArrayAdapter.setSelectedPosition(position);")
+        assertTrue("original detail modes must keep the active episode range highlighted after focus moves to an episode", source.contains("selectEpisodeSegmentPosition(position);")
+                && source.contains("private void selectEpisodeSegmentPosition(int position)")
+                && source.contains("mArrayAdapter.setSelectedPosition(position);")
                 && arrayAdapter.contains("setActivated(position == selectedPosition)")
                 && segmentSelector.contains("android:state_activated=\"true\"")
-                && segmentSelector.contains("#2CC56F"));
+                // 当前生效态的颜色收敛到**应用表面**统一语义 token：
+                // 2026-10-10 第三轮曾改为 ?attr/tvPlayerCurrentRing（当芯片当视频层宿主）；
+                // 2026-10-11 经实机复核修正宿主分层——分段落芯片叠在页面内容区（@+id/scroll）
+                // 而不是视频/固定玻璃上，所以回到 ?attr/tvCurrentRing，
+                // 与选集卡片（selector_episode_card）同一族；固定玻璃对话框由
+                // ThemeOverlay.WebHTV.GlassFocusRings 在子树内重绑回视频层派生色。
+                && segmentSelector.contains("android:color=\"?attr/tvCurrentRing\""));
     }
 
     @Test
@@ -2206,13 +2375,14 @@ public class VideoActivityLayoutTest {
         assertTrue(sourcePath + " is missing revealTmdbDetail", !body.isEmpty());
         assertTrue("the later TMDB reveal must know whether loading actually hid the content",
                 body.contains("boolean hiddenByLoading = !mBinding.progressLayout.isContent();"));
+        // 进场焦点统一回预览窗口（手动播放模式不再改道选集，见 manualPlaybackMode 用例）。
         assertTrue("focus must only be pulled back to the player when loading had hidden the content",
-                body.contains("if (hiddenByLoading) mBinding.video.post(() -> mBinding.video.requestFocus());"));
+                body.contains("if (hiddenByLoading) mBinding.video.post(this::requestInitialPlaybackFocus);"));
         assertTrue("a shell revealed without an initial preview must restore focus only when nothing else is focused",
                 shell.contains("boolean hiddenByLoading = !mBinding.progressLayout.isContent();")
                         && shell.contains("if (hiddenByLoading && !mBinding.getRoot().hasFocus())")
                         && shell.contains("mBinding.video.post(() -> {")
-                        && shell.contains("if (!mBinding.getRoot().hasFocus()) mBinding.video.requestFocus();"));
+                        && shell.contains("if (!mBinding.getRoot().hasFocus()) requestInitialPlaybackFocus();"));
     }
 
     @Test
@@ -2635,6 +2805,38 @@ public class VideoActivityLayoutTest {
         assertTrue("episode key handling must read current focus before resolving the RecyclerView holder", focus > method);
         assertTrue("episode key handling must ignore key events when focus has already been cleared", guard > focus);
         assertTrue("episode key handling must only resolve a holder after the focus null guard", holder > guard);
+    }
+
+    @Test
+    public void leanbackPlaybackEpisodeGridAdvancesOneCardPerHeldRepeat() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private boolean onEpisodeKey(KeyEvent event)");
+        int methodEnd = source.indexOf("\n    private ", method + 1);
+        String body = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
+        String holdAdvance = "if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);";
+        int lastRow = body.indexOf("if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);");
+        String holdBoundary = "if (event.getRepeatCount() > 0) return true;";
+        int upTarget = body.indexOf("TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), false)");
+
+        assertTrue(sourcePath + " is missing onEpisodeKey", method >= 0 && methodEnd > method);
+        assertTrue("a held DPAD press must move one card per repeat instead of leaving the grid",
+                body.contains(holdAdvance)
+                        && !body.contains("if (event.getRepeatCount() > 0) return focusEpisodeGridPosition(target);"));
+        assertTrue("the first DPAD press must keep native grid focus so a single press still moves exactly one card",
+                body.contains("if (event.getRepeatCount() == 0) mEpisodeHoldTarget = RecyclerView.NO_POSITION;"));
+        assertTrue("held repeats must continue from the last requested card so the next repeat skips it",
+                body.contains("TmdbEpisodeGridPolicy.holdBasePosition(focusedPosition, mEpisodeHoldTarget)"));
+        assertTrue("a released key must clear the hold target so the grid never snaps back after the gesture",
+                body.contains("mEpisodeHoldTarget = RecyclerView.NO_POSITION;"));
+        assertTrue("held DPAD_DOWN must stop on the last row instead of handing focus to the rating row",
+                lastRow > 0
+                        && body.indexOf(holdBoundary, lastRow) > lastRow
+                        && body.indexOf(holdBoundary, lastRow) < body.indexOf("return focusRatingRow();"));
+        assertTrue("held DPAD_UP must stop on the first row instead of leaving the grid",
+                upTarget > 0
+                        && body.indexOf("if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);", upTarget) > upTarget
+                        && body.indexOf(holdBoundary, upTarget) > upTarget);
     }
 
     @Test
@@ -3240,9 +3442,9 @@ public class VideoActivityLayoutTest {
                 styleBody.contains("label.setTextColor(colors.primary)"));
         assertTrue("direct detail external link icons must use resolved theme icon color",
                 styleBody.contains("icon.setColorFilter(colors.secondary)"));
-        assertTrue("focused direct detail external links must use the shared yellow focus stroke",
+        assertTrue("focused direct detail external links must use the shared theme focus stroke",
                 styleBody.contains("boolean focused = row.hasFocus();")
-                        && styleBody.contains("background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP), focused ? FOCUS_STROKE : colors.line);"));
+                        && styleBody.contains("background.setStroke(focused ? focusRingWidthPx() : ResUtil.dp2px(CHIP_STROKE_DP), focused ? focusStroke() : colors.line);"));
     }
 
     @Test
@@ -3331,13 +3533,15 @@ public class VideoActivityLayoutTest {
             assertTrue(sourcePath + " must share canonical episode progress when TMDB history aggregation is enabled",
                     selection.replaceAll("\\s+", " ").contains("boolean shareEpisodeProgress = crossSource || isResumeFromHistory() || Setting.isHistoryAggregationEffective();"));
             assertTrue(sourcePath + " must keep the original episode identity when aggregation and history resume are disabled",
-                    selection.replaceAll("\\s+", " ").contains("shareEpisodeProgress ? historyEpisode.matchesPlayback(mHistory.getEpisode()) : episode.matches(mHistory.getEpisode())"));
+                    selection.replaceAll("\\s+", " ").contains("shareEpisodeProgress ? historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware) : episode.matches(mHistory.getEpisode())"));
             assertTrue(sourcePath + " must ignore source-line differences when shared progress is enabled",
                     selection.contains("boolean compatibleFlag = shareEpisodeProgress || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());"));
             assertTrue(sourcePath + " must preserve progress when a history source refresh changes only the episode URL",
-                    selection.contains("historyEpisode.matchesPlayback(mHistory.getEpisode())"));
+                    selection.contains("boolean versionAware = flag.containsEpisodeUrl(mHistory.getEpisode());")
+                            && selection.contains("historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware)"));
             assertTrue(sourcePath + " must use the same tolerant episode identity when playback updates history",
-                    update.contains("historyEpisode.matchesPlayback(mHistory.getEpisode())"));
+                    update.contains("boolean versionAware = getFlag().containsEpisodeUrl(mHistory.getEpisode());")
+                            && update.contains("historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware)"));
             if (source.contains("private void updateFastTmdbPlaybackHistory(Flag flag, Episode episode)")) {
                 String fast = methodBody(source, "private void updateFastTmdbPlaybackHistory(Flag flag, Episode episode)", "private void resetDetailForNewIntent()");
                 assertTrue(sourcePath + " fast TMDB playback must honor the aggregation progress-sharing switch",
@@ -3383,19 +3587,25 @@ public class VideoActivityLayoutTest {
         int field = source.indexOf("private Runnable mSeekProgressFallback;");
         int init = source.indexOf("mSeekProgressFallback = this::hideSeekProgressIfReady;");
         int started = source.indexOf("protected void onSeekStarted()");
-        int show = source.indexOf("showProgress();", started);
-        int remove = source.indexOf("App.removeCallbacks(mSeekProgressFallback);", show);
-        int post = source.indexOf("App.post(mSeekProgressFallback, 500);", remove);
+        int pending = source.indexOf("mSeekProgressPending = true;", started);
+        int show = source.indexOf("showProgress();", pending);
+        int arm = source.indexOf("App.post(mSeekProgressFallback, SEEK_PROGRESS_MIN_VISIBLE_MS);", show);
         int helper = source.indexOf("private void hideSeekProgressIfReady()");
-        int readyGuard = source.indexOf("player().getPlaybackState() != Player.STATE_READY", helper);
-        int reveal = source.indexOf("showPlaybackContent();", readyGuard);
+        int gate = source.indexOf("if (!canHideSeekProgress()) return;", helper);
+        int close = source.indexOf("mSeekProgressPending = false;", gate);
+        int reveal = source.indexOf("showPlaybackContent();", close);
+        int stale = source.indexOf("private void hidePlaybackProgressIfStale()");
+        int staleGate = source.indexOf("if (!canHideSeekProgress()) return;", stale);
         int destroy = source.indexOf("protected void onDestroy()");
         int destroyRemove = source.indexOf("mSeekProgressFallback", destroy);
 
         assertTrue(sourcePath + " is missing mSeekProgressFallback", field >= 0);
         assertTrue("seek fallback runnable must be initialized", init > field);
-        assertTrue("seek must show loading before scheduling the READY fallback", show > started && remove > show && post > remove);
-        assertTrue("seek fallback must only clear loading once playback is READY", readyGuard > helper && reveal > readyGuard);
+        // 窗口必须先于 showProgress() 打开：它内部立刻投递的网速 ticker 是本次症状的直接执行者。
+        assertTrue("seek must open the pending window before showing loading", started > 0 && pending > started && show > pending);
+        assertTrue("seek must arm the minimum-visible timer after showing loading", arm > show);
+        assertTrue("seek fallback must only clear loading through the seek gate", gate > helper && close > gate && reveal > close);
+        assertTrue("the traffic-ticker fallback must respect the same seek gate", staleGate > stale);
         assertTrue("seek fallback callback must be removed on destroy", destroyRemove > destroy);
     }
 
@@ -3452,7 +3662,8 @@ public class VideoActivityLayoutTest {
             assertTrue(sourcePath + " must persist the identity-first adapter index with quarterly progress",
                     body.contains("mFlagAdapter.indexOf(flag)")
                             && body.contains("TmdbUIAdapter.flagKey(flag, index)")
-                            && body.contains("mHistory.setSourceBindingKey(flagKey)"));
+                            && body.contains("mHistory.setSourceBindingKey(flagKey)")
+                            && body.contains("syncHistory()"));
             assertTrue(sourcePath + " must recover the stable index before the TMDB adapter is bound",
                     body.contains("TmdbUIAdapter.flagIndex(mVod.getFlags(), flag)"));
         }
@@ -3490,10 +3701,99 @@ public class VideoActivityLayoutTest {
                     : "boolean initialBinding = mEpisodeAdapter.getItemCount() == 0;";
             assertTrue(sourcePath + " must distinguish an empty episode adapter from a user re-click",
                     click.contains(initialBinding)
-                            && click.contains("if (resolved.isSelected() && !initialBinding) return;"));
+                            && click.contains("if (resolved.isSelected() && isPlaybackFlag(resolved) && !initialBinding) return;"));
             assertTrue(sourcePath + " must start the inherited selected episode after rebuilding its list",
                     click.contains("if (initialBinding && !episodeChanged) onRefresh();"));
+            assertTrue(sourcePath + " must only treat the actually applied flag as the current stream",
+                    source.contains("private String mPlaybackFlagKey = \"\";")
+                            && source.contains("private boolean isPlaybackFlag(Flag flag) {")
+                            && source.contains("private boolean isPlayingContent(Episode episode) {"));
+            String fullscreen = methodBody(source, "private boolean shouldEnterFullscreen(Episode item)", "private void enterFullscreen()");
+            assertTrue(sourcePath + " must not infer the current stream from the episode list mark alone",
+                    fullscreen.contains("!isFullscreen() && isPlayingContent(item)"));
         }
+    }
+
+    @Test
+    public void manualPlaybackModeMovesFocusToEpisodesAndShowsCover() throws Exception {
+        // 关闭「点播自动播放」= 手动播放模式：进播放页焦点交给选集、预览位显示封面、
+        // 点集直接全屏起播。这里把这三条契约钉在 leanback 源码上。
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+
+        assertTrue("manual playback mode must be derived from the user VOD autoplay setting and stay TV-only",
+                source.contains("private boolean isManualPlaybackMode() {")
+                        && source.contains("return Util.isLeanback() && !PlayerSetting.isAutoPlay();"));
+
+        // 进场焦点：用户确认「进来的时候还是聚焦在播放器上」，手动模式不再把初始焦点送到选集。
+        // 曾经那样做会让用户按 UP 到播放器后又被拽回去，并在切线路后与 RecyclerView 的焦点回收
+        // 互相拉锯（焦点在播放器与集数按钮之间来回跳）。
+        String focus = methodBody(source, "private void requestInitialPlaybackFocus()", "private void flushPendingManualEpisodeFocus()");
+        assertTrue("the initial focus must always land on the player window, never on an episode card",
+                focus.contains("mBinding.video.requestFocus();")
+                        && !focus.contains("isManualPlaybackMode()")
+                        && !focus.contains("focusInitialEpisode"));
+
+        String preview = methodBody(source, "private void showInitialPreview()", "private History createHistory(Vod item)");
+        assertTrue("the initial preview must focus the player window in every mode",
+                preview.contains("requestInitialPlaybackFocus();")
+                        && !preview.contains("if (isManualPlaybackMode()) requestInitialPlaybackFocus();"));
+
+        // 手动播放模式下，播放器上的确认键要一次完成「全屏 + 起播」，语义等同详情页“继续播放”按钮：
+        // 用户不必先全屏、再按一次 OK 才看到画面。
+        String video = methodBody(source, "private void onVideo()", "private void onChange()");
+        assertTrue("in manual playback mode the player confirm must start playback as well as enter fullscreen",
+                video.contains("if (isManualPlaybackMode()) {")
+                        && video.contains("mExplicitPlaybackRequest = true;")
+                        && video.contains("enterFullscreen();")
+                        && video.contains("if (player().isEmpty()) onRefresh();")
+                        && video.contains("else if (!player().isPlaying()) onPlay();"));
+        assertTrue("autoplay mode must keep the original confirm behavior of only entering fullscreen",
+                video.contains("if (isFullscreen()) return;"));
+
+        String click = methodBody(source, "public void onItemClick(Episode item)", "private void onEpisodeLongClick(Episode item)");
+        assertTrue("manual playback mode must start the picked episode and enter fullscreen in one press",
+                click.contains("if (isManualPlaybackMode()) {")
+                        && click.contains("mExplicitPlaybackRequest = true;")
+                        && click.contains("selectEpisode(item, true);")
+                        && click.contains("if (isManualPlaybackMode() && !isFullscreen()) enterFullscreen();"));
+        assertTrue("picking the already-selected episode must also start playback instead of stopping at a paused fullscreen",
+                click.contains("if (shouldEnterFullscreen(item)) {")
+                        && click.contains("if (isManualPlaybackMode() && !player().isPlaying())")
+                        && click.contains("onPlay();"));
+        assertFalse("the episode click must not trigger a second player-content refresh",
+                click.contains("onRefresh();"));
+    }
+
+    @Test
+    public void manualPlaybackCoverOnlyShowsWhileNothingIsLoaded() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String cover = methodBody(source, "private void updateVideoCover()", "private String videoCoverUrl()");
+
+        // 用「是否已显式起播」而不是 player().isEmpty()：手动模式下详情页会先 prepare，
+        // 播放器非空但没播，用 isEmpty 会把封面误判成该隐藏。
+        assertTrue("the idle cover must be gated on manual mode, a non-audio stage and not-yet-started playback",
+                cover.contains("isManualPlaybackMode()")
+                        && cover.contains("!mAudioStageVisible")
+                        && cover.contains("!mManualPlaybackStarted"));
+        assertTrue("an empty cover url must hide the layer instead of leaving a blank hole",
+                cover.contains("if (TextUtils.isEmpty(url)) {")
+                        && cover.contains("mBinding.videoCover.setVisibility(View.GONE);"));
+
+        String ready = methodBody(source, "protected void onStateChanged(int state)", "public void onMediaItemTransition");
+        assertTrue("a ready player must drop the idle cover again", ready.contains("updateVideoCover();"));
+
+        String layout = new String(Files.readAllBytes(findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"))), StandardCharsets.UTF_8);
+        int exo = layout.indexOf("android:id=\"@+id/exo\"");
+        int coverId = layout.indexOf("android:id=\"@+id/videoCover\"");
+        int audioStage = layout.indexOf("android:id=\"@+id/audioStage\"");
+        assertTrue("the cover must sit above the video surface and below the audio stage",
+                exo >= 0 && coverId > exo && audioStage > coverId);
+        assertTrue("the cover must never become a remote-control focus target",
+                layout.contains("android:id=\"@+id/videoCover\"")
+                        && layout.substring(coverId, audioStage).contains("android:focusable=\"false\"")
+                        && layout.substring(coverId, audioStage).contains("android:visibility=\"gone\""));
     }
 
     private static Path findMobileResPath() {

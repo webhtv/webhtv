@@ -1,20 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」选集弹窗（dialog_episode / adapter_episode_dialog）剧集行的统一焦点环。
+
+    环宽唯一来源：@dimen/webhtv_focus_ring_width。此前写死 2dp，与电视端其余焦点环
+    不一致，是用户报告「边框粗细也貌似不一样」的同一族缺陷。
+
+    环色统一为白色：宿主面板 shape_episode_dialog_panel 是固定深色（#DD111820，两张色板相同），
+    按本仓库「宿主机明暗固定 → 环色必须与调色板无关」的规则取白。
+
+    这里同时修掉两处此前就存在的缺陷：
+
+    1) 「焦点看不见」——原稿环色取自填充色的近似色，与自身填充的 WCAG 对比度只有
+         focused  #2196F3 填充 vs #1976D2 环 = 1.47:1
+         selected #2AA46B 填充 vs #2AA46B 环 = 1.00:1   ← 完全不可见
+       改为白色后 focused 3.12:1、selected 3.17:1，达到 WCAG 2.2 SC 1.4.11 的 3:1 门槛；
+       环外侧贴 #111820 面板另有 17.87:1。
+
+    2) 「正在播放的剧集在被聚焦时看不到焦点环」——原稿把 state_selected 放在 state_focused
+       之前，所以「正在播放 + 获得焦点」的项会命中 selected 分支，焦点环被吞掉。
+       现在把 focused 放在最前，焦点环永远优先显示；selected 仍保留绿色填充作为
+       「正在播放」的持久标记（与 tv_item_current_ring 的绿色语义一致），并配 2dp 白环。
+       焦点态取 @dimen/webhtv_focus_ring_width（应用表面统一宽度，比「当前」态的 2dp 更细）：
+       两个状态靠绿色填充区分，而不是靠粗细差——「当前」是不随焦点出现/消失的持久标记。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="#2196F3" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="@color/white" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
     <item android:state_selected="true">
         <shape>
             <solid android:color="#CC2AA46B" />
             <stroke
                 android:width="2dp"
-                android:color="#2AA46B" />
-            <corners android:radius="8dp" />
-        </shape>
-    </item>
-    <item android:state_focused="true">
-        <shape>
-            <solid android:color="#2196F3" />
-            <stroke
-                android:width="2dp"
-                android:color="#1976D2" />
+                android:color="@color/white" />
             <corners android:radius="8dp" />
         </shape>
     </item>

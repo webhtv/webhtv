@@ -6,7 +6,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#8F000000"
+    android:background="@color/webhtv_color_scrim"
     android:clickable="true"
     android:defaultFocusHighlightEnabled="false"
     android:stateListAnimator="@null">
@@ -17,10 +17,10 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:layout_margin="10dp"
-        app:cardBackgroundColor="#F2101821"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
         app:cardCornerRadius="12dp"
         app:cardElevation="0dp"
-        app:strokeColor="#33FFFFFF"
+        app:strokeColor="?attr/colorOutline"
         app:strokeWidth="1dp">
 
         <androidx.core.widget.NestedScrollView
@@ -42,7 +42,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/tmdb_cast_label"
-                    android:textColor="#B3FFFFFF"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -57,20 +57,20 @@
                         android:id="@+id/profileCard"
                         android:layout_width="118dp"
                         android:layout_height="160dp"
-                        app:cardBackgroundColor="#25313D"
+                        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                         app:cardCornerRadius="8dp"
                         app:cardElevation="0dp"
-                        app:strokeColor="#33FFFFFF"
+                        app:strokeColor="?attr/colorOutline"
                         app:strokeWidth="1dp">
 
                         <ImageView
                             android:id="@+id/profile"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
-                            android:background="#25313D"
+                            android:background="?attr/colorSurfaceContainerHigh"
                             android:contentDescription="@null"
                             android:scaleType="centerCrop"
-                            tools:src="@color/black" />
+                            tools:src="?attr/colorSurfaceContainerLow" />
 
                     </com.google.android.material.card.MaterialCardView>
 
@@ -97,7 +97,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
                             android:maxLines="3"
-                            android:textColor="#B3FFFFFF"
+                            android:textColor="?attr/colorOnSurface"
                             android:textSize="13sp"
                             tools:text="饰 楚昭" />
 
@@ -107,7 +107,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="18dp"
                             android:lineSpacingExtra="3dp"
-                            android:textColor="#99FFFFFF"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="12sp"
                             android:visibility="gone"
                             tools:text="参与 54 部作品 · 平均 6.8 分"
@@ -140,10 +140,10 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        app:cardBackgroundColor="#261C2833"
+                        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                         app:cardCornerRadius="8dp"
                         app:cardElevation="0dp"
-                        app:strokeColor="#1FFFFFFF"
+                        app:strokeColor="?attr/colorOutlineVariant"
                         app:strokeWidth="1dp">
 
                         <TextView
@@ -154,7 +154,7 @@
                             android:lineSpacingExtra="4dp"
                             android:maxLines="8"
                             android:padding="12dp"
-                            android:textColor="#DDEAF2F8"
+                            android:textColor="?attr/colorOnSurface"
                             android:textSize="13sp"
                             tools:text="演员简介..." />
 

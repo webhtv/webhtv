@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.databinding.AdapterVodBinding;
+import com.fongmi.android.tv.ui.helper.TvFocusScale;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
@@ -114,13 +115,8 @@ public class HistoryAdapter extends BaseDiffAdapter<History, HistoryAdapter.View
         private void setFocusListener() {
             itemView.setOnFocusChangeListener((v, hasFocus) -> {
                 setMarquee(hasFocus);
-                if (hasFocus) {
-                    v.animate().scaleX(1.1f).scaleY(1.1f).setDuration(150).start();
-                    v.setTranslationZ(10f);
-                } else {
-                    v.animate().scaleX(1f).scaleY(1f).setDuration(150).start();
-                    v.setTranslationZ(0f);
-                }
+                TvFocusScale.apply(v, hasFocus);
+                v.setTranslationZ(hasFocus ? 10f : 0f);
             });
         }
 

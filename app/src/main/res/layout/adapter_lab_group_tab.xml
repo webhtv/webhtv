@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.textview.MaterialTextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:textSize="14sp"
-    android:textColor="@color/white"
+    android:textColor="?attr/colorOnSurface"
     android:gravity="center"
     android:id="@+id/text"
     android:background="@drawable/selector_lab_group_tab"

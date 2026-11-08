@@ -16,7 +16,7 @@
         android:layout_marginEnd="12dp"
         android:duplicateParentState="true"
         android:fontFeatureSettings="tnum"
-        android:textColor="@color/selector_live_text"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="14sp"
         tools:text="01" />
 
@@ -35,7 +35,7 @@
         android:duplicateParentState="true"
         android:ellipsize="marquee"
         android:singleLine="true"
-        android:textColor="@color/selector_live_text"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="14sp"
         tools:text="CNN" />
 

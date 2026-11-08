@@ -11,6 +11,18 @@ public final class FollowingDeviceDataRule extends TestWatcher {
 
     private Snapshot snapshot = Snapshot.empty();
 
+    /** 测试用新建体：不带 Room 依赖，createdAt 由调用方设置。 */
+    public static Following newFollowing(String identityKey) {
+        Following item = new Following();
+        item.identityKey = identityKey;
+        item.seriesKey = identityKey;
+        item.trackedSeason = 1;
+        item.enabled = true;
+        item.createdAt = System.currentTimeMillis();
+        item.updatedAt = item.createdAt;
+        return item;
+    }
+
     @Override
     protected void starting(Description description) {
         snapshot = Snapshot.capture();

@@ -16,7 +16,7 @@
         android:duplicateParentState="true"
         android:ellipsize="marquee"
         android:singleLine="true"
-        android:textColor="@color/text"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="16sp"
         tools:text="收藏" />
 

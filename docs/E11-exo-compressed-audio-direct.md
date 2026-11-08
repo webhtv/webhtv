@@ -572,3 +572,165 @@ A 的源码、测试、本文和索引按 `E11-audio-startup-admission` guard �
 - 定向门禁：`bash ./gradlew --console=plain :app:testLeanbackArmeabi_v7aDebugUnitTest --tests com.fongmi.android.tv.player.exo.ExoCompressedAudioDirectPolicyTest --tests com.fongmi.android.tv.player.exo.ExoAudioDirectFailureMemoryTest --tests com.fongmi.android.tv.player.exo.ExoStartupRecoveryIntegrationTest --tests com.fongmi.android.tv.player.PlaybackErrorClassifierTest :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:compileMobileArm64_v8aDebugJavaWithJavac` 通过：81 项中 0 failure、0 error、1 项显式 `@Ignore`；Leanback/Mobile ARM64 Java 编译均通过，Gradle `BUILD SUCCESSFUL in 37s`。
 - 第二轮审查：对照仓库锁定 Media3 `1.11.0-alpha01-fongmi` 源码确认，`ExoStartupAudioRenderer` 发出的 `isRecoverable=true` renderer error 会进入 `ExoPlayerImplInternal.attemptRendererErrorRecovery()` / `reselectTracksInternalAndSeek()`，复用当前 prepared period；`DefaultAudioSink.flush()` 只释放旧输出，不会清除已记录的失败证据。结合测试结果再次核对未推送差异，未发现新增问题，因此没有为“修测试而修代码”的无效改动。
 - 交付边界：本轮没有连接模拟器或目标电视，不把主机控制流、Java 编译或受控 Media3 集成测试扩大为真实 HAL/Sony 播放验收；未改依赖锁、native 资产、AAR 或 MPV。未推送改动通过本次 guard 原子记录后推送 `dev5`，并以 `dev5 -> beta` PR 交付。
+
+## 标准 offload 输出接受数据却不消费导致音乐只能力竭回退（2026-10-15）
+
+### 触发与现场证据
+
+用户报障「最新 TV 测试版 EXO 有的音乐不能播放」，提供 `webhtv-debug-log-1791999477492.txt`。故障包为 `870b2f8220d1b9cd83381198945c5a11f8e84b62`（`v5.6.0-beta-202610142347`），leanback/arm64，设备 Dangbei X7 Ultra（`horse_popular`，Android 14/API 34），Media3 `1.11.0-alpha01-fongmi`。片源为纯音频 MP4（`audio/mp4a-latm`/`mp4a.40.2`，**22050 Hz**、2ch、61136 bps、215109 ms）。
+
+同一前台会话（`trace=p-6rian-3`，`player-31`）的关键事实：
+
+| 证据 | 值 |
+| --- | --- |
+| `audio.output.configure` | `offload=true`、`tunneling=false`、`sampleRate=22050`、`bufferSize=40000000` |
+| `audio.output.write` | 首次 `requestedBytes=1595 → acceptedBytes=392`，此后 `zeroWrites` 单调增长 0→985→1338 |
+| `audio.output.playhead` | `headRaw=0`、`headFrames=0`、`state=1`、`playState=1`、`underruns=0` |
+| `play.clock` | `positionMs=0`、`isPlaying=false`、`state=BUFFERING`，`bufferedPosition` 停在 170898 ms 不再增长 |
+
+`playState=1` 是 `AudioTrack.PLAYSTATE_STOPPED`（不是 PLAYING），因此 `ExoDiagnosticAudioOutput` 的播放头 gate 在本会话一律记为 `audio-paused-or-stopped`：**`AudioTrack.play()` 从未被调用**，因为 Exo 始终未离开 BUFFERING。`underruns=0` 进一步排除「欠载」解释：HAL 从未开始消费这一路音频，`write` 收到 392 字节后持续返回 0（缓冲被判满）。
+
+回退时间线（三次会话的超时都精确落在各自 `player: setMediaItem timeout=15000` 之后 15.09–15.14 s）：
+
+```text
+01:36:30.326  player: setMediaItem timeout=15000
+01:36:31.85   offload write 只接受 392 字节，playhead 恒 0，此后 write 一律返回 0
+01:36:45.434  +15.11s  onPlaybackTimeout → fallback decode hard→soft（仍走 offload，必然无效）
+01:37:00.681  +15.25s  fallback player EXO→IJK
+01:37:01.99   IJK audio-rendering-start，position 正常推进
+```
+
+两处排除性核对（避免误归因）：
+
+- **不是 15 秒定时器陈旧触发**。`App.post(runnable, TIMEOUT_PLAY)` 位于 `setMediaItemNow()` 末尾，而 `onPlaybackStateChanged(BUFFERING)` 由 `prepare()` 同步回调、会先执行 `App.removeCallbacks(runnable)`，随后才 post，定时器照常武装；正常播放靠 READY / `onRenderedFirstFrame` 取消它。三个会话的时间差一致，说明这是设计内的启动看门狗在按预期工作。
+- **不是 `handleError` 或缓冲停滞看门狗触发**。日志中不存在 `player: error code=`，也不存在 `buffering-stall` 轨迹（`PlaybackTrace.log` 经 `SpiderDebug` 落盘）；`fallbackPlayback` 的另外两个调用点分别属 IJK 首帧看门狗（`evaluateIjkFirstFrameWatchdog`）与 IJK 专用路径。20 s 的 `ExoBufferingStallWatchdog` 因 15 s 超时先到而未参与。
+
+结论：全栈没有任何一处把「offload 输出已接受数据但从未消费」识别为可恢复故障，因此唯一兜底是 `onPlaybackTimeout → fallbackPlayback`，而它的动作只有「软解 / 换内核」，二者都不改变正在失效的输出模式，于是必然消耗两个 15 秒才轮到 IJK。
+
+### 最佳实践证据
+
+| 来源 | 版本/修订 | 访问日期 | 等级 | 支持的判断 | WebHTV 适用性 | 保留意见 | 对决策的影响 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `third_party/maven/androidx/media3/media3-exoplayer/1.11.0-alpha01-fongmi/media3-exoplayer-1.11.0-alpha01-fongmi-sources.jar` → `DefaultAudioSink.buildAudioOutputWithRetry()` / `getMinimumRetryBufferSize()` | 与在播 AAR 同源 | 2026-10-15 | A（与打包二进制同修订的源码） | Media3 的缓冲尺寸退避**只覆盖初始化异常**（逐次减半到 1 秒下限，失败后 `maybeDisableOffload()`）；对「初始化成功但从不消费」不生效 | 直接适用：本故障的 AudioTrack 初始化是成功的（`audio.output.lifecycle` 记为 `result=success`） | 该路径不会兜住本故障 | 排除「上游已有等价兜底」 |
+| 同上 → `AudioTrackPositionTracker.isStalled()`（`FORCE_RESET_WORKAROUND_TIMEOUT_MS=200`）与 `DefaultAudioSink` 消费点 | 同上 | 2026-10-15 | A | `isStalled()` 仅在 `forceResetWorkaroundTimeMs != C.TIME_UNSET` 时成立，即只服务于 tracker 自有的强制重置 workaround，**不覆盖启动后播放头恒 0** | 直接适用：本地源码确认该分支不会被本故障触发 | 无 | 确认 Media3 自身不会恢复本故障 |
+| [androidx/media issue #3269](https://github.com/androidx/media/issues/3269)「Audiotrack stale playback head on ac3/eac3 audio」 | Media3 1.10.1，状态 OPEN、`needs triage`、无 PR | 2026-10-15 | A（上游 issue，含精确失败签名） | 上游已确认同一故障类：`play()` 后播放头不前进，`Playback then gets stuck with repeated writes returning 0, playState=2, and the playback head never advancing` | 高度适用：本故障的 `zeroWrites` 单调增长 + 播放头恒 0 + 卡在 BUFFERING 是同一签名；上游触发条件是 seek 后的陈旧播放头，本地触发条件是 22050 Hz offload 起播 | 上游仍未修复（无 PR），不能靠升级依赖解决 | 支持「必须在 App 层处理」，并成为本方案判据的直接依据 |
+| [androidx/media issue #2735](https://github.com/androidx/media/issues/2735)「Playback issue with offload」 | 上游 issue（读取于 2026-10-15） | 2026-10-15 | B（现场复现报告，非维护者结论） | 现象与本地一致：`Sometimes no sound is produced and the track stop after some time. No issue with exact same settings and offload disabled.` | 适用：同类「offload 无声、关闭 offload 即正常」的现场报告 | 与 #611 同属设备相关 offload 缺陷，缺少可复现的最小样例 | 支持「回退到 PCM」作为对用户可见能力的正确修复方向 |
+| [androidx/media issue #611](https://github.com/androidx/media/issues/611)「Audio sink error when setPreferredAudioDevice with offload mode enable」 | 上游 issue（读取于 2026-10-15） | 2026-10-15 | B | 设备相关 offload 缺陷可表现为静默无声；`When disable Offload` 后恢复 | 适用：说明 offload 路径在不同 HAL 上普遍缺乏防御 | 触发条件是路由切换，与本故障不同 | 说明本方案要有设备/配置粒度的记忆，而不是全局关闭 offload |
+| [Android `AudioManager.getDirectPlaybackSupport`](https://developer.android.com/reference/android/media/AudioManager) 与 [Media3 release notes](https://developer.android.com/jetpack/androidx/releases/media3) | API 33+；release notes「Fix offload issue in which playback could stall during pre-roll or gapless transitions due to limited hardware buffer sizes」 | 2026-10-15 | A（官方 API 文档/发布说明） | 平台能力查询只声明「支持」，不保证 HAL 一定消费；该发布说明条目对应的是初始化重试（本地 `buildAudioOutputWithRetry` 已含），不是「已初始化但不消费」 | 适用：`audio.candidates` 的 `offload=true` 只是能力声明，本故障正是「能力声明为真但实际不消费」 | 发布说明条目与本地已有的初始化退避重复，未新增覆盖 | 确认不能把能力查询当健康保证；判据必须用运行时可观测证据 |
+| [Qualcomm developer blog, Audio Offload Support for ExoPlayer](https://www.qualcomm.com/developer/blog/2023/08/audio-offload-support-exoplayer)（经 issue #1093 维护者指引） | 厂商博客（读取于 2026-10-15） | 2026-10-15 | C | 厂商视角：offload 支持判定依赖平台 API，实现差异大 | 仅作背景 | 非规范性文档 | 未改变设计 |
+
+未使用的证据类：本缺陷不涉及编解码规格或论文结论，因此不引用规范/论文；`paper`、`benchmark` 两类记录为不适用。
+
+### 当前 WebHTV 实现复核
+
+- `app/src/main/java/com/fongmi/android/tv/player/exo/ExoCompressedAudioDirectPolicy.java`
+  - `getAudioOffloadSupport(Format, AudioAttributes)`：当前**无条件透传** `standardProvider`。日志中 `reason=standard-offload` 即由此产生；这也是本故障唯一未被治理的准入面。
+  - `getFormatSupport(...)` / `getOutputConfig(...)` / `getAudioOutput(...)`：`failedVendorDirectConfigs` 与 `vendorDirectConfigs` 只约束**厂商直出**（`usesVendorDirect` 要求 `!config.isTunneling && !config.isOffload`）。本故障走的是 `config.isOffload=true` 的标准 offload，**完全不在既有失败记忆覆盖内**。
+  - `maybeRequestStartupPcmFallback(boolean)` 与 `VendorDirectAudioOutput.isStartupStalled()`：启动无进展判据**只装在 `VendorDirectAudioOutput` 上**，且锚定 `acceptedBytes >= startupBuffer.effectiveThresholdBytes()`；本故障的 `bufferSize=40000000`、`acceptedBytes=392`，该阈值条件永不成立，判据不可照搬。
+  - `requestPcmFallbackForStuckPlayback(PlaybackException)`：只接受 `ERROR_CODE_TIMEOUT` + `StuckPlayerException(STUCK_PLAYING_NO_PROGRESS)`。本故障一直停在 BUFFERING（`play.clock` 的 `isPlaying=false`），永远构不成 stuck-playing，因此 PCM 通道拿不到触发。
+- `app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java`
+  - `onPlaybackTimeout()`：`cancelBufferingStallWatchdog()` 后依次尝试 mpv/DV 专项、`manualPlayerSwitchPending`、`fallbackPlayback(e)`。**没有输出模式维度的分支**。
+  - `fallbackDecode` / `fallbackPlayer`：只切换解码方式与内核；`nextFallbackAction` 的取值域里不存在「同内核内改用 PCM 输出」。
+  - `onPlaybackStateChanged(int)`：`state != STATE_IDLE` 即 `App.removeCallbacks(runnable)`；`setMediaItemNow` 末尾重新武装，二者构成设计内的启动看门狗。
+- `app/src/main/java/com/fongmi/android/tv/player/engine/ExoPlayerEngine.java`
+  - `handleError(PlaybackException)` → `requestPcmFallback()` → `retryAudioOutputWithPcm()` → `startInternal(position, shouldPlay, true)` → `policy.prepareForPlayback(url, pcmRetry=true)`：既有的一次性 PCM 重启链路完整且已验证，本方案复用它而不新建恢复通道。
+- 依赖/构建：不涉及 AAR、native、锁定 SHA 或 patch。
+
+### 方案比较
+
+1. **no change**：维持「15 s 超时 → 软解 → 再 15 s → 换内核」。用户侧表现为点开音乐后约 30 秒无声并发生一次无意义的内核切换；若用户已把内核固定为 EXO，第二次回退仍可能只落到 IJK。判为不可接受，因为真正失效的输出模式从未被改变。
+2. **未修改的上游做法**：Media3 与本地上游都**没有**对应实现（见证据表第 1、2、3 行）。`isStalled()` 与初始化退避都不覆盖本场景，issue #3269 至今 OPEN 无 PR。因此不存在可照搬的上游方案；照搬 `VendorDirectAudioOutput` 的阈值判据更会直接失效（阈值条件永不成立）。
+3. **窄 WebHTV 适配（推荐）**：增加一个**只做证据**的 offload 输出观察器，并在**既有的 15 秒启动决策点**把它接成一次性的 PCM 重启。要点：
+   - 判据改为事件驱动、与缓冲尺寸无关：`acceptedBytes > 0` **且** `zeroWrites > 0` **且** `environment.rawPlaybackHead(raw) == 0` **且** 距首次接受数据已过 2 s。`head` 为负（不可观测）或为正（已消费）一律不得判为停滞。
+   - 只在 `config.isOffload` 的标准输出上安装，不触碰厂商直出与 PCM 路径。
+   - 恢复动作复用 `ExoPlayerEngine.requestPcmFallback()` 这条已验证链路，并把该配置记入**独立于厂商直出的** `failedOffloadConfigs`，使重选轨时 `getAudioOffloadSupport` 返回不支持，从而由 Media3 走解码 + PCM（或既有的厂商直出路径，若该设备支持）。
+   - 一次性：每个 prepare 只允许一次；PCM 重试后若仍停滞，观察器为空、`failedOffloadConfigs` 已生效，控制流自然落回 `fallbackPlayback`，即退化为今天的既有行为，不会更差。
+   - `onPlaybackTimeout` 在引擎内部重启后需自行 `App.post(runnable, TIMEOUT_PLAY)` 重新武装看门狗，因为引擎重启绕过了 `setMediaItemNow`。
+   - 新增独立诊断事件 `audio.offload.stall`（`inferred()`，并声明 `audibility=not-observable`），不改变任何既有事件字段语义。
+4. **其他备选（已否决）**
+   - 全局关闭 offload / 设备黑名单：把设备缺陷写死进产品，无法自愈，且对能正常 offload 的设备造成功耗与无缝播放回归。
+   - 伪造 Media3 renderer 错误走 `reselectTracksInternalAndSeek()`：需要新判据 + 新抛出点，且恢复期仍在原 prepared period 内，不如直接复用已验证的 PCM 重启链路。
+   - 新增 2–3 秒早期看门狗：能缩短用户等待，但引入新的定时器与新的误判面（蓝牙/HDMI 路由切换后的正常启动延迟），属扩大范围；本轮不实施。
+
+风险与缓解（与方案一并交付的理由）：
+
+- **前提未验证**：日志只证明 offload 不消费，未证明 PCM 在 22050 Hz 上必然出声。缓解：一次性上限 + 失败后自然退化，且新增诊断事件保留归因证据；真机复现仍需用户在同一台电视上确认。
+- **误判导致无谓降级**：判据只在 15 秒决策点被读取，此时用户已实际静默 15 秒，因此不会产生「提前降级」型误判；对 AC3/EAC3/DTS 等不可无损转 PCM 的编码，本方案不改其 offload 准入，只在同一判据成立时回退，且回退目标是既有 PCM 路径。
+- **与既有失败记忆混用**：使用独立的 `failedOffloadConfigs` 集合与 `getAudioOffloadSupport` 准入面，不改 `failedVendorDirectConfigs` / `ExoAudioDirectFailureMemory` 的键空间与语义。
+- **循环重建**：一次性标志按 attempt 隔离（`prepareForPlayback` 重建 attempt），且引擎侧 `pcmFallbackInProgress` / `pcmFallbackScheduledAttempt` 继续去重。
+- **证据被掩盖**：新增 `audio.offload.stall` 事件记录编码/采样率/声道、`acceptedBytes`、`zeroWrites`、`headRaw`、窗口与恢复动作。
+
+### 验收标准
+
+1. `requestOffloadStallRecovery()` 在「已接受数据 + 持续零写入 + 播放头为 0 + 过窗」时为真，且**每次 prepare 只成立一次**；第二次调用为假。
+2. 播放头为正、为负（不可观测）、或从未接受过数据时，均不得判为停滞。
+3. 触发后 `getAudioOffloadSupport` 对该精确配置返回 `isFormatSupported=false`，而**其它采样率/声道配置仍按原样返回支持**，且厂商直出准入不变。
+4. `isOffload=false` 的输出不安装观察器、不产生停滞后遗症。
+5. 定向单测（`ExoCompressedAudioDirectPolicyTest` 及既有 Exo 音频测试类）与 Leanback/Mobile arm64 Java 编译通过。
+6. 真机（用户在同一台 Dangbei X7 Ultra、同一 22050 Hz 音频源）：日志应出现一次停滞证据与 `fallback=pcm`，音乐出声，且**不再出现** `fallback decode hard→soft` + `fallback player EXO→IJK` 的双 15 秒链；正常 offload 曲目不出现该证据、行为不变。停滞证据以 `audio.output.write` 事件承载，判别字段为 `stage=offload-startup-stall`（见「第 1 轮评审」第 1 项：catvod 诊断 schema 对事件名与字段都是硬白名单，新增事件名会被静默丢弃，故复用已注册事件 + 既有 `stage` 判别）。
+
+### 回滚
+
+单提交、App 侧 Java、无依赖/native/锁/patch 变更。`git revert` 该提交即可恢复「双 15 秒 + 软解/换内核」的现状；不涉及数据迁移或持久化格式。
+
+### 实施记录
+
+- 2026-10-15 16:25 CST：只读分析用户日志并完成证据归档；任务守卫以 `E11` / `standard` 启动，base `10e62fe391`，受保护脏文件 0。
+
+## 评审、修正与验证（2026-10-15）
+
+### 第 1 轮评审：确认并修正的缺陷
+
+评审对象为本轮全部未推送改动（`ExoCompressedAudioDirectPolicy`、`ExoPlayerEngine`、`PlayerManager`、对应测试与本文），逐项对照设计契约与真实设备日志。
+
+| # | 缺陷 | 证据 | 修正 |
+| --- | --- | --- | --- |
+| 1 | 新增的 `audio.offload.stall` 事件与 `recovery` 字段**都不在 catvod 诊断 schema 白名单内**，`DiagnosticEvent` 构造会抛 `IllegalArgumentException`，被 `PlaybackDiagnosticCollector.emit` 的 `catch (RuntimeException)` 吞掉并只累加 `collectorFailure`——事件静默丢弃，验收标准 6 的日志证据根本不会产生 | `DiagnosticEvent.EVENTS` 无该事件名、`FIELDS` 无 `recovery`；构造器与 `put()` 均为硬校验；`emit` 捕获后仅 `DebugLogStore.collectorFailure()`。已用 `assertEquals`/`assertThrows` 断言固化为可执行证明 | 复用已注册的 `audio.output.write` 事件与该事件既有的 `stage` 判别字段（`stage=offload-startup-stall`），`recovery` 改名为已注册的 `note`。理由：catvod 诊断 schema 是跨模块共享契约，为其扩容超出本任务范围 |
+| 2 | `zeroWrites` 从输出创建起就计数，判据无法区分「先被拒写、随后正常消费」的输出 | 真实日志首个 write 即被接受（`acceptedBytes=392`），该形态不影响目标场景，但判据本身过宽 | 仅在 `firstAcceptedAtMs` 已记录后才累加 `zeroWrites`，即零写入必须是「接受过数据之后」的拒绝 |
+| 3 | 探针计数字段由播放线程写入、控制线程读取；armeabi-v7a 是发货 ABI，非 `volatile` 的 64 位读取可能撕裂 | 写发生在 `write()`（播放线程），读发生在 `onPlaybackTimeout`（main 线程） | 三个计数字段改 `volatile`；`currentStall()` 内先把 `firstAcceptedAtMs` 读入局部变量再判断 |
+| 4 | 探针未区分输出 epoch：`flush()`/`stop()` 会把硬件播放头清零，而计数仍保留 flush 前的值，seek 之后的停滞会被归因到 flush 前的证据 | 同类 `VendorDirectAudioOutput` 已确立口径「seek/flush 不是新的首次起播探针」并在 flush/stop 清空；真实日志本故障全程无 flush/stop（整份日志仅 `initialize`×10 / `release`×6） | `OffloadStartupProbe` 在 `flush()`/`stop()` 清空计数，与同类保持一致；`release()` **刻意保留**证据，因为 Media3 会在 App 得知超时前释放输出 |
+| 5 | `hasStalledOffloadOutput()` 是生产未使用的 public API | 仅测试引用，且测试与该类同包 | 收窄为包内可见 |
+| 6 | 没有任何测试保证「本策略发出的事件/字段确实被 schema 接受」，即第 1 项这类静默丢弃无法被发现 | catvod 下无任何测试引用 `EVENTS`/`FIELDS` | 新增 `offloadStallDiagnosticUsesOnlyRegisteredEventAndFields`：既断言实际集合被接受，又断言未注册的事件名/字段**会被拒绝**（自证非空转，同时把第 1 项固化为回归证明） |
+
+### 第 1 轮评审：确认无需修改的两点（附证据，避免重复检查）
+
+- **边界读取依赖**：停滞判据只在 15 s 决策点读取一次播放头。真实日志时序为 App 超时决策（`logSeq=3637`，01:36:45.434）**先于**输出释放（`logSeq=3642`），读取时输出仍存活。若将来输出在决策前已被释放，`rawPlaybackHead` 返回 `C.LENGTH_UNSET`，判据返回「非停滞」，控制流落回既有回退——属优雅退化，不会比现状更差。
+- **不可能「提前降级」**：判据只在 15 s 超时点被消费；仅启动慢、但 15 s 内播放头已推进的输出，在决策点读到非零播放头而不成立停滞。
+
+### 变异测试（证明新判据非空转）
+
+`currentStall()` 的三条判据逐条独立变异，每次只移除一条并重跑定向用例类；三次运行均为 69–70 项用例、退出码非零，且**恰好**各自对应一个检测器，无附带失败：
+
+| 变异 | 移除的判据 | 唯一转红的用例 |
+| --- | --- | --- |
+| A | `if (environment.rawPlaybackHead(raw) != 0) return null;` | `advancingOrUnobservableOffloadHeadIsNeverAStall` |
+| B | `if (windowMs < OFFLOAD_STALL_WINDOW_MS) return null;` | `stalledOffloadOutputIsOnlyClaimedAfterAcceptedPayloadStopsBeingConsumed` |
+| C | `\|\| zeroWrites <= 0` | `acceptedPayloadWithNoRefusedWriteIsNotAnOffloadStall` |
+
+每次变异后均用 `git hash-object` 与 `sha256sum` 双向确认还原到同一 blob（`05ac26d8f2da70303592b1cace97d1e2b2ca5c3a`）。变异 C 的检测器是第 2 轮新增用例：第 1 轮的合并变异曾暴露「`zeroWrites` 判据当时无任何用例覆盖」。
+
+### 第 2 轮评审结论
+
+对照上述修正后重新逐文件评审 `ExoCompressedAudioDirectPolicy`（探针、判据、恢复请求、offload 准入面）、`ExoPlayerEngine`（一次性恢复与既有 PCM 重启链路复用）、`PlayerManager`（15 s 决策点顺序、看门狗重新武装、`FALLBACK_DISABLED` 生效）、测试与本文：**未再发现必修问题**。三项原有风险经复核仍被原设计覆盖：误降级（判据仅在超时点消费）、循环重建（一次性标志按 attempt 隔离，且配置进入 `failedOffloadConfigs` 后 Media3 不再走 offload，故不会再次安装探针）、与厂商直出失败记忆串扰（`failedOffloadConfigs` 与 `failedVendorDirectConfigs` 键空间与准入面各自独立）。
+
+### 验证（修正后）
+
+- 定向门禁：`bash ./gradlew --console=plain :app:testLeanbackArmeabi_v7aDebugUnitTest --tests com.fongmi.android.tv.player.exo.ExoCompressedAudioDirectPolicyTest :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:compileMobileArm64_v8aDebugJavaWithJavac` → 70 项中 0 failure / 0 error / 1 项既有 `@Ignore`；Leanback 与 Mobile ARM64 Java 编译均通过。
+- 变异测试：三次独立变异各自恰好转红一个对应用例，还原经 blob 与 sha256 双重确认（见上表）。
+- **未连接设备**：本轮不把主机单测/编译扩大为真机或 HAL 验收；验收标准 6 仍需用户在同一台 Dangbei X7 Ultra、同源复测。
+
+## 合并 origin/beta（2026-10-15）
+
+- 合并对象：`origin/beta` = `fc3d3a2b4a2e0f7bb8842e76d2db7da706f79ef7`（`Merge pull request #448 from Silent1566/dev3`），其第二父即本分支 HEAD `10e62fe391efa7d2b3607f78022d14c5372f3d3c`——本次为**内容零差异合并**。
+- **零复活证明**：合并结果树 `git write-tree` = `29e496e53d628d1045c2fae46136969d7f5ddf21`，与 `origin/beta^{tree}` **逐字节相同**；并以整树集合比对（`git ls-tree -r --name-only` + `comm`）核对：在「历史上出现过 revert/回退/撤销/剔除 主题提交所触及的 731 条路径」中已有 601 条不在 beta 树内，本次合并树**复活 0 条**。
+- 检测器口径与自检：只匹配提交主题行并锚定开头（`^(Revert|revert|回退|撤销|剔除)`），避免把正文含「revert」字样的合并提交误判为 revert 提交；把一条确实「在 revert 集且不在 beta 树」的路径（`ISSUE_TEMPLATE`）注入伪造树时检测器正确报出，对真实合并树则为 0，排除空转。
+
+### 交付坐标（2026-10-15）
+
+- 合并提交：`0d925731015595112eae8647d386051135c4da5c`（双父：`10e62fe391efa7d2b3607f78022d14c5372f3d3c` + `origin/beta` `fc3d3a2b4a2e0f7bb8842e76d2db7da706f79ef7`）。
+- 恢复标签：`recovery/E11/20261015153914-0d9257310155`（已推送）。
+- 推送：`origin/dev3` → 上述合并提交，`git ls-remote` 复核一致。
+- PR：<https://github.com/Silent1566/webhtv/pull/449>（base=`beta`、head=`dev3`、state=OPEN、`mergedAt=null`、`mergeable=MERGEABLE`；**仅创建，未合并**）。
+- PR 文件集与 `git diff --name-only origin/beta HEAD` 逐项一致（5 项，已用比对确认）。
+- 创建 PR 后再次 fetch：`origin/beta` 仍为 `fc3d3a2b4a`，等于合并提交第二父，PR 未转为冲突。
+- 回滚：`git revert 0d925731015595112eae8647d386051135c4da5c`，恢复「双 15 秒 + 软解/换内核」现状。

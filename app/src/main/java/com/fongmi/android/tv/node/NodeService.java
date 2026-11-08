@@ -7,12 +7,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
-import android.os.Process;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
+import android.os.Process;
 import android.os.RemoteException;
+import android.os.SystemClock;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -26,7 +27,10 @@ import com.github.catvod.crawler.SpiderDebug;
 
 import java.io.File;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import okhttp3.OkHttpClient;
 
 /**
  * 跑在 {@code :node} 子进程的前台 Service，承载 Node 运行时的全部生命周期。
@@ -169,9 +173,18 @@ public class NodeService extends Service {
      */
     private int waitReady(File portFile, Messenger reply) {
         boolean reported = false;
-        for (int i = 0; i < 225; i++) {
+        long deadline = SystemClock.elapsedRealtime() + NodeRuntime.READY_TIMEOUT_MS;
+        OkHttpClient probeClient = new OkHttpClient.Builder()
+                .connectTimeout(NodeRuntime.READY_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .readTimeout(NodeRuntime.READY_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .writeTimeout(NodeRuntime.READY_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .callTimeout(NodeRuntime.READY_PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .build();
+        while (SystemClock.elapsedRealtime() < deadline) {
             try {
-                Thread.sleep(200);
+                long remaining = deadline - SystemClock.elapsedRealtime();
+                if (remaining <= 0) break;
+                Thread.sleep(Math.min(NodeRuntime.READY_POLL_MS, remaining));
                 List<Integer> candidates = NodeRuntime.readPorts(portFile);
                 if (candidates.isEmpty()) {
                     if (!reported) {
@@ -181,7 +194,12 @@ public class NodeService extends Service {
                     continue;
                 }
                 for (int candidate : candidates) {
-                    String cfg = com.github.catvod.net.OkHttp.string("http://127.0.0.1:" + candidate + "/config");
+                    String cfg;
+                    try (okhttp3.Response response = probeClient.newCall(new okhttp3.Request.Builder()
+                            .url("http://127.0.0.1:" + candidate + "/config")
+                            .build()).execute()) {
+                        cfg = response.body() == null ? "" : response.body().string();
+                    }
                     if (com.fongmi.android.tv.api.CatSource.isConfig(cfg)) {
                         return candidate;
                     }

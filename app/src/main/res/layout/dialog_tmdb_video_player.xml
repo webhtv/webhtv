@@ -47,7 +47,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="52dp"
-        android:background="#66000000"
+        android:background="@color/webhtv_color_scrim"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="16dp"

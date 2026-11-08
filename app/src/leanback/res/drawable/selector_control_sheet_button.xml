@@ -1,4 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版播放器控制面板按钮（dialog_control 的 ControlSheetButton 样式）的统一焦点环。
+
+    环宽唯一来源：@dimen/webhtv_focus_ring_width。此前焦点/按下/当前三态写死 2dp，
+    与电视端其余焦点环不一致，是用户报告「边框粗细也貌似不一样」的同一族缺陷。
+    常态描边保持 1dp：它表达的是「未聚焦的轮廓」，不属于焦点环，与
+    selector_video_item 的 1dp tvNormalStroke 分档一致。
+
+    环色：?attr/tvPlayerRing / ?attr/tvPlayerCurrentRing。此前焦点/按下/当前三态写死半透明白，
+    于是播放页里同时存在白环（本族）与主题蓝环（selector_video_item）、绿环（当前态），
+    用户报告「按钮和播放器选中后的边框颜色也不统一」。本控件叠在播放页固定深靛玻璃面板
+    （shape_dialog_control_glass_panel）上，浅色表 FOCUS 深蓝在它上面只有 1.83:1，
+    所以不能用 ?attr/tvFocusRing；tvPlayerRing 是浅色表在固定玻璃上夹取到 ≥3:1 的派生色，
+    深色表则与应用表面焦点环同值（近白），既跟随主题又始终可见。
+    半透明层次（pressed/focused/selected 的 alpha 差异）保留，只把色相换成主题派生色。
+-->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="#33FFFFFF">
     <item>
@@ -8,8 +24,8 @@
                     <corners android:radius="6dp" />
                     <solid android:color="#5CFFFFFF" />
                     <stroke
-                        android:width="2dp"
-                        android:color="#D9FFFFFF" />
+                        android:width="@dimen/webhtv_focus_ring_width"
+                        android:color="?attr/tvPlayerCurrentRing" />
                 </shape>
             </item>
             <item android:state_focused="true">
@@ -17,8 +33,8 @@
                     <corners android:radius="6dp" />
                     <solid android:color="#4DFFFFFF" />
                     <stroke
-                        android:width="2dp"
-                        android:color="#BFFFFFFF" />
+                        android:width="@dimen/webhtv_focus_ring_width"
+                        android:color="?attr/tvPlayerRing" />
                 </shape>
             </item>
             <item android:state_selected="true">
@@ -26,8 +42,22 @@
                     <corners android:radius="6dp" />
                     <solid android:color="#5CFFFFFF" />
                     <stroke
-                        android:width="2dp"
-                        android:color="#BFFFFFFF" />
+                        android:width="@dimen/webhtv_focus_ring_width"
+                        android:color="?attr/tvPlayerCurrentRing" />
+                </shape>
+            </item>
+            <!--
+                state_activated 与 state_selected 必须同色同宽：部分入口（例如
+                ArrayAdapter.setActivated）用 activated 表达「当前生效」，
+                缺失这一分支时那些按钮会完全看不到选中环。
+            -->
+            <item android:state_activated="true">
+                <shape android:shape="rectangle">
+                    <corners android:radius="6dp" />
+                    <solid android:color="#5CFFFFFF" />
+                    <stroke
+                        android:width="@dimen/webhtv_focus_ring_width"
+                        android:color="?attr/tvPlayerCurrentRing" />
                 </shape>
             </item>
             <item>
@@ -36,7 +66,7 @@
                     <solid android:color="#1FFFFFFF" />
                     <stroke
                         android:width="1dp"
-                        android:color="#14FFFFFF" />
+                        android:color="?attr/tvNormalStroke" />
                 </shape>
             </item>
         </selector>

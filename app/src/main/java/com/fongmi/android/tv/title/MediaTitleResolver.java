@@ -1,7 +1,9 @@
 package com.fongmi.android.tv.title;
 
 import com.fongmi.android.tv.bean.AiConfig;
+import com.fongmi.android.tv.bean.TmdbConfig;
 import com.fongmi.android.tv.bean.TmdbItem;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.service.AiTitleExtractionService;
 import com.fongmi.android.tv.setting.Setting;
 import com.github.catvod.crawler.SpiderDebug;
@@ -132,7 +134,7 @@ public final class MediaTitleResolver {
     }
 
     private void applyTmdbCache(MediaTitleRequest request, MediaTitleResolution resolution) {
-        TmdbItem item = Setting.getTmdbMatchCache().find(request.getSiteKey(), request.getVodId(), request.getRawTitle());
+        TmdbItem item = Setting.getTmdbMatchCache().find(request.getSiteKey(), request.getVodId(), request.getRawTitle(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent(), Setting.getLanguage()));
         if (item == null || item.getTitle().isEmpty()) return;
         if (!isTmdbCacheCompatible(item, resolution)) return;
         resolution.setCanonicalTitle(item.getTitle());

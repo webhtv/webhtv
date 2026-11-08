@@ -32,8 +32,9 @@ public class VideoActivityHistoryTitleTest {
                             && directTmdbLaunch.contains("EXTRA_TMDB_PLAY_EPISODE_NUMBER"));
             assertTrue(sourcePath + " must persist the forwarded canonical TMDB position for the selected episode",
                     intentSelection.contains("withIntentTmdbEpisodeIdentity(episode)"));
-            assertTrue(sourcePath + " must compare episodes by URL before falling back to source names or numbers",
-                    updateHistory.contains("historyEpisode.matchesPlayback(mHistory.getEpisode())"));
+            assertTrue("videoActivities must compare episodes by URL before falling back to source names or numbers",
+                    updateHistory.contains("boolean versionAware = getFlag().containsEpisodeUrl(mHistory.getEpisode());")
+                            && updateHistory.contains("historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware)"));
             assertTrue(sourcePath + " must persist the displayed/scraped title whenever playback changes episodes",
                     updateHistory.contains("mHistory.setVodRemarks(getHistoryEpisodeName(item));"));
             assertTrue(sourcePath + " must replace the TMDB episode position when playback changes episodes",
@@ -102,7 +103,8 @@ public class VideoActivityHistoryTitleTest {
                 refreshHistory.contains("setHistoryTmdbEpisodePosition(saved, selectedEpisode)"));
         assertTrue("detail playback must prefer persisted TMDB episode identity over matching source labels",
                 sameEpisode.contains("item.getTmdbEpisodeNumber() > 0")
-                        && sameEpisode.contains("episode.matchesPlayback(saved)"));
+                        && sameEpisode.contains("episode.matchesPlayback(saved, versionAware)")
+                        && sameEpisode.contains("selectedFlag.containsEpisodeUrl(saved)"));
         assertTrue("external colorful playback must forward the scraped episode title table",
                 defaultPlayback.contains("fastPlaybackEpisodeTitles()"));
         assertTrue("external colorful playback must forward the canonical TMDB season and episode",

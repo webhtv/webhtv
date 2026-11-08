@@ -31,25 +31,45 @@
                 android:nextFocusDown="@id/keyboard"
                 android:src="@drawable/ic_search_mic" />
 
-            <com.fongmi.android.tv.ui.custom.CustomSearchView
-                android:id="@+id/keyword"
+            <!--
+                搜索输入框的实体宿主：此前 CustomSearchView 的 background 是 @null，整行只有文字，
+                浅色模式下既没有可辨认的框也没有可读的字（前景写死 @color/white）。这里给它一个
+                恒定的半透明底 + 随调色板的 1dp 轮廓，聚焦时换成电视统一焦点环。
+            -->
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/keywordField"
                 android:layout_width="220dp"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
-                android:background="@null"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:hint="@string/search_keyword"
-                android:imeOptions="actionDone"
-                android:inputType="textCapWords|textAutoCorrect|textAutoComplete"
-                android:letterSpacing="0.02"
-                android:maxLength="255"
-                android:nextFocusDown="@id/keyboard"
-                android:singleLine="true"
-                android:textColor="@color/white"
-                android:textColorHint="@color/white"
-                android:textCursorDrawable="@drawable/shape_cursor"
-                android:textSize="24sp" />
+                android:addStatesFromChildren="true"
+                android:background="@drawable/selector_tv_search_field"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="8dp">
+
+                <com.fongmi.android.tv.ui.custom.CustomSearchView
+                    android:id="@+id/keyword"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@null"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:hint="@string/search_keyword"
+                    android:imeOptions="actionDone"
+                    android:inputType="textCapWords|textAutoCorrect|textAutoComplete"
+                    android:letterSpacing="0.02"
+                    android:maxLength="255"
+                    android:nextFocusDown="@id/keyboard"
+                    android:singleLine="true"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
+                    android:textColorHint="@color/webhtv_color_player_control_muted"
+                    android:textCursorDrawable="@drawable/shape_cursor"
+                    android:textSize="24sp" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/searchScope"
@@ -71,7 +91,7 @@
                 android:nextFocusDown="@id/keyboard"
                 android:singleLine="true"
                 android:text="@string/search_scope_all"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -120,7 +140,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="14dp"
                     android:text="@string/search_record"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="24sp" />
 
                 <androidx.recyclerview.widget.RecyclerView
@@ -142,7 +162,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="14dp"
                 android:text="@string/search_hot"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="24sp" />
 
             <androidx.recyclerview.widget.RecyclerView
@@ -171,7 +191,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="14dp"
                     android:text="@string/search_hot_tv"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="24sp" />
 
                 <androidx.recyclerview.widget.RecyclerView
@@ -191,7 +211,7 @@
                     android:layout_marginTop="16dp"
                     android:layout_marginBottom="14dp"
                     android:text="@string/search_hot_movie"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="24sp" />
 
                 <androidx.recyclerview.widget.RecyclerView
@@ -211,7 +231,7 @@
                     android:layout_marginTop="16dp"
                     android:layout_marginBottom="14dp"
                     android:text="@string/search_hot_variety"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="24sp" />
 
                 <androidx.recyclerview.widget.RecyclerView

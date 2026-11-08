@@ -1,0 +1,7 @@
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:color="@color/webhtv_color_outline_variant" />
+    <item android:state_pressed="true" android:color="@color/webhtv_color_primary_container" />
+    <item android:state_focused="true" android:color="@color/webhtv_color_primary" />
+    <item android:state_selected="true" android:color="@color/webhtv_color_primary" />
+    <item android:color="@color/webhtv_color_primary" />
+</selector>

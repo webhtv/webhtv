@@ -1,9 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+   弹层 chip（音轨/视轨/字幕/标题/弹幕）文字色。
+
+   这里的取值必须是**调色板无关的常量**，不能走 ?attr/colorOnSurface：
+   chip 背景是固定色（选中态 shape_dialog_glass_chip_active 的浅灰实底，
+   常态 selector_dialog_glass_chip 的半透明深靛），宿主面板
+   shape_dialog_glass_panel / shape_dialog_danmaku_sheet_glass_panel
+   也是两张表相同的固定深靛玻璃。跟随调色板的前景必然在其中一张表上撞色：
+
+     深色表 onSurface 近白压在选中态浅灰实底上 ≈ 1.04:1
+       （用户报告 2026-10-14：电视版主题选深色后，选中项变成一条发光的白条）
+     浅色表 onSurface 近黑压在常态深靛 chip 上 ≈ 1.68:1
+
+   以上两个比值都是不透明原始色对按 WCAG 2.x 相对亮度直接算出的。
+   所以常态取固定浅色（white_90）；勾选/激活/选中取固定深色
+   （black，对浅灰选中底 16.87:1）；**焦点取固定浅色**，因为焦点底是固定的高饱和蓝
+   shape_dialog_glass_chip_focused（#FF1B45B8），黑字压在那块蓝上只有约 2.6:1。
+
+   焦点分支必须排在勾选/激活/选中之前，与 selector_dialog_glass_chip 的背景分支一一对应：
+   Android 取首个全匹配项，背景既然「焦点 > 选中」，前景也必须「焦点 > 选中」；
+   否则聚焦在「在播」那行时会拿到选中分支的黑字，压在焦点蓝底上不可读。
+
+   常态值不能只按 chip 原始色核算：它画在**两层半透明**之上——47% 的 chip 压在
+   90%–80% 的深靛玻璃上，玻璃再压住任意亮度的画面。两层都半透明，所以亮画面会让
+   合成后的底色**比 chip 原始色更浅**。逐档扫过玻璃的三档渐变、画面取纯黑与纯白，
+   真实最坏情况是 6.84:1、最好是 10.60:1；而直接拿 chip 原始色算出的 8.64:1 是
+   **偏乐观**的代理值，不是最坏情况（守卫已按真实合成核算，见
+   DialogGlassChipStyleTest.chipTextStaysReadableOnItsFixedFillInBothPalettes）。
+   这与同类的固定明暗控件一致：display_option_text.xml 的 state_selected
+   同样用固定黑压在固定的浅色选中底上。
+
+   两个常量都取自已命名资源，且都不在 ThemeRole 索引里（black 与 white_90
+   都不是任何基线角色值），因此 ThemeBinder 不会改写它们。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:alpha="0.45" android:color="#E6FFFFFF" android:state_enabled="false" />
-    <item android:color="#FF17171B" android:state_checked="true" />
-    <item android:color="#FF17171B" android:state_activated="true" />
-    <item android:color="#FF17171B" android:state_selected="true" />
-    <item android:color="#FF17171B" android:state_focused="true" />
-    <item android:color="#E6FFFFFF" />
+    <item android:alpha="0.45" android:color="@color/white_90" android:state_enabled="false" />
+    <item android:color="@color/white_90" android:state_focused="true" />
+    <item android:color="@color/black" android:state_checked="true" />
+    <item android:color="@color/black" android:state_activated="true" />
+    <item android:color="@color/black" android:state_selected="true" />
+    <item android:color="@color/white_90" />
 </selector>

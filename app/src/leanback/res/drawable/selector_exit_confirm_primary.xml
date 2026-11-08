@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版退出确认弹窗「主按钮」（dialog_exit_confirm，HomeActivity 退出确认）的焦点态。
+
+    只统一**宽度**：@dimen/webhtv_focus_ring_width（此前写死 2dp），
+    与电视端其余焦点环一致，消除「边框粗细也貌似不一样」。
+
+    环色与填充刻意保持与调色板无关的字面量，不改成 ?attr/colorPrimary：
+    该弹窗面板 shape_exit_confirm_dialog 是固定浅色（两张表相同），按钮文字是
+    ?attr/webhtvColorOnWallpaper（恒为白）。若把填充改成调色板角色，夜间表 colorPrimary
+    是浅蓝，白字只有约 1.7:1，会直接不可读。这条边界由
+    TvFixedDarkSurfaceContrastTest.theFixedPanelsAreStillPaletteIndependentAndDark 固化。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item android:state_focused="true">
@@ -6,7 +18,7 @@
             <solid android:color="#0B57D0" />
             <corners android:radius="10dp" />
             <stroke
-                android:width="2dp"
+                android:width="@dimen/webhtv_focus_ring_width"
                 android:color="#FFFFFF" />
         </shape>
     </item>
@@ -16,7 +28,7 @@
             <solid android:color="#0B57D0" />
             <corners android:radius="10dp" />
             <stroke
-                android:width="2dp"
+                android:width="@dimen/webhtv_focus_ring_width"
                 android:color="#FFFFFF" />
         </shape>
     </item>

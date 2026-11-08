@@ -25,6 +25,8 @@ import com.fongmi.android.tv.playback.PlaybackRemoteSyncStore;
 import com.fongmi.android.tv.playback.PlaybackWebhookStore;
 import com.fongmi.android.tv.playback.RemoteSyncConfig;
 import com.fongmi.android.tv.playback.ViewingRecordSyncStore;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -57,7 +59,7 @@ public class ViewingRecordSyncDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
@@ -67,8 +69,8 @@ public class ViewingRecordSyncDialog extends BaseAlertDialog {
         Window window = getDialog().getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
-        int screenWidth = ResUtil.getScreenWidth(requireContext());
-        int screenHeight = ResUtil.getScreenHeight(requireContext());
+        int screenWidth = DialogSafeArea.width(requireActivity(), window);
+        int screenHeight = DialogSafeArea.height(requireActivity(), window);
         boolean land = ResUtil.isLand(requireContext());
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
@@ -139,7 +141,7 @@ public class ViewingRecordSyncDialog extends BaseAlertDialog {
     }
 
     private View sectionTitle(int text) {
-        MaterialTextView view = text(getString(text), 12, Color.parseColor("#5F6368"), true);
+        MaterialTextView view = text(getString(text), 12, ThemeController.current().colorOnSurfaceVariant(), true);
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = binding.content.getChildCount() == 0 ? 0 : dp(12);
         view.setLayoutParams(params);
@@ -149,7 +151,7 @@ public class ViewingRecordSyncDialog extends BaseAlertDialog {
     private View switchRow(String title, String detail, boolean enabled, View.OnClickListener listener) {
         LinearLayoutCompat root = rowRoot();
         LinearLayoutCompat header = header(root);
-        header.addView(text(title, 15, Color.BLACK, true), new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        header.addView(text(title, 15, ThemeController.current().colorOnSurface(), true), new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         MaterialButton toggle = actionButton(enabled ? R.string.setting_enable : R.string.setting_disable, enabled, false);
         toggle.setOnClickListener(listener);
         header.addView(toggle, new LinearLayoutCompat.LayoutParams(dp(92), dp(36)));
@@ -163,7 +165,7 @@ public class ViewingRecordSyncDialog extends BaseAlertDialog {
         root.setClickable(true);
         root.setOnClickListener(listener);
         LinearLayoutCompat header = header(root);
-        header.addView(text(title, 15, Color.BLACK, true), new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        header.addView(text(title, 15, ThemeController.current().colorOnSurface(), true), new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         MaterialButton action = actionButton(actionText, true, false);
         action.setOnClickListener(listener);
         header.addView(action, new LinearLayoutCompat.LayoutParams(dp(92), dp(36)));
@@ -206,7 +208,7 @@ public class ViewingRecordSyncDialog extends BaseAlertDialog {
     }
 
     private void addDetail(LinearLayoutCompat root, String value) {
-        MaterialTextView view = text(value, 12, Color.parseColor("#5F6368"), false);
+        MaterialTextView view = text(value, 12, ThemeController.current().colorOnSurfaceVariant(), false);
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(4);
         root.addView(view, params);
@@ -230,7 +232,7 @@ public class ViewingRecordSyncDialog extends BaseAlertDialog {
         button.setMinimumHeight(dp(36));
         button.setPadding(dp(6), 0, dp(6), 0);
         ColorStateList bg = ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_bg : R.color.dialog_outlined_button_bg);
-        ColorStateList fg = danger ? ColorStateList.valueOf(Color.parseColor("#B3261E")) : ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_text : R.color.dialog_outlined_button_text);
+        ColorStateList fg = danger ? ColorStateList.valueOf(ThemeController.current().colorError()) : ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_text : R.color.dialog_outlined_button_text);
         button.setBackgroundTintList(bg);
         button.setTextColor(fg);
         if (!tonal) {
@@ -240,10 +242,24 @@ public class ViewingRecordSyncDialog extends BaseAlertDialog {
         return button;
     }
 
+    /**
+     * The row card fill and stroke follow the active palette.
+     *
+     * <p>These were fixed light literals ({@code #F5F6F7} fill, {@code #DADCE0} stroke), which
+     * no {@code webhtv_color_*} role ever equals, so {@code ThemeBinder}'s exact-match rewrite
+     * deliberately skipped them: under the night table the dialog panel went dark while every
+     * row stayed a near-white card with black text. {@code colorSurfaceContainerLow} is the
+     * semantic "card on a dialog panel" surface ({@code #F2F3F9} day / {@code #181C20} night)
+     * and {@code colorOutlineVariant} its paired hairline.
+     *
+     * <p>The previous two stroke greys ({@code #DADCE0} usable / {@code #E2E5E8} not) differed
+     * by 1.09:1, which carried no readable information - usability is already stated by the
+     * badge text - so both branches now share one semantic outline.
+     */
     private GradientDrawable rowBackground() {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor("#F5F6F7"));
-        drawable.setStroke(dp(1), Color.parseColor("#DADCE0"));
+        drawable.setColor(ThemeController.current().colorSurfaceContainerLow());
+        drawable.setStroke(dp(1), ThemeController.current().colorOutlineVariant());
         drawable.setCornerRadius(dp(6));
         return drawable;
     }

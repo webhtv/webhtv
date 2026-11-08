@@ -95,15 +95,38 @@ public class CustomRecyclerView extends RecyclerView {
         setMeasuredDimension(finalWidth, finalHeight);
     }
 
+    private static final int FOCUS_ATTEMPTS = 5;
+    private static final long FOCUS_RETRY_DELAY_MS = 50;
+
     private void focus(int position) {
+        focus(position, FOCUS_ATTEMPTS);
+    }
+
+    /**
+     * 把焦点落到指定行，但在布局完成前不放弃。
+     *
+     * <p>弹层刚 show 时 RecyclerView 往往还没走到 onLayout，{@code findViewHolderForLayoutPosition}
+     * 会返回 null，原先的实现就直接丢掉这次请求——结果是整张列表没有任何行处于 focus，
+     * 遥控器上下键既看不到焦点环，也看不出光标停在哪（用户报告「TV 版本视轨/音轨没有焦点显示」）。
+     * 电视盒子冷启动时更容易命中这个时序。
+     *
+     * <p>失败时按 50ms 重试，总时长上限 {@code FOCUS_ATTEMPTS * FOCUS_RETRY_DELAY_MS} = 250ms。
+     * 只要列表中已经有子 View 拿到焦点（用户已经开始按键）就立刻停止，不去抢焦点。
+     */
+    private void focus(int position, int attempts) {
         ViewHolder holder = findViewHolderForLayoutPosition(position);
-        if (holder != null) holder.itemView.requestFocus();
+        if (holder != null) {
+            holder.itemView.requestFocus();
+            return;
+        }
+        if (getFocusedChild() != null || attempts <= 1) return;
+        postDelayed(() -> focus(position, attempts - 1), FOCUS_RETRY_DELAY_MS);
     }
 
     @Override
     public void scrollToPosition(int position) {
         super.scrollToPosition(position);
-        postDelayed(() -> focus(position), 50);
+        postDelayed(() -> focus(position), FOCUS_RETRY_DELAY_MS);
     }
 
     @Override

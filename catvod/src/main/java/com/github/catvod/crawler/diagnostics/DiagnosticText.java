@@ -28,30 +28,64 @@ public final class DiagnosticText {
         if (input == null) return new Clean("", false);
         boolean truncated = input.length() > MAX_CHARS;
         String value = input.substring(0, Math.min(MAX_CHARS, input.length())).replace("\\/", "/");
-        value = HEADER.matcher(value).replaceAll("sensitive-header=" + REDACTED);
-        value = SECRET.matcher(value).replaceAll("$1" + REDACTED);
-        value = BEARER.matcher(value).replaceAll(REDACTED);
-        value = URI_TEXT.matcher(value).replaceAll("uri:" + REDACTED);
-        value = LOCAL_PATH.matcher(value).replaceAll("path:" + REDACTED);
-        value = ADDRESS.matcher(value).replaceAll("address:" + REDACTED);
-        StringBuilder result = new StringBuilder(Math.min(MAX_CHARS, value.length()));
-        for (int i = 0; i < value.length() && result.length() < MAX_CHARS; i++) {
+        // Each pattern needs at least one of these characters to match, so plain text skips the
+        // regex engine entirely. This runs on the calling (often UI) thread for every log line.
+        if (value.indexOf(':') >= 0 || value.indexOf('=') >= 0) {
+            value = HEADER.matcher(value).replaceAll("sensitive-header=" + REDACTED);
+            value = SECRET.matcher(value).replaceAll("$1" + REDACTED);
+        }
+        if (value.indexOf('b') >= 0 || value.indexOf('B') >= 0) value = BEARER.matcher(value).replaceAll(REDACTED);
+        if (value.indexOf('/') >= 0 || value.indexOf(':') >= 0) value = URI_TEXT.matcher(value).replaceAll("uri:" + REDACTED);
+        if (value.indexOf('/') >= 0) value = LOCAL_PATH.matcher(value).replaceAll("path:" + REDACTED);
+        if (value.indexOf('.') >= 0 || value.indexOf(':') >= 0) value = ADDRESS.matcher(value).replaceAll("address:" + REDACTED);
+        String escaped = escape(value);
+        truncated |= escaped.length() >= MAX_CHARS;
+        return new Clean(truncated ? escaped + " [truncated]" : escaped, truncated);
+    }
+
+    /**
+     * Short label text: escaped, and redacted through {@link #clean} only when it could carry a URI
+     * or a credential. A label with none of these characters cannot match any redaction pattern
+     * except {@code bearer}/{@code basic}, which needs whitespace after the keyword.
+     */
+    public static String sanitizeTag(String tag) {
+        if (tag == null) return "";
+        String value = tag.length() > MAX_CHARS ? tag.substring(0, MAX_CHARS) : tag;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '/' || c == ':' || c == '=' || c == '@' || c == '.' || c <= ' ') return clean(value).text();
+        }
+        return escape(value);
+    }
+
+    private static String escape(String value) {
+        int limit = Math.min(MAX_CHARS, value.length());
+        boolean needed = false;
+        for (int i = 0; i < limit; i++) {
+            if (isEscapedControl(value.charAt(i))) { needed = true; break; }
+        }
+        if (!needed) return value.length() <= MAX_CHARS ? value : value.substring(0, MAX_CHARS);
+        StringBuilder result = new StringBuilder(limit);
+        for (int i = 0; i < limit && result.length() < MAX_CHARS; i++) {
             char c = value.charAt(i);
             if (c == '\n') result.append("\\n");
             else if (c == '\r') result.append("\\r");
             else if (c == '\t') result.append("\\t");
-            else if (Character.isISOControl(c) || c == '\u2028' || c == '\u2029' || (c >= '\u202a' && c <= '\u202e')) result.append('?');
+            else if (isEscapedControl(c)) result.append('?');
             else result.append(c);
         }
-        truncated |= result.length() >= MAX_CHARS;
-        if (truncated) result.append(" [truncated]");
-        return new Clean(result.toString(), truncated);
+        return result.toString();
+    }
+
+    private static boolean isEscapedControl(char c) {
+        return Character.isISOControl(c) || c == '\u2028' || c == '\u2029' || (c >= '\u202a' && c <= '\u202e');
     }
 
     /** Domain suggestions are local memory only, never part of an exported event. */
     public static List<String> origins(String input) {
         if (input == null) return List.of();
         String value = input.substring(0, Math.min(MAX_CHARS, input.length())).replace("\\/", "/");
+        if (value.indexOf('/') < 0 && value.indexOf(':') < 0) return List.of();
         Matcher matcher = URI_TEXT.matcher(value);
         List<String> result = new ArrayList<>();
         while (matcher.find() && result.size() < 16) {

@@ -46,6 +46,18 @@ public class PlaybackRecord {
     public String episodeName;
     public String episodeUrl;
     public Integer episodeIndex;
+    /**
+     * 单集地址的 SHA-256（{@link #episodeUrl} 的指纹），供对端做**集消歧**。
+     *
+     * <p>为什么需要它：{@link PlaybackFieldPolicy#apiSafe()} 不含
+     * {@code episodeUrl}（它是带时效签名的播放地址），但对端要区分同一剧的
+     * 不同集就必须有一个稳定的集身份。若只能拿到 {@code episodeName}，
+     * 同名集（如"第01集"在两条线路重复）会塔缩成同一条记录。
+     *
+     * <p>为什么用哈希而不是原地址：哈希能稳定区分集，又不会把带签名的
+     * 播放地址交给对端（也不进日志/备份）。空地址时为空串。
+     */
+    public String episodeId;
     public String mediaType;
     public int tmdbId;
     public int seasonNumber;
@@ -114,6 +126,7 @@ public class PlaybackRecord {
         record.sourceBindingKey = safe(history.getSourceBindingKey());
         record.episodeName = safe(history.getVodRemarks());
         record.episodeUrl = safe(history.getEpisodeUrl());
+        record.episodeId = episodeId(record.episodeUrl);
         applyTmdbIdentity(record, history);
         record.positionMs = position(history, player);
         record.durationMs = duration(history, player);
@@ -197,6 +210,7 @@ public class PlaybackRecord {
         if (policy.includes("sourceBindingKey")) record.sourceBindingKey = sourceBindingKey;
         if (policy.includes("episodeName")) record.episodeName = episodeName;
         if (policy.includes("episodeUrl")) record.episodeUrl = episodeUrl;
+        if (policy.includes("episodeId")) record.episodeId = episodeId;
         if (policy.includes("episodeIndex")) record.episodeIndex = episodeIndex;
         if (policy.includes("mediaType")) record.mediaType = mediaType;
         if (policy.includes("tmdbId")) record.tmdbId = tmdbId;
@@ -239,6 +253,7 @@ public class PlaybackRecord {
         if (policy.includes("sourceBindingKey")) object.addProperty("sourceBindingKey", sourceBindingKey);
         if (policy.includes("episodeName")) object.addProperty("episodeName", episodeName);
         if (policy.includes("episodeUrl")) object.addProperty("episodeUrl", episodeUrl);
+        if (policy.includes("episodeId") && !TextUtils.isEmpty(episodeId)) object.addProperty("episodeId", episodeId);
         if (policy.includes("episodeIndex") && episodeIndex != null) object.addProperty("episodeIndex", episodeIndex);
         if (policy.includes("mediaType") && !TextUtils.isEmpty(mediaType)) object.addProperty("mediaType", mediaType);
         if (policy.includes("tmdbId") && tmdbId > 0) object.addProperty("tmdbId", tmdbId);
@@ -280,6 +295,7 @@ public class PlaybackRecord {
         record.sourceBindingKey = sourceBindingKey;
         record.episodeName = episodeName;
         record.episodeUrl = episodeUrl;
+        record.episodeId = episodeId;
         record.episodeIndex = episodeIndex;
         record.mediaType = mediaType;
         record.tmdbId = tmdbId;
@@ -320,6 +336,7 @@ public class PlaybackRecord {
         sourceBindingKey = "";
         episodeName = "";
         episodeUrl = "";
+        episodeId = "";
         episodeIndex = null;
         mediaType = "";
         tmdbId = 0;
@@ -437,7 +454,9 @@ public class PlaybackRecord {
 
     private static String clientKey() {
         try {
-            String uuid = Device.get().getUuid();
+            // 只取稳定身份，不构造整个 Device：Device.get() 会顺带做网卡枚举与地址拼接，
+            // 而这里每秒被进度 tick 调用一次，只需要 uuid。
+            String uuid = Device.identityUuid();
             return TextUtils.isEmpty(uuid) ? "" : sha256(uuid);
         } catch (Exception e) {
             return "";
@@ -460,5 +479,18 @@ public class PlaybackRecord {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    /**
+     * 单集地址 → 稳定的集身份（{@code episodeUrl} 的 SHA-256）。
+     *
+     * <p>空地址返回空串（而不是空串的哈希）——对端据此就能区分
+     * "没有单集地址"与"有一个地址"，不必再猜。
+     *
+     * <p>公开而不是私有：对端协议与测试都需要同一份算法，
+     * 重新实现一份哈希很容易在编码/空值处理上分叉。
+     */
+    public static String episodeId(String episodeUrl) {
+        return TextUtils.isEmpty(episodeUrl) ? "" : sha256(episodeUrl);
     }
 }

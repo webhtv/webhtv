@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/setting_one_key_sync"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -38,7 +38,7 @@
             android:nextFocusDown="@id/recycler"
             android:padding="8dp"
             android:src="@drawable/ic_setting_refresh"
-            app:tint="#5F6368" />
+            app:tint="?attr/colorOnSurfaceVariant" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -79,7 +79,7 @@
                         android:ellipsize="end"
                         android:singleLine="true"
                         android:text="@string/sync_mode_to_remote"
-                        android:textColor="#202124"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="14sp" />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
@@ -96,10 +96,10 @@
                         android:layout_width="0dp"
                         android:layout_height="112dp"
                         android:layout_weight="1"
-                        app:cardBackgroundColor="#F3F5F7"
+                        app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
                         app:cardCornerRadius="10dp"
                         app:cardElevation="0dp"
-                        app:strokeColor="#DADCE0"
+                        app:strokeColor="?attr/colorOutlineVariant"
                         app:strokeWidth="1dp">
 
                         <androidx.appcompat.widget.LinearLayoutCompat
@@ -114,7 +114,7 @@
                                 android:id="@+id/localIcon"
                                 android:layout_width="30dp"
                                 android:layout_height="30dp"
-                                android:tint="#2F6FED"
+                                android:tint="?attr/colorPrimary"
                                 tools:src="@drawable/ic_sync_phone" />
 
                             <com.google.android.material.textview.MaterialTextView
@@ -123,7 +123,7 @@
                                 android:layout_marginTop="6dp"
                                 android:gravity="center"
                                 android:text="@string/sync_local_device"
-                                android:textColor="#5F6368"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="12sp" />
 
                             <com.google.android.material.textview.MaterialTextView
@@ -133,7 +133,7 @@
                                 android:gravity="center"
                                 android:singleLine="true"
                                 android:text="@string/sync_sender"
-                                android:textColor="#0B57D0"
+                                android:textColor="?attr/colorPrimary"
                                 android:textSize="12sp"
                                 android:textStyle="bold" />
 
@@ -145,7 +145,7 @@
                                 android:ellipsize="end"
                                 android:gravity="center"
                                 android:singleLine="true"
-                                android:textColor="#202124"
+                                android:textColor="?attr/colorOnSurface"
                                 android:textSize="14sp"
                                 tools:text="Pixel 8" />
 
@@ -156,7 +156,7 @@
                                 android:ellipsize="end"
                                 android:gravity="center"
                                 android:singleLine="true"
-                                android:textColor="#5F6368"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="11sp"
                                 tools:text="192.168.1.10:9978" />
 
@@ -176,7 +176,7 @@
                         android:gravity="center"
                         android:includeFontPadding="false"
                         android:text="@string/sync_push"
-                        android:textColor="#174EA6"
+                        android:textColor="?attr/colorPrimary"
                         android:textSize="14sp"
                         android:textStyle="bold"
                         app:drawableTopCompat="@drawable/ic_sync_arrow_right_blue" />
@@ -186,10 +186,10 @@
                         android:layout_width="0dp"
                         android:layout_height="112dp"
                         android:layout_weight="1"
-                        app:cardBackgroundColor="#F3F5F7"
+                        app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
                         app:cardCornerRadius="10dp"
                         app:cardElevation="0dp"
-                        app:strokeColor="#DADCE0"
+                        app:strokeColor="?attr/colorOutlineVariant"
                         app:strokeWidth="1dp">
 
                         <androidx.appcompat.widget.LinearLayoutCompat
@@ -204,7 +204,7 @@
                                 android:id="@+id/remoteIcon"
                                 android:layout_width="30dp"
                                 android:layout_height="30dp"
-                                android:tint="#2F6FED"
+                                android:tint="?attr/colorPrimary"
                                 tools:src="@drawable/ic_sync_tv" />
 
                             <com.google.android.material.textview.MaterialTextView
@@ -213,7 +213,7 @@
                                 android:layout_marginTop="6dp"
                                 android:gravity="center"
                                 android:text="@string/sync_remote_device"
-                                android:textColor="#5F6368"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="12sp" />
 
                             <com.google.android.material.textview.MaterialTextView
@@ -223,7 +223,7 @@
                                 android:gravity="center"
                                 android:singleLine="true"
                                 android:text="@string/sync_receiver"
-                                android:textColor="#0B57D0"
+                                android:textColor="?attr/colorPrimary"
                                 android:textSize="12sp"
                                 android:textStyle="bold" />
 
@@ -235,7 +235,7 @@
                                 android:ellipsize="end"
                                 android:gravity="center"
                                 android:singleLine="true"
-                                android:textColor="#202124"
+                                android:textColor="?attr/colorOnSurface"
                                 android:textSize="14sp"
                                 tools:text="Living Room TV" />
 
@@ -246,7 +246,7 @@
                                 android:ellipsize="end"
                                 android:gravity="center"
                                 android:singleLine="true"
-                                android:textColor="#5F6368"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="11sp"
                                 tools:text="192.168.1.20:9978" />
 
@@ -262,56 +262,85 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:layout_marginBottom="8dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
+                    android:orientation="vertical"
                     android:visibility="gone"
                     tools:visibility="visible">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/start"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_weight="1.2"
-                        android:minWidth="112dp"
-                        android:text="@string/sync_start"
-                        android:textColor="@color/dialog_primary_button_text"
-                        app:backgroundTint="@color/dialog_primary_button_bg" />
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/directionGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/modeButton"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:minWidth="0dp"
-                        android:text="@string/sync_push"
-                        android:textColor="@color/dialog_tonal_button_text"
-                        app:backgroundTint="@color/dialog_tonal_button_bg" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/directionPush"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:text="@string/sync_push"
+                            android:textColor="@color/dialog_toggle_button_text"
+                            app:backgroundTint="@color/dialog_toggle_button_bg"
+                            app:strokeColor="@color/dialog_outlined_button_stroke" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/selectAll"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:minWidth="0dp"
-                        android:text="@string/sync_select_all"
-                        android:textColor="@color/dialog_tonal_button_text"
-                        app:backgroundTint="@color/dialog_tonal_button_bg" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/directionPull"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1"
+                            android:text="@string/sync_pull"
+                            android:textColor="@color/dialog_toggle_button_text"
+                            app:backgroundTint="@color/dialog_toggle_button_bg"
+                            app:strokeColor="@color/dialog_outlined_button_stroke" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/changeDevice"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="0dp"
-                        android:layout_height="40dp"
-                        android:layout_marginStart="8dp"
-                        android:layout_weight="1"
-                        android:minWidth="0dp"
-                        android:text="@string/sync_change_device"
-                        android:textColor="@color/dialog_tonal_button_text"
-                        app:backgroundTint="@color/dialog_tonal_button_bg" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/start"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_weight="1.2"
+                            android:minWidth="112dp"
+                            android:text="@string/sync_start"
+                            android:textColor="@color/dialog_primary_button_text"
+                            app:backgroundTint="@color/dialog_primary_button_bg"
+                            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+                            app:strokeColor="@color/focus_ring_primary_container" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/selectAll"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:minWidth="0dp"
+                            android:text="@string/sync_select_all"
+                            android:textColor="@color/dialog_tonal_button_text"
+                            app:backgroundTint="@color/dialog_tonal_button_bg" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/changeDevice"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:minWidth="0dp"
+                            android:text="@string/sync_change_device"
+                            android:textColor="@color/dialog_tonal_button_text"
+                            app:backgroundTint="@color/dialog_tonal_button_bg" />
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -326,7 +355,7 @@
                     app:cardBackgroundColor="@color/dialog_card_bg"
                     app:cardCornerRadius="10dp"
                     app:cardElevation="0dp"
-                    app:strokeColor="@color/dialog_card_stroke"
+                    app:strokeColor="?attr/colorOutline"
                     app:strokeWidth="1dp">
 
                     <androidx.appcompat.widget.LinearLayoutCompat
@@ -350,7 +379,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:text="@string/sync_paths_title"
-                                android:textColor="#202124"
+                                android:textColor="?attr/colorOnSurface"
                                 android:textSize="14sp" />
 
                             <com.google.android.material.textview.MaterialTextView
@@ -360,7 +389,7 @@
                                 android:layout_marginTop="2dp"
                                 android:ellipsize="end"
                                 android:maxLines="2"
-                                android:textColor="#5F6368"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="12sp"
                                 tools:text="TV&#10;TVBox&#10;TVData" />
 
@@ -385,7 +414,7 @@
                     android:layout_height="38dp"
                     android:checked="true"
                     android:text="@string/sync_item_config"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -394,7 +423,7 @@
                     android:layout_height="38dp"
                     android:checked="true"
                     android:text="@string/sync_item_spider"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -402,7 +431,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
                     android:text="@string/sync_item_mpv_config"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -411,7 +440,7 @@
                     android:layout_height="38dp"
                     android:checked="true"
                     android:text="@string/sync_item_login_state"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -420,7 +449,7 @@
                     android:layout_height="38dp"
                     android:checked="true"
                     android:text="@string/sync_item_webhome"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -429,7 +458,7 @@
                     android:layout_height="38dp"
                     android:checked="true"
                     android:text="@string/sync_item_search"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -438,7 +467,7 @@
                     android:layout_height="38dp"
                     android:checked="true"
                     android:text="@string/sync_item_history"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -447,7 +476,7 @@
                     android:layout_height="38dp"
                     android:checked="true"
                     android:text="@string/sync_item_keep"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -455,7 +484,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
                     android:text="@string/sync_item_follow"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -464,7 +493,7 @@
                     android:layout_height="38dp"
                     android:checked="true"
                     android:text="@string/sync_item_settings"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
@@ -472,7 +501,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
                     android:text="@string/sync_item_remote_relay"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     app:buttonTint="@color/dialog_checkbox_tint" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -497,7 +526,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/sync_discovering"
-                android:textColor="#5F6368"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="13sp"
                 android:visibility="gone"
                 tools:visibility="visible" />
@@ -536,7 +565,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:textColor="#5F6368"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp"
                 tools:text="42% · 12.4 MB / 29.6 MB · 1.8 MB/s · 128 个文件" />
 

@@ -47,6 +47,15 @@ final class ExoHlsAdblockDataSource implements DataSource {
         if (!isManifestRequest(dataSpec.uri.toString(), upstream.getResponseHeaders())) return upstreamLength;
         try {
             byte[] original = readAll();
+            if (!looksLikePlaylist(original)) {
+                // 实测（2026-10，本地包直播）：分片地址会顶着 .m3u8 后缀返回 TS 字节
+                // （形如 /xxx.m3u8?ts=<base64 的 .ts>）。按后缀当播放列表改写会把整段分片
+                // 吃掉，EXO 只剩一条轨、画面全黑。这里按原样透传。
+                manifest = original;
+                position = 0;
+                if (SpiderDebug.isEnabled()) SpiderDebug.log(TAG, "not-a-playlist bytes=%d url=%s", original.length, dataSpec.uri);
+                return manifest.length;
+            }
             String text = new String(original, StandardCharsets.UTF_8);
             List<HlsManifestCleaner.Rule> rules = List.of();
             boolean legacyFallback = false;
@@ -110,14 +119,46 @@ final class ExoHlsAdblockDataSource implements DataSource {
     }
 
     static boolean isManifestRequest(String url, Map<String, List<String>> responseHeaders) {
-        if (isManifestUrl(url) || responseHeaders == null) return isManifestUrl(url);
+        Boolean byContentType = hlsContentType(responseHeaders);
+        // 显式 CONTENT-TYPE 是权威证据：分片会以 .m3u8 后缀 + TS/二进制类型返回。
+        if (byContentType != null) return byContentType;
+        return isManifestUrl(url);
+    }
+
+    /** 只有真正以 {@code #EXTM3U} 开头的正文才按播放列表处理，其余一律当分片透传。 */
+    static boolean looksLikePlaylist(byte[] body) {
+        if (body == null) return false;
+        int index = 0;
+        if (body.length >= 3 && (body[0] & 0xFF) == 0xEF && (body[1] & 0xFF) == 0xBB && (body[2] & 0xFF) == 0xBF) index = 3;
+        while (index < body.length && (body[index] == ' ' || body[index] == '\r' || body[index] == '\n' || body[index] == '\t')) index++;
+        return index + 7 <= body.length
+                && body[index] == '#' && body[index + 1] == 'E' && body[index + 2] == 'X'
+                && body[index + 3] == 'T' && body[index + 4] == 'M' && body[index + 5] == '3'
+                && body[index + 6] == 'U';
+    }
+
+    @Nullable
+    private static Boolean hlsContentType(Map<String, List<String>> responseHeaders) {
+        if (responseHeaders == null) return null;
+        Boolean result = null;
         for (Map.Entry<String, List<String>> header : responseHeaders.entrySet()) {
             if (header.getKey() == null || !"content-type".equalsIgnoreCase(header.getKey())) continue;
             for (String value : header.getValue()) {
-                if (isHlsContentType(value)) return true;
+                if (value == null) continue;
+                if (isHlsContentType(value)) return Boolean.TRUE;
+                if (isSegmentContentType(value)) result = Boolean.FALSE;
             }
         }
-        return false;
+        return result;
+    }
+
+    private static boolean isSegmentContentType(String value) {
+        String type = value.toLowerCase(Locale.ROOT);
+        if (isHlsContentType(type)) return false;
+        // application/octet-stream 不能当「分片」证据：不少静态服务器没配 m3u8 的 MIME，
+        // 真播放列表也返回 octet-stream。把它留给 URL 后缀 + looksLikePlaylist 正文明判，
+        // 既不影响分片透传，也不会让这类服务器的广告过滤整体失效。
+        return type.contains("mp2t") || type.startsWith("video/") || type.startsWith("audio/");
     }
 
     private static boolean isHlsContentType(String value) {
@@ -161,9 +202,7 @@ final class ExoHlsAdblockDataSource implements DataSource {
 
     private static String notice(HlsAdblockPipeline.Outcome outcome) {
         int removed = outcome.removedSegments() > 0 ? outcome.removedSegments() : (outcome.legacy() ? 1 : 0);
-        return outcome.structured() && outcome.removedDurationSec() > 0
-                ? String.format(Locale.US, "已跳过 %d 个广告片段（%.1f 秒）", removed, outcome.removedDurationSec())
-                : "已跳过 " + removed + " 个广告片段";
+        return HlsAdblockNotice.message(removed, outcome.removedDurationSec());
     }
 
     record Result(String manifest, boolean changed, String notice) {}

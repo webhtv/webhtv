@@ -10,11 +10,11 @@
     android:defaultFocusHighlightEnabled="false"
     android:focusable="true"
     android:stateListAnimator="@null"
-    app:cardBackgroundColor="#261C2833"
-    app:cardCornerRadius="8dp"
+    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+    app:cardCornerRadius="@dimen/webhtv_card_radius_default"
     app:cardElevation="0dp"
     app:rippleColor="@android:color/transparent"
-    app:strokeColor="#1FFFFFFF"
+    app:strokeColor="?attr/colorOutlineVariant"
     app:strokeWidth="1dp">
 
     <LinearLayout
@@ -26,17 +26,17 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="72dp"
             android:layout_height="102dp"
-            app:cardBackgroundColor="#25313D"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
             app:cardCornerRadius="6dp"
             app:cardElevation="0dp"
-            app:strokeColor="#24FFFFFF"
+            app:strokeColor="?attr/colorOutlineVariant"
             app:strokeWidth="1dp">
 
             <ImageView
                 android:id="@+id/poster"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="#25313D"
+                android:background="?attr/colorSurfaceContainerHigh"
                 android:contentDescription="@null"
                 android:scaleType="centerCrop" />
 
@@ -75,7 +75,7 @@
                     android:ellipsize="end"
                     android:lineSpacingExtra="2dp"
                     android:maxLines="2"
-                    android:textColor="#99FFFFFF"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="11sp"
                     tools:text="剧集 · 2026-06-02" />
 
@@ -96,7 +96,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="★"
-                        android:textColor="#FFD166"
+                        android:textColor="@color/webhtv_color_player_control_active"
                         android:textSize="11sp"
                         android:textStyle="bold" />
 
@@ -121,7 +121,7 @@
                 android:layout_marginTop="5dp"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#CFE8FF"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="12sp"
                 android:textStyle="bold"
                 android:visibility="gone"
@@ -136,7 +136,7 @@
                 android:ellipsize="end"
                 android:lineSpacingExtra="2dp"
                 android:maxLines="3"
-                android:textColor="#CCFFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="11sp"
                 android:visibility="gone"
                 tools:text="人物参与作品简介预览。"

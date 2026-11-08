@@ -15,6 +15,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.web.WebHomeTarget;
@@ -38,8 +39,8 @@ public final class WebHomeThemeDialog {
                 activity.getString(R.string.setting_web_home_theme_eclipse),
                 activity.getString(R.string.setting_web_home_theme_custom)
         };
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(
-                activity, R.style.Theme_WebHTV_LightDialog)
+        MaterialAlertDialogBuilder builder = new WebHtvAlertDialogBuilder(
+                activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.setting_web_home_theme)
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setSingleChoiceItems(items, selectedMode(), (dialog, which) -> {
@@ -96,7 +97,7 @@ public final class WebHomeThemeDialog {
         int message = action == WebThemeManifestRollback.Action.ROLLBACK
                 ? R.string.setting_web_home_theme_rollback_message
                 : R.string.setting_web_home_theme_retry_message;
-        AlertDialog alert = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog alert = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.setting_web_home_theme_recovery)
                 .setMessage(message)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -148,7 +149,7 @@ public final class WebHomeThemeDialog {
         container.setPadding(padding, 0, padding, 0);
         container.addView(input, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        AlertDialog alert = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog alert = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.setting_web_home_theme_custom)
                 .setView(container)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -183,7 +184,7 @@ public final class WebHomeThemeDialog {
     }
 
     private static void showRemoteConfirmation(Activity activity, String url, Runnable onChanged, AlertDialog editor) {
-        AlertDialog warning = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog warning = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.setting_web_home_theme_remote_warning_title)
                 .setMessage(activity.getString(R.string.setting_web_home_theme_remote_warning_message, host(url)))
                 .setNegativeButton(R.string.dialog_negative, null)

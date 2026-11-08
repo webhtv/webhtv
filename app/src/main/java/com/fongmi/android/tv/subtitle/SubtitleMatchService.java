@@ -27,13 +27,13 @@ public final class SubtitleMatchService {
 
     private final SubtitleContextBuilder contextBuilder;
     private final SubtitleQueryPlanner queryPlanner;
-    private final SubtitleProviderRegistry registry;
     private final SubtitleRanker ranker;
     private final Map<String, Future<?>> jobs;
     private final Map<String, Integer> generations;
+    private volatile SubtitleProviderRegistry registry;
 
     public SubtitleMatchService() {
-        this(new SubtitleContextBuilder(), new SubtitleQueryPlanner(), SubtitleProviderRegistry.get(), new SubtitleRanker());
+        this(new SubtitleContextBuilder(), new SubtitleQueryPlanner(), null, new SubtitleRanker());
     }
 
     SubtitleMatchService(SubtitleContextBuilder contextBuilder, SubtitleQueryPlanner queryPlanner, SubtitleProviderRegistry registry, SubtitleRanker ranker) {
@@ -45,6 +45,23 @@ public final class SubtitleMatchService {
         this.generations = new ConcurrentHashMap<>();
     }
 
+    /**
+     * 字幕提供方注册表的首次初始化会同步启动 CPython 并导入 webhtv_logging / app 模块
+     * （设备实测约 0.9s，debuggerd 抓栈显示主线程正停在 libpython3.10.so）。
+     * 默认构造器过去在这里 eager 取单例，于是三个 Activity 的构造期
+     * （VideoActivity / TmdbDetailActivity -> SubtitlePlaybackSession -> DefaultController
+     * -> SubtitleMatchService）都要付这份成本，直接堵住播放页首帧。
+     * 现在改为惰性解析，且所有调用点都在 Task 的后台线程内。
+     */
+    private SubtitleProviderRegistry registry() {
+        SubtitleProviderRegistry current = registry;
+        if (current != null) return current;
+        synchronized (this) {
+            if (registry == null) registry = SubtitleProviderRegistry.get();
+            return registry;
+        }
+    }
+
     public void autoMatch(SubtitleRequest request, Listener listener) {
         if (request == null) return;
         if (request.isManualOnly()) {
@@ -52,12 +69,6 @@ public final class SubtitleMatchService {
             dispatch(listener, request, SubtitleMatchResult.skipped("manual_only"));
             return;
         }
-        if (registry.enabledProviders().isEmpty()) {
-            Log.w(TAG, "auto skipped reason=provider_unavailable title=" + request.getVodName());
-            dispatch(listener, request, SubtitleMatchResult.skipped("provider_unavailable"));
-            return;
-        }
-        Log.i(TAG, "auto start title=" + request.getVodName() + " episode=" + request.getEpisodeName() + " trigger=" + request.getTrigger());
         String playbackKey = request.getPlaybackKey();
         cancel(playbackKey);
         int generation = generations.merge(playbackKey, 1, Integer::sum);
@@ -71,20 +82,20 @@ public final class SubtitleMatchService {
 
     public void manualSearch(SubtitleRequest request, String keyword, Listener listener) {
         if (request == null) return;
-        if (registry.enabledProviders().isEmpty()) {
-            Log.w(TAG, "manual skipped reason=provider_unavailable title=" + request.getVodName());
-            dispatch(listener, request, SubtitleMatchResult.skipped("provider_unavailable"));
-            return;
-        }
         String text = keyword == null ? "" : keyword.trim();
         Log.i(TAG, "manual start title=" + request.getVodName() + " episode=" + request.getEpisodeName() + " keyword=" + text);
         Task.searchExecutor().submit(() -> {
             SubtitleMatchResult result;
             try {
+                if (registry().enabledProviders().isEmpty()) {
+                    Log.w(TAG, "manual skipped reason=provider_unavailable title=" + request.getVodName());
+                    dispatch(listener, request, SubtitleMatchResult.skipped("provider_unavailable"));
+                    return;
+                }
                 SubtitleContext context = contextBuilder.build(request);
                 List<com.fongmi.android.tv.subtitle.model.SubtitleQuery> queries = TextUtils.isEmpty(text) ? queryPlanner.build(context) : queryPlanner.buildManual(context, text);
                 Log.i(TAG, "manual context title=" + context.getCanonicalTitle() + " original=" + context.getOriginalTitle() + " year=" + context.getYear() + " tmdb=" + context.hasTmdbIdentity() + " custom=" + !TextUtils.isEmpty(text) + " queries=" + queries.size());
-                List<SubtitleCandidate> ranked = ranker.rank(registry.search(queries, context), context);
+                List<SubtitleCandidate> ranked = ranker.rank(registry().search(queries, context), context);
                 Log.i(TAG, "manual ranked count=" + ranked.size() + " best=" + best(ranked));
                 result = SubtitleMatchResult.noMatch(ranked, ranked.isEmpty() ? "empty_result" : "manual_candidates");
             } catch (Throwable e) {
@@ -102,7 +113,7 @@ public final class SubtitleMatchService {
             SubtitleMatchResult result;
             try {
                 SubtitleContext context = contextBuilder.build(request);
-                SubtitleAsset asset = registry.resolve(candidate, context);
+                SubtitleAsset asset = registry().resolve(candidate, context);
                 Log.i(TAG, "resolve result matched=" + (asset != null) + " provider=" + candidate.getProvider() + " id=" + candidate.getCandidateId());
                 result = asset == null ? SubtitleMatchResult.noMatch(List.of(candidate), "resolve_failed") : SubtitleMatchResult.matched(candidate, asset, List.of(candidate));
             } catch (Throwable e) {
@@ -122,6 +133,14 @@ public final class SubtitleMatchService {
 
     private void runAutoMatch(SubtitleRequest request, int generation, Listener listener) {
         SubtitleMatchResult result;
+        // 这条检查从 autoMatch 搬进来：调用方在 Task.scheduler 线程上，而注册表的首次初始化
+        // 要同步启动 CPython。搬到这里后，探测和启动都落在 Task.searchExecutor 的后台线程上。
+        if (registry().enabledProviders().isEmpty()) {
+            Log.w(TAG, "auto skipped reason=provider_unavailable title=" + request.getVodName());
+            jobs.remove(request.getPlaybackKey());
+            dispatch(listener, request, SubtitleMatchResult.skipped("provider_unavailable"));
+            return;
+        }
         try {
             SubtitleContext context = contextBuilder.build(request);
             result = matchContext(context, "auto");
@@ -142,11 +161,11 @@ public final class SubtitleMatchService {
     private SubtitleMatchResult matchContext(SubtitleContext context, String phase) throws Exception {
         List<com.fongmi.android.tv.subtitle.model.SubtitleQuery> queries = queryPlanner.build(context);
         Log.i(TAG, phase + " context title=" + context.getCanonicalTitle() + " original=" + context.getOriginalTitle() + " year=" + context.getYear() + " tmdb=" + context.hasTmdbIdentity() + " queries=" + queries.size());
-        List<SubtitleCandidate> ranked = ranker.rank(registry.search(queries, context), context);
+        List<SubtitleCandidate> ranked = ranker.rank(registry().search(queries, context), context);
         SubtitleCandidate selected = ranker.pickBest(ranked, context);
         Log.i(TAG, phase + " ranked count=" + ranked.size() + " selected=" + best(selected) + " best=" + best(ranked));
         if (selected == null) return SubtitleMatchResult.noMatch(ranked, ranked.isEmpty() ? "empty_result" : "below_threshold");
-        SubtitleAsset asset = registry.resolve(selected, context);
+        SubtitleAsset asset = registry().resolve(selected, context);
         Log.i(TAG, phase + " resolve matched=" + (asset != null) + " selected=" + best(selected));
         return asset == null ? SubtitleMatchResult.noMatch(ranked, "resolve_failed") : SubtitleMatchResult.matched(selected, asset, ranked);
     }

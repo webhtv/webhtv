@@ -19,6 +19,7 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogLoginStateLearnBinding;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.LoginStateSync;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -57,7 +58,7 @@ public final class LoginStateLearnDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
@@ -104,7 +105,7 @@ public final class LoginStateLearnDialog extends BaseAlertDialog {
 
     private void setScrollHeight(FragmentActivity activity) {
         ViewGroup.LayoutParams params = binding.contentScroll.getLayoutParams();
-        params.height = Math.max(ResUtil.dp2px(190), Math.min(ResUtil.dp2px(300), (int) (ResUtil.getScreenHeight(activity) * 0.34f)));
+        params.height = Math.max(ResUtil.dp2px(190), Math.min(ResUtil.dp2px(300), (int) (DialogSafeArea.height(activity) * 0.34f)));
         binding.contentScroll.setLayoutParams(params);
     }
 

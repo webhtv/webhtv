@@ -1,13 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」分组按钮（selector_group_button，直播/点播分段）的焦点态。
+    填充 = ?attr/colorPrimary，环色 = ?attr/colorOnPrimary（统一规范：环色取焦点态填充的
+    配对 on-色，由主题解析器保证对比度）。环宽改为唯一来源
+    @dimen/webhtv_focus_ring_width（此前写死 2dp）。
+    见 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="#2F6FED" />
+    <solid android:color="?attr/colorPrimary" />
 
     <corners android:radius="20dp" />
 
     <stroke
-        android:width="2dp"
-        android:color="#D7E5FF" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/colorOnPrimary" />
 
 </shape>

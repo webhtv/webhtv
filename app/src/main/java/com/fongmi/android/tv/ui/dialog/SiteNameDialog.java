@@ -13,8 +13,8 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.setting.SiteNameStore;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.textview.MaterialTextView;
@@ -47,7 +47,7 @@ public final class SiteNameDialog {
         }
         CharSequence[] labels = new CharSequence[sites.size()];
         for (int i = 0; i < sites.size(); i++) labels[i] = label(sites.get(i));
-        new MaterialAlertDialogBuilder(activity)
+        new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.setting_site_name)
                 .setItems(labels, (dialog, which) -> showEditor(sites.get(which)))
                 .setNeutralButton(R.string.setting_reset, (dialog, which) -> confirmReset())
@@ -86,7 +86,7 @@ public final class SiteNameDialog {
         inputParams.topMargin = Math.round(16 * activity.getResources().getDisplayMetrics().density);
         panel.addView(inputLayout, inputParams);
 
-        new MaterialAlertDialogBuilder(activity)
+        new WebHtvAlertDialogBuilder(activity)
                 .setTitle(site.getDisplayName())
                 .setView(panel)
                 .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
@@ -104,7 +104,7 @@ public final class SiteNameDialog {
     }
 
     private void confirmReset() {
-        new MaterialAlertDialogBuilder(activity)
+        new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.site_name_reset_title)
                 .setMessage(R.string.site_name_reset_message)
                 .setPositiveButton(R.string.setting_reset, (dialog, which) -> {

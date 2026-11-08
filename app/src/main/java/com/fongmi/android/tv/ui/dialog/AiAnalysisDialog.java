@@ -8,8 +8,8 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public final class AiAnalysisDialog {
 
@@ -26,7 +26,7 @@ public final class AiAnalysisDialog {
                 ResUtil.dp2px(40), ResUtil.dp2px(40), Gravity.CENTER);
         container.addView(progress, params);
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.tmdb_season_ai_loading_title)
                 .setMessage(R.string.tmdb_season_ai_analyzing)
                 .setView(container)

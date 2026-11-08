@@ -16,8 +16,10 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
@@ -32,6 +34,16 @@ import okhttp3.Response;
 public class JarLoader {
 
     private static final int SPIDER_INIT_ATTEMPTS = 2;
+
+    /**
+     * On translated runtimes (x86 emulator executing arm64 native code) ART's
+     * {@code UnloadNativeLibraries()} calls into the binary translator and can
+     * SIGSEGV from {@code HeapTaskDaemon}. Dropping a replaced
+     * {@code DexClassLoader} therefore crashed the app on every interface
+     * reload. Retiring the loader keeps it strongly reachable for the process
+     * lifetime on those devices only, which skips the unsafe unload path.
+     */
+    private static final List<DexClassLoader> RETAINED_ON_TRANSLATED_RUNTIME = new ArrayList<>();
 
     private final ConcurrentHashMap<String, DexClassLoader> loaders;
     private final ConcurrentHashMap<String, Method> methods;
@@ -51,6 +63,7 @@ public class JarLoader {
         try {
             SpiderCleanup.destroy("jar-loader", spiders);
         } finally {
+            retireLoaders();
             loaders.clear();
             methods.clear();
             spiders.clear();
@@ -59,9 +72,23 @@ public class JarLoader {
         }
     }
 
+    private void retireLoaders() {
+        if (loaders.isEmpty()) return;
+        if (!NativeBridgeGuard.isTranslatedRuntime()) return;
+        synchronized (RETAINED_ON_TRANSLATED_RUNTIME) {
+            RETAINED_ON_TRANSLATED_RUNTIME.addAll(loaders.values());
+            SpiderDebug.log("jar-loader", "retained translated loaders count=%s total=%s",
+                    loaders.size(), RETAINED_ON_TRANSLATED_RUNTIME.size());
+        }
+    }
+
     public void setRecent(String recent) {
         this.recent = recent;
         SpiderDebug.log("jar-loader", "recent=%s", recent);
+    }
+
+    public java.util.Set<String> activeKeys() {
+        return java.util.Set.copyOf(loaders.keySet());
     }
 
     private void load(String key, File file) {
@@ -188,8 +215,16 @@ public class JarLoader {
     }
 
     public Spider getSpider(String key, String api, String ext, String jar) {
+        return getSpider("", key, api, ext, jar);
+    }
+
+    /**
+     * 按 (命名空间, jar, siteKey) 取 spider：桥接解析非激活配置时不能写进激活配置的槽位。
+     * 空命名空间等于原来的行为（jar md5 + siteKey），loaders 仍只按 jar md5 建键。
+     */
+    public Spider getSpider(String namespace, String key, String api, String ext, String jar) {
         String jaKey = Util.md5(jar);
-        String spKey = jaKey + key;
+        String spKey = jaKey + BaseLoader.slot(namespace, key);
         return getOrCreateSpider(spKey, () -> {
             long start = System.currentTimeMillis();
             try {

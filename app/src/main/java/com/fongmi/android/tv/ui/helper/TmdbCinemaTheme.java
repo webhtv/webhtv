@@ -40,23 +40,23 @@ public final class TmdbCinemaTheme {
 
     private static Palette light() {
         return new Palette(
-                0xFFF4F7FA,
-                0xBFFFFFFF,
-                0xFFE7EDF3,
+                0xFFEBE3DA,
+                0x99FFFFFF,
+                0xFFF6F1EA,
                 0xD9FFFFFF,
-                0xFFE5F7EC,
-                0x33424B57,
-                0x66424B57,
+                0xFFFFE9CC,
+                0x33806E5F,
+                0x66806E5F,
                 0xFF12202D,
-                0xCC12202D,
-                0x9912202D,
-                0xE612202D,
-                0xFF1D8F5A,
-                0xFF20B866,
-                0xBFF4F7FA,
+                0xCC1D2A38,
+                0x991D2A38,
+                0xE61D2A38,
+                0xFFA8702F,
+                0xFFB7802F,
+                0xBFEBE3DA,
                 0xD9FFFFFF,
-                0x33424B57,
-                0x1F12202D,
+                0x33806E5F,
+                0x1F1D2A38,
                 0xD9FFFFFF
         );
     }

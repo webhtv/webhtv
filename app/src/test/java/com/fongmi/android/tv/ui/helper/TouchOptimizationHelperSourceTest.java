@@ -71,13 +71,19 @@ public class TouchOptimizationHelperSourceTest {
     public void activityAppliesOptimizationToNewContentAndRegistersFragmentsEarly() throws Exception {
         String source = read("app/src/leanback/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
         int register = source.indexOf("registerFragmentLifecycleCallbacks();");
-        int content = source.indexOf("setContentView(getBinding().getRoot());");
+        // The activity resolves one inflated binding and passes that instance to
+        // setContentView (see "keep one inflated binding per activity"), so the
+        // ordering contract is expressed through the local `content` variable.
+        int content = source.indexOf("View content = getBinding().getRoot();");
+        int setContent = source.indexOf("setContentView(content);", content);
         int method = source.indexOf("public void setContentView(View view)");
         int methodEnd = source.indexOf("protected FragmentActivity getActivity()", method);
         int wall = source.indexOf("addCustomWall();", method);
         int sync = source.indexOf("TouchOptimizationHelper.sync(getWindow().getDecorView());", method);
 
         assertTrue(register >= 0 && content >= 0 && register < content);
+        assertTrue("the resolved binding must be the instance handed to setContentView",
+                setContent > content && setContent < method);
         assertTrue(method >= 0 && methodEnd > method);
         assertTrue(method < wall && wall < sync && sync < methodEnd);
     }
@@ -145,33 +151,22 @@ public class TouchOptimizationHelperSourceTest {
     }
 
     @Test
-    public void touchOptimizationToggleCanEnableModeWithOneTouchMobile() throws Exception {
+    public void touchOptimizationRowIsRemovedFromMobilePersonalSettings() throws Exception {
         Path layout = path("app/src/mobile/res/layout/fragment_setting_personal.xml");
         var document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile());
-        var nodes = document.getElementsByTagName("androidx.appcompat.widget.LinearLayoutCompat");
 
-        for (int i = 0; i < nodes.getLength(); i++) {
-            var attributes = nodes.item(i).getAttributes();
-            var id = attributes.getNamedItem("android:id");
-            if (id == null || !"@+id/touchOptimization".equals(id.getNodeValue())) continue;
-            assertTrue("true".equals(attributes.getNamedItem("android:focusable").getNodeValue()));
-            assertTrue("false".equals(attributes.getNamedItem("android:focusableInTouchMode").getNodeValue()));
-            return;
-        }
-        throw new AssertionError("touchOptimization row not found");
+        assertFalse(hasId(document, "@+id/touchOptimization"));
+        assertFalse(hasId(document, "@+id/touchOptimizationText"));
     }
 
     @Test
     public void personalSettingsBindTouchOptimizationToggle() throws Exception {
         String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingPersonalActivity.java");
-        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/fragment/SettingPersonalFragment.java");
         String root = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java");
 
         assertTrue(leanback.contains("mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);"));
         assertTrue(leanback.contains("mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));"));
         assertTrue(leanback.contains("TouchOptimizationHelper.sync(getWindow().getDecorView());"));
-        assertTrue(mobile.contains("mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);"));
-        assertTrue(mobile.contains("mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));"));
         assertFalse(root.contains("mBinding.touchOptimization"));
     }
 

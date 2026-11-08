@@ -20,7 +20,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/play_timer"
-            android:textColor="@color/white_70"
+            android:textColor="@color/webhtv_color_player_control_muted"
             android:textSize="16sp" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
@@ -98,7 +98,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:layout_marginBottom="24dp"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="48sp"
             tools:text="5:00" />
 
@@ -110,9 +110,9 @@
             android:layout_marginBottom="8dp"
             android:singleLine="true"
             android:text="@string/timer_delay"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             app:backgroundTint="@color/selector_dialog_glass_button_tint"
-            app:rippleColor="#33FFFFFF" />
+            app:rippleColor="@color/webhtv_color_overlay_light" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/reset"
@@ -122,8 +122,8 @@
             android:layout_marginBottom="24dp"
             android:singleLine="true"
             android:text="@string/timer_cancel"
-            android:textColor="@color/white_90"
-            app:strokeColor="#66FFFFFF" />
+            android:textColor="?attr/webhtvColorOnWallpaper"
+            app:strokeColor="@color/webhtv_color_player_control_muted" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 </androidx.appcompat.widget.LinearLayoutCompat>

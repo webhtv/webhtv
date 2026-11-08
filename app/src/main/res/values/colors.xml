@@ -26,30 +26,112 @@
     <color name="white_70">#B3FFFFFF</color>
     <color name="white_80">#CCFFFFFF</color>
     <color name="white_90">#E6FFFFFF</color>
-    <color name="display_option_selected">#1C2328</color>
-    <color name="display_option_focused">#102A43</color>
-    <color name="display_option_default">#F2FFFFFF</color>
-    <color name="display_option_bg_selected">#FFE16A</color>
-    <color name="display_option_bg_focused">#E6FFFFFF</color>
-    <color name="display_option_bg_default">#2EFFFFFF</color>
-    <color name="display_option_stroke_selected">#FFFFFFFF</color>
-    <color name="display_option_stroke_default">#33FFFFFF</color>
-    <color name="display_dialog_panel_bg">#E61F2A31</color>
-    <color name="site_health_good">#0B8043</color>
-    <color name="site_health_warn">#B7791F</color>
-    <color name="site_health_bad">#C53030</color>
+    <color name="display_option_selected">@android:color/black</color>
+    <color name="display_option_focused">@color/webhtv_color_player_control</color>
+    <color name="display_option_default">@color/webhtv_color_player_control_muted</color>
+    <color name="display_option_bg_selected">@color/webhtv_color_player_control_active</color>
+    <color name="display_option_bg_focused">@color/webhtv_color_player_control_muted</color>
+    <color name="display_option_bg_default">@color/webhtv_color_player_control_muted</color>
+    <color name="display_option_stroke_selected">@color/webhtv_color_player_control</color>
+    <color name="display_option_stroke_default">@color/webhtv_color_player_control_muted</color>
+    <color name="display_dialog_panel_bg">@color/webhtv_color_player_scrim</color>
+    <!--
+        原生增强播放页统一焦点/选中语义色。详情页(TmdbDetailActivity)、TV 播放页(leanback
+        VideoActivity) 和集数卡片此前各自用白、黄、无描边三套规则；这三项是唯一的取值来源，
+        新增可选控件必须引用它们，不要再写死十六进制。
+        - focus   获得焦点：3dp 圆环
+        - current 当前播放/当前生效：2dp 圆环
+        - stroke  常态描边：1dp
 
-    <color name="following_page_bg">#F3F7FD</color>
-    <color name="following_card_bg">#FFFFFF</color>
-    <color name="following_card_stroke">#D8E3F2</color>
-    <color name="following_text_primary">#172033</color>
-    <color name="following_text_secondary">#65748B</color>
-    <color name="following_accent">#2563B9</color>
-    <color name="following_accent_focus">#174EA6</color>
-    <color name="following_button_focus">#FF8A00</color>
-    <color name="following_button_focus_pressed">#E56F00</color>
-    <color name="following_button_secondary">#EEF4FC</color>
-    <color name="following_button_text">#24599C</color>
-    <color name="following_danger_soft">#FDECEC</color>
-    <color name="following_danger">#B3261E</color>
+        focus 环色必须可被主题设置覆写：它直连色板的 FOCUS 用户槽(webhtv_color_focus)，
+        于是 ?attr/tvFocusRing 的全部消费者（选集卡、演员卡、播放页控件、快捷栏…）都跟随
+        主题编辑器的焦点色。此前写死 #FFD166，用户改主题时焦点环纹丝不动。
+    -->
+    <color name="tv_item_focus_ring">@color/webhtv_color_focus</color>
+    <color name="tv_item_current_ring">#2CC56F</color>
+    <color name="tv_item_normal_stroke">#33FFFFFF</color>
+    <!--
+        播放页（视频层）环色 = 叠在固定深色玻璃/视频上的控件（播控条、解析线路芯片、
+        字幕环、画面框）的高亮色。浅色表不能照搬调色板色：浅色 FOCUS 深蓝 #0B57D0
+        在固定深靛玻璃上只有 1.83:1（dev1 实机实测），所以浅色表取 ThemeResolver 在
+        固定玻璃背景上夹取到 ≥3:1（WCAG 2.2 SC 1.4.11 非文本门槛）后的派生值 #447BF5。
+        深色表不需要这层夹取，直接取与应用表面焦点环一致的近白：否则同一页会同时出现
+        「应用表面近白 + 视频层灰蓝」两种高亮（用户报告 2026-10-11）。主题改 FOCUS /
+        playerCurrent 槽时这两项跟着派生。
+    -->
+    <color name="tv_player_focus_ring">@color/webhtv_color_player_focus_ring</color>
+    <color name="tv_player_current_ring">@color/webhtv_color_player_current_ring</color>
+    <!--
+        自带主题色填充的控件（关于弹窗按钮、齿轮、追更页按钮组）获得焦点时的边框环色。
+        环色取控件**焦点态实际填充色**的配对 on-色，由主题解析器保证两者对比度，因此换任何
+        主题都仍然可见；“焦点色 == 填充色”那类看不见焦点的写法从此不再需要。
+
+        配对按“焦点态填充家族”各一条，错配会让环贴在近似色上而完全看不见
+        （实机曾把 FOCUS 填充配成 on_secondary_container，环与填充仅 1.33:1）：
+          primary / focus 填充  -> on_primary
+          primaryContainer      -> on_primary_container
+          secondaryContainer    -> on_secondary_container
+          errorContainer        -> on_error_container
+        注意 `following_button_*_bg` 的焦点态填充就是 FOCUS 色(== primary)，追更页
+        “全部已读/显示全部/导入订阅/标记已读”因此取 on_primary；只有填充不随焦点变化的
+        “检查/提醒开/换源/下季”才取 on_secondary_container。
+    -->
+    <color name="focus_ring_on_primary">@color/webhtv_color_on_primary</color>
+    <!--
+        `focus_ring_on_primary_container` 是 2026-10-19 第二轮补的：主按钮的**默认**填充
+        是浅色 colorPrimary，环取 on_primary 时对填充有 7.50:1，但环的外沿贴在弹窗面板上
+        只有 1.05:1（夜间）/ 1.22:1（浅色），看起来像按钮自带的深边而不是焦点高亮。
+        取值空间是空集（证明见 color/focus_ring_primary_container.xml），所以主按钮的
+        聚焦填充改为 primaryContainer，环随之取 on_primary_container。
+    -->
+    <color name="focus_ring_on_primary_container">@color/webhtv_color_on_primary_container</color>
+    <color name="focus_ring_on_secondary_container">@color/webhtv_color_on_secondary_container</color>
+    <color name="focus_ring_on_error_container">@color/webhtv_color_on_error_container</color>
+    <color name="site_health_good">@color/webhtv_color_health_good</color>
+    <color name="site_health_warn">@color/webhtv_color_health_warn</color>
+    <color name="site_health_bad">@color/webhtv_color_health_bad</color>
+
+    <color name="following_page_bg">@color/webhtv_color_surface</color>
+    <color name="following_card_bg">@color/webhtv_color_surface_container_high</color>
+    <color name="following_card_stroke">@color/webhtv_color_outline_variant</color>
+    <color name="following_text_primary">@color/webhtv_color_on_surface</color>
+    <color name="following_text_secondary">@color/webhtv_color_on_surface_variant</color>
+    <color name="following_accent">@color/webhtv_color_primary</color>
+    <color name="following_accent_focus">@color/webhtv_color_primary</color>
+    <color name="following_button_focus">@color/webhtv_color_focus</color>
+    <color name="following_button_focus_pressed">@color/webhtv_color_primary</color>
+    <color name="following_button_secondary">@color/webhtv_color_surface_container</color>
+    <color name="following_button_text">@color/webhtv_color_primary</color>
+    <color name="following_danger_soft">@color/webhtv_color_error_container</color>
+    <color name="following_danger">@color/webhtv_color_error</color>
+    <!--
+        固定浅底上的前景：adapter_ad_block_log / adapter_ad_stats_item / dialog_ad_block_stats
+        的宿主底是字面量浅色（shape_ad_stats_content #FAFBFC、selector_ad_stats_item 的
+        #E8F0FE / #D2E3FC），adapter_mpv_config_profile / dialog_ai_recommendation_info 的
+        徽标底同样是字面量（#E8F0FE / #EAF6EE）。这些底在两张色板下都不变，所以前景必须是
+        两表恒定的深色；若跟随 ?attr/colorOnSurfaceVariant（夜间 #C4C6D0）就会变成近白压
+        近白，实测 1.13–1.66:1。取值来自日间色板的角色值，它们压上述所有固定浅底都 ≥4.5:1
+        （#202124 最低 11.73、#44474F 最低 6.77、#0B57D0 最低 4.65、#146C2E 最低 4.76）。
+    -->
+    <!--
+        日志页列头 + 筛选按钮底下的那条固定浅带。它原来是 @color/webhtv_color_scrim
+        （日间 #52000000 / 夜间 #8A000000），压在固定浅面板 #FAFBFC 上合成 #AAAAAB /
+        #737374：带内文字因此既不属于"固定浅底"也不属于"深底"，本次修复的固定深色前景
+        在夜间带上只剩 3.40:1（12sp 加粗列头），筛选项继承的 ?attr/colorPrimary
+        （夜间 #A8C7FA）更是只有 2.76:1。改用与面板同族的字面量浅灰后，带不随表变，
+        带内前景固定即可全部达标：#202124 13.00、#44474F 7.51、#174EA6 6.34、#0B57D0 5.16。
+    -->
+    <color name="fixed_light_band">#E5E7EB</color>
+    <color name="fixed_light_text_muted">#44474F</color>
+    <color name="fixed_light_accent">#0B57D0</color>
+    <color name="fixed_light_success">#146C2E</color>
+    <color name="fixed_light_error">#B3261E</color>
+    <!--
+        TMDB 豆瓣评分徽标前景：徽标底是固定的半透明黑（shape_episode_card_badge /
+        shape_tmdb_rating），压在任意海报图上，与调色板无关。因此前景必须是两套色板
+        恒定的浅绿；若走 @color/webhtv_color_success（日间 #146C2E 深绿），日间模式下
+        会变成深绿压深底（实测 1.31–3.10:1）。与 TmdbRailAdapter 里既有的 0xFF78E08F
+        保持一致。
+    -->
+    <color name="tmdb_douban_rating_green">#78E08F</color>
 </resources>

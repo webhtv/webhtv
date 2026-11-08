@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    实验室分组标签的遥控聚焦态。
+
+    内边距与 shape_lab_group_tab_normal / _activated 完全一致：
+    background 里的 padding 会变成 View 的 padding，改数值会让聚焦时标签尺寸跳动。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/black_40"/>
+    <stroke
+        android:width="2dp"
+        android:color="@color/accent"/>
+    <corners android:radius="28dp"/>
+    <padding
+        android:left="12dp"
+        android:top="6dp"
+        android:right="12dp"
+        android:bottom="6dp"/>
+</shape>

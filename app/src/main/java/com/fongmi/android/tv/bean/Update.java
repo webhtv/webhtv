@@ -42,9 +42,21 @@ public class Update {
                 && (!TextUtils.isEmpty(githubUrl) || oci != null && oci.isValid());
     }
 
+    /**
+     * Only a strictly newer build counts as an update.
+     *
+     * <p>The previous "anything different" test made an older channel manifest look installable over
+     * a newer install. Because the stable and beta manifests of one release line share a
+     * {@code versionCode}, a beta install was offered the older stable package and vice versa, so
+     * the two channels kept overwriting each other. Those packages also disagree about the database
+     * schema, so the loop destroyed the user's data and could leave a database the app refused to
+     * open.
+     */
     public boolean hasUpdate() {
         if (!hasManifest()) return false;
-        return code != BuildConfig.VERSION_CODE || !AppVersion.isCurrent(name);
+        if (code > BuildConfig.VERSION_CODE) return true;
+        if (code < BuildConfig.VERSION_CODE) return false;
+        return AppVersion.isNewer(name);
     }
 
     public String getText() {

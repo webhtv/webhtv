@@ -16,7 +16,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/site_health_report_title"
-        android:textColor="@color/black"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -26,7 +26,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:lineSpacingMultiplier="1.2"
-        android:textColor="@color/black_70"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="14sp"
         tools:text="3 sites · 42 samples · 8 failures" />
 
@@ -203,7 +203,7 @@
                 android:layout_height="160dp"
                 android:gravity="center"
                 android:text="@string/site_health_report_empty"
-                android:textColor="@color/black_50"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="15sp"
                 android:visibility="gone" />
 
@@ -220,6 +220,8 @@
         android:minHeight="40dp"
         android:text="@string/dialog_negative"
         android:textColor="@color/dialog_primary_button_text"
-        app:backgroundTint="@color/dialog_primary_button_bg" />
+        app:backgroundTint="@color/dialog_primary_button_bg"
+        app:strokeWidth="@dimen/webhtv_focus_ring_width"
+        app:strokeColor="@color/focus_ring_primary_container" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

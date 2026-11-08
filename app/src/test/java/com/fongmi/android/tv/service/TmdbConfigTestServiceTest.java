@@ -95,4 +95,19 @@ public class TmdbConfigTestServiceTest {
     public void invalidBearerHeaderBecomesFailedCheck() {
         assertFalse(TmdbConfigTestService.testApi(client, "first.second.\nbad", server.url("/").toString()).success);
     }
+    @Test
+    public void proxyBaseRoutesApiAndImageChecksToMirrorEndpoint() throws Exception {
+        server.enqueue(new MockResponse().setHeader("Content-Type", "application/json").setBody("{\"images\":{}}"));
+        server.enqueue(new MockResponse().setHeader("Content-Type", "image/png")
+                .setBody(new okio.Buffer().write(Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"))));
+
+        String proxy = server.url("/tmdb-mirror").toString();
+        TmdbConfigTestService.Result result = TmdbConfigTestService.test(client, "key", "https://api.tmdb.org", "https://images.tmdb.org", proxy, "", server.url("/").toString());
+
+        assertTrue(result.api.success);
+        assertTrue(result.image.success);
+        assertEquals("/tmdb-mirror/3/configuration?api_key=key", server.takeRequest().getPath());
+        assertEquals("/tmdb-mirror/t/p/w342/wwemzKWzjKYJFfCeiB57q3r4Bcm.png", server.takeRequest().getPath());
+    }
+
 }

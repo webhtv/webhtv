@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.helper;
 import androidx.annotation.Nullable;
 
 import com.fongmi.android.tv.bean.TmdbSourcePayload;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -305,7 +306,8 @@ public final class TmdbSourcePayloadParser {
 
     private static String normalizeLanguage(String value) {
         String result = value == null ? "" : value.trim();
-        return result.length() > 64 ? "" : result;
+        if (result.isEmpty() || result.length() > 64) return "";
+        return TmdbLanguagePolicy.normalize(result);
     }
 
     private static String normalizeFetchedAt(String value) {

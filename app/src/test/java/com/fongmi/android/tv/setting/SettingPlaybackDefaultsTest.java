@@ -170,8 +170,6 @@ public class SettingPlaybackDefaultsTest {
         String leanbackPlayer = read(root.resolve(Path.of("src", "leanback", "res", "layout", "activity_setting_player.xml")));
 
         for (String id : new String[]{"adblock", "aiAdDetection", "adRuleManage", "adBlockStats",
-                "adAudioFingerprint", "adAudioAutoSkip", "probeRuleSource", "probeRuleRefresh",
-                "speechAdEnabled", "speechAdKeywords", "speechAdSkipSeconds", "speechAdSkipMode",
                 "autoSkipIntroOutro"}) {
             assertTrue(id, mobileAd.contains("@+id/" + id));
             assertTrue(id, leanbackAd.contains("@+id/" + id));

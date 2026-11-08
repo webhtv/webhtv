@@ -181,6 +181,70 @@ public class AppBrandingContractTest {
         if (leanback) assertTrue(manifest.contains("android.intent.category.LEANBACK_LAUNCHER"));
     }
 
+    @Test
+    public void tvBannerIsProvidedPerDensityAtFullResolution() throws Exception {
+        String manifest = read("app/src/leanback/AndroidManifest.xml");
+        // 两个启动器入口（application 与 current alias）都必须带横幅，
+        // 只给 application 会让 TV 桌面的 alias 磁贴缺图。
+        assertEquals(2, countOccurrences(manifest, "android:banner=\"@mipmap/ic_banner\""));
+
+        // 每档按 320x180 dp 出图，即官方 xhdpi 最小尺寸 320x180 px 的 2 倍。
+        // 磁贴按 dp 画，只给最小尺寸时 1080p/4K 电视只能放大位图，字标出锯齿。
+        int[][] expected = {{320, 180}, {480, 270}, {640, 360}, {960, 540}, {1280, 720}};
+        String[] density = {"mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"};
+        for (int i = 0; i < density.length; i++) {
+            Path file = banner(density[i]);
+            assertTrue("missing banner for " + density[i], Files.exists(file));
+            int[] size = pngSize(Files.readAllBytes(file));
+            assertEquals("width of " + density[i], expected[i][0], size[0]);
+            assertEquals("height of " + density[i], expected[i][1], size[1]);
+            // 16:9 是 Android TV 横幅的硬性规格，比例不对会被启动器拉伸。
+            assertEquals("aspect of " + density[i], 16.0 / 9.0,
+                    (double) size[0] / size[1], 0.001);
+        }
+    }
+
+    @Test
+    public void tvBannerUsesBitmapDensitiesNotAdaptiveIcon() {
+        Path leanback = Path.of("app/src/leanback/res");
+        if (!Files.exists(leanback)) leanback = Path.of("src/leanback/res");
+
+        // 关键防回归：mipmap-anydpi-v26/ic_banner.xml 是一个【包含 v26 的资源
+        // 配置】，它会捕获所有 API>=26 的设备而不看屏幕密度，把 manifest 对
+        // @mipmap/ic_banner 的引用从密度位图上抢走。它当时的内容是 108dp
+        // 方形自适应图标，启动器只能自行裁切进 16:9 磁贴，得到的就是用户
+        // 报的“横幅糊成一团”与锯齿。横幅只能是位图。
+        assertFalse(Files.exists(leanback.resolve("mipmap-anydpi-v26/ic_banner.xml")));
+        assertFalse(Files.exists(leanback.resolve("drawable/ic_banner_foreground.xml")));
+        // 同理，横幅不能落在 default(drawable) 桶里：xhdpi 电视会把 320x180
+        // 拉大 2 倍显示，正是这次的模糊来源。
+        assertFalse(Files.exists(leanback.resolve("drawable/ic_banner.png")));
+    }
+
+    private static Path banner(String density) {
+        Path path = Path.of("app/src/leanback/res")
+                .resolve("mipmap-" + density).resolve("ic_banner.png");
+        if (!Files.exists(path)) {
+            path = Path.of("src/leanback/res")
+                    .resolve("mipmap-" + density).resolve("ic_banner.png");
+        }
+        return path;
+    }
+
+    /** 只解析 PNG 头部的 IHDR，避免为一次断言引入图片解码依赖。 */
+    private static int[] pngSize(byte[] bytes) {
+        byte[] signature = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        for (int i = 0; i < signature.length; i++) {
+            assertEquals("not a PNG", signature[i], bytes[i]);
+        }
+        return new int[]{readInt(bytes, 16), readInt(bytes, 20)};
+    }
+
+    private static int readInt(byte[] bytes, int offset) {
+        return ((bytes[offset] & 0xFF) << 24) | ((bytes[offset + 1] & 0xFF) << 16)
+                | ((bytes[offset + 2] & 0xFF) << 8) | (bytes[offset + 3] & 0xFF);
+    }
+
     private static String read(String relative) throws Exception {
         Path path = Path.of(relative);
         if (!Files.exists(path) && relative.startsWith("app/")) path = Path.of(relative.substring(4));

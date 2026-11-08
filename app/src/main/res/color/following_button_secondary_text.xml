@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    追更页 secondary 按钮（继续看/提醒开/换源/下季）的文本色。
+
+    焦点/按下时填充会换成 following_button_focus（= webhtv_color_focus），所以文本
+    必须跟着换成同一填充的配对 on-色；此前这里写死 @android:color/white，深色表下
+    填充为浅色时白字不可读（1.00:1）。非焦点态填充是 surface_container，文本保持
+    following_button_text（= primary），两张表下均 ≥9:1。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true" android:color="@android:color/white" />
-    <item android:state_pressed="true" android:color="@android:color/white" />
+    <item android:state_focused="true" android:color="@color/webhtv_color_on_primary" />
+    <item android:state_pressed="true" android:color="@color/webhtv_color_on_primary" />
     <item android:color="@color/following_button_text" />
 </selector>

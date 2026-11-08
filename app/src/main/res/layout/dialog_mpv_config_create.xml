@@ -20,7 +20,7 @@
             android:layout_weight="1"
             android:gravity="start|center_vertical"
             android:text="@string/mpv_config_create_title"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="18sp"
             android:textStyle="bold" />
 
@@ -33,7 +33,7 @@
             android:focusable="true"
             android:padding="10dp"
             android:src="@drawable/ic_dialog_close"
-            android:tint="#5F6368" />
+            android:tint="@color/fixed_light_focus_icon" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -43,7 +43,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="@string/mpv_config_create_desc"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="13sp" />
 
     <com.google.android.material.textview.MaterialTextView
@@ -52,7 +52,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
         android:text="@string/mpv_config_name_optional"
-        android:textColor="#3C4043"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -98,7 +98,7 @@
                 android:layout_weight="1"
                 android:labelFor="@id/scriptEnabled"
                 android:text="@string/mpv_config_script_enabled"
-                android:textColor="#3C4043"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -121,7 +121,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/mpv_config_custom_button_enabled"
-                android:textColor="#3C4043"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -138,7 +138,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:text="@string/mpv_config_custom_button_trigger"
-            android:textColor="#3C4043"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -212,7 +212,7 @@
             android:overScrollMode="ifContentScrolls"
             android:padding="12dp"
             android:scrollbars="vertical|horizontal"
-            android:textColor="#303134"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="13sp" />
 
         <androidx.appcompat.widget.LinearLayoutCompat
@@ -226,7 +226,7 @@
                 android:id="@+id/scriptStats"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#80868B"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -255,7 +255,9 @@
                 android:minHeight="40dp"
                 android:text="@string/mpv_config_save"
                 android:textColor="@color/dialog_primary_button_text"
-                app:backgroundTint="@color/dialog_primary_button_bg" />
+                app:backgroundTint="@color/dialog_primary_button_bg"
+                app:strokeWidth="@dimen/webhtv_focus_ring_width"
+                app:strokeColor="@color/focus_ring_primary_container" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -267,7 +269,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
         android:text="@string/mpv_config_choose_action"
-        android:textColor="#3C4043"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -302,7 +304,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/mpv_config_text_edit"
-                android:textColor="#202124"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -311,7 +313,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/mpv_config_text_edit_desc"
-                android:textColor="#80868B"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -320,7 +322,7 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:src="@drawable/ic_sync_arrow_right"
-            android:tint="#80868B" />
+            android:tint="?attr/colorOnSurfaceVariant" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -355,7 +357,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/mpv_config_import_url"
-                android:textColor="#202124"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -364,7 +366,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/mpv_config_import_url_desc"
-                android:textColor="#80868B"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -373,7 +375,7 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:src="@drawable/ic_sync_arrow_right"
-            android:tint="#80868B" />
+            android:tint="?attr/colorOnSurfaceVariant" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -409,7 +411,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/mpv_config_import_file"
-                android:textColor="#202124"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -418,7 +420,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/mpv_config_import_file_desc"
-                android:textColor="#80868B"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -427,7 +429,7 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:src="@drawable/ic_sync_arrow_right"
-            android:tint="#80868B" />
+            android:tint="?attr/colorOnSurfaceVariant" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -443,7 +445,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/mpv_config_import_url"
-            android:textColor="#3C4043"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -482,7 +484,7 @@
                 android:text="@string/mpv_config_method"
                 android:textColor="@color/dialog_outlined_button_text"
                 app:backgroundTint="@color/dialog_outlined_button_bg"
-                app:strokeColor="@color/dialog_outlined_button_stroke" />
+                app:strokeColor="?attr/colorOutline" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/urlImport"
@@ -493,7 +495,9 @@
                 android:minHeight="40dp"
                 android:text="@string/mpv_config_import"
                 android:textColor="@color/dialog_primary_button_text"
-                app:backgroundTint="@color/dialog_primary_button_bg" />
+                app:backgroundTint="@color/dialog_primary_button_bg"
+                app:strokeWidth="@dimen/webhtv_focus_ring_width"
+                app:strokeColor="@color/focus_ring_primary_container" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 

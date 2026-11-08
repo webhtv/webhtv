@@ -1,9 +1,11 @@
 package com.fongmi.android.tv.service;
 
 import com.fongmi.android.tv.bean.TmdbConfig;
+import com.fongmi.android.tv.utils.TmdbProxy;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
@@ -25,58 +27,121 @@ public final class TmdbConfigTestService {
     }
 
     public static Result test(String credential, String apiHost, String imageHost, String omdbApiKey) {
-        return test(CLIENT, credential, apiHost, imageHost, omdbApiKey, "https://www.omdbapi.com/");
+        return test(credential, apiHost, imageHost, "", omdbApiKey);
+    }
+
+    public static Result test(String credential, String apiHost, String imageHost, String proxyBase, String omdbApiKey) {
+        return test(CLIENT, credential, apiHost, imageHost, proxyBase, omdbApiKey, "https://www.omdbapi.com/");
     }
 
     static Result test(OkHttpClient client, String credential, String apiHost, String imageHost, String omdbApiKey, String omdbBaseUrl) {
+        return test(client, credential, apiHost, imageHost, "", omdbApiKey, omdbBaseUrl);
+    }
+
+    static Result test(OkHttpClient client, String credential, String apiHost, String imageHost, String proxyBase, String omdbApiKey, String omdbBaseUrl) {
         return new Result(
-                timed(() -> testApi(client, credential, apiHost)),
-                timed(() -> testImage(client, imageHost)),
+                timed(() -> testApi(client, credential, apiHost, proxyBase)),
+                timed(() -> testImage(client, imageHost, proxyBase)),
                 timed(() -> testOmdb(client, omdbApiKey, omdbBaseUrl)));
     }
 
     static Check testApi(OkHttpClient client, String credential, String apiHost) {
+        return testApi(client, credential, apiHost, "");
+    }
+
+    static Check testApi(OkHttpClient client, String credential, String apiHost, String proxyBase) {
         if (credential == null || credential.trim().isEmpty()) return Check.failed("API Key / Access Token is empty");
-        TmdbConfig config = config(credential, apiHost, null, null);
-        try {
-            HttpUrl base = HttpUrl.parse(config.getApiBase() + "/configuration");
-            if (base == null) return Check.failed("invalid URL");
-            HttpUrl.Builder url = base.newBuilder();
-            Request.Builder request = new Request.Builder().get();
-            if (config.getAccessToken().isEmpty()) {
-                request.url(url.addQueryParameter("api_key", config.getApiKey()).build());
-            } else {
-                request.url(url.build()).header("Authorization", "Bearer " + config.getAccessToken());
-            }
-            try (Response response = client.newCall(request.build()).execute()) {
-                if (!response.isSuccessful()) return Check.failed("HTTP " + response.code());
-                ResponseBody body = response.body();
-                if (body == null) return Check.failed("empty response");
-                JsonObject json = JsonParser.parseString(body.string()).getAsJsonObject();
-                if (!json.has("images") || !json.get("images").isJsonObject()) {
-                    return Check.failed("response is not TMDB configuration data");
+        TmdbConfig config = config(credential, apiHost, null, proxyBase, null);
+        Check last = Check.failed("API route unavailable");
+        for (String route : config.getApiCandidates()) {
+            long started = System.nanoTime();
+            try {
+                HttpUrl base = HttpUrl.parse(route + "/configuration");
+                if (base == null) {
+                    last = Check.failed("invalid URL");
+                    continue;
                 }
-                return Check.success();
+                HttpUrl.Builder url = base.newBuilder();
+                Request.Builder request = new Request.Builder().get();
+                if (config.getAccessToken().isEmpty()) {
+                    request.url(url.addQueryParameter("api_key", config.getApiKey()).build());
+                } else {
+                    request.url(url.build()).header("Authorization", "Bearer " + config.getAccessToken());
+                }
+                try (Response response = client.newCall(request.build()).execute()) {
+                    if (!response.isSuccessful()) {
+                        last = Check.failed("HTTP " + response.code());
+                        TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.API, route);
+                        continue;
+                    }
+                    ResponseBody body = response.body();
+                    if (body == null) {
+                        last = Check.failed("empty response");
+                        TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.API, route);
+                        continue;
+                    }
+                    JsonObject json = JsonParser.parseString(body.string()).getAsJsonObject();
+                    if (!json.has("images") || !json.get("images").isJsonObject()) {
+                        last = Check.failed("response is not TMDB configuration data");
+                        TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.API, route);
+                        continue;
+                    }
+                    TmdbProxy.RouteSelector.success(TmdbProxy.RouteSelector.Kind.API, route,
+                            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+                    return Check.success();
+                }
+            } catch (Exception e) {
+                last = Check.failed(message(e));
+                TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.API, route);
             }
-        } catch (Exception e) {
-            return Check.failed(message(e));
         }
+        return last;
     }
 
     static Check testImage(OkHttpClient client, String imageHost) {
-        TmdbConfig config = config(null, null, imageHost, null);
+        return testImage(client, imageHost, "");
+    }
+
+    static Check testImage(OkHttpClient client, String imageHost, String proxyBase) {
+        TmdbConfig config = config(null, null, imageHost, proxyBase, null);
         try {
-            HttpUrl url = HttpUrl.parse(config.getImageBase() + "/wwemzKWzjKYJFfCeiB57q3r4Bcm.png");
-            if (url == null) return Check.failed("invalid URL");
-            try (Response response = client.newCall(new Request.Builder().url(url).get().build()).execute()) {
-                if (!response.isSuccessful()) return Check.failed("HTTP " + response.code());
-                ResponseBody body = response.body();
-                String type = response.header("Content-Type", "").toLowerCase(Locale.ROOT);
-                if (!type.startsWith("image/")) return Check.failed("response is not an image");
-                if (body == null || body.contentLength() == 0) return Check.failed("empty image");
-                byte[] prefix = body.source().peek().readByteArray(16);
-                return hasImageSignature(prefix) ? Check.success() : Check.failed("invalid image data");
+            Check last = Check.failed("image route unavailable");
+            List<String> candidates = config.getImageCandidates();
+            for (String route : candidates) {
+                long started = System.nanoTime();
+                String base = config.isImageAuto() ? TmdbProxy.imageBaseFor(route, "w342") : config.getImageBase();
+                HttpUrl url = HttpUrl.parse(TmdbProxy.imageUrl(base, "/wwemzKWzjKYJFfCeiB57q3r4Bcm.png"));
+                if (url == null) continue;
+                try (Response response = client.newCall(new Request.Builder().url(url).get().build()).execute()) {
+                    if (!response.isSuccessful()) {
+                        last = Check.failed("HTTP " + response.code());
+                        TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.IMAGE, route);
+                        continue;
+                    }
+                    ResponseBody body = response.body();
+                    String type = response.header("Content-Type", "").toLowerCase(Locale.ROOT);
+                    if (!type.startsWith("image/")) {
+                        last = Check.failed("response is not an image");
+                        TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.IMAGE, route);
+                        continue;
+                    }
+                    if (body == null || body.contentLength() == 0) {
+                        last = Check.failed("empty image");
+                        TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.IMAGE, route);
+                        continue;
+                    }
+                    byte[] prefix = body.source().peek().readByteArray(16);
+                    if (!hasImageSignature(prefix)) {
+                        last = Check.failed("invalid image data");
+                        TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.IMAGE, route);
+                        continue;
+                    }
+                    TmdbProxy.RouteSelector.success(TmdbProxy.RouteSelector.Kind.IMAGE, route,
+                            TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+                    return Check.success();
+                }
             }
+            return last;
         } catch (Exception e) {
             return Check.failed(message(e));
         }
@@ -109,13 +174,24 @@ public final class TmdbConfigTestService {
         }
     }
 
-    private static TmdbConfig config(String credential, String apiHost, String imageHost, String omdbApiKey) {
+    private static TmdbConfig config(String credential, String apiHost, String imageHost, String proxyBase, String omdbApiKey) {
         JsonObject json = new JsonObject();
         String value = trim(credential);
         if (value.split("\\.").length >= 3) json.addProperty("accessToken", value);
         else json.addProperty("apiKey", value);
-        if (apiHost != null) json.addProperty("apiBase", trim(apiHost));
-        if (imageHost != null) json.addProperty("imageBase", trim(imageHost));
+        if (apiHost != null) {
+            if (TmdbProxy.isAuto(apiHost)) {
+                json.addProperty("apiAuto", true);
+                json.addProperty("apiBase", TmdbProxy.OFFICIAL_API);
+            } else json.addProperty("apiBase", trim(apiHost));
+        }
+        if (imageHost != null) {
+            if (TmdbProxy.isAuto(imageHost)) {
+                json.addProperty("imageAuto", true);
+                json.addProperty("imageBase", TmdbProxy.OFFICIAL_IMAGE);
+            } else json.addProperty("imageBase", trim(imageHost));
+        }
+        if (proxyBase != null) json.addProperty("proxyBase", trim(proxyBase));
         if (omdbApiKey != null) json.addProperty("omdbApiKey", trim(omdbApiKey));
         return TmdbConfig.objectFrom(json.toString());
     }

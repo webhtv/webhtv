@@ -15,7 +15,7 @@
         android:duplicateParentState="true"
         android:ellipsize="marquee"
         android:singleLine="true"
-        android:textColor="@color/selector_live_text"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="14sp"
         tools:text="七龍珠" />
 
@@ -26,7 +26,7 @@
         android:duplicateParentState="true"
         android:ellipsize="marquee"
         android:singleLine="true"
-        android:textColor="@color/selector_live_text"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="12sp"
         tools:text="18:00 ~ 19:00" />
 

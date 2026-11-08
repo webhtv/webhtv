@@ -30,6 +30,8 @@ import com.fongmi.android.tv.playback.PlaybackRemoteSyncResult;
 import com.fongmi.android.tv.playback.PlaybackRemoteSyncStore;
 import com.fongmi.android.tv.playback.PlaybackRemoteSyncer;
 import com.fongmi.android.tv.playback.RemoteSyncConfig;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.utils.Formatters;
 import com.fongmi.android.tv.utils.Notify;
@@ -66,7 +68,7 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
@@ -76,8 +78,8 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
         Window window = getDialog().getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
-        int screenWidth = ResUtil.getScreenWidth(requireContext());
-        int screenHeight = ResUtil.getScreenHeight(requireContext());
+        int screenWidth = DialogSafeArea.width(requireActivity(), window);
+        int screenHeight = DialogSafeArea.height(requireActivity(), window);
         boolean land = ResUtil.isLand(requireContext());
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
@@ -162,7 +164,7 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
         LinearLayoutCompat root = new LinearLayoutCompat(requireContext());
         root.setOrientation(LinearLayoutCompat.VERTICAL);
         root.setPadding(dp(10), dp(9), dp(10), dp(9));
-        root.setBackground(rowBackground(config));
+        root.setBackground(rowBackground());
         root.setFocusable(true);
         root.setClickable(true);
         root.setOnClickListener(view -> showEdit(copy(config)));
@@ -174,12 +176,12 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setOrientation(LinearLayoutCompat.HORIZONTAL);
         root.addView(header, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        header.addView(text(config.displayName(), 15, Color.BLACK, true), new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        header.addView(text(config.displayName(), 15, ThemeController.current().colorOnSurface(), true), new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         header.addView(badge(status(config), statusColor(config)));
 
         addDetail(root, config.url);
         addDetail(root, meta(config));
-        if (!TextUtils.isEmpty(config.lastError)) addDetail(root, getString(R.string.playback_remote_sync_last_error, config.lastError), Color.parseColor("#B3261E"));
+        if (!TextUtils.isEmpty(config.lastError)) addDetail(root, getString(R.string.playback_remote_sync_last_error, config.lastError), ThemeController.current().colorError());
 
         LinearLayoutCompat actions = new LinearLayoutCompat(requireContext());
         actions.setGravity(Gravity.CENTER_VERTICAL);
@@ -334,8 +336,8 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
     }
 
     private int statusColor(RemoteSyncConfig config) {
-        if (config.enabled && config.isUsable()) return Color.parseColor("#137333");
-        return Color.parseColor("#5F6368");
+        if (config.enabled && config.isUsable()) return ThemeController.current().colorSuccess();
+        return ThemeController.current().colorOnSurfaceVariant();
     }
 
     private RemoteSyncConfig copy(RemoteSyncConfig source) {
@@ -423,7 +425,7 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
         button.setMinimumHeight(dp(36));
         button.setPadding(dp(6), 0, dp(6), 0);
         ColorStateList bg = ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_bg : R.color.dialog_outlined_button_bg);
-        ColorStateList fg = danger ? ColorStateList.valueOf(Color.parseColor("#B3261E")) : ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_text : R.color.dialog_outlined_button_text);
+        ColorStateList fg = danger ? ColorStateList.valueOf(ThemeController.current().colorError()) : ContextCompat.getColorStateList(requireContext(), tonal ? R.color.dialog_tonal_button_text : R.color.dialog_outlined_button_text);
         button.setBackgroundTintList(bg);
         button.setTextColor(fg);
         if (!tonal) {
@@ -434,7 +436,7 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
     }
 
     private void addDetail(LinearLayoutCompat root, String value) {
-        addDetail(root, value, Color.parseColor("#5F6368"));
+        addDetail(root, value, ThemeController.current().colorOnSurfaceVariant());
     }
 
     private void addDetail(LinearLayoutCompat root, String value, int color) {
@@ -455,23 +457,33 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
         return view;
     }
 
+    /**
+     * The badge fill follows the palette so the outlined status chip stays legible in both
+     * tables. It was a fixed {@code #FFFFFF}, which under the night table drew a white chip
+     * with the night success/error text on it.
+     */
     private MaterialTextView badge(String value, int color) {
         MaterialTextView view = text(value, 12, color, true);
         view.setGravity(Gravity.CENTER);
         view.setSingleLine(true);
         view.setPadding(dp(8), dp(3), dp(8), dp(3));
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor("#FFFFFF"));
+        drawable.setColor(ThemeController.current().colorSurfaceContainerLowest());
         drawable.setStroke(dp(1), color);
         drawable.setCornerRadius(dp(6));
         view.setBackground(drawable);
         return view;
     }
 
-    private GradientDrawable rowBackground(RemoteSyncConfig config) {
+    /**
+     * The row card fill and stroke follow the active palette; see
+     * {@code ViewingRecordSyncDialog.rowBackground} for why the fixed light literals could
+     * not be rescued by {@code ThemeBinder}.
+     */
+    private GradientDrawable rowBackground() {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor("#F5F6F7"));
-        drawable.setStroke(dp(1), Color.parseColor(config.isUsable() ? "#DADCE0" : "#E2E5E8"));
+        drawable.setColor(ThemeController.current().colorSurfaceContainerLow());
+        drawable.setStroke(dp(1), ThemeController.current().colorOutlineVariant());
         drawable.setCornerRadius(dp(6));
         return drawable;
     }

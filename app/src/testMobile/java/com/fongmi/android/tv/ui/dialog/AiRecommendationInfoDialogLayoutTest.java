@@ -48,8 +48,8 @@ public class AiRecommendationInfoDialogLayoutTest {
         assertTrue("Compact metadata should leave substantially more first-screen room for the synopsis",
                 layout.contains("@+id/summaryCard")
                         && singleTag(layout, "summaryCard").contains("layout_height=\"100dp\""));
-        assertTrue("The whole dialog should use actual window pixels instead of compatibility screenHeightDp",
-                source.contains("ResUtil.getScreenHeight(activity)")
+        assertTrue("The whole dialog should use bar-safe window pixels instead of compatibility screenHeightDp",
+                source.contains("DialogSafeArea.height(activity)")
                         && source.contains("calculateDialogHeightPx(")
                         && source.contains("DIALOG_HEIGHT_FRACTION = 0.82f")
                         && source.contains("DIALOG_VERTICAL_MARGIN_DP = 32")

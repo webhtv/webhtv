@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Framework default text colour for ordinary widgets.
+
+    Material maps android:textColorPrimary to its own
+    @color/m3_default_color_primary_text, which hard-references
+    its own neutral on-surface colour instead of following the theme's
+    ?attr/colorOnSurface. Programmatic widgets created from an Activity context
+    therefore kept Material's palette and, because that value is not one of our
+    baseline roles, ThemeBinder could not rewrite it - the same class of defect that
+    left the theme editor's labels on Material's neutral variant colour, which then
+    survived a custom surface untouched.
+
+    Mapping the framework attributes onto our own tokens fixes the source, so those
+    widgets inherit the WebHTV palette AND become rewritable by the binder.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:alpha="0.38" android:color="@color/webhtv_color_on_surface" />
+    <item android:color="@color/webhtv_color_on_surface" />
+</selector>

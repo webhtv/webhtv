@@ -21,6 +21,11 @@ public class FusionDetailController extends BaseTmdbDetailModeController {
     }
 
     @Override
+    public boolean isFusionMode() {
+        return true;
+    }
+
+    @Override
     protected boolean showInlinePlayer() {
         return true;
     }

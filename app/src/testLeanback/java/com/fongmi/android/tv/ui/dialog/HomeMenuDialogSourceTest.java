@@ -43,12 +43,31 @@ public class HomeMenuDialogSourceTest {
         String java = read("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/HomeMenuDialog.java");
         assertTrue(java.contains("items.remove(0)"));
         int options = countItems(read("app/src/main/res/values-zh-rCN/strings.xml"));
-        // 数组共 10 项，去掉第 0 项后 position 0..8 对应 onHomeMenuItem 的 case 1..9
-        assertEquals(10, options);
+        // 数组共 12 项，去掉第 0 项后 position 0..10 对应 onHomeMenuItem 的 case 1..11
+        assertEquals(12, options);
         String activity = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
         for (int index = 1; index <= options - 1; index++) {
             assertTrue("缺少 case " + index, activity.contains("case " + index + " ->"));
         }
+    }
+
+    @Test
+    public void menuOptionsIncludeFollowingAndSiteInjectionAndKeepDialogDefault() throws Exception {
+        String strings = read("app/src/main/res/values-zh-rCN/strings.xml");
+        assertTrue(strings.contains("<item>选项弹窗</item>"));
+        assertTrue(strings.contains("<item>追更页面</item>"));
+        assertTrue(strings.contains("<item>站点注入</item>"));
+        for (String locale : new String[]{"values", "values-zh-rCN", "values-zh-rTW"}) {
+            assertEquals(locale, 12, countItems(read("app/src/main/res/" + locale + "/strings.xml")));
+        }
+
+        String setting = read("app/src/main/java/com/fongmi/android/tv/setting/Setting.java");
+        assertTrue(setting.contains("Prefers.getInt(\"home_menu_key\", 0)"));
+        assertTrue(setting.contains("menuKey > 11"));
+
+        String activity = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
+        assertTrue(activity.contains("case 10 -> FollowingActivity.start(this, null);"));
+        assertTrue(activity.contains("case 11 -> openCustomCsp();"));
     }
 
     @Test
@@ -57,10 +76,10 @@ public class HomeMenuDialogSourceTest {
         String adapter = read("app/src/leanback/res/layout/adapter_home_menu.xml");
         assertTrue(dialog.contains("@+id/recycler"));
         assertTrue(adapter.contains("@+id/text"));
-        // 9 项按 3 列排布才能一屏显示完，单列会超出 maxHeight 需要滚动
+        // 菜单项按 3 列排布，新增条目也会由运行时数组自动显示
         assertTrue(dialog.contains("app:spanCount=\"3\""));
         assertTrue(dialog.contains("GridLayoutManager"));
-        // 英文文案最长 13 字符，18sp 在窄列上会被 ellipsize 截断，需要自适应缩字兜底
+        // 英文文案最长 14 字符（Following page/Site injection），18sp 在窄列上会被 ellipsize 截断，需要自适应缩字兜底
         assertTrue(adapter.contains("app:autoSizeTextType=\"uniform\""));
         assertTrue(adapter.contains("xmlns:app="));
         String java = read("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/HomeMenuDialog.java");

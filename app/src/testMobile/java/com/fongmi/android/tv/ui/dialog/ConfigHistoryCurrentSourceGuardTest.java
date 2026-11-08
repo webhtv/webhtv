@@ -15,9 +15,9 @@ public class ConfigHistoryCurrentSourceGuardTest {
     private static final String LEANBACK = "src/leanback/java/com/fongmi/android/tv/ui/adapter/ConfigAdapter.java";
 
     @Test
-    public void editableHistoryAlwaysHidesCurrentConfig() throws Exception {
-        assertCurrentConfigHidden(MOBILE);
-        assertCurrentConfigHidden(LEANBACK);
+    public void managerShowsCurrentConfigButProtectsItsUseAndDeleteActions() throws Exception {
+        assertCurrentConfigProtected(MOBILE);
+        assertCurrentConfigProtected(LEANBACK);
     }
 
     @Test
@@ -26,10 +26,27 @@ public class ConfigHistoryCurrentSourceGuardTest {
         assertDeleteConfirmation("src/leanback/java/com/fongmi/android/tv/ui/dialog/HistoryDialog.java");
     }
 
-    private static void assertCurrentConfigHidden(String file) throws Exception {
+    private static void assertCurrentConfigProtected(String file) throws Exception {
         String source = Files.readString(Path.of(file), StandardCharsets.UTF_8);
-        assertTrue(source.contains("if (!readOnly && !TextUtils.isEmpty(currentUrl))"));
+        assertTrue(source.contains("private boolean protectCurrent;"));
+        assertTrue(source.contains("if (!readOnly && !protectCurrent && !TextUtils.isEmpty(currentUrl))"));
         assertTrue(source.contains("mItems.removeIf(item -> TextUtils.equals(item.getUrl(), currentUrl));"));
+        assertTrue(source.contains("holder.binding.delete.setVisibility(readOnly ? View.GONE : View.VISIBLE);"));
+        assertTrue(source.contains("holder.binding.delete.setAlpha(current ? 0.38f : 1f);"));
+        if (file.contains("leanback")) {
+            assertTrue(source.contains("holder.binding.text.setFocusable(true)"));
+            assertTrue(source.contains("KEYCODE_DPAD_DOWN"));
+            assertFalse(source.contains("holder.binding.text.setFocusable(!current)"));
+            if (file.contains("leanback")) {
+                assertTrue(source.contains("recycler.stopScroll()"));
+                assertTrue(source.contains("recycler.addOnChildAttachStateChangeListener(this)"));
+                assertTrue(source.contains("onChildViewAttachedToWindow(@NonNull View view)"));
+                assertTrue(source.contains("recycler.removeOnChildAttachStateChangeListener(this)"));
+                assertTrue(source.contains("recycler.postOnAnimation(focus::run)"));
+                assertFalse(source.contains("postDelayed(focus"));
+            }
+        }
+        assertTrue(source.contains("if (!current) listener.onTextClick(item);"));
         assertFalse(source.contains("if (type != 0 && !readOnly && !TextUtils.isEmpty(currentUrl))"));
     }
 

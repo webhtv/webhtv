@@ -10,6 +10,6 @@
     android:gravity="center"
     android:nextFocusUp="@id/quality"
     android:nextFocusDown="@id/episode"
-    android:textColor="@color/white"
+    android:textColor="?attr/webhtvColorOnWallpaper"
     android:textSize="16sp"
     tools:text="11" />

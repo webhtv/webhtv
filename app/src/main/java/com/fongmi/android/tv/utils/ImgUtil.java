@@ -187,13 +187,17 @@ public class ImgUtil {
             @Override
             public boolean onLoadFailed(@Nullable GlideException e, Object model, @NonNull Target<Drawable> target, boolean isFirstResource) {
                 failed.add(url);
-                if (!TextUtils.isEmpty(fallback) && !failed.contains(fallback)) load(text, fallback, view, vod, width, height);
+                TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.IMAGE, TmdbProxy.routeForImageUrl(url));
+                String autoFallback = TmdbProxy.nextAutoImageUrl(url);
+                if (!TextUtils.isEmpty(autoFallback) && !failed.contains(autoFallback)) load(text, autoFallback, view, vod, width, height);
+                else if (!TextUtils.isEmpty(fallback) && !failed.contains(fallback)) load(text, fallback, view, vod, width, height);
                 else showTextDrawable(text, view, vod, false);
                 return true;
             }
 
             @Override
             public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+                TmdbProxy.RouteSelector.success(TmdbProxy.RouteSelector.Kind.IMAGE, TmdbProxy.routeForImageUrl(url), 0);
                 return false;
             }
         };
@@ -203,13 +207,20 @@ public class ImgUtil {
         return new RequestListener<>() {
             @Override
             public boolean onLoadFailed(@Nullable GlideException e, Object model, @NonNull Target<Drawable> target, boolean isFirstResource) {
-                showTextDrawable(text, view, vod, false);
                 failed.add(url);
+                TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.IMAGE, TmdbProxy.routeForImageUrl(url));
+                String autoFallback = TmdbProxy.nextAutoImageUrl(url);
+                if (!TextUtils.isEmpty(autoFallback) && !failed.contains(autoFallback)) {
+                    load(text, autoFallback, view, vod, 0, 0);
+                } else {
+                    showTextDrawable(text, view, vod, false);
+                }
                 return true;
             }
 
             @Override
             public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+                TmdbProxy.RouteSelector.success(TmdbProxy.RouteSelector.Kind.IMAGE, TmdbProxy.routeForImageUrl(url), 0);
                 return false;
             }
         };

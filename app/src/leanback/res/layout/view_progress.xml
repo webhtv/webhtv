@@ -5,12 +5,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!--
+        指示器颜色改走语义角色：此前写死 @color/white，与同屏其它状态元素
+        （traffic 文字、空态标题）用的 ?attr/webhtvColorOnWallpaper 是两份声明。
+        设计文档 §9.9 要求「加载使用统一 spinner/progress……不使用多种颜色动画」。
+    -->
     <com.google.android.material.progressindicator.CircularProgressIndicator
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:indeterminate="true"
-        app:indicatorColor="@color/white" />
+        app:indicatorColor="?attr/webhtvColorOnWallpaper" />
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/traffic"
@@ -19,7 +24,7 @@
         android:layout_gravity="center"
         android:layout_marginTop="44dp"
         android:fontFeatureSettings="tnum"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="16sp"
         android:visibility="gone"
         tools:text="120 KB/s"

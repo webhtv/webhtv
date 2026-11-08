@@ -13,9 +13,9 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.ComicSourceConfig;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,7 +70,7 @@ public class ComicSourceDialog {
         manageBtn.setOnClickListener(v -> showSiteManage());
         resetBtn.setOnClickListener(v -> resetToDefault());
 
-        dialog = new MaterialAlertDialogBuilder(activity)
+        dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.setting_comic_source)
                 .setView(view)
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> onSave())
@@ -103,7 +103,7 @@ public class ComicSourceDialog {
             checked[i] = matchesRule(enabledRules, site);
         }
 
-        new MaterialAlertDialogBuilder(activity)
+        new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.dialog_comic_site_manage)
                 .setMultiChoiceItems(labels, checked, (d, which, isChecked) -> checked[which] = isChecked)
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> applySiteManage(sites, enabledRules, checked))

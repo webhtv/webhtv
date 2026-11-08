@@ -25,6 +25,7 @@ public final class LabCommandAdapter extends RecyclerView.Adapter<LabCommandAdap
     }
 
     private final List<LabModels.Command> rows = new ArrayList<>();
+    private final List<String> rowStates = new ArrayList<>();
     private final Listener listener;
     private final Context context;
     private LabModels.Item item;
@@ -51,7 +52,35 @@ public final class LabCommandAdapter extends RecyclerView.Adapter<LabCommandAdap
                 rows.add(command);
             }
         }
+        rowStates.clear();
+        for (LabModels.Command command : rows) rowStates.add(stateOf(command));
         notifyDataSetChanged();
+    }
+
+    /**
+     * 只刷新状态真正变化的行。
+     *
+     * <p>详情页每 2 秒调用一次 {@code notifyDataSetChanged()} 时，RecyclerView 会把全部子 View
+     * 回收重挂：焦点所在的「运行」按钮被移除后，框架把焦点丢回工具栏的返回键，
+     * 遥控器再按不到命令列表（实测表现就是「遥控器没法操作焦点，只能在实验室配置文件里控制启动」）。
+     *
+     * <p>状态没变时这里完全不触发重排，焦点保持不动；真变化时只做局部 {@code notifyItemChanged}，
+     * 复用同一个 ViewHolder，不会像整表刷新那样回收焦点所在的视图。
+     */
+    public void refreshStates() {
+        for (int i = 0; i < rows.size(); i++) {
+            String state = stateOf(rows.get(i));
+            if (i < rowStates.size() && state.equals(rowStates.get(i))) continue;
+            if (i < rowStates.size()) rowStates.set(i, state);
+            else rowStates.add(state);
+            notifyItemChanged(i);
+        }
+    }
+
+    /** 行内全部可视差异（圆点、运行标签、按钮文字与底色）都由这两个字段决定。 */
+    private String stateOf(LabModels.Command command) {
+        boolean running = item != null && LabRunner.isRunning(item.name + "/" + command.id);
+        return (running ? "running:" : "idle:") + (command.name == null ? command.description : command.name);
     }
 
     @NonNull
@@ -76,10 +105,14 @@ public final class LabCommandAdapter extends RecyclerView.Adapter<LabCommandAdap
         holder.btnAction.setOnClickListener(v -> {
             if (listener != null) listener.onAction(item, command);
         });
-        holder.itemView.setOnLongClickListener(v -> {
+        // 遥控器上焦点落在右侧「运行」按钮时按键事件只发给它，itemView 的长按收不到，
+        // 所以两个 View 共用同一个长按监听器：按住 OK 到长按阈值进编辑，短按仍是运行/停止。
+        View.OnLongClickListener longPress = v -> {
             if (listener != null) listener.onLongPress(item, command);
             return true;
-        });
+        };
+        holder.itemView.setOnLongClickListener(longPress);
+        holder.btnAction.setOnLongClickListener(longPress);
     }
 
     @Override

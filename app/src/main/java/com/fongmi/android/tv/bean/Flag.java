@@ -197,8 +197,37 @@ public class Flag implements Parcelable, Diffable<Flag> {
         return getPosition() >= 0 && getPosition() < getEpisodes().size();
     }
 
+    /**
+     * 对侧（历史）URL 是否仍能定位到本线路的某个条目。
+     * <p>
+     * 这是“同线路内同集多版本消歧”的启用判据：命中说明历史与当前列表同属一条线（多版本并存），
+     * 播放恢复判定应启用版本消歧；未命中说明是换线路/换源或源站刷新（旧 URL 已不在列表），
+     * 必须保留集号容错，否则跨线路续播会丢失进度。带 TMDB 季集位置的条目同样要求位置不冲突，
+     * 与 {@link #find(Episode, boolean)} 的 URL 优先定位口径一致。
+     */
+    public boolean containsEpisodeUrl(Episode target) {
+        if (target == null || TextUtils.isEmpty(target.getUrl()) || getEpisodes().isEmpty()) return false;
+        for (Episode episode : getEpisodes()) {
+            if (!TextUtils.equals(target.getUrl(), episode.getUrl())) continue;
+            if (hasTmdbEpisodeNumber(episode) && hasTmdbEpisodeNumber(target) && !episode.matchesNumber(target)) continue;
+            return true;
+        }
+        return false;
+    }
+
     public Episode find(Episode target, boolean strict) {
         if (getEpisodes().isEmpty()) return null;
+        // 同一 TMDB 集可能在同一线路内存在多个版本（同名不同 URL）。定位请求带 URL 时必须先按 URL
+        // 锁定版本，否则下面“TMDB 集号相同即返回第一个”会把第二版本解析成第一版本。
+        // 但同 URL 也可能跨季/跨集复用（源站播放地址不唯一），此时按 URL 命中会定位到另一季的条目，
+        // 故 TMDB 位置冲突的条目一律不按 URL 命中，交回下面的季集号定位。
+        if (target != null && !TextUtils.isEmpty(target.getUrl())) {
+            for (Episode episode : getEpisodes()) {
+                if (!TextUtils.equals(target.getUrl(), episode.getUrl())) continue;
+                if (hasTmdbEpisodeNumber(episode) && hasTmdbEpisodeNumber(target) && !episode.matchesNumber(target)) continue;
+                return episode;
+            }
+        }
         if (getEpisodes().size() == 1) {
             Episode episode = getEpisodes().get(0);
             if (hasTmdbEpisodeNumber(target) && hasTmdbEpisodeNumber(episode) && !episode.matchesNumber(target)) return null;

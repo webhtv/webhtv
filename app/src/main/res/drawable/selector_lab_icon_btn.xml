@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    详情页顶部图标按钮（终端 / 新增命令 / 刷新命令）的遥控聚焦背景。
+
+    这些 ImageView 本来就带点击监听（可聚焦），但背景是 borderless ripple，只有按下态；
+    遥控聚焦时画面不变，用户看不到焦点落在这三个图标上。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/black_40"/>
+            <stroke
+                android:width="2dp"
+                android:color="@color/accent"/>
+            <corners android:radius="8dp"/>
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/black_40"/>
+            <corners android:radius="8dp"/>
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent"/>
+            <corners android:radius="8dp"/>
+        </shape>
+    </item>
+</selector>

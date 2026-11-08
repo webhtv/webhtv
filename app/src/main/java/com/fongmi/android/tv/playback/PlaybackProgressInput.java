@@ -35,6 +35,14 @@ public class PlaybackProgressInput {
     public String episodeName;
     @SerializedName("episodeUrl")
     public String episodeUrl;
+    /**
+     * 单集地址指纹（{@code episodeUrl} 的 SHA-256）。
+     *
+     * <p>只读 API 不输出 {@code episodeUrl}，只输出本字段；对端反向推送时
+     * 可能只有本字段而没有真实地址。此时保留它以便往返不丢集身份。
+     */
+    @SerializedName("episodeId")
+    public String episodeId;
     @SerializedName("mediaType")
     public String mediaType;
     @SerializedName("tmdbId")
@@ -78,6 +86,9 @@ public class PlaybackProgressInput {
         sourceBindingKey = safe(sourceBindingKey);
         episodeName = safe(episodeName);
         episodeUrl = safe(episodeUrl);
+        episodeId = safe(episodeId);
+        // 有真实地址而没指纹时补上：让两端对"同一集"的判定始终一致。
+        if (empty(episodeId) && !empty(episodeUrl)) episodeId = PlaybackRecord.episodeId(episodeUrl);
         mediaType = safe(mediaType).toLowerCase(Locale.ROOT);
         if (!"tv".equals(mediaType) && !"movie".equals(mediaType)) mediaType = "";
         if (seasonNumber < 0) seasonNumber = -1;
@@ -153,6 +164,7 @@ public class PlaybackProgressInput {
         input.sourceBindingKey = firstString(input.sourceBindingKey, object, "flagKey", "source_binding_key");
         input.episodeName = firstString(input.episodeName, object, "episode", "episodeTitle", "vodRemarks", "remarks");
         input.episodeUrl = firstString(input.episodeUrl, object, "url", "playUrl", "episode_url");
+        input.episodeId = firstString(input.episodeId, object, "episode_id", "episodeHash");
         input.mediaType = firstString(input.mediaType, object, "media_type", "type");
         input.tmdbId = firstInt(input.tmdbId, object, "tmdb_id", "tmdb");
         input.seasonNumber = firstInt(input.seasonNumber, object, "season", "season_number", "tmdbSeasonNumber");

@@ -47,4 +47,5 @@
     <!-- Delete Dialog -->
     <string name="dialog_delete_record">删除全部记录？</string>
     <string name="dialog_delete_history">观看记录将会全部删除。</string>
+    <string name="filter_reset">已重置筛选</string>
 </resources>

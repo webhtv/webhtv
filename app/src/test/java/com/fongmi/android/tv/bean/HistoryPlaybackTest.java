@@ -130,9 +130,46 @@ public class HistoryPlaybackTest {
 
     @Test
     public void playbackEpisodeMatchAllowsUnknownSeasonWhenTmdbEpisodeNumberMatches() {
+        // 季号任一侧未知（-1）时，无法断定这是同集的不同版本，必须保留集号容错：
+        // URL 与源站集名都不同也仍视为同一集，否则跨源续播会失效。
         Episode unknownSeason = Episode.create("源站第2集", "old-url");
         unknownSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 0, -1));
         Episode knownSeason = Episode.create("第2集", "new-url");
+        knownSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+
+        assertTrue(knownSeason.matchesPlayback(unknownSeason));
+    }
+
+    @Test
+    public void playbackEpisodeMatchRejectsDifferentVariantOnlyWhenSeasonIsConfirmed() {
+        // 季号两侧都已知且相等、且调用方确认同线路（历史 URL 仍能定位到本线路条目）：
+        // 才允许按 URL/源站条目文本区分同集多版本。
+        Episode firstVersion = tmdbVersion("url-v1");
+        Episode secondVersion = tmdbVersion("url-v2");
+        Episode secondVersionAgain = tmdbVersion("url-v2");
+
+        assertFalse(secondVersion.matchesPlayback(firstVersion, true));
+        assertFalse(secondVersion.matches(firstVersion));
+        assertTrue(secondVersionAgain.matchesPlayback(secondVersion));
+        assertTrue(secondVersionAgain.matchesPlayback(secondVersion, true));
+    }
+
+    @Test
+    public void playbackEpisodeMatchKeepsCrossLineToleranceForDifferentUrls() {
+        // 换线路/换源或源站刷新后 URL 必然变化：单参容错必须保留，否则跨线路续播会丢失进度。
+        Episode lineA = tmdbVersion("url-line-a");
+        Episode lineB = tmdbVersion("url-line-b");
+
+        assertTrue(lineB.matchesPlayback(lineA));
+        assertTrue(lineA.matchesPlayback(lineB));
+    }
+
+    @Test
+    public void playbackEpisodeMatchAllowsUnknownSeasonWhenNoVersionInfoCanSeparateThem() {
+        // 双方都带 TMDB 集号但没有任何版本信息（URL 与源站名均为空）时，只能视为同一集。
+        Episode unknownSeason = Episode.create("", "");
+        unknownSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 0, -1));
+        Episode knownSeason = Episode.create("", "");
         knownSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
 
         assertTrue(knownSeason.matchesPlayback(unknownSeason));
@@ -235,6 +272,43 @@ public class HistoryPlaybackTest {
         copy.setTmdbEpisodePosition(Episode.create("下一集", "url-21"));
         assertEquals(0, copy.getTmdbSeasonNumber());
         assertEquals(0, copy.getTmdbEpisodeNumber());
+    }
+
+    @Test
+    public void unmappedEpisodeKeepsTheConfirmedSeasonWhenItsNumberIsKnown() {
+        // 有 TMDB 身份后上游解析不出 TMDB 集号（tmdbEpisode==null）但源站集号可解析：
+        // 不得把已确认季号抹成 0，否则 FollowingDao 的季号精确匹配落空、追更进度永不前进。
+        History history = history("site@@vod@@1", "示例剧", "第5集", "url-5", 120_000, 300_000);
+        history.setTmdbEpisodePosition(3, 5);
+        Episode episode = Episode.create("第6集", "url-6");
+
+        assertTrue(history.setTmdbEpisodePosition(episode));
+
+        assertNull(episode.getTmdbEpisode());
+        assertEquals(3, history.getTmdbSeasonNumber());
+        assertEquals(6, history.getTmdbEpisodeNumber());
+    }
+
+    @Test
+    public void unmappedEpisodeOnFreshHistoryKeepsTheSeasonUnknownInsteadOfZero() {
+        // 本记录从未写过季集号（裸 0/0）时不能假装成特别篇第 N 集，只能记为未知季。
+        History history = history("site@@vod@@1", "示例剧", "第5集", "url-5", 120_000, 300_000);
+
+        assertTrue(history.setTmdbEpisodePosition(Episode.create("第5集", "url-5")));
+
+        assertEquals(-1, history.getTmdbSeasonNumber());
+        assertEquals(5, history.getTmdbEpisodeNumber());
+    }
+
+    @Test
+    public void unmappedEpisodeWithUnresolvableNumberStillClearsThePosition() {
+        History history = history("site@@vod@@1", "示例剧", "第5集", "url-5", 120_000, 300_000);
+        history.setTmdbEpisodePosition(3, 5);
+
+        history.setTmdbEpisodePosition(Episode.create("下一集", "url-6"));
+
+        assertEquals(0, history.getTmdbSeasonNumber());
+        assertEquals(0, history.getTmdbEpisodeNumber());
     }
 
     @Test
@@ -634,6 +708,60 @@ public class HistoryPlaybackTest {
     }
 
     @Test
+    public void findPlaybackCandidateKeepsSameKeyEpisodeAfterSeasonBindingDrift() {
+        History drifted = history("site@@vod@@drift", "示例剧", "第5集", "s1e5-url", 90_000, 300_000);
+        drifted.setTmdbEpisodePosition(1, 5);
+        Episode current = Episode.create("第5集", "s1e5-url");
+
+        History result = History.findPlaybackCandidate(
+                "site@@vod@@drift", List.of(drifted), List.of(flag(current)), 2);
+
+        assertEquals(90_000, result.getPosition());
+        assertEquals(1, result.getTmdbSeasonNumber());
+    }
+
+    @Test
+    public void rebindClearsEpisodeUrlWhenRouteChangesWithoutMatchingEpisode() {
+        History source = history("site-a@@vod@@1", "示例剧", "第5集", "old-url", 90_000, 300_000);
+        source.setVodFlag("线路A");
+        Flag target = new Flag("线路B");
+        target.getEpisodes().add(Episode.create("第9集", "new-url-9"));
+
+        History rebound = History.findPlaybackCandidate(
+                "site-b@@vod@@2", List.of(source), List.of(target));
+
+        assertEquals("线路B", rebound.getVodFlag());
+        assertEquals("", rebound.getEpisodeUrl());
+    }
+
+    @Test
+    public void rebindKeepsEpisodeUrlWhenSameRouteStillCannotBindTheEpisode() {
+        History source = history("site@@vod@@1", "示例剧", "第5集", "old-url", 90_000, 300_000);
+        source.setVodFlag("线路A");
+        Flag route = new Flag("线路A");
+        route.getEpisodes().add(Episode.create("第9集", "new-url-9"));
+
+        History rebound = History.findPlaybackCandidate(
+                source.getKey(), List.of(source), List.of(route));
+
+        assertEquals("线路A", rebound.getVodFlag());
+        assertEquals("old-url", rebound.getEpisodeUrl());
+    }
+
+    @Test
+    public void rebindKeepsEpisodeUrlWhenTheRecordHadNoRouteToBeginWith() {
+        History source = history("site@@vod@@legacy", "示例剧", "第5集", "legacy-url", 90_000, 300_000);
+        Flag route = new Flag("线路A");
+        route.getEpisodes().add(Episode.create("第9集", "new-url-9"));
+
+        History rebound = History.findPlaybackCandidate(
+                source.getKey(), List.of(source), List.of(route));
+
+        assertEquals("线路A", rebound.getVodFlag());
+        assertEquals("legacy-url", rebound.getEpisodeUrl());
+    }
+
+    @Test
     public void findPlaybackCandidateKeepsSameKeyLegacyCompatibilityWhenTargetSeasonIsKnown() {
         History legacy = history("site-a@@vod@@season2", "示例剧", "第5集", "old-url", 90_000, 300_000);
         Episode current = Episode.create("第5集", "new-url");
@@ -740,6 +868,13 @@ public class HistoryPlaybackTest {
         History unset = new History();
         // 用户没设过片尾，永不触发。
         assertFalse(unset.isEndingReached(2_580_000, 2_700_000));
+    }
+
+    /** 同一季同一集（S2E2）下、仅 URL 不同的同集版本。 */
+    private static Episode tmdbVersion(String url) {
+        Episode episode = Episode.create("源站第2集", url);
+        episode.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+        return episode;
     }
 
     private static History history(String key, String name, String remarks, String episodeUrl, long position, long duration) {

@@ -90,6 +90,7 @@ android {
 
     // ASS rendering is part of normal builds; package the matching prebuilt ABI.
     sourceSets.main.jniLibs.srcDir(rootProject.file('third_party/exo-ass-native/prebuilt'))
+    sourceSets.androidTest.assets.srcDir(files("$projectDir/schemas").files)
 
     signingConfigs {
         release {
@@ -163,6 +164,11 @@ dependencies {
     implementation project(':chaquo')
     implementation project(':nodejs')
     implementation project(':quickjs')
+    // quickjs 模块用 implementation 引入 wrapper，不会向 app 传递；
+    // QuickJsPluginRuntime 需要直接用 QuickJSContext/JSFunction，故此处显式声明。
+    // 未改成 api：那会扩大 quickjs 模块的公开面，影响所有未来的消费者。
+    implementation libs.quickjs.android
+    implementation libs.quickjs.java
     implementation libs.appcompat
     implementation libs.lifecycle.service
     implementation libs.media
@@ -195,7 +201,6 @@ dependencies {
     implementation libs.simple.xml
     implementation libs.textdrawable
     implementation libs.tensorflow.lite
-    implementation libs.tink.android
     implementation libs.zxing.core
     leanbackImplementation libs.leanback
     leanbackImplementation libs.androidautosize
@@ -210,6 +215,7 @@ dependencies {
     coreLibraryDesugaring libs.desugar
     testLeanbackImplementation 'org.robolectric:robolectric:4.16'
     androidTestImplementation libs.junit
+    androidTestImplementation libs.room.testing
     androidTestImplementation libs.work.testing
     testImplementation libs.okhttp.mockwebserver
     androidTestImplementation libs.androidx.test.runner

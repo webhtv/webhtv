@@ -23,7 +23,7 @@
         android:background="@drawable/shape_mpv_active_badge"
         android:padding="8dp"
         android:src="@drawable/ic_file"
-        android:tint="#1A73E8" />
+        android:tint="@color/fixed_light_accent" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="0dp"
@@ -38,7 +38,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="#202124"
+            android:textColor="@color/fixed_light_focus_text"
             android:textSize="15sp"
             android:textStyle="bold"
             tools:text="4K 播放优化" />
@@ -49,7 +49,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="#80868B"
+            android:textColor="@color/fixed_light_text_muted"
             android:textSize="12sp"
             tools:text="2026-07-15 14:30 · 文本配置" />
 
@@ -65,7 +65,7 @@
         android:paddingStart="9dp"
         android:paddingEnd="9dp"
         android:text="@string/mpv_config_in_use"
-        android:textColor="#0B57D0"
+        android:textColor="@color/fixed_light_accent"
         android:textSize="11sp"
         android:visibility="gone"
         tools:visibility="visible" />
@@ -80,6 +80,6 @@
         android:focusable="true"
         android:padding="9dp"
         android:src="@drawable/ic_action_more_vert"
-        android:tint="#3C4043" />
+        android:tint="@color/fixed_light_focus_icon" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

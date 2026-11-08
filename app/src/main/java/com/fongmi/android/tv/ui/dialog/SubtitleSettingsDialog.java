@@ -10,6 +10,7 @@ import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
@@ -30,7 +31,7 @@ public final class SubtitleSettingsDialog {
     public static void showPreferredLanguage(FragmentActivity activity, String[] labels, String[] values, String currentValue, ValueCallback callback) {
         if (activity == null || labels == null || values == null || labels.length == 0 || values.length == 0) return;
         int checked = indexOf(values, currentValue);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.player_subtitle_language)
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setSingleChoiceItems(labels, checked, (d, which) -> {
@@ -44,7 +45,7 @@ public final class SubtitleSettingsDialog {
     public static void showSourceSummary(FragmentActivity activity, java.util.List<com.fongmi.android.tv.subtitle.provider.SubtitleProvider> providers, Runnable onSaved) {
         if (activity == null) return;
         if (providers == null || providers.isEmpty()) {
-            AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+            AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                     .setTitle(R.string.player_subtitle_source)
                     .setMessage(R.string.player_subtitle_source_empty)
                     .setPositiveButton(R.string.dialog_positive, null)
@@ -54,7 +55,7 @@ public final class SubtitleSettingsDialog {
         }
         String[] names = new String[providers.size()];
         for (int i = 0; i < providers.size(); i++) names[i] = providers.get(i).getName();
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.player_subtitle_source)
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setItems(names, (d, which) -> showSourceEnvironment(activity, providers.get(which), onSaved))
@@ -76,7 +77,7 @@ public final class SubtitleSettingsDialog {
         int horizontal = dp(activity, 20);
         container.setPadding(horizontal, dp(activity, 8), horizontal, 0);
         container.addView(layout);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(provider.getName())
                 .setView(container)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -99,7 +100,7 @@ public final class SubtitleSettingsDialog {
 
     public static void showRealtimeModel(FragmentActivity activity, String[] labels, int checked, boolean canDelete, IntCallback selection, Runnable deleteAction) {
         if (activity == null || labels == null || labels.length == 0) return;
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        MaterialAlertDialogBuilder builder = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.subtitle_realtime_model_select_title)
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setSingleChoiceItems(labels, checked, (d, which) -> {
@@ -113,7 +114,7 @@ public final class SubtitleSettingsDialog {
 
     public static void showDeleteRealtimeModel(FragmentActivity activity, Runnable action) {
         if (activity == null) return;
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.subtitle_realtime_model_delete_title)
                 .setMessage(R.string.subtitle_realtime_model_delete_message)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -126,7 +127,7 @@ public final class SubtitleSettingsDialog {
 
     public static void showRealtimeCompatibility(FragmentActivity activity, Runnable action) {
         if (activity == null) return;
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.subtitle_realtime_pcm_title)
                 .setMessage(R.string.subtitle_realtime_pcm_required)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -139,7 +140,7 @@ public final class SubtitleSettingsDialog {
 
     public static void showRealtimeSpeedCompatibility(FragmentActivity activity, Runnable action) {
         if (activity == null) return;
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.subtitle_realtime_speed_title)
                 .setMessage(R.string.subtitle_realtime_speed_required)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -169,7 +170,7 @@ public final class SubtitleSettingsDialog {
         container.setPadding(horizontal, dp(activity, 8), horizontal, 0);
         container.addView(layout, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(titleRes)
                 .setView(container)
                 .setNegativeButton(R.string.dialog_negative, null)

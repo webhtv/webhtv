@@ -35,7 +35,7 @@
             android:background="@drawable/shape_warning_background"
             android:padding="10dp"
             android:text="@string/ad_rule_low_confidence_warning"
-            android:textColor="@color/white"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="13sp"
             android:visibility="gone"
             tools:visibility="visible" />

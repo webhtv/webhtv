@@ -30,7 +30,7 @@
         android:layout_gravity="center_vertical"
         android:layout_marginEnd="16dp"
         android:text="默认"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="12sp"
         android:visibility="gone" />
 

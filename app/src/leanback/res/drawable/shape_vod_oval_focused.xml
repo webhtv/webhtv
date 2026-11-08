@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版「应用表面」圆形卡片（VodPresenter ViewType.OVAL，首页/收藏页）的统一焦点环。
+    与 shape_vod_focused.xml 同源：@dimen/webhtv_focus_ring_width + ?attr/tvFocusRing。
+    此前这里是 `2dp @color/white`——与方形卡片同属一套白色边框，且宽度还比方形卡片粗 0.5dp。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
 
     <stroke
-        android:width="2dp"
-        android:color="@color/white" />
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvFocusRing" />
 
 </shape>

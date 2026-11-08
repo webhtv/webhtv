@@ -22,36 +22,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.OPEN_DOCUMENT" />
-            <data android:mimeType="*/*" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:mimeType="video/*" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.SEND" />
-            <data android:mimeType="text/plain" />
-        </intent>
-        <package android:name="com.vivo.abe" />
-        <package android:name="com.vivo.permissionmanager" />
-        <package android:name="com.iqoo.powersaving" />
-        <package android:name="com.iqoo.secure" />
-        <package android:name="com.miui.securitycenter" />
-        <package android:name="com.miui.powerkeeper" />
-        <package android:name="com.coloros.safecenter" />
-        <package android:name="com.oppo.safe" />
-        <package android:name="com.heytap.safecenter" />
-        <package android:name="com.huawei.systemmanager" />
-        <package android:name="com.samsung.android.lool" />
-        <package android:name="com.oneplus.security" />
-        <package android:name="com.meizu.safe" />
-        <package android:name="com.android.settings" />
-    </queries>
-
+    <!--
+        Do not add <queries> here: Android 9 TV firmware parses the final APK manifest
+        before launch and treats this Android 11 element as an unknown manifest child.
+        The app targets API 28, so package visibility declarations are not required.
+    -->
     <application
         android:name=".App"
         android:allowBackup="false"
@@ -98,6 +75,13 @@
             tools:node="merge">
             <meta-data
                 android:name="com.fongmi.android.tv.Startup"
+                android:value="androidx.startup" />
+            <!-- Some TV firmware defaults the app to device-protected storage. -->
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                tools:node="remove" />
+            <meta-data
+                android:name="com.fongmi.android.tv.following.FollowingWorkInitializer"
                 android:value="androidx.startup" />
         </provider>
 
@@ -179,6 +163,12 @@
         </service>
 
         <service
+            android:name=".service.ReaderTtsService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="true" />
+
+        <service
             android:name=".service.ManageService"
             android:exported="false"
             android:foregroundServiceType="dataSync|connectedDevice"
@@ -202,6 +192,11 @@
             android:process=":node"
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
+
+        <service
+            android:name=".cache.CacheCleanupJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <meta-data
             android:name="com.google.android.gms.car.application"

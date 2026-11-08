@@ -22,7 +22,7 @@
         android:ellipsize="end"
         android:maxLines="1"
         android:text="站点名称"
-        android:textColor="@color/dialog_outlined_button_text"
+        android:textColor="@color/fixed_light_focus_text"
         android:textSize="15sp" />
 
     <com.google.android.material.textview.MaterialTextView
@@ -32,7 +32,7 @@
         android:layout_gravity="center_vertical"
         android:layout_marginEnd="16dp"
         android:text="默认"
-        android:textColor="#5F6368"
+        android:textColor="@color/fixed_light_text_muted"
         android:textSize="12sp"
         android:visibility="gone" />
 
@@ -44,7 +44,7 @@
         android:minWidth="48dp"
         android:text="0"
         android:textAlignment="textEnd"
-        android:textColor="@color/dialog_outlined_button_text"
+        android:textColor="@color/fixed_light_focus_text"
         android:textSize="14sp"
         android:textStyle="bold" />
 

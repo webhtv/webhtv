@@ -23,11 +23,11 @@ import com.fongmi.android.tv.subtitle.model.SubtitleMatchType;
 import com.fongmi.android.tv.subtitle.model.SubtitleRequest;
 import com.fongmi.android.tv.subtitle.translate.SubtitleTranslationRequest;
 import com.fongmi.android.tv.subtitle.translate.SubtitleTranslationResult;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Util;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.util.ArrayList;
@@ -60,7 +60,7 @@ public final class SubtitleManualSearchDialog {
         input.setTextColor(0xFF202124);
         input.setHintTextColor(0xFF5F6368);
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.subtitle_manual_search)
                 .setView(input)
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -112,7 +112,7 @@ public final class SubtitleManualSearchDialog {
         if (candidates == null || candidates.isEmpty()) return;
         String[] labels = new String[candidates.size()];
         for (int i = 0; i < candidates.size(); i++) labels[i] = label(candidates.get(i));
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(ResUtil.getString(R.string.subtitle_manual_select_title, candidates.size()))
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setSingleChoiceItems(labels, indexOfCandidate(candidates, selected), (d, which) -> {
@@ -154,7 +154,7 @@ public final class SubtitleManualSearchDialog {
 
     private static void maybeOfferAiTranslate(FragmentActivity activity, SubtitlePlaybackSession session, SubtitlePlaybackSession.Host host, SubtitleRequest request, SubtitleMatchResult result, SubtitleCandidate candidate, List<SubtitleCandidate> candidates) {
         if (!shouldOfferAiTranslate(result, candidate)) return;
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.subtitle_ai_translate_title)
                 .setMessage(R.string.subtitle_ai_translate_message)
                 .setNegativeButton(R.string.dialog_negative, null)

@@ -74,6 +74,10 @@ public class Setting {
     public static final int GLOBAL_HISTORY_OFF = 0;
     public static final int GLOBAL_HISTORY_AUTO = 1;
     public static final int GLOBAL_HISTORY_SEARCH = 2;
+    // 全屏菜单键动作：0/1 为既有取值，2 为新增「下一集」，只能追加不能重排。
+    public static final int FULLSCREEN_MENU_KEY_CONTROL = 0;
+    public static final int FULLSCREEN_MENU_KEY_EPISODES = 1;
+    public static final int FULLSCREEN_MENU_KEY_NEXT_EPISODE = 2;
     public static final int DETAIL_INTERACTION_SYSTEM = 0;
     public static final int INTRO_SKIP_OFF = 0;
     public static final int INTRO_SKIP_AUTO = 1;
@@ -890,12 +894,29 @@ public class Setting {
         Prefers.put("zhuyin", zhuyin);
     }
 
+    /** Appearance mode: -1 follows system, 0 forces light, 1 forces dark. */
+    public static int getThemeMode() {
+        return Prefers.getInt("theme_mode", -1);
+    }
+
+    public static void putThemeMode(int mode) {
+        Prefers.put("theme_mode", mode < 0 ? -1 : Math.min(mode, 1));
+    }
+
     public static int getThemeColor() {
         return Prefers.getInt("theme_color", -1);
     }
 
     public static void putThemeColor(int color) {
         Prefers.put("theme_color", color);
+    }
+
+    public static boolean isThemeColorEnabled() {
+        return Prefers.getBoolean("theme_color_enabled");
+    }
+
+    public static void putThemeColorEnabled(boolean enabled) {
+        Prefers.put("theme_color_enabled", enabled);
     }
 
     public static int getWallColor() {
@@ -1330,11 +1351,17 @@ public class Setting {
     }
 
     public static int getGlobalHistoryMode() {
-        return clampGlobalHistoryMode(Prefers.getInt("global_history_mode", GLOBAL_HISTORY_OFF));
+        // Read the raw value so a legacy Boolean can be migrated without
+        // mistaking an Integer 0 for Boolean false during app startup.
+        Object value = Prefers.getPrefers().getAll().get("global_history_mode");
+        if (value instanceof Boolean legacy) return legacy ? GLOBAL_HISTORY_AUTO : GLOBAL_HISTORY_OFF;
+        if (value instanceof Number number) return clampGlobalHistoryMode(number.intValue());
+        return GLOBAL_HISTORY_OFF;
     }
 
     public static void putGlobalHistoryMode(int mode) {
-        Prefers.put("global_history_mode", clampGlobalHistoryMode(mode));
+        mode = clampGlobalHistoryMode(mode);
+        Prefers.put("global_history_mode", mode == GLOBAL_HISTORY_OFF ? -1 : mode);
     }
 
     public static int getInterfaceFailoverMode() {
@@ -1400,7 +1427,9 @@ public class Setting {
     }
 
     public static int getFullscreenMenuKey() {
-        return Prefers.getInt("fullscreen_menu_key", 0);
+        int menuKey = Prefers.getInt("fullscreen_menu_key", FULLSCREEN_MENU_KEY_CONTROL);
+        // 旧版本不认新增取值，钳制可避免设置页用越界下标取 string-array。
+        return menuKey < FULLSCREEN_MENU_KEY_CONTROL || menuKey > FULLSCREEN_MENU_KEY_NEXT_EPISODE ? FULLSCREEN_MENU_KEY_CONTROL : menuKey;
     }
 
     public static void putFullscreenMenuKey(int menuKey) {
@@ -1409,7 +1438,7 @@ public class Setting {
 
     public static int getHomeMenuKey() {
         int menuKey = Prefers.getInt("home_menu_key", 0);
-        return menuKey < 0 || menuKey > 9 ? 0 : menuKey;
+        return menuKey < 0 || menuKey > 11 ? 0 : menuKey;
     }
 
     public static void putHomeMenuKey(int menuKey) {

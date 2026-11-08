@@ -1,19 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版站点卡片（切换模式）。行高 52dp 必须与 SiteDialog.ROW_HEIGHT_DP 一致，
+    否则网格高度算出的整数行会与实际行高错位、末行被裁。
+    健康点紧贴站名（左对齐），不再让文字居中把点甩到卡片边缘。
+
+    水平内边距必须显式写在 View 上：SiteDialogTheme.applySiteItem() 会用程序化
+    GradientDrawable 整体替换 background，而它是没有 padding 的，selector_site_item
+    里三个 shape 声明的 14dp 内边距会被一起丢掉，健康点直接压在卡片边框上。
+    垂直方向由 gravity="center_vertical" 居中，不再叠加 padding。
+-->
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="46dp"
+    android:layout_height="52dp"
     android:background="@drawable/selector_site_item"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:orientation="horizontal"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp">
 
     <View
         android:id="@+id/health"
         android:layout_width="8dp"
         android:layout_height="8dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="10dp"
         android:background="@drawable/shape_site_health" />
 
     <com.google.android.material.textview.MaterialTextView
@@ -22,20 +34,19 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:ellipsize="marquee"
-        android:gravity="center"
+        android:gravity="start|center_vertical"
         android:singleLine="true"
-        android:textColor="@color/white"
-        android:textSize="18sp" />
+        android:textColor="@color/site_item_text"
+        android:textSize="17sp" />
 
     <com.google.android.material.checkbox.MaterialCheckBox
         android:id="@+id/check"
         android:layout_width="24dp"
         android:layout_height="24dp"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="10dp"
         android:clickable="false"
-        android:enabled="false"
         android:focusable="false"
         android:focusableInTouchMode="false"
-        app:buttonTint="@color/white" />
+        app:buttonTint="@color/site_item_check" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

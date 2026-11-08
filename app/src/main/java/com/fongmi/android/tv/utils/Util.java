@@ -41,6 +41,12 @@ public class Util {
     private static final Pattern EP_PREFIX = Pattern.compile("\\b(?:EP|E)[-._\\s]*([0-9]{1,3})\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern NUMERIC_RANGE = Pattern.compile("(?<!\\d)\\d{1,4}\\s*[-~～至]\\s*\\d{1,4}(?!\\d)");
     private static final Pattern TRAILING_SEASON_EPISODE = Pattern.compile("(?<!\\d)([1-9]\\d?)[_.-]0*([1-9]\\d{0,2})(?=$|\\s|\\[|\\(|\\.(?:mp4|mkv|avi|flv|ts|m3u8|webm|mov|wmv|rmvb))", Pattern.CASE_INSENSITIVE);
+    // 画质/编码/音轨/片源标记经常彼此粘连（如 4KHQHDR、1080pHEVC），故按“标记链”整体匹配，链内允许零个分隔符。
+    // 链两端要求 ASCII 字母数字边界，HDRip、SDTV、HDRipx 这类拉丁正文词因此不会被吞；
+    // 但中文正文词前的 ASCII 标记（如 SD高达 的 SD）仍会被剥离，与旧实现一致。
+    private static final Pattern QUALITY_NOISE_CHAIN = Pattern.compile(
+            "(?i)(?<![a-z0-9])(?:(?:2160p|1080p|720p|480p|4K|8K|2K|UHD|FHD|HDR10\\+?|HDR|SDR|HD|HQ|SD|DV|10bit|8bit"
+                    + "|x264|x265|H\\.?264|H\\.?265|AVC|HEVC|AAC|AC3|DTS|FLAC|WEB[-._\\s]*DL|BluRay|BDRip|REMUX|HDTV)[\\s._-]?)+(?![a-z0-9])");
     private static volatile String serial;
 
     public static void toggleFullscreen(Activity activity, boolean fullscreen) {
@@ -250,13 +256,8 @@ public class Util {
                 .replaceAll("\\([0-9]+(?:\\.[0-9]+)?[GMK]B?\\)", " ")
                 .replaceAll("【[0-9]+(?:\\.[0-9]+)?[GMK]B?】", " ");
 
-        // 移除常见的画质、编码信息
-        processed = processed
-                .replaceAll("(?i)(?<![a-z0-9])(?:2160|1080|720|480)p(?![a-z0-9])", " ")
-                .replaceAll("(?i)(?<![a-z0-9])(?:4K|2K|HD|SD|FHD|UHD)(?![a-z0-9])", " ")
-                .replaceAll("\\b(?:x264|x265|H264|H265|AVC|HEVC)\\b", " ")
-                .replaceAll("\\b(?:AAC|AC3|DTS|FLAC)\\b", " ")
-                .replaceAll("\\b(?:WEB[-._\\s]*DL|BluRay|BDRip|REMUX|HDTV)\\b", " ");
+        // 移除画质、编码、音轨与片源标记（含互相粘连的链式写法，如 4KHQHDR、1080pHEVC）
+        processed = QUALITY_NOISE_CHAIN.matcher(processed).replaceAll(" ");
 
         // 移除版本信息：v2, ver2.0
         processed = processed.replaceAll("\\b[vV](?:[0-9]+(?:\\.[0-9]+)?)\\b", " ");

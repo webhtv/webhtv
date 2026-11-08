@@ -69,7 +69,7 @@ import com.google.gson.JsonObject;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
-public class HomeActivity extends BaseActivity implements NavigationBarView.OnItemSelectedListener, WebHomeChromeController.Host {
+public class HomeActivity extends BaseActivity implements NavigationBarView.OnItemSelectedListener, WebHomeChromeController.Host, VodFragment.ConfigRetry {
 
     public static final String EXTRA_NAV_POSITION = "nav_position";
     private static final String STATE_RETURN_VOD_FROM_ENHANCE = "returnVodFromEnhance";
@@ -91,6 +91,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         checkAction(intent);
     }
 
@@ -109,10 +110,12 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         mChrome = new WebHomeChromeController(this, mBinding, this, savedInstanceState, WebHomeChromeStartup.restore(mStartupConfig));
         mBinding.getRoot().addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> checkWindowShape(right - left, bottom - top));
         mBinding.navigation.setOnItemSelectedListener(this);
+        setNavigation();
         PermissionUtil.requestFile(this, allGranted -> PermissionUtil.requestNotify(this));
         FollowingScheduler.ensurePeriodic(this);
         FollowingScheduler.enqueueDueNow(this);
         initFragment(savedInstanceState);
+        if (savedInstanceState == null && getIntent().hasExtra(EXTRA_NAV_POSITION)) checkAction(getIntent());
         initConfig();
     }
 
@@ -194,6 +197,19 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         WallConfig.get().init();
     }
 
+    /**
+     * 首页错误态的重试动作。
+     *
+     * <p>失败的那一步是这里的**内容源配置加载**（{@link #initConfig()}），所以重试必须回到它——
+     * 由 VodFragment 通过 {@link VodFragment.ConfigRetry} 回调过来。重试期间先把状态浮层切回
+     * 加载态，避免错误态一直停在屏幕上。
+     */
+    @Override
+    public void retryConfig() {
+        StateEvent.progress();
+        initConfig();
+    }
+
     private Callback getCallback() {
         return new Callback() {
             @Override
@@ -201,11 +217,29 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
                 checkAction(getIntent());
             }
 
+            /**
+             * 还没有配置任何内容源（重置应用、重装或恢复出厂后的首次启动）。
+             *
+             * <p>这不是失败：没有地址可请求、没有失败原因、重试也永远不会成功。改动前
+             * {@code BaseConfig} 把它当 {@code error("")} 抛出来，首页便显示「内容源加载失败 /
+             * 重试」——一个不存在的故障加一个点了没用的按钮。这里改发「未配置」状态：
+             * 不接管首页，由 {@code VodFragment} 收起状态浮层、保留底部导航；添加接口仍走
+             * 既有的「设置 → 点播」管理面板（{@code HistoryDialog} 的「添加」）。
+             */
+            @Override
+            public void noConfig() {
+                resetVodChrome();
+                checkAction(getIntent());
+                StateEvent.noConfig();
+            }
+
             @Override
             public void error(String msg) {
                 resetVodChrome();
                 checkAction(getIntent());
-                StateEvent.empty();
+                // 失败要发 ERROR（带原因），不能发 EMPTY：消费方对 EMPTY 的处理只是
+                // "隐藏转圈"，于是加载失败后首页是一片空白，用户只看到一个会消失的吐司。
+                StateEvent.error(msg);
                 Notify.show(msg);
             }
         };

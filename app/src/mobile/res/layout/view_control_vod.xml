@@ -4,6 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:id="@+id/playerControlRoot"
     android:background="@color/black_20"
     android:clickable="false"
     android:focusable="false">
@@ -117,6 +118,44 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:scaleType="center"
                 android:src="@drawable/ic_control_setting" />
+
+            <!-- 电池电量 + 时间：与沉浸融合模式内联播放器（view_control_vod_tmdb.xml 的 batteryInfo）
+                 保持同构——48dp 竖排容器内 22×18dp 电量图标 + 8sp 时间。只在全屏、未锁定且
+                 已开始播放时显示；竖屏顶部栏本来就有投屏/护眼/收藏/信息/设置，窄屏不加这一项。
+                 图标与时间由 VideoActivity.updateBatteryInfo() 刷新（档位复用 BatteryUtil），
+                 电量读不到时整条隐藏。 -->
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/batteryInfo"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/battery"
+                    android:layout_width="22dp"
+                    android:layout_height="18dp"
+                    android:layout_marginTop="3dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:scaleType="center"
+                    android:src="@drawable/ic_battery_full" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/batteryTime"
+                    android:layout_width="24dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="1dp"
+                    android:layout_marginTop="-4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:fontFeatureSettings="tnum"
+                    android:maxLength="5"
+                    android:textColor="@color/white"
+                    android:textSize="8sp"
+                    tools:text="21:49" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
 
             <!-- 短剧竖屏专用图标入口：action 栏在竖屏全屏下整条隐藏，那里的文字按钮
                  (change2/actionQuality/episodes) 与 dock 中 48dp 图标混排会很突兀。

@@ -11,6 +11,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ItemFollowingBinding;
 import com.fongmi.android.tv.following.Following;
 import com.fongmi.android.tv.following.FollowingSource;
+import com.fongmi.android.tv.following.FollowingUpdateCoordinator;
 import com.fongmi.android.tv.following.FollowingUpdatePolicy;
 import com.fongmi.android.tv.utils.ImgUtil;
 
@@ -90,13 +91,17 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Hold
         int released = FollowingUpdatePolicy.releasedEpisode(item);
         if (released > 0) holder.binding.official.setText(holder.itemView.getContext().getString(R.string.following_official, released));
         else holder.binding.official.setText(R.string.following_official_unknown);
+        bindMetadata(holder, item);
         if (source != null && source.playableEpisode > 0) {
             holder.binding.source.setText(holder.itemView.getContext().getString(R.string.following_source, source.playableEpisode));
         } else {
-            holder.binding.source.setText(R.string.following_source_unknown);
+            // 探针跑过但没算出可播集数必须与「尚未检查」分开，否则失败被静默伪装成未检查。
+            // 判据必须与 FILTER_FAILED 同口径，且不能用 lastProbeAt：订阅导入会预写它，从未探过的源会误显示失败。
+            holder.binding.source.setText(FollowingUpdateCoordinator.sourceCheckFailed(item.lastError)
+                    ? R.string.following_source_failed : R.string.following_source_unknown);
         }
         if (item.watchedEpisode > 0) holder.binding.progress.setText(holder.itemView.getContext().getString(R.string.following_watched, item.watchedEpisode));
-        else holder.binding.progress.setText(R.string.following_source_unknown);
+        else holder.binding.progress.setText(R.string.following_watched_unknown);
         if (item.unwatchedCount > 0) holder.binding.progress.append("\n" + holder.itemView.getContext().getString(R.string.following_unwatched, item.unwatchedCount));
         else if (released > 0) holder.binding.progress.append("\n" + holder.itemView.getContext().getString(R.string.following_unwatched_none));
         if (item.hasUpdate && item.unwatchedCount > 0) {
@@ -129,6 +134,25 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Hold
         holder.binding.delete.setOnClickListener(view -> listener.onDelete(item));
     }
 
+    private void bindMetadata(Holder holder, Following item) {
+        List<String> parts = new ArrayList<>();
+        if (item.seasonTotalEpisodes > 0) {
+            parts.add(holder.itemView.getContext().getString(R.string.following_season_total, item.seasonTotalEpisodes));
+        }
+        if (item.seriesTotalEpisodes > 0) {
+            parts.add(holder.itemView.getContext().getString(R.string.following_series_total, item.seriesTotalEpisodes));
+        }
+        if (item.nextAirWeekday > 0) {
+            parts.add(holder.itemView.getContext().getString(R.string.following_weekday,
+                    holder.itemView.getResources().getStringArray(R.array.following_weekdays)[item.nextAirWeekday - 1]));
+        }
+        if (parts.isEmpty()) holder.binding.metadata.setVisibility(View.GONE);
+        else {
+            holder.binding.metadata.setVisibility(View.VISIBLE);
+            holder.binding.metadata.setText(String.join(" · ", parts));
+        }
+    }
+
     @Override
     public int getItemCount() {
         return items.size();
@@ -136,6 +160,10 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Hold
 
     public Row rowAt(int position) {
         return position >= 0 && position < items.size() ? items.get(position) : null;
+    }
+
+    public List<Row> getItems() {
+        return new ArrayList<>(items);
     }
 
     public void markReadLocally(Collection<String> identityKeys) {

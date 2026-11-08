@@ -21,7 +21,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/detail_episode"
-            android:textColor="#EAF2F8"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp" />
 
         <androidx.appcompat.widget.AppCompatImageView
@@ -36,7 +36,7 @@
             android:nextFocusLeft="@id/page"
             android:padding="8dp"
             android:src="@drawable/ic_action_reverse"
-            app:tint="#EAF2F8" />
+            app:tint="?attr/webhtvColorOnWallpaper" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

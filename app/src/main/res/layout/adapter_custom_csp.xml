@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="10dp"
-    android:background="@drawable/selector_custom_csp_item"
+    android:background="@drawable/selector_dialog_surface_row"
     android:orientation="vertical"
     android:padding="12dp">
 
@@ -37,7 +37,7 @@
             android:focusable="true"
             android:minWidth="72dp"
             android:text="@string/setting_custom_csp_home"
-            android:textColor="@color/black" />
+            android:textColor="?attr/colorOnSurface" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/localFiles"
@@ -67,7 +67,7 @@
             android:focusable="true"
             android:padding="8dp"
             android:src="@drawable/ic_subtitle_up"
-            app:tint="#5F6368" />
+            app:tint="@color/fixed_light_focus_icon" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/down"
@@ -79,7 +79,7 @@
             android:focusable="true"
             android:padding="8dp"
             android:src="@drawable/ic_subtitle_down"
-            app:tint="#5F6368" />
+            app:tint="@color/fixed_light_focus_icon" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/delete"
@@ -91,7 +91,7 @@
             android:focusable="true"
             android:padding="8dp"
             android:src="@drawable/ic_setting_delete"
-            app:tint="#5F6368" />
+            app:tint="@color/fixed_light_focus_icon" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -256,9 +256,9 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:hint="@string/dialog_config_name"
-        app:boxBackgroundColor="@color/white"
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
         app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-        app:hintTextColor="#5F6368">
+        app:hintTextColor="?attr/colorOnSurfaceVariant">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/name"
@@ -268,8 +268,8 @@
             android:importantForAutofill="no"
             android:inputType="textNoSuggestions"
             android:singleLine="true"
-            android:textColor="@color/black"
-            android:textColorHint="#666666" />
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -279,9 +279,9 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:hint="@string/setting_custom_csp_api"
-        app:boxBackgroundColor="@color/white"
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
         app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-        app:hintTextColor="#5F6368">
+        app:hintTextColor="?attr/colorOnSurfaceVariant">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/api"
@@ -292,8 +292,8 @@
             android:inputType="textUri|textNoSuggestions"
             android:scrollHorizontally="true"
             android:singleLine="true"
-            android:textColor="@color/black"
-            android:textColorHint="#666666" />
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -303,9 +303,9 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:hint="@string/setting_custom_csp_home_page"
-        app:boxBackgroundColor="@color/white"
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
         app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-        app:hintTextColor="#5F6368">
+        app:hintTextColor="?attr/colorOnSurfaceVariant">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/homePage"
@@ -316,8 +316,8 @@
             android:inputType="textUri|textNoSuggestions"
             android:scrollHorizontally="true"
             android:singleLine="true"
-            android:textColor="@color/black"
-            android:textColorHint="#666666" />
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -327,9 +327,9 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:hint="@string/setting_custom_csp_live_url"
-        app:boxBackgroundColor="@color/white"
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
         app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-        app:hintTextColor="#5F6368">
+        app:hintTextColor="?attr/colorOnSurfaceVariant">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/liveUrl"
@@ -340,8 +340,8 @@
             android:inputType="textUri|textNoSuggestions"
             android:scrollHorizontally="true"
             android:singleLine="true"
-            android:textColor="@color/black"
-            android:textColorHint="#666666" />
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -356,7 +356,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/setting_custom_csp_type"
-            android:textColor="#5F6368"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -414,7 +414,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="@string/setting_custom_csp_player_type"
-            android:textColor="#5F6368"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -495,9 +495,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_key"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/key"
@@ -508,8 +508,8 @@
                 android:inputType="textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -519,9 +519,9 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:hint="@string/setting_custom_csp_type"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/type"
@@ -532,8 +532,8 @@
                 android:importantForAutofill="no"
                 android:inputType="number"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -579,11 +579,11 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:hint="@string/setting_custom_csp_extensions"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368"
+            app:hintTextColor="?attr/colorOnSurfaceVariant"
             app:placeholderText="@string/setting_custom_csp_extensions_example"
-            app:placeholderTextColor="#666666">
+            app:placeholderTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/extensions"
@@ -598,8 +598,8 @@
                 android:scrollHorizontally="false"
                 android:scrollbars="vertical"
                 android:singleLine="false"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -616,7 +616,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/setting_custom_csp_other_fields"
-            android:textColor="#5F6368"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -639,9 +639,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/otherValue"
@@ -656,8 +656,8 @@
                 android:scrollHorizontally="false"
                 android:scrollbars="vertical"
                 android:singleLine="false"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -675,9 +675,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_logo"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/logo"
@@ -688,8 +688,8 @@
                 android:inputType="textUri|textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -699,9 +699,9 @@
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_epg"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/epg"
@@ -712,8 +712,8 @@
                 android:inputType="textUri|textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -731,9 +731,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_ua"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/ua"
@@ -744,8 +744,8 @@
                 android:inputType="textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -755,9 +755,9 @@
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_referer"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/referer"
@@ -768,8 +768,8 @@
                 android:inputType="textUri|textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -787,9 +787,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_origin"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/origin"
@@ -800,8 +800,8 @@
                 android:inputType="textUri|textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -811,9 +811,9 @@
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_time_zone"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/timeZone"
@@ -824,8 +824,8 @@
                 android:inputType="textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -834,9 +834,9 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:hint="@string/setting_custom_csp_timeout"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/timeout"
@@ -847,8 +847,8 @@
                 android:importantForAutofill="no"
                 android:inputType="number"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -870,7 +870,7 @@
             android:buttonTint="@color/dialog_checkbox_tint"
             android:minWidth="0dp"
             android:text="@string/setting_custom_csp_hide"
-            android:textColor="@color/black" />
+            android:textColor="?attr/colorOnSurface" />
 
         <com.google.android.material.checkbox.MaterialCheckBox
             android:id="@+id/searchable"
@@ -880,7 +880,7 @@
             android:buttonTint="@color/dialog_checkbox_tint"
             android:minWidth="0dp"
             android:text="@string/setting_custom_csp_searchable"
-            android:textColor="@color/black" />
+            android:textColor="?attr/colorOnSurface" />
 
         <com.google.android.material.checkbox.MaterialCheckBox
             android:id="@+id/changeable"
@@ -890,7 +890,7 @@
             android:buttonTint="@color/dialog_checkbox_tint"
             android:minWidth="0dp"
             android:text="@string/setting_custom_csp_changeable"
-            android:textColor="@color/black" />
+            android:textColor="?attr/colorOnSurface" />
 
         <com.google.android.material.checkbox.MaterialCheckBox
             android:id="@+id/quickSearch"
@@ -900,7 +900,7 @@
             android:buttonTint="@color/dialog_checkbox_tint"
             android:minWidth="0dp"
             android:text="@string/setting_custom_csp_quick_search"
-            android:textColor="@color/black" />
+            android:textColor="?attr/colorOnSurface" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -916,9 +916,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_ext"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/ext"
@@ -929,8 +929,8 @@
                 android:inputType="textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -940,9 +940,9 @@
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_jar"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/jar"
@@ -953,8 +953,8 @@
                 android:inputType="textUri|textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -972,9 +972,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_click"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/click"
@@ -985,8 +985,8 @@
                 android:inputType="textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -997,9 +997,9 @@
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:hint="@string/setting_custom_csp_play_url"
-            app:boxBackgroundColor="@color/white"
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/playUrl"
@@ -1010,8 +1010,8 @@
                 android:inputType="textUri|textNoSuggestions"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 

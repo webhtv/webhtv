@@ -27,8 +27,8 @@
             android:inputType="textCapWords|textAutoCorrect|textAutoComplete"
             android:maxLength="255"
             android:singleLine="true"
-            android:textColor="@color/white"
-            android:textColorHint="@color/white_60"
+            android:textColor="?attr/webhtvColorOnWallpaper"
+            android:textColorHint="@color/webhtv_color_player_control_muted"
             android:textSize="14sp" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
@@ -41,7 +41,7 @@
         android:layout_marginBottom="16dp"
         android:indeterminate="true"
         android:visibility="gone"
-        app:indicatorColor="@color/white_90"
+        app:indicatorColor="?attr/colorPrimary"
         app:indicatorSize="32dp"
         app:trackThickness="2dp"
         tools:visibility="visible" />

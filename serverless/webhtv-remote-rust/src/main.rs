@@ -226,6 +226,8 @@ async fn main() {
         )
         .route("/api/playback/sync/status", get(playback::get_status))
         .route("/playback/sync/status", get(playback::get_status))
+        .route("/api/playback/identity/resolve", post(playback::post_identity_resolve))
+        .route("/playback/identity/resolve", post(playback::post_identity_resolve))
         .route("/api/device/register", post(register_device))
         .route("/api/device/bind-code", post(create_bind_code))
         .route("/api/device/poll", post(poll_device))

@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/multi_thread_proxy_title"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="19sp"
         android:textStyle="bold" />
 
@@ -37,7 +37,7 @@
                 android:layout_height="wrap_content"
                 app:buttonTint="@color/dialog_checkbox_tint"
                 android:text="@string/multi_thread_proxy_enable"
-                android:textColor="#202124"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="16sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -46,7 +46,7 @@
                 android:layout_marginStart="4dp"
                 android:layout_marginTop="-2dp"
                 android:text="@string/multi_thread_proxy_enable_hint"
-                android:textColor="#5F6368"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="13sp" />
 
             <androidx.appcompat.widget.LinearLayoutCompat
@@ -61,7 +61,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/multi_thread_proxy_threads"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="16sp" />
 
                 <androidx.appcompat.widget.AppCompatEditText
@@ -73,8 +73,8 @@
                     android:imeOptions="actionNext"
                     android:inputType="number"
                     android:maxLines="1"
-                    android:textColor="#202124"
-                    android:textColorHint="#7A7A7A"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textColorHint="?attr/colorOnSurfaceVariant"
                     android:textSize="16sp" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -91,7 +91,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/multi_thread_proxy_shards"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="16sp" />
 
                 <androidx.appcompat.widget.AppCompatEditText
@@ -103,8 +103,8 @@
                     android:imeOptions="actionDone"
                     android:inputType="number"
                     android:maxLines="1"
-                    android:textColor="#202124"
-                    android:textColorHint="#7A7A7A"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textColorHint="?attr/colorOnSurfaceVariant"
                     android:textSize="16sp" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
@@ -121,21 +121,17 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:text="@string/multi_thread_proxy_domain_rules"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/extractCurrentDomain"
-                    style="@style/Widget.Material3.Button.TextButton"
+                    style="@style/Widget.WebHTV.Button.Outlined"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:minWidth="0dp"
-                    android:text="@string/multi_thread_proxy_extract_domain"
-                    android:textColor="@color/dialog_outlined_button_text"
-                    app:backgroundTint="@color/dialog_outlined_button_bg"
-                    app:strokeColor="@color/dialog_outlined_button_stroke"
-                    app:strokeWidth="1dp" />
+                    android:text="@string/multi_thread_proxy_extract_domain" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -152,8 +148,8 @@
                 android:paddingTop="9dp"
                 android:paddingEnd="10dp"
                 android:paddingBottom="9dp"
-                android:textColor="#202124"
-                android:textColorHint="#7A7A7A"
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant"
                 android:textSize="14sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -161,7 +157,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="7dp"
                 android:text="@string/multi_thread_proxy_domain_rules_help"
-                android:textColor="#5F6368"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="13sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -169,7 +165,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="9dp"
-                android:textColor="#B3261E"
+                android:textColor="?attr/colorError"
                 android:textSize="13sp"
                 android:visibility="gone" />
 
@@ -186,14 +182,10 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/cancel"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.WebHTV.Button.Outlined"
             android:layout_width="wrap_content"
             android:layout_height="42dp"
-            android:text="@string/dialog_negative"
-            android:textColor="@color/dialog_outlined_button_text"
-            app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke"
-            app:strokeWidth="1dp" />
+            android:text="@string/dialog_negative" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/save"
@@ -201,8 +193,7 @@
             android:layout_height="42dp"
             android:layout_marginStart="8dp"
             android:text="@string/dialog_positive"
-            android:textColor="@color/dialog_tonal_button_text"
-            app:backgroundTint="@color/dialog_tonal_button_bg" />
+            style="@style/Widget.WebHTV.Button.Tonal" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

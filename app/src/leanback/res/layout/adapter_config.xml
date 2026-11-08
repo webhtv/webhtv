@@ -4,22 +4,47 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:descendantFocusability="afterDescendants"
     android:orientation="horizontal">
 
-    <com.google.android.material.textview.MaterialTextView
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/text"
+        style="?attr/materialButtonOutlinedStyle"
         android:layout_width="0dp"
         android:layout_height="40dp"
         android:layout_weight="1"
-        android:background="@drawable/selector_config_history_item"
         android:ellipsize="middle"
         android:focusable="true"
         android:focusableInTouchMode="true"
         android:gravity="center"
+        android:minHeight="0dp"
+        android:minWidth="0dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
         android:singleLine="true"
-        android:textColor="@color/config_history_text"
+        android:textAllCaps="false"
+        android:textColor="@color/dialog_outlined_button_text"
         android:textSize="18sp"
+        app:backgroundTint="@color/dialog_outlined_button_bg"
+        app:cornerRadius="22dp"
+        android:insetBottom="0dp"
+        android:insetTop="0dp"
+        app:strokeColor="@color/dialog_outlined_button_stroke"
+        app:strokeWidth="2dp"
         tools:text="https://fongmi.github.io/cat.json" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/edit"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="12dp"
+        android:background="@drawable/selector_config_history_item"
+        android:contentDescription="@string/dialog_edit"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:padding="8dp"
+        android:src="@drawable/ic_action_edit"
+        app:tint="@color/config_history_icon" />
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/delete"
@@ -27,6 +52,7 @@
         android:layout_height="40dp"
         android:layout_marginStart="12dp"
         android:background="@drawable/selector_config_history_item"
+        android:contentDescription="@string/setting_delete"
         android:focusable="true"
         android:focusableInTouchMode="true"
         android:padding="8dp"

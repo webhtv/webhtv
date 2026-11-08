@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   电视版弹层芯片（视轨/音轨/字幕/选集/弹幕）的**焦点**外观。
+
+   为什么焦点必须换填充色，而不是只加一圈描边：
+   宿主 selector_dialog_glass_chip 的「已选中」态（shape_dialog_glass_chip_active）
+   是 #E6E6EA 浅灰实底 + 2dp 近白描边。此前焦点也指向同一张 active drawable，
+   于是「焦点」和「选中」渲染完全一致——用户报告「遥控器上下键看不出变化，
+   不知道焦点停在哪」。更糟的是 media3 自适应选轨会把同组候选全部标成已选中
+   （视轨列表因此整列浅灰），焦点在浅灰列里彻底没有信号。
+
+   所以这里刻意用**相反色相**：选中=最亮（浅灰），焦点=高饱和蓝，默认=半透明深靛。
+   亮度接近、色相分离，移动焦点时蓝块是唯一的「光标」，同时「在播/已选」仍是浅灰。
+
+   颜色是固定常量而不是 ?attr：本家族宿主是固定深色玻璃
+   （shape_dialog_glass_panel / shape_dialog_danmaku_sheet_glass_panel，两张表相同），
+   与 shape_dialog_glass_chip_active、selector_dialog_glass_chip 的既有约定一致；
+   改成随调色板取值会在其中一张表上与固定底撞色（见 selector_dialog_glass_chip_text.xml
+   里记录的那两次用户报告）。配对的文字色在 selector_dialog_glass_chip_text.xml 的
+   state_focused 分支：固定浅色，压这块蓝底 ≥4.5:1。
+
+   环宽取唯一 token @dimen/webhtv_focus_ring_width（与本仓库其它焦点环一致），
+   不用写死的 2dp。
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:left="1dp"
+        android:right="1dp"
+        android:top="2dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="#6B6F9F" />
+        </shape>
+    </item>
+
+    <item android:bottom="2dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="8dp" />
+            <solid android:color="#FF1B45B8" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="#B3FFFFFF" />
+            <padding
+                android:bottom="8dp"
+                android:left="14dp"
+                android:right="14dp"
+                android:top="8dp" />
+        </shape>
+    </item>
+</layer-list>

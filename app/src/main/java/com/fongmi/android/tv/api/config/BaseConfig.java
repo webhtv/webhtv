@@ -124,7 +124,11 @@ abstract class BaseConfig {
             e.printStackTrace();
             if (isCanceled(e)) return;
             if (taskId.get() != id) return;
-            if (TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
+            // 没有配置地址不是"加载失败"：没有地址可请求，也没有失败原因，重试永远不会成功。
+            // 改动前这里发 error("")，错误态便渲染成「内容源加载失败 + 重试」——重置应用、
+            // 重装或恢复出厂后首次启动就是这个状态，用户被一个不存在的故障卡住。宿主应把
+            // noConfig 渲染成空态并给出「添加接口」这种可执行的主动作。
+            if (TextUtils.isEmpty(config.getUrl())) App.post(callback::noConfig);
             else if (this instanceof VodConfig) ((VodConfig) this).onConfigFailure(config, callback, e);
             else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
         } finally {

@@ -14,9 +14,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="@string/setting_proxy_hosts"
-        app:boxBackgroundColor="@color/white"
-        app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-        app:hintTextColor="#5F6368">
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+        app:boxStrokeColor="?attr/colorOutline"
+        app:hintTextColor="?attr/colorOnSurfaceVariant">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/hosts"
@@ -29,8 +29,8 @@
             android:maxLines="3"
             android:minLines="1"
             android:selectAllOnFocus="false"
-            android:textColor="@color/black"
-            android:textColorHint="#666666" />
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -40,9 +40,9 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:hint="@string/setting_proxy_rule_url"
-        app:boxBackgroundColor="@color/white"
-        app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-        app:hintTextColor="#5F6368">
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+        app:boxStrokeColor="?attr/colorOutline"
+        app:hintTextColor="?attr/colorOnSurfaceVariant">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/url"
@@ -54,8 +54,8 @@
             android:scrollHorizontally="true"
             android:selectAllOnFocus="false"
             android:singleLine="true"
-            android:textColor="@color/black"
-            android:textColorHint="#666666" />
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
     </com.google.android.material.textfield.TextInputLayout>
 

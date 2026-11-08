@@ -29,6 +29,8 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.AdapterLoginStateTreeBinding;
 import com.fongmi.android.tv.databinding.DialogLoginStatePathBinding;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.ui.custom.SafeScrollEditText;
 import com.fongmi.android.tv.utils.FileUtil;
@@ -100,7 +102,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog).setView(getBinding().getRoot());
     }
 
     @Override
@@ -136,8 +138,8 @@ public class LoginStatePathDialog extends BaseAlertDialog {
         Window window = getDialog().getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
-        int screenWidth = ResUtil.getScreenWidth(requireContext());
-        int screenHeight = ResUtil.getScreenHeight(requireContext());
+        int screenWidth = DialogSafeArea.width(requireActivity(), window);
+        int screenHeight = DialogSafeArea.height(requireActivity(), window);
         boolean land = ResUtil.isLand(requireContext());
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
@@ -447,7 +449,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
         container.setPadding(ResUtil.dp2px(20), ResUtil.dp2px(8), ResUtil.dp2px(20), 0);
         TextView label = new TextView(requireContext());
         label.setText(preview.getPath());
-        label.setTextColor(Color.parseColor("#5F6368"));
+        label.setTextColor(ThemeController.current().colorOnSurfaceVariant());
         label.setTextSize(12);
         label.setSingleLine(true);
         label.setEllipsize(TextUtils.TruncateAt.MIDDLE);
@@ -455,12 +457,12 @@ public class LoginStatePathDialog extends BaseAlertDialog {
         if (preview.isTruncated() || !preview.isEditable()) {
             TextView meta = new TextView(requireContext());
             meta.setText(preview.isTruncated() ? R.string.login_state_preview_truncated : R.string.login_state_preview_readonly);
-            meta.setTextColor(Color.parseColor("#8A4B00"));
+            meta.setTextColor(ThemeController.current().colorWarning());
             meta.setTextSize(12);
             meta.setPadding(0, ResUtil.dp2px(6), 0, 0);
             container.addView(meta, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        LinearLayoutCompat.LayoutParams inputParams = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (ResUtil.getScreenHeight(requireContext()) * 0.52f));
+        LinearLayoutCompat.LayoutParams inputParams = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (DialogSafeArea.height(requireActivity()) * 0.52f));
         inputParams.topMargin = ResUtil.dp2px(8);
         SafeScrollEditText input = null;
         if (payload.listPreview) {
@@ -486,6 +488,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
     private SafeScrollEditText editText(LoginStateSync.TextPreview preview) {
         SafeScrollEditText input = new SafeScrollEditText(requireContext());
         input.setText(preview.getContent(), TextView.BufferType.EDITABLE);
+        input.setTextColor(ThemeController.current().colorOnSurface());
         input.setSelectAllOnFocus(false);
         input.setSingleLine(false);
         input.setHorizontallyScrolling(true);
@@ -509,9 +512,9 @@ public class LoginStatePathDialog extends BaseAlertDialog {
 
     private GradientDrawable editorBackground() {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor("#F8FAFD"));
+        drawable.setColor(ThemeController.current().colorSurfaceContainerHigh());
         drawable.setCornerRadius(ResUtil.dp2px(8));
-        drawable.setStroke(1, Color.parseColor("#DADCE0"));
+        drawable.setStroke(1, ThemeController.current().colorOutlineVariant());
         return drawable;
     }
 
@@ -576,15 +579,15 @@ public class LoginStatePathDialog extends BaseAlertDialog {
 
     private int stateColor(Row row) {
         String path = row.item.getPath();
-        if (isMissing(path)) return Color.parseColor("#B3261E");
-        if (isPending(path) || (row.item.isDir() && hasPendingChild(path))) return Color.parseColor("#B06000");
-        return Color.parseColor("#174EA6");
+        if (isMissing(path)) return ThemeController.current().colorError();
+        if (isPending(path) || (row.item.isDir() && hasPendingChild(path))) return ThemeController.current().colorWarning();
+        return ThemeController.current().colorPrimary();
     }
 
     private int nameColor(Row row) {
-        if (isPending(row.item.getPath()) || (row.item.isDir() && hasPendingChild(row.item.getPath()))) return Color.parseColor("#8A4B00");
-        if (isMissing(row.item.getPath())) return Color.parseColor("#B3261E");
-        return Color.parseColor("#202124");
+        if (isPending(row.item.getPath()) || (row.item.isDir() && hasPendingChild(row.item.getPath()))) return ThemeController.current().colorWarning();
+        if (isMissing(row.item.getPath())) return ThemeController.current().colorError();
+        return ThemeController.current().colorOnSurface();
     }
 
     private int iconFor(LoginStateSync.TreeItem item) {
@@ -755,7 +758,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
         @Override
         public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             TextView text = new TextView(parent.getContext());
-            text.setTextColor(Color.parseColor("#202124"));
+            text.setTextColor(ThemeController.current().colorOnSurface());
             text.setTextSize(12);
             text.setTypeface(Typeface.MONOSPACE);
             text.setLineSpacing(0, 1.08f);

@@ -614,12 +614,38 @@ History.save()
 
 在 `TmdbDetailActivity` 和 mobile/leanback `VideoActivity` 的详情头部增加“追更”动作：
 
-- 已追更：显示“已追更”，点击进入追更详情。
+- 已追更：显示“已追更”，再次点击就地取消（写墓碑并立即刷新按钮，见 8.3.1）。
 - 未追更：显示“加入追更”，点击保存当前季和当前来源。
 - 失败：不清空页面，显示可恢复错误。
 - 非 TV/非连续内容：隐藏按钮。
 
 按钮状态使用 `FollowingStore.find(identityKey)`，不能仅凭运行时内存标记。
+
+### 8.3.1 详情页/播放页的追更按钮统一为就地开关
+
+播放页（mobile/leanback `VideoActivity`，含其内嵌的 TMDB 头部追更按钮）必须保持播放不被打断：
+
+- 已追更：显示“已追更”，再次点击**立即取消追更**（写墓碑 + 取消该条 one-shot 检查），按钮立刻回到“加入追更”，只弹轻提示，**绝不跳转追更页**。
+- 未追更：显示“加入追更”，点击保存当前季和当前来源。
+- 取消失败：按钮恢复可用并显示错误，不静默吞掉。
+
+`TmdbDetailActivity`（详情页）采用**完全相同**的语义，不再区分是否处于内联播放：点“已追更”就是就地取消并立即生效（写墓碑 → `updateFollowingState()` 刷新按钮为“加入追更” → 提示“已取消追更”），全程停留在当前页。理由：
+
+- 跳页会把“取消”这种一步操作变成两步（跳转 → 在列表页再找该条 → 再点取消），是明显的交互倒退；
+- 内联播放中跳页会直接打断播放，这是最初被修复的缺陷；
+- 详情页与播放页共享同一个按钮与同一套状态机，保留两套分支会让“取消后按钮是否立即更新”这类契约随模式漂移。
+
+列表页 `FollowingActivity` 仍然是“已追更”记录的唯一管理入口（卡片内“取消追更”带确认对话框）；详情页/播放页的按钮只负责开关，不再承担“打开追更详情”的导航职责。
+
+#### 8.3.2 “已追更”判定必须排除墓碑行（与 C9 墓碑语义的接口约定）
+
+`FollowingStore.resolveTmdb`（TMDB 身份迁移）为防复活，遇到目标已是墓碑时会**故意返回该墓碑行而不是 `null`**（见 C9）。因此所有“是否已追更”的判定都不能写成 `item != null`，必须用 `item != null && !item.isDeleted()`：
+
+- `TmdbDetailActivity` 统一走 `isFollowed(item)`（`onFollowing` 的分支 + `updateFollowingState` 的按钮态）。
+- 若写成 `item != null`，TV 剧集在详情页取消追更后会表现为：按钮仍显示“已追更”；内联播放中再点只重复写墓碑，**永远无法重新追更**（复活路径永远进不去）。
+- 墓碑行在点击“加入追更”时交由 `addFollowing` → `FollowingPlaybackBridge.addAsync` → `FollowingStore.saveNew` 的复活分支处理（`deletedAt=0`、`enabled=true`、`createdAt` 刷新）。
+
+该约定由 `FollowingUiSourceTest`（源码级）与 `FollowingMigrationDeviceTest#tombstonedTargetIsReturnedAsTombstoneNotAsNull`（设备级）双向锁定。
 
 ### 8.4 播放页集成
 
@@ -941,7 +967,7 @@ channelId: webhtv.following.updates
 |---|---|---|---|
 | Android Mobile | 底部导航一级项 | `点播 / 直播 / 追更 / 设置`；实验室显示时为 `点播 / 直播 / 追更 / 实验室 / 设置` | 点击底部“追更”打开 `FollowingActivity` |
 | Android TV/Leanback | 首页功能按钮一级项 | `点播 / 直播 / 搜索 / 收藏 / 追更 / 推送 / 投屏 / 历史 / 设置 / 站点注入` | 点击首页“追更”打开 `FollowingActivity` |
-| 详情页 | 上下文操作 | 顶部主操作区，显示“加入追更/已追更” | 当前作品没有记录时加入，有记录时打开追更详情 |
+| 详情页 | 上下文操作 | 顶部主操作区，显示“加入追更/已追更” | 未追更时加入；已追更时就地取消（不跳转，与播放页同源） |
 | 通知 | 深链入口 | 系统通知点击 | 打开 `FollowingActivity` 并定位对应记录 |
 
 一级入口的验收标准是：用户不需要先进入设置、收藏、历史或更多菜单，在主页一次点击即可到达“我的追更”。
@@ -1730,6 +1756,9 @@ rollback_anchor:   关闭 following_enabled 并取消 WorkManager 唯一任务�
 - 追更 instrumentation 测试新增真实数据库快照/恢复规则；所有会清表或删除数据库文件的测试结束前恢复原有 `following` 和 `following_source`，`FollowingDatabaseTest` 改用内存数据库，避免设备测试再次清空用户追更数据。
 - `following_enabled` 默认关闭；新安装或从未设置过该开关的用户不会显示追更入口，用户显式开启后才注册后台检查并展示追更功能。
 - schema 导出为 `app/schemas/com.fongmi.android.tv.following.FollowingDatabase/1.json`。
+- 播放页的追更按钮改为就地开关：`mobile`/`leanback` `VideoActivity` 和内联播放中的 `TmdbDetailActivity` 在“已追更”时再次点击会立即写墓碑、取消该条 one-shot 检查、刷新按钮为“加入追更”并提示“已取消追更”，不再跳转追更页打断播放。设备实测：`192.168.50.3:5559` 上点“已追更”后仍停留在 `VideoActivity`，`deleted_at` 已写入且按钮回到“加入追更”。
+- 详情页追更按钮补齐同一语义（FOLLOW-DETAIL-CANCEL）：`TmdbDetailActivity` 不再区分是否内联播放，点“已追更”一律就地取消并立即刷新按钮，`FollowingActivity.start(...)` 已从该页移除；列表页仍是唯一的管理入口。
+- “已追更”判定统一排除墓碑行（`isFollowed`）：`resolveTmdb` 对墓碑目标故意返回墓碑行，若用 `!= null` 判定会导致取消后按钮仍显示“已追更”且永远无法重新追更。
 
 ### 25.3 P5 同步与 alist 导入
 
@@ -1754,6 +1783,12 @@ rollback_anchor:   关闭 following_enabled 并取消 WorkManager 唯一任务�
 - 同一批次执行 `:app:testMobileArm64_v8aDebugUnitTest` 与 `:app:testLeanbackArm64_v8aDebugUnitTest`，双端全量单元测试均通过；最新设备包没有发现 `FATAL EXCEPTION` 或主线程 Room 崩溃。
 - 在最后的调度和详情页启用修复后，重新构建 Debug 包并以 `adb install -r -t` 覆盖安装：双端全量单元测试再次通过，追更 instrumentation 仍为 `OK (11 tests)`，日志未出现主线程 Room 或 `FATAL EXCEPTION`。
 - 新增源站身份到 TMDB 身份的迁移设备测试后，追更 instrumentation 为 `OK (12 tests)`；测试确认旧 `tmdb_id=0` 记录迁移到 TMDB 季身份、来源绑定跟随迁移，并立即写入官方状态和已播集数。
+
+### 25.4.2 2026-10-05 FOLLOW-DETAIL-CANCEL 设备回归
+
+- 在分配的模拟器 `127.0.0.1:5561`（HD1910，API 28，`primaryCpuAbi=arm64-v8a`）上用 `mobileArm64_v8aDebug` 的 app 包与 androidTest 包**覆盖安装**（`adb install -r -t`，未卸载现有应用）。安装前已用 `apksigner verify --print-certs` 核对设备上已装包与本地构建包的签名摘要一致（`95e4b2e7…7e4d`），确认覆盖安装不会因签名不一致而要求卸载。
+- `TmdbDetailFollowingCancelDeviceTest#tappingAlreadyFollowedCancelsInPlaceWithoutLeavingThePage` 通过（`OK (1 test)`，24.3s）：用例在真实设备上真正点击详情页追更按钮，并断言 (1) 写入墓碑行而非物理删除、(2) 按钮文字立即回到“加入追更”、(3) `FollowingActivity` 的 `ActivityMonitor` 命中数为 0 且当前页未 `finish`。这是“详情页取消追更立即生效且不跳页”这条用户可见契约的端到端证据。
+- 同一提交的双端 JVM 门禁 `:app:testMobileArm64_v8aDebugUnitTest` 与 `:app:testLeanbackArm64_v8aDebugUnitTest` 的 `FollowingUiSourceTest` 均为 15/15 通过。
 
 ### 25.5 提交与回滚记录
 
@@ -1797,7 +1832,7 @@ a6978e6ba4818eab6e1407657deb49c5692e24b5  fix(following): schedule returning sho
 ```text
 objective:         FOLLOW-1 P0–P5 代码、备份/同步、双端入口和手动 alist 导入已实施
 authority:         用户已要求按设计实施；当前已提交多个可回滚原子单元
-status:            implementation + all simulator-available targeted/device verification complete; badge unread queries are off-main-thread as of FOLLOW-1-BADGE-CRASH; design completion item 6 (API 33+/TV/Doze/multi-device) not available
+status:            implementation + all simulator-available targeted/device verification complete; badge unread queries are off-main-thread as of FOLLOW-1-BADGE-CRASH; playback-page unfollow is now an in-place toggle (FOLLOW-PLAYBACK-CANCEL) verified on 192.168.50.3:5559; design completion item 6 (API 33+/TV/Doze/multi-device) not available
                           Release/package-size build intentionally excluded by explicit user constraint
 next_action:       如需完成正式发布验收，由具备 API 33+ 手机和 TV 真机的环境执行完成定义第 6 条；当前 5561 上没有剩余可执行的代码级验证
 rollback_anchor:   following_enabled=false + FollowingScheduler.cancelAll；不修改 AppDatabase v45

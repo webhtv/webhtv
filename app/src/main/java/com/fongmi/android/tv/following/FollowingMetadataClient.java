@@ -66,7 +66,9 @@ public class FollowingMetadataClient {
         if (next != null && !next.isJsonNull()) {
             snapshot.nextAirSeason = integer(next, "season_number");
             snapshot.nextAirEpisode = integer(next, "episode_number");
-            snapshot.nextAirAt = airTime(string(next, "air_date"));
+            String nextAirDate = string(next, "air_date");
+            snapshot.nextAirAt = airTime(nextAirDate);
+            snapshot.nextAirWeekday = FollowingMetadataSnapshot.weekday(nextAirDate);
         }
         JsonArray seasons = array(detail, "seasons");
         if (seasons != null) {

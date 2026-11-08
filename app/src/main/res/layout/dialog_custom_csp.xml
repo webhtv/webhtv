@@ -24,7 +24,7 @@
             android:layout_marginEnd="16dp"
             android:layout_weight="1"
             android:text="@string/setting_custom_csp"
-            android:textColor="@color/black"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -41,7 +41,7 @@
             android:text="@string/setting_order_reverse"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/enabled"
@@ -81,7 +81,7 @@
                 android:layout_marginEnd="8dp"
                 android:singleLine="true"
                 android:text="@string/setting_custom_csp_insert_short"
-                android:textColor="@color/black"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="15sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -95,7 +95,7 @@
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:text="&#8722;"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="22sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -106,7 +106,7 @@
                 android:layout_marginEnd="2dp"
                 android:gravity="center"
                 android:text="1"
-                android:textColor="@color/black"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
@@ -121,7 +121,7 @@
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:text="+"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="22sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -153,7 +153,7 @@
             android:text="@string/setting_custom_csp_recognize"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/sort"
@@ -168,9 +168,36 @@
             android:text="@string/setting_custom_csp_sort"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/searchLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/setting_custom_csp_search_hint"
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+        app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+        app:endIconMode="clear_text"
+        app:hintTextColor="?attr/colorOnSurfaceVariant"
+        app:startIconDrawable="@drawable/ic_search">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/siteSearch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/setting_custom_csp_search_hint"
+            android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
+            android:inputType="textNoSuggestions"
+            android:singleLine="true"
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
+            android:nextFocusDown="@id/recycler" />
+
+    </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/modeGroup"
@@ -189,7 +216,7 @@
             android:text="@string/setting_proxy_ui_mode"
             android:textColor="@color/dialog_toggle_button_text"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/textMode"
@@ -200,7 +227,7 @@
             android:text="@string/setting_proxy_text_mode"
             android:textColor="@color/dialog_toggle_button_text"
             app:backgroundTint="@color/dialog_toggle_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -225,16 +252,25 @@
                 android:clipToPadding="false"
                 android:overScrollMode="never" />
 
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/searchEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:gravity="center"
+                android:text="@string/setting_custom_csp_search_empty"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone" />
+
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/jsonLayout"
                 android:layout_width="match_parent"
                 android:layout_height="420dp"
                 android:visibility="gone"
-                app:boxBackgroundColor="@color/white"
+                app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
                 app:boxCollapsedPaddingTop="0dp"
-                app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+                app:boxStrokeColor="?attr/colorOutline"
                 app:hintEnabled="false"
-                app:hintTextColor="#5F6368">
+                app:hintTextColor="?attr/colorOnSurfaceVariant">
 
                 <com.fongmi.android.tv.ui.custom.SafeScrollEditText
                     android:id="@+id/jsonText"
@@ -251,8 +287,8 @@
                     android:scrollbars="none"
                     android:selectAllOnFocus="false"
                     android:singleLine="false"
-                    android:textColor="@color/black"
-                    android:textColorHint="#666666" />
+                    android:textColor="?attr/colorOnSurface"
+                    android:textColorHint="?attr/colorOnSurfaceVariant" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -285,7 +321,7 @@
             android:text="@string/dialog_negative"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
@@ -298,7 +334,9 @@
             android:minWidth="0dp"
             android:text="@string/dialog_positive"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

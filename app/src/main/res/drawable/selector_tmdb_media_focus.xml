@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    原生增强播放页剧照、海报、相关视频卡片的统一焦点环。
+    常态描边由 MaterialCardView 自身设置，焦点环由前景 selector 绘制，避免图片内容被覆盖。
+
+    圆角 = 宿主圆角 − w/2：宿主（adapter_tmdb_video / adapter_tmdb_photo 的 MaterialCardView）
+    app:cardCornerRadius="@dimen/webhtv_card_radius_default" = 8dp，而本 selector 是 foreground，
+    环**外边界**圆角半径 = 声明值 + w/2。声明 8dp 时外边界 9.5dp，卡片圆角会露出环外一段
+    （2026-10-10 实机复核）。故焦点态 8 − 1.5 = 6.5dp、当前态 8 − 1 = 7dp。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/transparent" />
+            <stroke android:width="3dp" android:color="?attr/tvFocusRing" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+    <item android:state_activated="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/transparent" />
+            <stroke android:width="2dp" android:color="?attr/tvCurrentRing" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/transparent" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+</selector>

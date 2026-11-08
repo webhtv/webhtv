@@ -18,7 +18,7 @@
         android:ellipsize="end"
         android:singleLine="true"
         android:text="@string/manage_page_battery_title"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
 
@@ -36,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:lineSpacingMultiplier="1.12"
-            android:textColor="#5F6368"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="14sp"
             tools:text="当前设备可能会在 App 切到后台后限制网络，导致浏览器管理页无法连接。&#10;&#10;设置 → 应用 → 本应用 → 电池 → 选择不受限制" />
 
@@ -64,7 +64,7 @@
             android:text="@string/manage_page_open_anyway"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/openSettings"
@@ -80,7 +80,9 @@
             android:singleLine="true"
             android:text="@string/manage_page_battery_allow"
             android:textColor="@color/dialog_primary_button_text"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

@@ -19,10 +19,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.databinding.DialogResultListBinding;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.adapter.TmdbAdapter;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Util;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.Collections;
 import java.util.List;
@@ -59,7 +59,7 @@ public class TmdbSearchDialog {
 
     public TmdbSearchDialog(Activity activity) {
         this.activity = activity;
-        ContextThemeWrapper dialogContext = new ContextThemeWrapper(activity, R.style.Theme_WebHTV_LightDialog);
+        ContextThemeWrapper dialogContext = new ContextThemeWrapper(activity, R.style.Theme_WebHTV_Dialog);
         this.binding = DialogResultListBinding.inflate(LayoutInflater.from(dialogContext));
     }
 
@@ -100,7 +100,7 @@ public class TmdbSearchDialog {
 
     public void show() {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
-        dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog).setView(binding.getRoot()).create();
+        dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog).setView(binding.getRoot()).create();
         if (activity.isFinishing() || activity.isDestroyed()) return;
         dialog.show();
         LightDialog.apply(dialog);

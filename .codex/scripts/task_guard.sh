@@ -9,6 +9,7 @@ Usage:
                       [--adopt-dirty PATH ...]
   task_guard.sh check
   task_guard.sh finish --verified EVIDENCE --commit-message MESSAGE
+  task_guard.sh abort
   task_guard.sh status
 
 Modes: quick-fix, standard, assessment, upstream
@@ -82,7 +83,15 @@ check_staged_whitespace() {
     [[ "$path" == *.patch ]] && continue
     paths+=("$path")
   done < <(list_staged)
-  ((${#paths[@]} == 0)) || git diff --cached --check -- "${paths[@]}"
+  ((${#paths[@]} == 0)) && return 0
+  # Windows CreateProcess 32KB argv 上限：大合并时一次性传全部 staged 路径会 E2BIG。
+  # 分批校验保持语义不变（.patch 排除已在上方完成）。
+  local -a chunk=()
+  local i
+  for ((i = 0; i < ${#paths[@]}; i += 100)); do
+    chunk=("${paths[@]:i:100}")
+    git diff --cached --check -- "${chunk[@]}"
+  done
 }
 
 fingerprint_path() {
@@ -99,8 +108,11 @@ fingerprint_path() {
 }
 
 read_state() {
-  [[ -f "$state_dir/$1" ]] || fail_usage "no active task guard state ($1 missing)"
-  sed -n '1p' "$state_dir/$1"
+  if [[ -f "$state_dir/$1" ]]; then
+    sed -n '1p' "$state_dir/$1"
+  else
+    return 1
+  fi
 }
 
 write_state() {
@@ -202,24 +214,27 @@ start_task() {
     *) fail_usage "unknown mode: $mode" ;;
   esac
 
+  mkdir -p "$state_dir"
   if [[ -d "$state_dir" && -f "$state_dir/status" ]]; then
     local previous_status
+    local previous_id
     previous_status="$(sed -n '1p' "$state_dir/status")"
+    previous_id="$(sed -n '1p' "$state_dir/id" 2>/dev/null || true)"
     if [[ "$previous_status" == "active" || "$previous_status" == "commit_needs_tag" ]]; then
-      fail_usage "another task guard is unfinished: $(sed -n '1p' "$state_dir/id") ($previous_status)"
+      # 只把「有 id 的未完成会话」当作真实占用。写序修复前留下的半成品状态
+      # （有 status 无 id）必须被识别为损坏，否则它会永久堵死后续所有 start。
+      if [[ -z "$previous_id" ]]; then
+        fail_usage "task guard state is corrupt (status=$previous_status but no id); run 'task_guard.sh abort' to archive it"
+      fi
+      fail_usage "another task guard is unfinished: $previous_id ($previous_status)"
     fi
   fi
-  if [[ -d "$state_dir" && -f "$state_dir/status" ]] && [[ "$(sed -n '1p' "$state_dir/status")" == "active" ]]; then
-    # 支持 active 会话一次性扩容；不覆盖 initial-dirty/protected，避免误改保护面。
-    :
-  else
-    : > "$state_dir/initial-dirty"
-    : > "$state_dir/initial-staged"
-    : > "$state_dir/protected"
-    : > "$state_dir/protected-fingerprints"
-    printf 'active\n' > "$state_dir/status"
-  fi
-  mkdir -p "$state_dir"
+  # 会话初始化。status 一律在 start_task 末尾写入：任何中途失败（scope 校验、
+  # --adopt-dirty 校验等）都不得留下「active 但无 id」的会话。
+  : > "$state_dir/initial-dirty"
+  : > "$state_dir/initial-staged"
+  : > "$state_dir/protected"
+  : > "$state_dir/protected-fingerprints"
   : > "$state_dir/scope"
   : > "$state_dir/adopted"
 
@@ -281,12 +296,43 @@ start_task() {
 
   write_state id "$id"
   write_state mode "$mode"
-  write_state status active
   write_state branch "$(git branch --show-current)"
   write_state base_head "$(git rev-parse HEAD)"
+  # 最后一步：只有走到这里会话才真正生效。
+  write_state status active
 
   show_status
   printf 'PASS: task guard started; protected %s pre-existing dirty path(s)\n' "$(wc -l < "$state_dir/protected" | tr -d ' ')"
+}
+
+# 归档一个未完成的会话，使后续 start 不再被堵死。
+#
+# 存在的理由：start 在 scope / --adopt-dirty 校验失败时会在写完 id 之前退出。
+# 写序已修为「status 最后写」，但历史遗留或异常中断仍可能留下半成品状态，
+# 而脚本原本没有任何退路（只能手工 rm -rf），所以 abort 是必要的逃生口。
+#
+# 安全约束：绝不静默丢弃工作。已提交（commit_needs_tag）的会话必须走 finish，
+# 否则会丢掉 recovery tag；归档保留全部状态文件供事后查证。
+abort_task() {
+  (($# == 0)) || fail_usage "abort accepts no options"
+  [[ -d "$state_dir" ]] || fail_usage "no task guard state to abort"
+
+  local status=""
+  local id=""
+  status="$(sed -n '1p' "$state_dir/status" 2>/dev/null || true)"
+  id="$(sed -n '1p' "$state_dir/id" 2>/dev/null || true)"
+
+  if [[ "$status" == "commit_needs_tag" ]]; then
+    fail_usage "session $id already committed; run 'finish' to create its recovery tag instead of aborting"
+  fi
+
+  local label="${id:-corrupt}"
+  local archive
+  archive="$state_root/aborted-$(TZ=Asia/Shanghai date +%Y%m%d%H%M%S)-$label"
+  mv "$state_dir" "$archive"
+  printf 'PASS: aborted session %s (status=%s); state archived at %s\n' \
+    "$label" "${status:-none}" "$(basename "$archive")"
+  printf 'NOTE: worktree changes were left untouched.\n'
 }
 
 create_recovery_tag() {
@@ -312,6 +358,8 @@ create_recovery_tag() {
   write_state tag_elapsed_seconds "$tag_elapsed"
   write_state recovery_tag "$tag"
   write_state status finished
+  mkdir -p "$state_root"
+  mv "$state_dir" "$state_root/finished-$(TZ=Asia/Shanghai date +%Y%m%d%H%M%S)-$(read_state id)"
   if ((tag_elapsed > 5)); then
     printf 'WARN: recovery tag phase took %ss (target <=5s); tag already created, continue without repeated validation\n' "$tag_elapsed" >&2
   fi
@@ -330,7 +378,10 @@ finish_task() {
   done
   [[ -n "$verified" && -n "$commit_message" ]] || fail_usage "verification evidence and commit message are required"
 
-  if [[ "$(read_state status)" == "commit_needs_tag" ]]; then
+  local committed_head
+  committed_head="$(read_state committed_head 2>/dev/null || true)"
+  if [[ "$(read_state status)" == "commit_needs_tag" ]] ||
+     { [[ -n "$committed_head" ]] && [[ "$(git rev-parse HEAD)" == "$committed_head" ]]; }; then
     create_recovery_tag "$(read_state committed_head)" "$(read_state verification)"
     return
   fi
@@ -380,6 +431,7 @@ case "$command_name" in
   start) start_task "$@" ;;
   check) (($# == 0)) || fail_usage "check accepts no options"; scope_check ;;
   finish) finish_task "$@" ;;
+  abort) abort_task "$@" ;;
   status) (($# == 0)) || fail_usage "status accepts no options"; show_status ;;
   -h|--help|help) usage ;;
   *) fail_usage "unknown command: $command_name" ;;

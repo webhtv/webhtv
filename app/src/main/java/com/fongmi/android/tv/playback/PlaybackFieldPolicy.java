@@ -12,6 +12,22 @@ public class PlaybackFieldPolicy {
     private static final Set<String> STANDARD = set("appVersion", "client");
     private static final Set<String> FULL = set("episodeUrl", "episodeIndex", "clientKey");
     private static final Set<String> OPTIONAL = set("episodeUrl", "episodeIndex", "appVersion", "client", "clientKey");
+    /**
+     * 只读 API 额外放行的字段。
+     *
+     * <p>{@code episodeId} 是单集地址的 SHA-256（见
+     * {@link PlaybackRecord#episodeId(String)}）：它让对端能稳定区分同一剧的
+     * 不同集，又不把带时效签名的播放地址（{@code episodeUrl}）交出去。
+     *
+     * <p>为什么不直接放 {@code episodeUrl}：那个地址常带 CDN 签名/token，
+     * 且对端只需要"是不是同一集"这个布尔语义，不需要能重新发起播放。
+     *
+     * <p>本字段只被 {@link #apiSafe()} 在**运行时**读取，不参与任何静态初始化，
+     * 因此没有声明顺序约束。{@link #customSafe()} 刻意不含它：webhook 的自定义字段
+     * 白名单由 {@code PlaybackWebhookDialog.FIELD_KEYS} 驱动，那里没有 {@code episodeId}。
+     */
+    private static final Set<String> API_SAFE_EXTRA = set("episodeId");
+
     private static final Set<String> CUSTOM_SAFE = customSafe();
 
     private final Set<String> fields;
@@ -26,6 +42,7 @@ public class PlaybackFieldPolicy {
         Set<String> fields = base();
         fields.remove("event");
         fields.remove("eventId");
+        fields.addAll(API_SAFE_EXTRA);
         return new PlaybackFieldPolicy(fields, false);
     }
 
@@ -82,6 +99,9 @@ public class PlaybackFieldPolicy {
         fields.addAll(OBJECT);
         fields.addAll(PROGRESS);
         fields.addAll(OPTIONAL);
+        // 不含 API_SAFE_EXTRA：episodeId 是给 API 端点用的派生字段，webhook 的
+        // 自定义字段白名单由 PlaybackWebhookDialog.FIELD_KEYS 驱动，那里没有它，
+        // 放进这里只会造成"能被配置但界面上发现不了"的隐式放宽。
         return fields;
     }
 

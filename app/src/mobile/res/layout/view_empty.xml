@@ -8,6 +8,7 @@
     android:translationY="-40dp">
 
     <com.airbnb.lottie.LottieAnimationView
+        android:id="@+id/illustration"
         android:layout_width="160dp"
         android:layout_height="180dp"
         app:lottie_autoPlay="true"
@@ -18,8 +19,44 @@
         android:id="@+id/text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:gravity="center"
         android:text="@string/error_empty"
-        android:textColor="@color/white"
-        android:textSize="16sp" />
+        android:textColor="?attr/webhtvColorOnWallpaper"
+        android:textSize="32sp" />
+
+    <!--
+        解释与主动作两个槽位：设计文档 §9.9 要求空态是「标题 + 解释 + 一个主动作」，
+        §6.2 又把空态列入 Display 档（手机 32–40sp，故标题取 32sp）。
+
+        两者默认 GONE：未接入的宿主渲染结果与改动前一致，宿主按需通过
+        ProgressLayout.setEmptyContent(...) 接入（首个接入的是收藏页）。
+    -->
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/description"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:maxWidth="320dp"
+        android:textColor="?attr/webhtvColorOnWallpaperVariant"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <!--
+        主作用按钮而不是裸文本：改动前它是一个只有 clickable/focusable 的 TextView，
+        渲染出来与旁边的解释文字没有区别，用户看不出这是可以点的（实机确认）。
+        这里用应用自己的语义按钮样式，容器色与文字色由该样式成对提供，因此不需要再
+        单独声明 textColor——这也是它不取壁纸前景角色的原因。
+    -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/action"
+        style="@style/Widget.WebHTV.Button.Tonal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:minWidth="120dp"
+        android:singleLine="true"
+        android:textSize="14sp"
+        android:visibility="gone" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

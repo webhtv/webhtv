@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/white">
+    android:background="?attr/colorSurfaceContainerHigh">
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
@@ -15,7 +15,7 @@
         android:paddingBottom="4dp">
 
     <com.google.android.material.textview.MaterialTextView
-        style="@style/Widget.WebHTV.LightDialog.Helper"
+        style="@style/Widget.WebHTV.Helper"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingBottom="14dp"
@@ -39,7 +39,7 @@
         android:focusable="true"
         android:nextFocusDown="@id/input"
         android:text="@string/setting_github_proxy_enabled"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="15sp"
     app:thumbTint="@color/dialog_switch_thumb"
     app:trackTint="@color/dialog_switch_track" />
@@ -85,9 +85,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="@string/setting_github_proxy_hint"
-            app:boxBackgroundColor="@color/white"
-            app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+            app:boxStrokeColor="?attr/colorOutline"
+            app:hintTextColor="?attr/colorOnSurfaceVariant">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/input"
@@ -99,14 +99,14 @@
                 android:nextFocusDown="@id/reset"
                 android:scrollHorizontally="true"
                 android:singleLine="true"
-                android:textColor="@color/black"
-                android:textColorHint="#666666" />
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/add"
-            style="@style/Widget.WebHTV.LightDialog.Button.Tonal"
+            style="@style/Widget.WebHTV.Button.Tonal"
             android:layout_width="wrap_content"
             android:layout_height="44dp"
             android:layout_marginStart="10dp"
@@ -124,7 +124,7 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/reset"
-        style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+        style="@style/Widget.WebHTV.Button.Outlined"
         android:layout_width="match_parent"
         android:layout_height="44dp"
         android:layout_marginTop="10dp"
@@ -136,7 +136,7 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/probe"
-        style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+        style="@style/Widget.WebHTV.Button.Outlined"
         android:layout_width="match_parent"
         android:layout_height="44dp"
         android:layout_marginTop="10dp"

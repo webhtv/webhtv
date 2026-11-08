@@ -1,4 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    TMDB 线路芯片的「深色页」变体，与 selector_tmdb_flag_item 成对使用。
+
+    FlagAdapter 依据页头是否为亮色在这两个文件间切换：亮色页用 selector_tmdb_flag_item
+    （浅底深字），深色页（默认主题下的壁纸/backdrop 播放页）用本文件，文字为
+    selector_tmdb_flag_text_dark（#F3F7FA / 选中 #8FE7B6）。因此这里的底色必须是与调色板
+    无关的恒定半透明白，叠在深色页面上。
+
+    e1ea7ab34 曾把这里的实色换成 @color/webhtv_color_surface_container(_high) 等语义表面。
+    手机版日间调色板把那些表面解析成浅色（#ECEEF4 / #E7E8EF），于是默认主题下变成
+    「浅底 + 近白字」：实测 1.08:1（选中态 1.16:1），用户反馈的「字体看不清」即包含此项。
+    恢复为恒定半透明填充后为 10.61:1（选中态 6.81:1）。
+
+    与 selector_control_sheet_button / shape_player_child_sheet_panel 等同族文件一致，
+    本文件在 docs/ui-token-allowlist.txt 中按「播放器/沉浸式叠层使用固定半透明色」豁免。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_selected="true">
         <shape android:shape="rectangle">

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    空态主按钮的焦点态。
+
+    环色取 ?attr/tvFocusRing（**应用表面**族），不是 shape_chip_round_focused 用的
+    ?attr/tvPlayerRing：后者是为固定深靛玻璃宿主夹取的派生值，而空态画在壁纸/页面背景上。
+    两族的边界见 docs/TV-FOCUS-RING-20261004-unified-theme-ring.md 与
+    shape_item_focused.xml 的说明——用错族会重现阶段 M 修过的「同一屏两种环色」。
+
+    环宽仍取唯一来源 @dimen/webhtv_focus_ring_width。
+    圆角与内边距与 shape_button_normal 保持一致，避免焦点前后尺寸跳动。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <corners android:radius="28dp" />
+
+    <padding
+        android:bottom="8dp"
+        android:left="14dp"
+        android:right="14dp"
+        android:top="8dp" />
+
+    <stroke
+        android:width="@dimen/webhtv_focus_ring_width"
+        android:color="?attr/tvFocusRing" />
+
+</shape>

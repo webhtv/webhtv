@@ -5,13 +5,13 @@
         android:id="@+id/vod"
         android:icon="@drawable/ic_nav_vod"
         android:title="@string/nav_vod"
-        android:visible="false" />
+        android:visible="true" />
 
     <item
         android:id="@+id/live"
         android:icon="@drawable/ic_nav_live"
         android:title="@string/nav_live"
-        android:visible="false" />
+        android:visible="true" />
 
     <item
         android:id="@+id/following"
@@ -29,6 +29,6 @@
         android:id="@+id/setting"
         android:icon="@drawable/ic_nav_setting"
         android:title="@string/nav_setting"
-        android:visible="false" />
+        android:visible="true" />
 
 </menu>

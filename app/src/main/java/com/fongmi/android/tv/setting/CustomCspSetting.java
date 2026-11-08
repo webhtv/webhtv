@@ -463,6 +463,20 @@ public class CustomCspSetting {
         return load().getItems().size();
     }
 
+    public static boolean matchesSearch(Item item, String query) {
+        if (item == null) return false;
+        if (item.isOther()) return matchesSearch(query, item.getName(), item.getOtherKey(), item.getOtherKeys(), item.getOtherText());
+        return matchesSearch(query, item.getName(), item.getKey(), item.getApi(), item.getHomePage(), item.getUrl(), item.getExt(), item.getJar(), item.getExtensionsText());
+    }
+
+    public static boolean matchesSearch(String query, String... fields) {
+        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        if (needle.isEmpty()) return true;
+        if (fields == null) return false;
+        for (String field : fields) if (field != null && field.toLowerCase(Locale.ROOT).contains(needle)) return true;
+        return false;
+    }
+
     public static Count count() {
         return count(load());
     }

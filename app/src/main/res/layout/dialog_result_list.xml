@@ -90,8 +90,8 @@
             android:textColor="@color/dialog_primary_button_text"
             android:textSize="20sp"
             app:backgroundTint="@color/dialog_primary_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke"
-            app:strokeWidth="2dp" />
+            app:strokeColor="@color/focus_ring_primary_container"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
     </LinearLayout>
 

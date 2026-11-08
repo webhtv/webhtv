@@ -79,7 +79,7 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
     private Update beta;
     private Update selected;
     private boolean force;
-    private boolean downloading;
+    private volatile boolean downloading;
     private boolean canceled;
     private int lastProgress = -1;
     private long lastBytes;
@@ -92,6 +92,11 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
 
     public static Updater create() {
         return INSTANCE;
+    }
+
+    /** Reports an in-flight APK download so cache cleanup can preserve {@code update.apk}. */
+    public static boolean isDownloading() {
+        return INSTANCE.downloading;
     }
 
     private File getFile() {
@@ -384,7 +389,10 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
         FragmentActivity activity = activityRef == null ? null : activityRef.get();
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
-        androidx.appcompat.app.AlertDialog alert = new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
+        // 走 WebHtvAlertDialogBuilder 而不是原始 Material builder：后者创建的弹窗从不经过
+        // ThemeController.bindDialog，用户自定义主题对它会静默失效。这里显式传 ThemeOverlay
+        // 的用法被 (Context, int) 构造覆盖，行为不变。
+        androidx.appcompat.app.AlertDialog alert = new com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_Dialog)
                 .setTitle(R.string.update_backup_title)
                 .setMessage(R.string.update_backup_message)
                 .setPositiveButton(R.string.update_backup_positive, (dialog, which) -> startBackupAndUpdate(view))

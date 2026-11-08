@@ -16,7 +16,6 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
-import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -59,7 +58,6 @@ public class SettingAppearanceActivity extends BaseActivity {
         mBinding.language.setOnClickListener(this::setLanguage);
         mBinding.size.setOnClickListener(this::setSize);
         mBinding.wall.setOnClickListener(this::onWall);
-        mBinding.wall.setOnLongClickListener(this::onWallEdit);
         mBinding.wallHome.setOnClickListener(this::setWallDefault);
         mBinding.wallRefresh.setOnClickListener(this::setWallRefresh);
         mBinding.wallHistory.setOnClickListener(this::onWallHistory);
@@ -89,12 +87,7 @@ public class SettingAppearanceActivity extends BaseActivity {
     }
 
     private void onWall(View view) {
-        ConfigDialog.create().wall().show(this);
-    }
-
-    private boolean onWallEdit(View view) {
-        ConfigDialog.create().wall().edit().show(this);
-        return true;
+        HistoryDialog.create().wall().manage().show(this);
     }
 
     private void setWallDefault(View view) {

@@ -62,6 +62,18 @@
             android:layout_height="match_parent"
             app:surface_type="none" />
 
+        <!-- 关闭「点播自动播放」后的待播态：预览位显示影片封面，而不是停留在没有画面的空黑框。
+             叠在 exo 之上、音频封面层之下；不可聚焦、不吞触摸，避免成为遥控器焦点死角。 -->
+        <ImageView
+            android:id="@+id/videoCover"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
         <FrameLayout
             android:id="@+id/audioStage"
             android:layout_width="match_parent"
@@ -127,7 +139,7 @@
                             android:ellipsize="end"
                             android:gravity="center"
                             android:maxLines="2"
-                            android:textColor="@color/white"
+                            android:textColor="?attr/webhtvColorOnWallpaper"
                             android:textSize="22sp"
                             android:textStyle="bold"
                             tools:text="八段锦口令音乐" />
@@ -580,7 +592,7 @@
         android:layout_marginEnd="24dp"
         android:layout_toEndOf="@+id/video"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="24sp"
         tools:text="慶餘年第二季" />
 
@@ -594,7 +606,7 @@
         android:layout_marginTop="6dp"
         android:layout_marginEnd="24dp"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="16sp"
         tools:text="更新到第二季" />
 
@@ -615,7 +627,7 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="12dp"
             android:singleLine="true"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="16sp"
             tools:text="站源：泥巴" />
 
@@ -626,7 +638,7 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="12dp"
             android:singleLine="true"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="16sp"
             tools:text="年份：2022" />
 
@@ -637,7 +649,7 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="12dp"
             android:singleLine="true"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="16sp"
             tools:text="地區：台灣" />
 
@@ -647,7 +659,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:singleLine="true"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="16sp"
             tools:text="類型：科幻" />
 
@@ -664,17 +676,24 @@
         android:layout_marginEnd="24dp"
         android:nextFocusDown="@id/actor"
         android:singleLine="true"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="16sp"
         tools:text="導演：FongMi" />
 
-    <!-- TMDB 简介：仅 TMDB 模式显示，撑满站源/导演行与底部按钮之间的空间 -->
+    <!--
+        简介预览：撑满「导演/演员行」与底部按钮行之间的空间，超出的部分由运行时按
+        可用高度夹取行数（getTmdbOverviewMaxLines），点「简介」按钮看全文。
+        锚点取 @id/actor 而不是 @id/director：原生增强/TMDB 里 actor 被
+        suppressTmdbNativeTextFields() 压成 GONE，RelativeLayout 会把 GONE 锚点折叠到自身位置，
+        这里因此仍落在导演行下方；影视原生(DIRECT) 模式下 actor 可见，简介接在演员行下方，
+        不再与演员行重叠。
+    -->
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/tmdbOverview"
         style="@style/Video.ContextText"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@+id/director"
+        android:layout_below="@+id/actor"
         android:layout_above="@+id/row2"
         android:layout_alignStart="@+id/name"
         android:layout_alignParentEnd="true"
@@ -684,7 +703,7 @@
         android:ellipsize="end"
         android:gravity="top"
         android:paddingBottom="4dp"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="16sp"
         android:visibility="gone"
         tools:text="简介：这是一段剧情简介……" />
@@ -701,7 +720,7 @@
         android:ellipsize="end"
         android:maxLines="2"
         android:nextFocusDown="@id/content"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="16sp"
         tools:text="演員：FongMi" />
 
@@ -730,7 +749,6 @@
                 android:layout_marginEnd="16dp"
                 android:background="@drawable/selector_video_item"
                 android:drawablePadding="6dp"
-                android:visibility="gone"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:gravity="center"
@@ -739,7 +757,7 @@
                 android:nextFocusDown="@id/tmdbCast"
                 android:singleLine="true"
                 android:text="@string/detail_desc"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 app:drawableStartCompat="@drawable/ic_detail_desc" />
 
@@ -758,7 +776,7 @@
                 android:nextFocusDown="@id/flag"
                 android:singleLine="true"
                 android:text="@string/play_short_display"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 app:drawableStartCompat="@drawable/ic_detail_short_display" />
 
@@ -778,7 +796,7 @@
                 android:nextFocusDown="@id/flag"
                 android:singleLine="true"
                 android:text="@string/play_search"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 app:drawableStartCompat="@drawable/ic_action_search" />
 
@@ -798,7 +816,7 @@
                 android:nextFocusDown="@id/tmdbCast"
                 android:singleLine="true"
                 android:text="@string/play_change"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 android:visibility="gone"
                 app:drawableStartCompat="@drawable/ic_detail_change" />
@@ -819,7 +837,7 @@
                 android:nextFocusDown="@id/tmdbCast"
                 android:singleLine="true"
                 android:text="@string/keep"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 app:drawableStartCompat="@drawable/ic_detail_keep_off" />
 
@@ -841,7 +859,7 @@
                 android:nextFocusDown="@id/tmdbCast"
                 android:singleLine="true"
                 android:text="@string/following_add"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 app:drawableStartCompat="@drawable/ic_home_following" />
 
@@ -860,7 +878,7 @@
                 android:nextFocusDown="@id/tmdbCast"
                 android:singleLine="true"
                 android:text="@string/detail_tmdb_rematch"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 android:visibility="gone"
                 app:drawableStartCompat="@drawable/ic_action_search" />
@@ -885,6 +903,51 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
+
+            <!--
+                插件入口。电视端详情页就是本布局（VideoActivity），不是手机那份
+                activity_tmdb_detail.xml——这一点曾经导致插件行加错了文件、电视上永远不出现。
+                没有已装载插件时整行 GONE，不留空白标题。
+            -->
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/pluginHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/pluginTitle"
+                    style="@style/Shadow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/detail_plugin"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <HorizontalScrollView
+                android:id="@+id/pluginScroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:clipToPadding="false"
+                android:scrollbars="none"
+                android:visibility="gone">
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:id="@+id/pluginRow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="24dp" />
+            </HorizontalScrollView>
 
             <!-- 线路选择 -->
             <androidx.leanback.widget.HorizontalGridView
@@ -941,7 +1004,7 @@
                     android:id="@+id/episodeTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/selector_button"
+                    android:background="@drawable/selector_video_item"
                     android:clickable="true"
                     android:focusable="true"
                     android:focusableInTouchMode="false"
@@ -952,7 +1015,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="@string/detail_episode"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="18sp"
                     android:textStyle="bold" />
 
@@ -965,14 +1028,14 @@
                     android:id="@+id/episodeReverse"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/selector_button"
+                    android:background="@drawable/selector_video_item"
                     android:focusable="true"
                     android:focusableInTouchMode="true"
                     android:gravity="center"
                     android:minWidth="76dp"
                     android:nextFocusLeft="@id/episodeTitle"
                     android:text="@string/detail_episode_reverse"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="16sp" />
 
                 <com.google.android.material.textview.MaterialTextView
@@ -980,13 +1043,13 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
-                    android:background="@drawable/selector_button"
+                    android:background="@drawable/selector_video_item"
                     android:focusable="true"
                     android:focusableInTouchMode="true"
                     android:gravity="center"
                     android:minWidth="76dp"
                     android:text="@string/detail_episode_view_grid"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="16sp" />
 
                 <com.google.android.material.textview.MaterialTextView
@@ -994,13 +1057,13 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
-                    android:background="@drawable/selector_button"
+                    android:background="@drawable/selector_video_item"
                     android:focusable="true"
                     android:focusableInTouchMode="true"
                     android:gravity="center"
                     android:minWidth="76dp"
                     android:text="@string/detail_episode_file_name_original"
-                    android:textColor="@color/white"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
                     android:textSize="16sp" />
 
             </LinearLayout>
@@ -1048,14 +1111,14 @@
                     <ProgressBar
                         android:layout_width="32dp"
                         android:layout_height="32dp"
-                        android:indeterminateTint="#FFFFFF" />
+                        android:indeterminateTint="?attr/webhtvColorOnWallpaper" />
 
                     <com.google.android.material.textview.MaterialTextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
                         android:text="@string/tmdb_loading_episodes"
-                        android:textColor="#CCCCCC"
+                        android:textColor="@color/webhtv_color_player_control_muted"
                         android:textSize="14sp" />
 
                 </LinearLayout>
@@ -1071,7 +1134,7 @@
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="8dp"
                 android:text="@string/tmdb_ratings_label"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -1095,7 +1158,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_cast_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1123,7 +1186,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_photos_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1152,7 +1215,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_posters_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1181,7 +1244,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_related_videos_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1198,7 +1261,9 @@
             android:nextFocusDown="@id/tmdbCrew"
             android:nextFocusUp="@id/tmdbPosters"
             android:paddingStart="24dp"
+            android:paddingTop="6dp"
             android:paddingEnd="24dp"
+            android:paddingBottom="6dp"
             android:visibility="gone" />
 
 
@@ -1212,7 +1277,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_crew_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1241,7 +1306,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_recommendations_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1270,7 +1335,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_personal_recommendations_tmdb_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1299,7 +1364,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_personal_recommendations_douban_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1328,7 +1393,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginBottom="8dp"
             android:text="@string/tmdb_personal_recommendations_ai_label"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -1358,7 +1423,7 @@
             android:ellipsize="end"
             android:lineSpacingExtra="2dp"
             android:maxLines="2"
-            android:textColor="#CCFFFFFF"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="15sp"
             android:visibility="gone" />
 

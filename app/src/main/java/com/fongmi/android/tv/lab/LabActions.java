@@ -27,13 +27,13 @@ import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.EncodeHintType;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -55,7 +55,7 @@ public final class LabActions {
     public static void install(FragmentActivity activity, LabModels.Item item, DoneCallback done) {
         PermissionUtil.requestFile(activity, granted -> {
             if (!granted) {
-                new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+                new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                         .setTitle("需要存储权限")
                         .setMessage("安装环境需要读取手机 /storage/emulated/0/VodPlus/EnvFiles/ 里的压缩包。\n请在系统设置中授予「所有文件访问」权限后重试。")
                         .setNegativeButton("取消", null)
@@ -72,7 +72,7 @@ public final class LabActions {
     public static void installWithDialog(FragmentActivity activity, LabModels.Item item, DoneCallback done) {
         PermissionUtil.requestFile(activity, granted -> {
             if (!granted) {
-                new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+                new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                         .setTitle("需要存储权限")
                         .setMessage("安装环境需要读取手机 /storage/emulated/0/VodPlus/EnvFiles/ 里的压缩包。\n请在系统设置中授予「所有文件访问」权限后重试。")
                         .setNegativeButton("取消", null)
@@ -98,7 +98,7 @@ public final class LabActions {
         TextView detail = root.findViewById(R.id.detail);
         List<String> mirrors = download.getMirrorNames();
         int[] mirrorIndex = {0};
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle("下载 " + item.name)
                 .setView(root)
                 .setCancelable(false)
@@ -219,7 +219,7 @@ public final class LabActions {
         progress.setTextColor(Color.WHITE);
         progress.setTextSize(14);
         progress.setPadding(48, 32, 48, 32);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle("安装 " + item.name)
                 .setView(progress)
                 .setCancelable(false)
@@ -308,7 +308,7 @@ public final class LabActions {
     }
 
     public static void uninstall(FragmentActivity activity, LabModels.Item item, DoneCallback done) {
-        new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle("卸载 " + item.name)
                 .setMessage("确定卸载该环境吗？")
                 .setNegativeButton("取消", null)
@@ -368,7 +368,7 @@ public final class LabActions {
             progress.setTextColor(Color.WHITE);
             progress.setTextSize(14);
             progress.setPadding(48, 32, 48, 32);
-            AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+            AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                     .setTitle("下载依赖" + (command.download.title == null ? "" : " · " + command.download.title))
                     .setView(progress)
                     .setCancelable(false)
@@ -469,7 +469,7 @@ public final class LabActions {
         List<LabModels.Click> clicks = command.clicks;
         String[] titles = new String[clicks.size()];
         for (int i = 0; i < clicks.size(); i++) titles[i] = clicks.get(i).title == null ? clicks.get(i).action : clicks.get(i).title;
-        new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle("后续操作")
                 .setItems(titles, (d, w) -> performClick(activity, command, clicks.get(w), vars))
                 .setNegativeButton("关闭", null)
@@ -515,7 +515,7 @@ public final class LabActions {
                 Toast.makeText(activity, "已复制", Toast.LENGTH_SHORT).show();
                 break;
             case "alert":
-                new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+                new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                         .setTitle(click.title == null ? "提示" : click.title)
                         .setMessage(value)
                         .setPositiveButton("确定", null)
@@ -574,7 +574,7 @@ public final class LabActions {
             content.setText(click.content);
             content.setVisibility(View.VISIBLE);
         }
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle(click.title == null ? "WebView" : click.title)
                 .setView(root)
                 .setNegativeButton("关闭", (d, w) -> {
@@ -634,7 +634,7 @@ public final class LabActions {
             content.setText(click.content);
             content.setVisibility(View.VISIBLE);
         }
-        new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle(click.title == null ? "二维码" : click.title)
                 .setView(root)
                 .setNegativeButton("关闭", null)
@@ -659,7 +659,7 @@ public final class LabActions {
         text.setPadding(pad, pad, pad, pad);
         text.setText(TextUtils.isEmpty(log) ? "暂无日志输出" : log);
         scroll.addView(text);
-        new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle(command.name + " - 日志")
                 .setView(scroll)
                 .setNegativeButton("关闭", null)

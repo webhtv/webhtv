@@ -7,15 +7,15 @@ import android.view.WindowManager;
 import androidx.appcompat.app.AlertDialog;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class WebDialog {
 
     private final AlertDialog dialog;
 
     private WebDialog(View view) {
-        this.dialog = new MaterialAlertDialogBuilder(App.activity()).setView(view).create();
+        this.dialog = new WebHtvAlertDialogBuilder(App.activity()).setView(view).create();
         this.dialog.setOnDismissListener((DialogInterface.OnDismissListener) view);
     }
 

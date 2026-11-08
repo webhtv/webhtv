@@ -19,7 +19,7 @@
             android:paddingStart="4dp"
             android:paddingEnd="4dp"
             android:text="@string/disc_menu_navigation"
-            android:textColor="@color/white"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="17sp"
             android:textStyle="bold" />
 
@@ -39,7 +39,7 @@
         android:paddingStart="4dp"
         android:paddingEnd="4dp"
         android:text="@string/disc_menu_touch_hint"
-        android:textColor="@color/white_80"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="12sp" />
 
     <LinearLayout

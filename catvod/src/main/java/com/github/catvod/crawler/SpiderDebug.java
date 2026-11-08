@@ -47,20 +47,22 @@ public class SpiderDebug {
     public static void log(String msg) {
         if (TextUtils.isEmpty(msg)) return;
         if (!DebugLogStore.acceptsTag(TAG)) return;
-        DebugLogStore.add(TAG, msg);
-        Logger.t(TAG).d(DiagnosticText.clean(msg).text());
+        DiagnosticText.Clean clean = DiagnosticText.clean(msg);
+        DebugLogStore.addCleaned(TAG, clean, msg, false);
+        Logger.t(TAG).d(clean.text());
     }
 
     public static void log(String tag, String msg, Object... args) {
         if (TextUtils.isEmpty(msg)) return;
         if (!DebugLogStore.acceptsTag(tag)) return;
         String message = format(msg, args);
-        DebugLogStore.add(tag, message);
-        Logger.t(safeTag(tag)).d(DiagnosticText.clean(message).text());
+        DiagnosticText.Clean clean = DiagnosticText.clean(message);
+        DebugLogStore.addCleaned(tag, clean, message, false);
+        Logger.t(safeTag(tag)).d(clean.text());
     }
 
     private static String safeTag(String tag) {
-        return DiagnosticText.clean(TextUtils.isEmpty(tag) ? TAG : tag).text();
+        return DiagnosticText.sanitizeTag(TextUtils.isEmpty(tag) ? TAG : tag);
     }
 
     private static String format(String msg, Object... args) {

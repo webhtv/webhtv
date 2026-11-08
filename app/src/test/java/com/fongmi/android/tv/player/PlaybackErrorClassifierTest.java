@@ -134,6 +134,27 @@ public class PlaybackErrorClassifierTest {
                 error("Player stuck", null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT), route).stage());
     }
 
+    @Test
+    public void transientSourceFailuresAreSeparatedFromUnsupportedContent() {
+        // 取不到流（网络/本机端点/manifest 空体）→ 重试本项、不换内核。
+        assertEquals(true, PlaybackErrorClassifier.isTransientSourceFailure(
+                PlaybackErrorClassifier.Stage.NETWORK_IO, PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS));
+        assertEquals(true, PlaybackErrorClassifier.isTransientSourceFailure(
+                PlaybackErrorClassifier.Stage.LOCAL_ENDPOINT, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED));
+        assertEquals(true, PlaybackErrorClassifier.isTransientSourceFailure(
+                PlaybackErrorClassifier.Stage.MEDIA_PARSING, PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED));
+        // 内容能力边界（容器不支持/损坏、编码器失败）必须保留换核机会。
+        assertEquals(false, PlaybackErrorClassifier.isTransientSourceFailure(
+                PlaybackErrorClassifier.Stage.MEDIA_PARSING, PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED));
+        assertEquals(false, PlaybackErrorClassifier.isTransientSourceFailure(
+                PlaybackErrorClassifier.Stage.MEDIA_PARSING, PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED));
+        assertEquals(false, PlaybackErrorClassifier.isTransientSourceFailure(
+                PlaybackErrorClassifier.Stage.MEDIA_PARSING, PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED));
+        assertEquals(false, PlaybackErrorClassifier.isTransientSourceFailure(
+                PlaybackErrorClassifier.Stage.DECODER, PlaybackException.ERROR_CODE_DECODER_INIT_FAILED));
+        assertEquals(false, PlaybackErrorClassifier.isTransientSourceFailure(null, PlaybackException.ERROR_CODE_UNSPECIFIED));
+    }
+
     private static PlaybackException error(String message, Throwable cause, int code) {
         return new TestPlaybackException(message, cause, code);
     }

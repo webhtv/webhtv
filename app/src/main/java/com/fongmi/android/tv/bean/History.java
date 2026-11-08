@@ -29,6 +29,7 @@ import com.fongmi.android.tv.playback.TmdbSeasonProgressStore;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.Util;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
@@ -131,8 +132,9 @@ public class History implements Diffable<History> {
     private String subtitleSource;
     private transient long updateTime;
     private transient String playbackSourceKey;
-    @Ignore
-    private transient String sourceBindingKey;
+    @SerializedName("sourceBindingKey")
+    @ColumnInfo(defaultValue = "")
+    private String sourceBindingKey;
     @Ignore
     private transient String displayIdentity;
 
@@ -256,7 +258,10 @@ public class History implements Diffable<History> {
         History aggregated = findPlaybackByTmdb(key, vodNames, flags, explicitTmdbId, explicitMediaType, expectedSeason);
         if (aggregated != null) return aggregated;
         History history = find(key);
-        if (isSeasonEligible(history, key, expectedSeason)) return copyForPlaybackKey(history, key, flags, history);
+        if (history != null) {
+            History own = findPlaybackCandidate(key, Collections.singletonList(history), flags, expectedSeason);
+            if (own != null) return own;
+        }
         if (vodNames != null) {
             for (String vodName : vodNames) {
                 if (vodName == null || vodName.isEmpty()) continue;
@@ -388,8 +393,13 @@ public class History implements Diffable<History> {
     }
 
     public static List<History> findByName(String name) {
+        return findByName(VodConfig.getCid(), name);
+    }
+
+    /** 按显式 cid 查同名记录，供"推送到指定源"使用，不读取当前激活配置。 */
+    public static List<History> findByName(int cid, String name) {
         try {
-            return AppDatabase.get().getHistoryDao().findByName(VodConfig.getCid(), name);
+            return AppDatabase.get().getHistoryDao().findByName(cid, name);
         } catch (Exception e) {
             return Collections.emptyList();
         }
@@ -422,16 +432,27 @@ public class History implements Diffable<History> {
     }
 
     public static void sync(List<History> targets) {
+        syncTo(VodConfig.getCid(), targets);
+    }
+
+    /**
+     * 把 targets 写入指定配置的历史。
+     *
+     * <p>与 {@link #sync(List)} 的唯一区别是 cid 显式传入：桥接推送的目标是"某个源"，
+     * 而不是"安卓此刻激活的源"，按当前 cid 落库会把记录写错源、并迫使调用方切配置。
+     * 同名合并也按同一个 cid 查，避免跨源串记录。
+     */
+    public static void syncTo(int cid, List<History> targets) {
         targets.forEach(target -> {
             if (!target.canMergeByName()) {
-                target.cid(VodConfig.getCid()).save();
+                target.cid(cid).save();
                 return;
             }
-            List<History> items = findByName(target.getVodName());
-            if (items.isEmpty()) target.cid(VodConfig.getCid()).save();
+            List<History> items = findByName(cid, target.getVodName());
+            if (items.isEmpty()) target.cid(cid).save();
             else {
                 long latestTime = items.stream().mapToLong(History::getCreateTime).max().orElse(0L);
-                if (target.getCreateTime() > latestTime) target.cid(VodConfig.getCid()).merge(items, true).save();
+                if (target.getCreateTime() > latestTime) target.cid(cid).merge(items, true).save();
             }
         });
     }
@@ -462,6 +483,15 @@ public class History implements Diffable<History> {
         if (selected == null) {
             for (History item : items) {
                 if (isSeasonEligible(item, key, expectedSeason)) {
+                    selected = item;
+                    break;
+                }
+            }
+        }
+        if (selected == null) {
+            // 同 key 放宽：季绑定漂移后仍按线路可绑定的同集续播，避免整条记录被丢弃后退化成第 1 集。
+            for (History item : items) {
+                if (canResume(item) && TextUtils.equals(key, item.getKey()) && matchesAnyEpisode(item, flags)) {
                     selected = item;
                     break;
                 }
@@ -525,9 +555,14 @@ public class History implements Diffable<History> {
             }
         }
         if (resolved == null) resolved = preferred != null ? preferred : firstFlag(flags);
+        boolean routeChanged = !TextUtils.isEmpty(playback.getVodFlag()) && resolved != null && !TextUtils.equals(resolved.getFlag(), playback.getVodFlag());
         if (resolved != null) playback.setVodFlag(resolved.getFlag());
         playback.setSourceBindingKey(stableFlagKey(flags, resolved));
         if (episode != null) playback.setEpisodeUrl(episode.getUrl());
+        // 换线路且新线路找不到该集时只清空旧 URL，避免落库成「新线路 + 旧 URL」的矛盾态。
+        // 这里刻意不清 vodRemarks：URL 是线路内身份，remarks 是跨线路的集号来源，
+        // matchesEpisode 在 URL 失配后会退化到 matchesNumber 用它比对，清掉反而丢掉唯一的集号线索。
+        else if (routeChanged) playback.setEpisodeUrl("");
     }
 
     private static String stableFlagKey(List<Flag> flags, Flag target) {
@@ -903,8 +938,17 @@ public class History implements Diffable<History> {
 
     public boolean setTmdbEpisodePosition(Episode episode) {
         TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
-        int episodeNumber = tmdbEpisode == null ? 0 : tmdbEpisode.getNumber();
-        return setTmdbEpisodePosition(tmdbEpisode, episodeNumber);
+        if (tmdbEpisode == null) {
+            // 上游解析不出 TMDB 集号时不能把已确认的季号一并抹成 0：追更按季号精确匹配，
+            // 归零后 watchedEpisode 永远不前进。集号可解析时沿用已确认季号（无确认则为未知季）。
+            // 「已确认」= 正季号，或特别篇季 0 且本记录已有集号；裸 0/0 只是未写过，不能当成特别篇。
+            int sourceNumber = episode == null ? 0 : episode.getNumber();
+            if (sourceNumber <= 0) return setTmdbEpisodePosition(null, 0);
+            boolean seasonConfirmed = tmdbSeasonNumber > 0
+                    || tmdbSeasonNumber == 0 && tmdbEpisodeNumber > 0;
+            return setTmdbEpisodePosition(seasonConfirmed ? tmdbSeasonNumber : -1, sourceNumber);
+        }
+        return setTmdbEpisodePosition(tmdbEpisode, tmdbEpisode.getNumber());
     }
 
     public boolean setTmdbEpisodePositionWithUnknownSeason(int episodeNumber) {
@@ -1145,7 +1189,7 @@ public class History implements Diffable<History> {
         String siteKey = getSiteKey();
         String vodId = getVodId();
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return;
-        TmdbItem item = Setting.getTmdbMatchCache().find(siteKey, vodId, getVodName());
+        TmdbItem item = Setting.getTmdbMatchCache().find(siteKey, vodId, getVodName(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent(), Setting.getLanguage()));
         if (item != null && item.getTmdbId() > 0) {
             this.tmdbId = item.getTmdbId();
             this.mediaType = item.getMediaType();

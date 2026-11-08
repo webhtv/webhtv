@@ -12,10 +12,10 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivitySettingTmdbBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.ui.dialog.TmdbSourceDialog;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class SettingTmdbActivity extends BaseActivity {
 
@@ -92,7 +92,7 @@ public class SettingTmdbActivity extends BaseActivity {
     }
 
     private void setDetailOpenMode(View view) {
-        AlertDialog alert = new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog).setTitle(R.string.setting_detail_open_mode).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(getDetailOpenModes(), getDetailOpenModeIndex(), (dialog, which) -> {
+        AlertDialog alert = new WebHtvAlertDialogBuilder(this, R.style.Theme_WebHTV_Dialog).setTitle(R.string.setting_detail_open_mode).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(getDetailOpenModes(), getDetailOpenModeIndex(), (dialog, which) -> {
             int mode = DETAIL_OPEN_MODES[which];
             Setting.putDetailOpenMode(mode);
             setText();
@@ -109,7 +109,7 @@ public class SettingTmdbActivity extends BaseActivity {
 
     private void setDetailThemeMode(View view) {
         if (!Setting.isTmdbMode(Setting.getDetailOpenMode())) return;
-        AlertDialog alert = new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog).setTitle(R.string.setting_detail_theme_mode).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(getDetailThemeModes(), getDetailThemeModeIndex(), (dialog, which) -> {
+        AlertDialog alert = new WebHtvAlertDialogBuilder(this, R.style.Theme_WebHTV_Dialog).setTitle(R.string.setting_detail_theme_mode).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(getDetailThemeModes(), getDetailThemeModeIndex(), (dialog, which) -> {
             Setting.putTmdbDetailStyle(DETAIL_THEME_MODES[which]);
             setText();
             dialog.dismiss();

@@ -15,7 +15,7 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="12dp"
         android:text="@string/control_display"
-        android:textColor="#F2FFFFFF"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="18sp" />
 
     <com.google.android.flexbox.FlexboxLayout
@@ -58,6 +58,12 @@
             android:id="@+id/display_params"
             style="@style/DisplayControl"
             android:text="@string/play_params"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/display_media_badges"
+            style="@style/DisplayControl"
+            android:text="@string/display_media_badges"
             android:visibility="gone" />
 
     </com.google.android.flexbox.FlexboxLayout>

@@ -20,7 +20,7 @@
             android:layout_weight="1"
             android:gravity="start|center_vertical"
             android:text="@string/player_mpv_config"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="18sp"
             android:textStyle="bold" />
 
@@ -35,7 +35,7 @@
             android:text="@string/mpv_config_new"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/close"
@@ -47,7 +47,7 @@
             android:focusable="true"
             android:padding="10dp"
             android:src="@drawable/ic_dialog_close"
-            android:tint="#5F6368" />
+            android:tint="@color/fixed_light_focus_icon" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -83,7 +83,7 @@
         android:gravity="center"
         android:padding="28dp"
         android:text="@string/mpv_config_no_profiles"
-        android:textColor="#80868B"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="14sp"
         android:visibility="gone" />
 

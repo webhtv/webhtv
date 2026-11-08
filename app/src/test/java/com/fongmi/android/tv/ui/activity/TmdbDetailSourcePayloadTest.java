@@ -30,7 +30,7 @@ public class TmdbDetailSourcePayloadTest {
         String body = loadContentBody();
         int request = body.indexOf("tmdbService.detailForSource(initialBundle.item(), sourcePayload.getSeasonNumber(), tmdbConfig, plan.missing())");
         int adapt = body.indexOf("TmdbSourceAdapter.fromNetwork(initialBundle.item(), detail, tmdbConfig)");
-        int merge = body.indexOf("TmdbSourceMerger.fillOnly(initialBundle, sourcePayload, networkBundle)");
+        int merge = body.indexOf("TmdbSourceMerger.fillOnly(initialBundle, sourcePayload, networkBundle");
         int apply = body.indexOf("applyTmdbResultNow(new TmdbLoadResult(mergedBundle, List.of()));", merge);
 
         assertTrue("missing capabilities must request by the embedded TMDB identity", request >= 0 && adapt > request);

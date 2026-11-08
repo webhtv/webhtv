@@ -30,6 +30,16 @@ public class Group {
     private int position;
     private int width;
 
+    /**
+     * 界面语言下的分组显示名。
+     * <p>
+     * {@link #name} 同时是 keep 键（{@code Live.keep()} 会拼成 {@code 组名@@@频道名@@@线路}）、
+     * 浏览树 id（{@code LG:组名}）与 {@link #equals} 的依据，必须与界面语言无关；简繁转换只写到
+     * 本字段，由 {@link #getDisplayName()} 供 UI 展示。加 transient 是为了不进入 gson 序列化
+     * （分组来自直播源自带的 JSON，导出时不应夹带译文）。
+     */
+    private transient String displayName;
+
     public Group(String name) {
         this(name, false);
     }
@@ -80,6 +90,17 @@ public class Group {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    /**
+     * 界面语言下的展示名；未做简繁转换时回退到 {@link #getName()}。
+     */
+    public String getDisplayName() {
+        return TextUtils.isEmpty(displayName) ? getName() : displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
     }
 
     public String getPass() {
@@ -138,6 +159,19 @@ public class Group {
         return getChannel().lastIndexOf(Channel.create(name));
     }
 
+    /**
+     * 该分组是否就是给定的身份名。
+     * <p>
+     * 旧版本把简繁转换后的组名写进了 keep 键与浏览树 id，所以除了当前身份名，还要把候选名与
+     * 配置值都做一次简繁归一后再比，避免升级后「上次频道」静默退回第一组第一个频道。
+     * 归一显式传 {@code pass=false} 强制转换，否则简体态会短路返回原文。
+     */
+    public boolean matchesName(String name) {
+        if (TextUtils.isEmpty(name)) return false;
+        if (getName().equals(name) || getDisplayName().equals(name)) return true;
+        return Trans.s2t(false, getName()).equals(Trans.s2t(false, name));
+    }
+
     public void add(Channel channel) {
         Channel exist = getChannel().stream().filter(item -> item.equals(channel)).findFirst().orElse(null);
         if (exist != null) exist.getUrls().addAll(channel.getUrls());
@@ -155,9 +189,16 @@ public class Group {
         return getChannel().get(getPosition()).group(this);
     }
 
+    /**
+     * 只把简繁转换结果写到展示名，绝不改写 {@link #name}。
+     * <p>
+     * 旧实现直接改写 name，导致 keep 键（组名@@@频道名@@@线路）、浏览树 id（LG:组名）与
+     * {@link #equals} 全部随界面语言漂移：切到繁体后「上次频道」静默回落到第一组第一个频道，
+     * 切回简体又按另一套组名再找一遍。
+     */
     public Group trans() {
         if (Trans.pass()) return this;
-        this.name = Trans.s2t(name);
+        this.displayName = Trans.s2t(name);
         return this;
     }
 

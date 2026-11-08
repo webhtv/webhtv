@@ -197,7 +197,7 @@ T3/T4 现有响应、解析、缓存和页面入口不变；新客户端识别�
 
 1. 解析并验证 `tmdb`。
 2. 在启动 `TmdbDetailPrefetch` 之前计算当前页面所需能力组。
-3. 所需字段完整时直接渲染，TMDB 请求数必须为 0。
+3. 所需字段完整时直接渲染，TMDB **补齐**请求数必须为 0。例外见 §6.3：identity 已知的页面允许 1 次并行预热请求，其结果不得上屏。
 4. 部分缺失且用户 TMDB 配置可用时，复用现有详情请求，并只填缺口。
 5. 只有合法 ID 时跳过标题搜索，直接按 ID 补齐。
 6. ID 缺失或身份无效时维持现有匹配流程。
@@ -212,6 +212,18 @@ T3/T4 现有响应、解析、缓存和页面入口不变；新客户端识别�
 - 页面关闭、切源或身份变化时继续使用现有取消与 identity 机制，旧请求不得覆盖新页面。
 
 内嵌数据不依赖 APP 的 TMDB API Key。没有凭据时仍应完整显示已有源数据，只是不补缺口。
+
+### 6.3 identity 已知时的并行预热（例外）
+
+当详情页 Intent 已携带明确的 `tmdbItem`（`tmdbId > 0` 且媒体类型合法）时，APP 允许在站点详情请求发出的同时并行预热 1 次 TMDB 详情请求，用于消除两个互相独立请求的串行等待。
+
+约束（缺一不可）：
+
+1. 只在 TMDB 配置可用且当前站点允许 TMDB 时启动；已复用 `TmdbBundle`、自动匹配（identity 未知）时不启动。
+2. 预热结果只在「页面确实需要 TMDB 详情」的路径被消费（`loadPrefetchedTmdbBundle`）；源 payload 路径必须取消单槽并丢弃结果，不得上屏、不得覆盖源字段。
+3. 该页面**后续**的 TMDB 补齐请求数仍按本文件其余条款执行；预热不改变 `TmdbSourceCapabilityPlanner` 的缺口判定。
+4. 页面关闭、`onNewIntent`、切源、快速退出与代际变化时沿用现有取消与 identity 机制（单槽 `TmdbDetailPrefetch`），旧结果不得覆盖新页面。
+5. 已知代价：T3/T4 完整 payload 页面会多发 1 次预热请求。该代价由 `TMDB-DETAIL-PERF-01` 明确接受并记录，不属于回归。
 
 ## 7. 数据模型与代码边界
 
@@ -294,7 +306,7 @@ T4 内部若有持久化元数据，建议按 `provider=tmdb、metaId=id、seaso
 
 1. 无 `tmdb` 的旧 T3/T4 响应与现状一致。
 2. T3/T4 返回相同 JSON 时解析结果和请求计划一致。
-3. 完整首屏打开详情时 TMDB 请求数为 0。
+3. 完整首屏打开详情时 TMDB 补齐请求数为 0；identity 已知的页面允许 §6.3 的 1 次并行预热，结果不上屏、不改变源字段归属。
 4. 只缺 `credits` 时最多发一次补齐请求，源字段不被覆盖。
 5. 只有合法 ID 时跳过搜索并直接按 ID 补齐。
 6. ID、媒体类型或 `detail.id` 冲突时拒绝增强对象，普通详情和播放仍可用。
@@ -483,7 +495,7 @@ if plan.hasInitialNetworkGaps() and tmdbConfig.isReady() and siteAllowsTmdb:
 
 具体分支：
 
-1. payload 合法且首屏能力完整：不创建 `TmdbLoadResult`，不调用搜索、`loadTmdbBundle` 或 `TmdbService.detail`。
+1. payload 合法且首屏能力完整：不创建 `TmdbLoadResult`，不调用搜索或 `loadTmdbBundle`。identity 已知时允许在站点详情返回前预热 1 次详情请求（§6.3），但其结果必须丢弃，不得替代或不参与 source 渲染。
 2. payload 合法但缺 `core`：用 payload 的 ID 构造 `TmdbItem`，直接调用详情接口；禁止标题搜索。
 3. payload 合法但缺 `credits/images`：直接按 ID 请求完整详情并只合并缺口。
 4. payload 只有 ID 且 `detail` 为空：直接按 ID 请求；只有 payload 无效或 ID 缺失时才进入原有 `searchResolvedTmdbMatch()`。
@@ -604,12 +616,13 @@ T4 的服务端测试必须验证旧客户端仍可读取 `vod_*`，新客户端
 
 - 提交：`7de6bed8886ab34e429f4e66295d12e946815393`；恢复标签 `recovery/C16-stage4/20260919111304-7de6bed8886a`。
 - `TmdbDetailActivity.loadContent` 已改为先完成 `SiteApi.detailContent`、解析并应用 `Vod.tmdb`，再决定是否创建旧 TMDB 匹配任务；旧源路径仍在源详情完成后串行执行。
+- 后续性能任务（`TMDB-DETAIL-PERF-01` §W1）为 identity 已知的页面新增并行预热：TMDB 详情请求与站点详情同时发出，源 payload 路径直接丢弃预热结果（见 §6.3）。
 - 合法 payload 先按 identity 构造 `TmdbBundle`，再计算 `TmdbSourceCapabilityPlanner` 首屏缺口；`core/credits/images` 完整时直接返回，不调用来源详情 TMDB 请求。
 - 部分 payload 使用 `TmdbService.detailForSource()` 按 TMDB ID 请求，合并后通过 `TmdbSourceMerger.fillOnly()` 仅填缺口；不再为有效身份执行标题搜索。
 - `TmdbService` 新增 source detail 缓存键，包含媒体类型、TMDB ID、季上下文、语言和排序后的能力 mask；请求 URL、认证和磁盘缓存实现保持现有策略。
 - `TmdbSourceAdapter.fromNetwork()` 复用与服务端 payload 相同的字段解析、图片规范化和季集映射，确保 source 与 network bundle 形状一致。
 - 后台合并回 UI 前继续检查 generation、当前 `Vod` 和 TMDB identity；旧页面、切源或退出不会应用迟到结果。
-- 同步调整旧 standalone 源码测试：仍保留单次首屏绑定和季预加载，但断言顺序改为 source detail -> payload plan -> TMDB wait。
+- 同步调整旧 standalone 源码测试：仍保留单次首屏绑定和季预加载，但断言顺序改为 source detail -> payload plan -> TMDB wait（identity 预热先于 source detail，属 §6.3 例外，不在该断言范围）。
 - 定向验证：`TmdbDetailSourcePayloadTest`、`TmdbDetailGenerationTest`、`TmdbServiceCacheKeyTest`、`TmdbSourceAdapterTest`、`TmdbDetailActivityLayoutTest`、`TmdbUIAdapterTest` 共 75 项通过；Leanback Arm64 Debug Java 编译通过，Gradle 返回 `BUILD SUCCESSFUL`。
 - 未验证项：真实网站 T3/T4 网络请求计数、移动端/电视端字段渲染和真实退出/切源竞态，留待阶段 6 设备验收。
 
@@ -1809,7 +1822,7 @@ T3 爬虫和 T4 服务端：
 | ---: | --- | --- |
 | 19-A1 | 旧订阅配置与旧 T3/T4 均无 `tmdb_api_key` | 与第 18 节完全一致，无新增 TMDB 请求 |
 | 19-A2 | 用户已配置 Key，订阅配置返回根字段 | 只用用户配置；源值不进入作用域、不进入日志/缓存 |
-| 19-A3 | 无用户配置，订阅配置合法根字段 + 完整 payload | 源数据上屏；首屏 TMDB 请求数为 0 |
+| 19-A3 | 无用户配置，订阅配置合法根字段 + 完整 payload | 源数据上屏；首屏 TMDB 补齐请求数为 0（identity 已知时允许 §6.3 的 1 次并行预热，结果丢弃） |
 | 19-A4 | 无用户配置，订阅配置合法根字段 + 部分 payload | 按有效配置只补缺失能力，源字段不被覆盖 |
 | 19-A5 | 无用户配置，订阅配置合法根字段 + 仅身份 | 可用有效配置加载详情；失败回退原始详情 |
 | 19-A6 | 同一订阅接口内跨站点/条目/详情 | 临时 Key 持续可用，不清空 |

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 深色模式：低透明度黑纱，与 leanback 首页按钮 / 深色设置行同一套面板语言。 -->
+    <item android:alpha="0.32" android:color="@color/black" />
+</selector>

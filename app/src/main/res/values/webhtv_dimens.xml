@@ -1,0 +1,27 @@
+<resources>
+    <dimen name="webhtv_space_1">4dp</dimen>
+    <dimen name="webhtv_space_2">8dp</dimen>
+    <dimen name="webhtv_space_3">12dp</dimen>
+    <dimen name="webhtv_space_4">16dp</dimen>
+    <dimen name="webhtv_space_5">20dp</dimen>
+    <dimen name="webhtv_space_6">24dp</dimen>
+    <dimen name="webhtv_size_icon">24dp</dimen>
+    <dimen name="webhtv_size_button">48dp</dimen>
+    <dimen name="webhtv_size_input_min_height">56dp</dimen>
+    <dimen name="webhtv_size_tv_card_gap">20dp</dimen>
+    <dimen name="webhtv_card_radius_default">8dp</dimen>
+    <dimen name="webhtv_card_radius_large">12dp</dimen>
+    <dimen name="webhtv_size_dialog_corner">22dp</dimen>
+    <!--
+        电视版统一焦点边框环宽度。全 TV 只允许这一个宽度来源，新增可聚焦控件必须引用它。
+
+        取值 1.5dp：这是统一前「内容卡片」那一族焦点环（shape_vod_focused 等 1.5dp）的实机
+        宽度，也是用户对比后认可的粗细。应用表面（首页按钮/内容卡片/列表项/对话框按钮）
+        必须保持这一个取值，不要再按「视频层更粗」的印象把它调粗——实机复核时 3dp 环
+        在首页卡片上被用户判为「太粗」（2026-10-10 实机截图）。
+
+        视频层/固定明暗宿主（selector_video_item 等）是另一套语义，见
+        docs/TV-FOCUS-RING-20261004-unified-theme-ring.md。
+    -->
+    <dimen name="webhtv_focus_ring_width">1.5dp</dimen>
+</resources>

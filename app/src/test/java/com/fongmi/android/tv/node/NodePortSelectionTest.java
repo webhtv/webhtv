@@ -111,7 +111,20 @@ public class NodePortSelectionTest {
         assertTrue("NodeRuntime 启动必须有超时", runtime.contains("START_TIMEOUT_MS"));
         assertTrue("启动超时必须停止 NodeService", runtime.contains("NodeService.stop(context)"));
         assertTrue("启动超时必须复位 STARTING", runtime.contains("STARTING.compareAndSet(true, false)"));
-        assertTrue("CatSource 等待必须有时间上限", source.contains("latch.await(60, TimeUnit.SECONDS)"));
+        assertTrue("CatSource 等待必须使用集中定义的启动预算", source.contains("latch.await(NodeRuntime.START_TIMEOUT_MS, TimeUnit.MILLISECONDS)"));
+        assertTrue("NodeRuntime 必须给首次加载足够的启动预算", runtime.contains("START_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(12)"));
+        assertTrue("NodeService 必须给端口就绪探测独立预算", runtime.contains("READY_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(3)"));
+        assertTrue("NodeService 必须给单次 /config 探测独立短超时", runtime.contains("READY_PROBE_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(2)"));
+    }
+
+    @Test
+    public void readyProbeUsesBoundedPerRequestTimeoutAndLongerOverallBudget() throws IOException {
+        String runtime = read("com/fongmi/android/tv/node/NodeRuntime.java");
+        String service = read("com/fongmi/android/tv/node/NodeService.java");
+        assertTrue("就绪探测必须使用独立单次超时", service.contains("callTimeout(NodeRuntime.READY_PROBE_TIMEOUT_MS")
+                && service.contains("probeClient.newCall") && service.contains("NodeRuntime.READY_PROBE_TIMEOUT_MS"));
+        assertTrue("就绪探测必须使用整体 deadline，不能固定短轮数", service.contains("NodeRuntime.READY_TIMEOUT_MS") && service.contains("SystemClock.elapsedRealtime()"));
+        assertTrue("NodeService 不得仍使用旧的 225 轮固定上限", !service.contains("for (int i = 0; i < 225; i++)"));
     }
 
     @Test
@@ -179,6 +192,19 @@ public class NodePortSelectionTest {
             assertTrue("servingSourceKey 不能被赋成 " + value + "（只允许 \"\" 或 installedSourceKey）",
                     value.equals("\"\"") || value.equals("NodeBundle.installedSourceKey(App.get())"));
         }
+    }
+
+    @Test
+    public void remoteMetadataIsParallelAndBundleTransfersUseLongerTimeout() throws IOException {
+        String bundle = read("com/fongmi/android/tv/node/NodeBundle.java");
+        String runtime = read("com/fongmi/android/tv/node/NodeRuntime.java");
+        assertTrue("远端 md5 必须并行获取", bundle.contains("remoteMd5Pair")
+                && bundle.contains("cat-md5-bundle") && bundle.contains("cat-md5-config"));
+        assertTrue("每个 md5 请求必须有完整调用超时，不能只限制连接阶段", bundle.contains("callTimeout(METADATA_TIMEOUT_MS"));
+        assertTrue("bundle 下载必须使用独立传输预算", bundle.contains("NodeRuntime.TRANSFER_TIMEOUT_MS"));
+        assertTrue("NodeLib 下载必须使用更长的运行时传输预算",
+                read("com/fongmi/android/tv/node/NodeLib.java").contains("NodeRuntime.LIB_TRANSFER_TIMEOUT_MS"));
+        assertTrue("运行时必须定义传输预算", runtime.contains("TRANSFER_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(3)"));
     }
 
     @Test

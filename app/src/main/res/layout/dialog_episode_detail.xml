@@ -5,17 +5,17 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#B3000000"
+    android:background="@color/webhtv_color_scrim"
     android:padding="16dp">
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/panel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:cardBackgroundColor="#2A2A2A"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
         app:cardCornerRadius="16dp"
         app:cardElevation="8dp"
-        app:strokeColor="#4A4A4A"
+        app:strokeColor="?attr/colorOutlineVariant"
         app:strokeWidth="1dp">
 
         <LinearLayout
@@ -42,7 +42,7 @@
                         android:id="@+id/still"
                         android:layout_width="match_parent"
                         android:layout_height="280dp"
-                        android:background="#1A1A1A"
+                        android:background="?attr/colorSurfaceContainerLowest"
                         android:scaleType="centerCrop"
                         android:visibility="gone" />
 
@@ -52,7 +52,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:textColor="#FFFFFF"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="20sp"
                         android:textStyle="bold" />
 
@@ -62,7 +62,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:textColor="#AAAAAA"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textIsSelectable="true"
                         android:textSize="13sp"
                         android:visibility="gone"
@@ -74,7 +74,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:textColor="#AAAAAA"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="13sp"
                         android:visibility="gone" />
 
@@ -85,7 +85,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
                         android:lineSpacingExtra="4dp"
-                        android:textColor="#DDDDDD"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="14sp" />
 
                     <!-- 剧照标题 -->
@@ -95,7 +95,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="20dp"
                         android:text="@string/detail_tmdb_photos"
-                        android:textColor="#FFFFFF"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:visibility="gone" />
@@ -116,7 +116,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="20dp"
                         android:text="@string/detail_episode_guests"
-                        android:textColor="#FFFFFF"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:visibility="gone" />

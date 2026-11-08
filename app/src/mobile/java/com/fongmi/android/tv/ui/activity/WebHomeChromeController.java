@@ -1,6 +1,5 @@
 package com.fongmi.android.tv.ui.activity;
 
-import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -17,6 +16,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.utils.Util;
 import com.fongmi.android.tv.web.WebHomeChrome;
 import com.fongmi.android.tv.web.WebHomeChromeOptions;
@@ -222,7 +222,6 @@ final class WebHomeChromeController {
     private boolean useDarkIcons(String style) {
         if (WebHomeChromeOptions.STYLE_DARK.equals(style)) return true;
         if (WebHomeChromeOptions.STYLE_LIGHT.equals(style)) return false;
-        int mask = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return mask != Configuration.UI_MODE_NIGHT_YES;
+        return !ThemeController.isNight(activity);
     }
 }

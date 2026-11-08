@@ -13,6 +13,7 @@
     <string name="live_refresh">Refresh</string>
     <string name="live_line">Line <xliff:g name="name">%s</xliff:g></string>
     <string name="live_control_source">Live source</string>
+    <string name="live_control_source_named">Live source: <xliff:g name="name">%s</xliff:g></string>
     <string name="live_no_epg">00:00 - 23:59 No program info</string>
 
     <!-- Detail -->
@@ -42,6 +43,14 @@
     <string name="keep">Keep</string>
     <string name="keep_add">Added</string>
     <string name="keep_del">Removed</string>
+    <!-- 收藏页空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。 -->
+    <string name="keep_empty_title">Nothing saved yet</string>
+    <string name="keep_empty_description">Press Keep on any detail page and it will show up here.</string>
+    <string name="keep_empty_action">Browse Vod</string>
+    <!-- 历史页空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。 -->
+    <string name="history_empty_title">No watch history yet</string>
+    <string name="history_empty_description">Titles you play show up here so you can pick up where you left off.</string>
+    <string name="history_empty_action">Browse Vod</string>
     <string name="exit_confirm_title">Exit app</string>
     <string name="exit_confirm_message">The app, playback, and background services will stop.</string>
     <string name="exit_confirm_playing_message">Playback is active. Background playback keeps it playing; Exit completely stops playback and background services.</string>
@@ -174,6 +183,12 @@
     <string name="push_image" translatable="false">data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCADwAPADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9U6KKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACvN7bxhffFCaRPB+oWZ8KSQX1h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g74M+K1mbfxR4fs9UYLtS5ZNlxH/ALkq4dfoDitbp7mFmtjGvNNudPbbcQtH6NjIP41518fo5NY8G+FfAFsxS88da3DaTbSQy2ULCWdwRzwFX8GNTyfBX4nfCdd/w38bf8JHoqf8yx4w/ertzkrFcDkdwAQoHcml+F9n4v8AiP8AHCLxZ4w8H3Xg6Hwxop020sZ3WSF7yaQmWWGQcOvlhVyOOcZOKaVtbkt30seofFbVo/C/gCS2s9Y07w3dXTRabp9xqUBmt/NcgLEYwDuDKGXFdhptmun6fa2qrGiwRLEFhQRoAoAwqjhRxwB0p11ZW98ipcwRXCK6yKsqBgGByGGe4PQ1PUFhRRRSGFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAVhePP+RH8Rf9g64/9FNW7WD483HwN4i2RvK/9nXOI413Mx8puAO5NNbgfB/jX4kWV58A/hN8NZdQaw0u40+PVvEl1Dy0NjHI2yMdi7sPlU9XEQ/ir6Q+DPw1vPGOt6f8RfGGljTBZ262/hTwww/d6LZgAK7L/wA92ULk/wAIAHYBfFf2N/2XJtelsfiN47tWeKIRjR9LuoyN4jUIk8in+EBRsB643dMZ+6K1m0tEYwTerCiiisTYKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP/Z</string>
 
     <!-- Setting -->
+    <!-- Section headings of the TV settings page; it groups its rows so the screen stops
+         reading as one flat wall of seventeen equally weighted items. -->
+    <string name="setting_group_sources">Sources</string>
+    <string name="setting_group_playback">Playback &amp; content</string>
+    <string name="setting_group_personal">Personalization &amp; intelligence</string>
+    <string name="setting_group_data">Data &amp; network</string>
     <string name="setting_vod">Vod</string>
     <string name="setting_live">Live</string>
     <string name="setting_wall">Wallpaper</string>
@@ -261,6 +276,7 @@
     <string name="dialog_delete_global_history">Delete history from all VOD configurations?</string>
     <string name="config_delete_title">Delete source?</string>
     <string name="config_delete_message">Delete “%1$s”? Related playback history may also be lost. This cannot be undone.</string>
+    <string name="config_current_delete_message">This interface is currently in use. Switch to another interface before deleting it.</string>
     <string name="setting_home_history">Home recent history</string>
     <string name="setting_personal_recommendation">Personal recommendations</string>
     <string name="setting_recommendation_feedback">Not interested management</string>
@@ -775,6 +791,8 @@
     <string name="setting_custom_csp_recognize_empty">Paste site JSON first</string>
     <string name="setting_custom_csp_recognize_invalid">No valid site JSON detected</string>
     <string name="setting_custom_csp_recognize_done">Added %1$d items</string>
+    <string name="setting_custom_csp_search_hint">Search site injections…</string>
+    <string name="setting_custom_csp_search_empty">No matching site injections</string>
     <string name="setting_custom_csp_sort">Sort</string>
     <string name="setting_custom_csp_sort_done">Done</string>
     <string name="setting_custom_csp_sort_drag">Drag to sort</string>
@@ -891,9 +909,111 @@
     <string name="site_name_reset_title">Reset custom site names?</string>
     <string name="site_name_reset_message">All custom names and groups for the current interface will be removed.</string>
     <string name="setting_short_drama_source">Short drama source config</string>
+    <string name="setting_theme_mode">Theme mode</string>
+    <string name="setting_theme_mode_system">Follow system</string>
+    <string name="setting_theme_mode_light">Light</string>
+    <string name="setting_theme_mode_dark">Dark</string>
     <string name="setting_theme_color">Theme color</string>
+    <string name="setting_theme_editor">Customize theme</string>
+    <string name="theme_editor_edit_mode">Preview &amp; edit</string>
+    <string name="theme_editor_dark">Dark</string>
+    <string name="theme_editor_light">Light</string>
+    <string name="theme_editor_preview">Live preview</string>
+    <string name="theme_editor_inherit">Inherit default</string>
+    <string name="theme_editor_clear">Use automatic color</string>
+    <string name="theme_editor_dirty">Previewing unsaved changes on this page only</string>
+    <string name="theme_editor_reset_done">Default loaded into draft. Save to apply.</string>
+    <string name="theme_editor_save_failed">Unable to save: %1$s</string>
+    <string name="theme_editor_apply">Save &amp; apply</string>
+    <string name="theme_editor_reset">Reset to default</string>
+    <string name="theme_editor_cancel">Cancel</string>
+    <string name="theme_editor_confirm">OK</string>
+    <string name="theme_editor_hex_label">Exact hex</string>
+    <string name="theme_editor_hex_hint">#RRGGBB</string>
+    <string name="theme_editor_hex_apply">Use this hex</string>
+    <string name="theme_editor_hex_invalid">Enter #RRGGBB</string>
+    <string name="theme_editor_preset_default">Default</string>
+    <string name="theme_editor_preset_wallpaper">Wallpaper</string>
+    <string name="theme_editor_preset_blue">Ocean</string>
+    <string name="theme_editor_preset_teal">Lagoon</string>
+    <string name="theme_editor_preset_green">Forest</string>
+    <string name="theme_editor_preset_orange">Amber</string>
+    <string name="theme_editor_preset_red">Rose</string>
+    <string name="theme_editor_preset_purple">Iris</string>
+    <string name="theme_editor_preview_title">Aa Title</string>
+    <string name="theme_editor_preview_body">Body text</string>
+    <string name="theme_editor_preview_secondary">Secondary text</string>
+    <string name="theme_editor_preview_filled">Filled button</string>
+    <string name="theme_editor_preview_tonal">Tonal button</string>
+    <string name="theme_editor_slot_primary">Primary</string>
+    <string name="theme_editor_slot_primary_container">Primary container</string>
+    <string name="theme_editor_slot_secondary_container">Secondary container</string>
+    <string name="theme_editor_slot_focus">Focus</string>
+    <string name="theme_editor_slot_player_current">Playing ring</string>
+    <string name="theme_editor_slot_surface">Surface</string>
+    <string name="theme_editor_slot_surface_container">Card surface</string>
+    <string name="theme_editor_slot_surface_container_high">Dialog surface</string>
+    <string name="theme_editor_slot_on_surface">Body text colour</string>
+    <string name="theme_editor_slot_on_surface_variant">Secondary text colour</string>
+    <string name="theme_editor_slot_outline">Outline</string>
+    <string name="theme_editor_slot_error">Error</string>
+    <string name="theme_editor_slot_success">Success</string>
+    <string name="theme_editor_slot_warning">Warning</string>
+    <string name="theme_editor_slot_scrim_opacity">Scrim opacity</string>
+    <string name="theme_editor_slot_dialog_opacity">Dialog opacity</string>
+    <string name="theme_editor_slot_overlay_opacity">Overlay opacity (web theme only)</string>
+    <string name="theme_editor_slot_player_scrim_opacity">Playback menu overlay opacity</string>
+    <string name="theme_editor_slot_live_list_scrim_opacity">Live list overlay opacity</string>
+    <string name="theme_editor_import">Import palette</string>
+    <string name="theme_editor_palette_style">Palette style · keeps manual edits</string>
+    <string name="theme_editor_palette_tonal">Tonal</string>
+    <string name="theme_editor_palette_vibrant">Vibrant</string>
+    <string name="theme_editor_palette_expressive">Expressive</string>
+    <string name="theme_editor_palette_rainbow">Rainbow</string>
+    <string name="theme_editor_palette_fidelity">Fidelity</string>
+    <string name="theme_editor_palette_content">Content</string>
+    <string name="theme_editor_palette_fruit_salad">Fruit salad</string>
+    <string name="theme_editor_palette_neutral">Neutral</string>
+    <string name="theme_editor_palette_monochrome">Monochrome</string>
+    <string name="theme_editor_inline_hint">Changes preview only here. Save to apply to the app.</string>
+    <string name="theme_editor_presets">Built-in themes · complete light and dark palettes</string>
+    <string name="theme_editor_preset_graphite">Graphite</string>
+    <string name="theme_editor_preset_pair">Light + dark</string>
+    <string name="theme_editor_preset_original">Original palette</string>
+    <string name="theme_editor_preset_dynamic">Follows wallpaper</string>
+    <string name="theme_editor_preset_modified">Customized</string>
+    <string name="theme_editor_selected">Selected</string>
+    <string name="theme_editor_saved_state">Editing saved colors · changes stay here until saved</string>
+    <string name="theme_editor_clear_short">↺</string>
+    <string name="theme_editor_value_auto">%1$s · Auto</string>
+    <string name="theme_editor_value_adjusted">Input %1$s\nDisplay %2$s</string>
+    <string name="theme_editor_group_accent">Accent &amp; interaction</string>
+    <string name="theme_editor_group_surfaces">Backgrounds &amp; surfaces</string>
+    <string name="theme_editor_group_text">Text &amp; outlines</string>
+    <string name="theme_editor_group_states">Status colors</string>
+    <string name="theme_editor_group_player">Player</string>
+    <string name="theme_editor_group_layers">Opacity &amp; overlays</string>
+    <string name="theme_editor_group_item_overlay">Item overlay &amp; selection</string>
+    <string name="theme_editor_slot_item_overlay">Item overlay colour</string>
+    <string name="theme_editor_slot_on_item_overlay">Selected text colour</string>
+    <string name="theme_editor_slot_item_overlay_opacity">Item overlay opacity</string>
+    <string name="theme_import_title">Import palette</string>
+    <string name="theme_import_input_hint">Paste TweakCN JSON or an HTTPS JSON link</string>
+    <string name="theme_import_file">Open JSON</string>
+    <string name="theme_import_community">TweakCN community</string>
+    <string name="theme_import_preview_action">Preview import</string>
+    <string name="theme_import_cancel">Cancel</string>
+    <string name="theme_import_use">Use in editor</string>
+    <string name="theme_import_empty">Paste JSON or an HTTPS JSON link first.</string>
+    <string name="theme_import_failed">Palette import failed.</string>
+    <string name="theme_import_browser_unavailable">No browser is available.</string>
+    <string name="theme_import_source_paste">Pasted JSON</string>
+    <string name="theme_import_source_file">Local JSON</string>
+    <string name="theme_import_preview">Ready: %1$s</string>
+    <string name="theme_import_no_warnings">Only supported color roles will be imported.</string>
+    <string name="theme_import_warnings">Import warnings:\n%1$s</string>
     <string name="setting_appearance">Appearance &amp; language</string>
-    <string name="setting_appearance_summary">4 options</string>
+    <string name="setting_appearance_summary">5 options</string>
     <string name="setting_auto">Auto</string>
     <string name="setting_custom">Custom</string>
     <string name="setting_language">Language</string>
@@ -903,6 +1023,73 @@
     <string name="setting_doh">DoH</string>
     <string name="setting_proxy">Proxy</string>
     <string name="setting_cache">Cache</string>
+    <string name="cache_management_title">Cache management</string>
+    <string name="cache_management_scanning">Calculating…</string>
+    <string name="cache_management_summary">Total %1$s</string>
+    <string name="cache_management_summary_with_quota">Total %1$s / %2$s system quota</string>
+    <string name="cache_management_inline">%1$s / %2$s</string>
+    <string name="cache_management_module_detail">%1$s · %2$d files · last used %3$s</string>
+    <string name="cache_management_scanned_at">Scanned at %1$s</string>
+    <string name="cache_management_partial">Partial result · %1$d warnings</string>
+    <string name="cache_management_refresh">Refresh</string>
+    <string name="cache_cleanup_light">Light</string>
+    <string name="cache_cleanup_standard">Standard</string>
+    <string name="cache_cleanup_deep">Deep</string>
+    <string name="cache_cleanup_cancel">Cancel</string>
+    <string name="cache_cleanup_module">Clean</string>
+    <string name="cache_cleanup_owner_managed">Owner managed</string>
+    <string name="cache_cleanup_confirm_module">Clean %1$s? Rebuildable data will be downloaded again when needed.</string>
+    <string name="cache_limit_button">Limit</string>
+    <string name="cache_limit_title">Cache limit</string>
+    <string name="cache_limit_unlimited">Unlimited</string>
+    <string name="cache_auto_button">Auto cleanup</string>
+    <string name="cache_auto_on">Auto cleanup: on</string>
+    <string name="cache_auto_off">Auto cleanup: off</string>
+    <string name="cache_retention_button">Retention</string>
+    <string name="cache_retention_title">Retention period</string>
+    <string name="cache_retention_summary">Retention: %1$s</string>
+    <string name="cache_retention_7">7 days</string>
+    <string name="cache_retention_30">30 days</string>
+    <string name="cache_retention_90">90 days</string>
+    <string name="cache_retention_forever">Forever</string>
+    <string name="cache_total_limit_button">Total limit</string>
+    <string name="cache_total_limit_title">Total cache limit</string>
+    <string name="cache_total_limit_summary">Total limit: %1$s</string>
+    <string name="cache_limit_title_exo">Playback cache limit</string>
+    <string name="cache_management_playback_budget">Playback cache %1$s (shrinks to %2$s once playback ends)</string>
+    <string name="cache_cleanup_confirm_title">Clean cache?</string>
+    <string name="cache_cleanup_confirm_light">Remove expired EPG, temporary, and legacy cache data?</string>
+    <string name="cache_cleanup_confirm_standard">Clean rebuildable modules such as images, lyrics, karaoke, and WebHome cache?\n\nFavorites, history, and settings are not affected.</string>
+    <string name="cache_cleanup_confirm_deep">Clean playback and other deep cache data?\n\nActive playback is protected. Future playback may need to download and buffer again.</string>
+    <string name="cache_cleanup_confirm_deep_final">Deep cleanup cannot be undone. Continue now?</string>
+    <string name="cache_cleanup_continue">Continue</string>
+    <string name="cache_cleanup_deep_start">Start deep cleanup</string>
+    <string name="cache_cleanup_progress">Cleaning %1$s (%2$d/%3$d)</string>
+    <string name="cache_cleanup_done">Cleaned\nReleased %1$s · deleted %2$d files</string>
+    <string name="cache_cleanup_partial">Partially completed\nReleased %1$s · deleted %2$d files · skipped %3$d files</string>
+    <string name="cache_cleanup_deferred">Current playback is active. Playback cache cleanup was deferred.</string>
+    <string name="cache_cleanup_not_allowed">This cache is managed by its owner and cannot be removed directly.</string>
+    <string name="cache_cleanup_failed">Cache cleanup failed</string>
+    <string name="cache_cleanup_cancelled">Cache cleanup cancelled</string>
+    <string name="cache_cleanup_full_started">Cleaning all cache…</string>
+    <string name="cache_cleanup_busy">Cleaning, please wait</string>
+    <string name="cache_module_exo">Exo playback cache</string>
+    <string name="cache_module_mpv_hls">MPV HLS/ISO segments</string>
+    <string name="cache_module_mpv_demuxer">MPV demuxer preload</string>
+    <string name="cache_module_mpv_runtime">MPV shader/font cache</string>
+    <string name="cache_module_lyrics">Lyrics and source choices</string>
+    <string name="cache_module_karaoke">Karaoke tracks</string>
+    <string name="cache_module_webhome_ext">WebHome extensions</string>
+    <string name="cache_module_webhome_raw">WebHome HTTP cache</string>
+    <string name="cache_module_epg">EPG programs</string>
+    <string name="cache_module_glide">Images and covers</string>
+    <string name="cache_module_plugin_scripts">JS/Python/Jar resources</string>
+    <string name="cache_module_plugin_audit">Plugin audit log</string>
+    <string name="cache_module_plugin_http_cache">Plugin network cache</string>
+    <string name="cache_module_temp_files">Temporary files</string>
+    <string name="cache_module_diagnostic_logs">Diagnostic logs</string>
+    <string name="cache_module_legacy_files">Legacy paths</string>
+    <string name="cache_module_unclassified">Unclassified cache</string>
     <string name="setting_backup">Backup</string>
     <string name="setting_restore">Restore</string>
     <string name="setting_about">About</string>
@@ -974,7 +1161,6 @@
     <string name="sync_item_webhome">WebHome saved data</string>
     <string name="sync_item_search">Search records</string>
     <string name="sync_item_history">Watch history</string>
-    <string name="history_watched_time">Watched %1$s</string>
     <string name="sync_item_keep">Favorites</string>
     <string name="sync_item_settings">App settings</string>
     <string name="sync_item_remote_relay">Relay server config</string>
@@ -1326,6 +1512,7 @@
     <string name="player_auto_play">Auto play VOD</string>
     <string name="player_live_source_fallback">Switch live source on failure</string>
     <string name="player_auto_change">Auto source change</string>
+    <string name="player_defer_flag_switch">Don\'t auto-play on line switch</string>
     <string name="player_remember_brightness">Remember playback brightness</string>
     <string name="player_failure_fallback">Failure fallback</string>
     <string name="player_speed">Press speed</string>
@@ -1456,6 +1643,9 @@
     <string name="search_keyword">Keywords…</string>
     <string name="search_column">Search layout</string>
     <string name="site_search_hint">Search sites…</string>
+    <string name="site_dialog_title">Select site</string>
+    <string name="site_dialog_title_action">Manage sites</string>
+    <string name="site_dialog_count">%1$d sites</string>
     <string name="site_group_all">All</string>
     <string name="site_group_sort_desc">%1$s, long press to reorder</string>
     <string name="site_group_sort_tv_desc">%1$s, long press OK to reorder</string>
@@ -1505,6 +1695,19 @@
     <string name="reader_chapter_failed">Failed to load chapter</string>
     <string name="reader_opening">Opening %1$s</string>
     <string name="reader_opening_default">Opening reader</string>
+    <string name="reader_tts_channel">Read aloud</string>
+    <string name="reader_tts_playing">Reading aloud</string>
+    <string name="reader_tts_paused">Read aloud paused</string>
+    <string name="reader_tts_error">Read aloud failed</string>
+    <string name="reader_tts_default_title">Novel</string>
+    <string name="reader_tts_progress">Paragraph %1$d / %2$d</string>
+    <string name="reader_tts_prev">Prev</string>
+    <string name="reader_tts_next">Next</string>
+    <string name="reader_tts_pause">Pause</string>
+    <string name="reader_tts_resume">Resume</string>
+    <string name="reader_tts_stop">Stop</string>
+    <string name="reader_tts_timer">%1$d min left</string>
+    <string name="reader_tts_timer_action">+30 min</string>
     <string name="cat_web_opening">Opening settings</string>
     <string name="cat_web_failed">Failed to load page: %1$s</string>
     <string name="cat_web_external">Opened in browser</string>
@@ -1528,9 +1731,35 @@
     <string name="dialog_config_choose_failed">Could not read the selected item, please pick the package folder or zip again</string>
     <string name="dialog_config_name">Please enter the name…</string>
     <string name="dialog_config_url">Please enter the url…</string>
+    <string name="dialog_config_addresses">Backup addresses, one per line…</string>
 
     <!-- Error -->
     <string name="error_config_get">Configuration get failed</string>
+    <!-- 内容源加载失败时的错误态：设计文档 §9.9 要求「错误色 + 原因 + 重试动作」。 -->
+    <string name="error_config_load">Could not load content source</string>
+    <!-- 首页空态（确实没有内容，与"加载失败"是两件事）：设计文档 §9.9 的三件套。 -->
+    <string name="home_empty_title">Nothing to show</string>
+    <string name="home_empty_description">The content source returned no items.</string>
+    <string name="home_empty_action">Reload</string>
+    <!--
+        "No content source configured yet" empty state: the state right after an app reset,
+        a reinstall or a factory reset. It is **not a failure** (there is no address to request,
+        no failure reason, and retrying can never succeed), so the title is not error-colored and
+        the primary action is "Add source" rather than "Retry".
+    -->
+    <string name="home_no_config_title">No content source yet</string>
+    <string name="home_no_config_description">Add a VOD content source to start browsing.</string>
+    <string name="home_no_config_action">Add source</string>
+    <!--
+        本地文件浏览器空态。主动作是**重新扫描当前目录**，不是"返回上级"——因为：
+        根目录没有上级（返回会退出页面），而"重新扫描"在任何目录都成立，
+        且能反映外部变化（刚用别的应用放进来的文件）。
+        description 说明"这里本来就没有可显示的项"，并把两种过滤模式的差别讲清楚。
+    -->
+    <string name="file_empty_title">Nothing here</string>
+    <string name="file_empty_description">This folder has no items to show. If you just added files, rescan to pick them up.</string>
+    <string name="file_empty_action">Rescan</string>
+    <string name="error_retry">Retry</string>
     <string name="error_play_next">It\'s the last episode!</string>
     <string name="error_play_prev">It\'s the first episode!</string>
     <string name="error_play_parse">Unable to parse url</string>
@@ -1643,6 +1872,15 @@
     <string name="crash_details_title">Error details</string>
     <string name="crash_details_message">App version: %1$s\n\n%2$s</string>
     <string name="crash_details_close">Close</string>
+    <string name="crash_log_title">Log download address</string>
+    <string name="crash_log_hint">Open this address in a browser on a phone or computer on the same network to view and download this crash log.</string>
+    <string name="crash_log_preparing">Preparing the log service…</string>
+    <string name="crash_log_unavailable">Log service unavailable. Use Error details to read the stack trace.</string>
+    <string name="crash_log_no_lan">No LAN address found. Open locally:\n%1$s</string>
+    <string name="crash_log_service_failed">Log service unavailable</string>
+    <string name="crash_log_copy">Copy address</string>
+    <string name="crash_log_copied">Address copied</string>
+    <string name="crash_log_open">Open in browser</string>
 
     <!-- Hint -->
     <string name="copied">Copied</string>
@@ -1761,6 +1999,7 @@
     <string-array name="select_fullscreen_menu_key">
         <item>Control</item>
         <item>Episodes</item>
+        <item>Next episode</item>
     </string-array>
 
     <string-array name="select_home_menu_key">
@@ -1774,6 +2013,8 @@
         <item>Cast page</item>
         <item>Keep page</item>
         <item>Setting page</item>
+        <item>Following page</item>
+        <item>Site injection</item>
     </string-array>
 
     <string-array name="select_search_ui">
@@ -1931,6 +2172,7 @@
         <item>@string/display_mini</item>
         <item>@string/display_title</item>
         <item>Playback params</item>
+        <item>@string/display_media_badges</item>
     </string-array>
 
     <string-array name="select_live_player_osd">
@@ -2003,9 +2245,20 @@
     <string name="dialog_tmdb_api_key_tip">Get your free API key at: https://www.themoviedb.org/settings/api</string>
     <string name="dialog_tmdb_language_label">TMDB language</string>
     <string name="dialog_tmdb_language_hint">For example zh-CN</string>
-    <string name="dialog_tmdb_api_host_label">API host</string>
-    <string name="dialog_tmdb_api_host_hint">For example https://api.tmdb.org</string>
-    <string name="dialog_tmdb_image_host_label">Image host</string>
+    <string name="dialog_tmdb_api_host_label">TMDB API route</string>
+    <string name="dialog_tmdb_image_itv666">itv666 image mirror</string>
+    <string name="dialog_tmdb_image_direct">Official images (direct)</string>
+    <string name="dialog_tmdb_api_itv666">itv666 API mirror</string>
+    <string name="dialog_tmdb_api_direct">Official API (direct)</string>
+    <string name="dialog_tmdb_api_auto">Auto (latency priority, failover)</string>
+    <string name="dialog_tmdb_image_auto">Auto (latency priority, failover)</string>
+    <string name="dialog_tmdb_image_wsrv">wsrv.nl image proxy</string>
+    <string name="dialog_tmdb_route_custom">Custom</string>
+    <string name="dialog_tmdb_api_custom_hint">Custom API base URL, e.g. https://api.tmdb.org</string>
+    <string name="dialog_tmdb_image_custom_hint">Custom image base URL, e.g. https://images.tmdb.org</string>
+    <string name="dialog_tmdb_api_host_hint">https://api.tmdb.org or choose a built-in mirror</string>
+    <string name="dialog_tmdb_proxy_host_help">API and image routes can be selected independently. Auto ranks the verified routes by latency and switches after failure; itv666 and wsrv.nl are included, and custom endpoints are supported.</string>
+    <string name="dialog_tmdb_image_host_label">TMDB image route</string>
     <string name="dialog_tmdb_image_host_hint">For example https://images.tmdb.org</string>
     <string name="dialog_tmdb_section_data">Data source</string>
     <string name="dialog_tmdb_section_ratings">Ratings</string>
@@ -2103,6 +2356,10 @@
     <string name="detail_image_save_success">Saved to: %1$s</string>
     <string name="detail_image_save_failed">Image save failed</string>
     <string name="detail_external_open_failed">Unable to open external link</string>
+    <string name="detail_external_opening">Opening external page</string>
+    <string name="detail_external_open_title">Open external link</string>
+    <string name="detail_external_open_builtin">Built-in browser</string>
+    <string name="detail_external_open_external">System or external browser</string>
     <string name="detail_image_permission_denied">Storage permission denied</string>
 
     <string name="detail_tmdb_photos">Stills</string>
@@ -2119,11 +2376,21 @@
     <string name="display_progress">Progress</string>
     <string name="display_mini">Mini</string>
     <string name="display_title">Title</string>
+    <string name="display_media_badges">Media info</string>
+    <string name="osd_media_badge_position">Media info position</string>
+    <string-array name="select_media_badge_position">
+        <item>Top left</item>
+        <item>Top right</item>
+        <item>Bottom left</item>
+        <item>Bottom right</item>
+        <item>Off</item>
+    </string-array>
     <string name="play_decode_idle">Decode</string>
     <string name="detail_close">Close</string>
     <string name="detail_expand">Read more</string>
     <string name="detail_collapse">Collapse</string>
     <string name="detail_flag">Line</string>
+    <string name="detail_plugin">Plugins</string>
     <string name="detail_quality">Quality</string>
     <string name="detail_play_now">Play now</string>
     <string name="detail_play_resume">Resume - %1$s</string>
@@ -2689,57 +2956,6 @@
 <string name="player_audio_repeat">Repeat</string>
 
     <string name="web_theme_detail_loading">Loading details…</string>
-    <string name="ad_audio_candidate_title">Suspected advertisement</string>
-    <string name="ad_audio_match_title">Audio advertisement matched</string>
-    <string name="ad_audio_candidate_message">Rule %1$s matched. Skip about %2$d seconds?</string>
-    <string name="ad_audio_skip">Skip</string>
-    <string name="ad_audio_ignore">Ignore</string>
-    <string name="ad_audio_skipped_title">Advertisement skipped</string>
-    <string name="ad_audio_skipped_message">You can undo within %1$d seconds.</string>
-    <string name="ad_audio_undo">Undo</string>
-    <string name="setting_ad_audio_title">Audio fingerprint ad skipping (experimental)</string>
-    <string name="setting_ad_audio_no_rules">No rules</string>
-    <string name="setting_ad_audio_rule_error">Rule error</string>
-    <string name="setting_ad_audio_rule_count">Rules %1$d · %2$s</string>
-    <string name="setting_ad_audio_import">Import rule JSON</string>
-    <string name="setting_ad_audio_clear">Clear rules</string>
-    <string name="setting_ad_audio_clear_confirm">Clear the imported audio fingerprint rules?</string>
-    <string name="setting_ad_audio_imported">Imported %1$d rules · %2$s</string>
-    <string name="setting_ad_audio_import_failed">Rule import failed; the previous rules were kept.</string>
-    <string name="setting_ad_audio_clear_done">Audio fingerprint rules cleared</string>
-    <string name="speech_ad_enabled">Speech ad recognition</string>
-    <string name="speech_ad_keywords">Ad keywords</string>
-    <string name="speech_ad_keyword_count">%1$d keywords</string>
-    <string name="speech_ad_rules">Speech rules</string>
-    <string name="speech_ad_rules_none">No speech rules</string>
-    <string name="speech_ad_rules_summary">%1$d rules · %2$s</string>
-    <string name="speech_ad_rules_error">Rule settings error: %1$s</string>
-    <string name="speech_ad_rules_manage">Manage speech rules</string>
-    <string name="speech_ad_rules_edit">Edit rules</string>
-    <string name="speech_ad_rules_import">Import text rules</string>
-    <string name="speech_ad_rules_clear">Clear custom rules</string>
-    <string name="speech_ad_rules_view_builtin">View built-in rules</string>
-    <string name="speech_ad_rules_clear_confirm">Clear the current custom speech rules?</string>
-    <string name="speech_ad_rules_clear_done">Custom speech rules cleared</string>
-    <string name="speech_ad_rules_saved">Speech rules saved</string>
-    <string name="speech_ad_rules_imported">Imported %1$d speech rules</string>
-    <string name="speech_ad_rules_import_failed">Speech rule import failed: %1$s</string>
-    <string name="speech_ad_rules_source_none">none</string>
-    <string name="speech_ad_rules_source_builtin">built-in</string>
-    <string name="speech_ad_rules_source_user">edited</string>
-    <string name="speech_ad_rules_source_imported">imported</string>
-    <string name="speech_ad_rules_source_combined">built-in + custom</string>
-    <string name="speech_ad_builtin">Built-in speech rules</string>
-    <string name="speech_ad_builtin_value">%1$s · %2$d rules</string>
-    <string name="speech_ad_skip_seconds">Skip duration</string>
-    <string name="speech_ad_skip_seconds_value">%1$d seconds</string>
-    <string name="speech_ad_skip_mode">Skip mode</string>
-    <string name="speech_ad_skip_mode_prompt">Confirm before skipping</string>
-    <string name="speech_ad_skip_mode_auto">Auto skip</string>
-    <string name="speech_ad_skip_seconds_invalid">Enter a whole number from 1 to 120.</string>
-    <string name="speech_ad_model_not_ready">model not ready</string>
-    <string name="ad_audio_speech_candidate_title">Speech advertisement detected</string>
-    <string name="ad_audio_speech_candidate_message">Speech keywords matched. Skip about %1$d seconds?</string>
     <string name="node_title">Preparing cat source</string>
     <string name="node_prepare">Preparing…</string>
     <string name="node_hint">First run only: the Node runtime is downloaded once and reused afterwards.</string>
@@ -2755,26 +2971,11 @@
     <string name="node_speed">%1$s/s</string>
     <string name="node_size_pair">%1$s / %2$s</string>
     <string name="setting_ad">Ad blocking</string>
-    <string name="setting_ad_summary">Master switch, rules, audio fingerprint, intro skip</string>
+    <string name="setting_ad_summary">Master switch, rules, intro skip</string>
     <string name="setting_ad_group_basic">Basic</string>
     <string name="setting_ad_group_rule">Rules and stats</string>
-    <string name="setting_ad_group_audio">Audio detection</string>
     <string name="setting_ad_group_segment">Segment skipping</string>
     <string name="setting_ad_master">Ad blocking master switch</string>
-    <string name="setting_ad_audio_auto_skip">Skip automatically</string>
-    <string name="setting_ad_probe_source">Community rule source</string>
-    <string name="setting_ad_probe_source_hint">Must be an https address. Rules are unsigned, so only use a source you trust.</string>
-    <string name="setting_ad_probe_source_default">Default</string>
-    <string name="setting_ad_probe_source_off">Off</string>
-    <string name="setting_ad_probe_refresh">Refresh rules now</string>
-    <string name="setting_ad_probe_refreshing">Refreshing…</string>
-    <string name="setting_ad_probe_refreshed">Updated: %1$s · %2$d rules</string>
-    <string name="setting_ad_probe_unchanged">Already up to date, %1$d rules</string>
-    <string name="setting_ad_probe_failed">Refresh failed: %1$s</string>
-    <string name="setting_ad_probe_revision">Revision %1$d · %2$d rules</string>
-    <string name="setting_ad_probe_never">Never fetched</string>
-    <string name="setting_ad_probe_url_invalid">The rule source must start with https://</string>
-    <string name="setting_ad_probe_source_disabled">Set a community rule source first</string>
     <string name="dialog_tmdb_test_config">Test configuration</string>
     <string name="dialog_tmdb_test_result_title">Configuration test</string>
     <string name="dialog_tmdb_test_api_success">TMDB API: connected and returned valid data (%1$d ms)</string>
@@ -2803,17 +3004,24 @@
     <string name="following_summary">%1$d followed · %2$d unread</string>
     <string name="following_continue">Continue</string>
     <string name="following_read">Mark read</string>
+    <string name="following_read_all">Mark all read</string>
     <string name="following_notify_on">Notify on</string>
     <string name="following_notify_off">Notify off</string>
     <string name="following_change_source">Source</string>
     <string name="following_cancel">Unfollow</string>
     <string name="following_delete_title">Unfollow this show?</string>
     <string name="following_delete_message">The viewing history and TMDB progress will be kept.</string>
+    <string name="following_canceled">Unfollowed</string>
     <string name="following_official">Official: episode %1$d</string>
+    <string name="following_season_total">Season: %1$d episodes</string>
+    <string name="following_series_total">Series: %1$d episodes</string>
+    <string name="following_weekday">Updates every %1$s</string>
     <string name="following_official_unknown">Official status unknown</string>
     <string name="following_source">Current source: episode %1$d</string>
     <string name="following_source_unknown">Current source not checked</string>
+    <string name="following_source_failed">Current source check failed</string>
     <string name="following_watched">Watched to episode %1$d</string>
+    <string name="following_watched_unknown">No watch progress yet</string>
     <string name="following_unwatched">%1$d episodes remaining</string>
     <string name="following_unwatched_none">Up to date</string>
     <string name="following_new_count">New %1$d</string>
@@ -2836,4 +3044,70 @@
     <string name="following_filter_failed">Check failed</string>
     <string name="setting_following">Following updates</string>
     <string name="following_next_season">Follow new season S%1$d</string>
+    <string-array name="following_weekdays">
+        <item>Sunday</item>
+        <item>Monday</item>
+        <item>Tuesday</item>
+        <item>Wednesday</item>
+        <item>Thursday</item>
+        <item>Friday</item>
+        <item>Saturday</item>
+    </string-array>
+    <string name="setting_plugin_manager">Plugin manager</string>
+    <string name="plugin_manager_entry_count">%1$d plugin(s)</string>
+    <string name="plugin_manager_import">Import package</string>
+    <string name="plugin_manager_reload">Reload</string>
+    <string name="plugin_manager_empty">No plugins yet. Import a package directory that contains manifest.json.</string>
+    <string name="plugin_manager_permission_required">Storage permission is required to pick a plugin directory</string>
+    <string name="plugin_manager_invalid_path">The selected directory path is unreadable</string>
+    <string name="plugin_manager_import_ok">Plugin imported and enabled: %1$s</string>
+    <string name="plugin_manager_import_failed">Import failed: %1$s</string>
+    <string name="plugin_manager_delete_title">Delete plugin</string>
+    <string name="plugin_manager_delete_message">Remove %1$s from the list and delete its files from this device?</string>
+    <string name="plugin_manager_save_failed">Could not save plugin settings: %1$s</string>
+    <string name="plugin_manager_delete_failed">Removed from the list, but the plugin files could not be deleted: %1$s</string>
+    <string name="plugin_manager_load_failed">Could not read the plugin list: %1$s</string>
+    <string name="plugin_manager_entry_meta">v%1$s · %2$s · %3$s</string>
+    <string name="plugin_manager_params">Parameters</string>
+    <string name="plugin_manager_params_title">Parameters for %1$s</string>
+    <string name="plugin_manager_params_hint">JSON object, e.g. {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
+    <string name="plugin_manager_params_invalid">Parameters must be a JSON object</string>
+    <string name="plugin_manager_params_too_large">Parameters are too large to save</string>
+    <string name="plugin_manager_remote_import">Import from URL</string>
+    <string name="plugin_manager_remote_title">Import from URL</string>
+    <string name="plugin_manager_remote_hint">https://github.com/owner/repo</string>
+    <string name="plugin_manager_remote_helper">https only. Accepts a GitHub repository URL, a GitHub /tree/branch URL, or a direct .zip URL.</string>
+    <string name="plugin_manager_remote_paste">Paste</string>
+    <string name="plugin_manager_remote_start">Fetch</string>
+    <string name="plugin_manager_remote_failed">Could not get the plugin package: %1$s</string>
+    <string name="plugin_manager_remote_empty">No plugin was found in that package</string>
+    <string name="plugin_manager_remote_found">%1$d plugin(s) found</string>
+    <string name="plugin_manager_remote_source">Source: %1$s</string>
+    <string name="plugin_manager_remote_select_all">Select all</string>
+    <string name="plugin_manager_remote_select_none">Select none</string>
+    <string name="plugin_manager_remote_do_import">Import</string>
+    <string name="plugin_manager_remote_candidate_meta">v%1$s · runtime %2$s</string>
+    <string name="plugin_manager_remote_name_separator">", "</string>
+    <string name="plugin_manager_remote_confirm_title">Confirm install</string>
+    <string name="plugin_manager_remote_confirm_message">This will install %1$d plugin(s): %2$s\n\nPermissions being granted (combined): %3$s</string>
+    <string name="plugin_manager_remote_confirm_not_sandboxed">These plugins are NOT sandboxed: they run inside this app with this app\'s own trust, so they can read and modify this app\'s data and use its network. No safety check was performed on them. Only install plugins from sources you trust.</string>
+    <string name="plugin_manager_perm_net_request_plain">net.request — this plugin can access the network (send data out and fetch remote content).</string>
+    <string name="plugin_manager_perm_ui_panel_plain">ui.panel — this plugin can draw its own content on the playback screen.</string>
+    <string name="plugin_manager_remote_install">Install</string>
+    <string name="plugin_manager_remote_result_title">Import result</string>
+    <string name="plugin_manager_remote_item_ok">%1$s: installed</string>
+    <string name="plugin_manager_remote_item_failed">%1$s: %2$s</string>
+    <string name="plugin_manager_remote_all_ok">Installed %1$d plugin(s)</string>
+    <string name="plugin_manager_remote_batch_failed">The import could not start: %1$s</string>
+    <string name="plugin_manager_remote_busy">Another plugin task is already running</string>
+    <string name="plugin_manager_perm_none">No declared permissions</string>
+    <string name="plugin_manager_perm_separator">" · "</string>
+    <string name="plugin_manager_perm_net_request">Network access (net.request)</string>
+    <string name="plugin_manager_perm_ui_panel">Drawing on the playback panel (ui.panel)</string>
+    <string name="plugin_manager_perm_ui_floating">Floating overlay (ui.floating)</string>
+    <string name="plugin_manager_perm_ui_toolbar">Toolbar button (ui.toolbar)</string>
+    <string name="plugin_manager_perm_ui_page">Page surface (ui.page)</string>
+    <string name="plugin_manager_perm_events">Playback events (plugin.events)</string>
+    <string name="plugin_manager_perm_episode_data">Episode data (plugin.data.episode)</string>
+    <string name="plugin_panel_title">Plugin panel</string>
 </resources>

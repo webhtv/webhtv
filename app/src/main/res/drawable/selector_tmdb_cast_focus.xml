@@ -1,23 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    原生增强播放页「演员/主创卡片」的统一焦点环。统一规范见 selector_video_item.xml：
+    获得焦点 3dp ?attr/tvFocusRing，当前态 2dp ?attr/tvCurrentRing。
+    未获得焦点时透明，常态描边由 TmdbCastPresenter 设置的 strokeColor 表达，避免双重描边。
+
+    圆角 = 宿主圆角 − w/2：宿主（adapter_tmdb_cast 的 MaterialCardView）
+    app:cardCornerRadius="@dimen/webhtv_card_radius_large" = 12dp，而本 selector 是 foreground，
+    环**外边界**圆角半径 = 声明值 + w/2。声明 12dp 时外边界 13.5dp，卡片圆角会在环外露出一段
+    （2026-10-10 实机复核：12dp 声明在 density 2/3/4 下分别溢出 61/153/224 像素，
+    11.25dp 时为 0/2/0）。故焦点态 = 12 − 1.5 = 10.5dp、当前态 = 12 − 1 = 11dp。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="@color/transparent" />
-            <stroke android:width="4dp" android:color="@color/white" />
-            <corners android:radius="14dp" />
+            <stroke android:width="3dp" android:color="?attr/tvFocusRing" />
+            <corners android:radius="9.5dp" />
         </shape>
     </item>
     <item android:state_activated="true">
         <shape android:shape="rectangle">
             <solid android:color="@color/transparent" />
-            <stroke android:width="4dp" android:color="@color/white" />
-            <corners android:radius="14dp" />
+            <stroke android:width="2dp" android:color="?attr/tvCurrentRing" />
+            <corners android:radius="9.5dp" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
             <solid android:color="@color/transparent" />
-            <corners android:radius="14dp" />
+            <corners android:radius="9.5dp" />
         </shape>
     </item>
 </selector>

@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/shape_dialog_control_glass_panel"
-    tools:background="#1F1F1F">
+    tools:background="?attr/colorSurfaceContainerLow">
 
     <View
         android:layout_width="match_parent"
@@ -35,7 +35,7 @@
                 android:background="@null"
                 android:gravity="center_vertical"
                 android:text="@string/live_epg_follow"
-                android:textColor="@color/white_70"
+                android:textColor="@color/webhtv_color_player_control_muted"
                 android:textSize="14sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -47,7 +47,7 @@
                 android:gravity="center"
                 android:singleLine="true"
                 android:text="@string/live_epg_select"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -58,7 +58,7 @@
                 android:background="@null"
                 android:gravity="center_vertical|end"
                 android:text="@string/live_epg_apply"
-                android:textColor="@color/white_70"
+                android:textColor="@color/webhtv_color_player_control_muted"
                 android:textSize="14sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
@@ -77,8 +77,8 @@
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
             android:singleLine="true"
-            android:textColor="@color/white"
-            android:textColorHint="@color/white_60"
+            android:textColor="?attr/webhtvColorOnWallpaper"
+            android:textColorHint="@color/webhtv_color_player_control_muted"
             android:textSize="13sp" />
 
         <com.fongmi.android.tv.ui.custom.CustomRecyclerView

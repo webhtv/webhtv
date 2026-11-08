@@ -22,6 +22,7 @@ import com.fongmi.android.tv.server.proxy.ProxyDomainRuleSet;
 import com.fongmi.android.tv.server.proxy.ProxyRuntimeConfig;
 import com.fongmi.android.tv.server.proxy.ProxyRuntimeConfigValidator;
 import com.fongmi.android.tv.setting.MultiThreadProxySetting;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -72,7 +73,7 @@ public class MultiThreadProxyDialog extends BaseAlertDialog {
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
+        return new WebHtvAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_Dialog)
                 .setView(getBinding().getRoot());
     }
 
@@ -83,8 +84,8 @@ public class MultiThreadProxyDialog extends BaseAlertDialog {
         if (dialog == null) return;
         Window window = dialog.getWindow();
         if (window == null) return;
-        int width = ResUtil.getScreenWidth(requireContext());
-        int height = ResUtil.getScreenHeight(requireContext());
+        int width = DialogSafeArea.width(requireActivity(), window);
+        int height = DialogSafeArea.height(requireActivity(), window);
         boolean land = ResUtil.isLand(requireContext());
         WindowManager.LayoutParams params = window.getAttributes();
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -222,7 +223,7 @@ public class MultiThreadProxyDialog extends BaseAlertDialog {
     private void showApplyChoice(ProxyRuntimeConfig next, ProxyDomainRuleSet rules) {
         FragmentActivity activity = requireActivity();
         dismiss();
-        new MaterialAlertDialogBuilder(activity)
+        new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.multi_thread_proxy_apply_title)
                 .setMessage(R.string.multi_thread_proxy_apply_message)
                 .setNegativeButton(R.string.multi_thread_proxy_apply_later,

@@ -20,13 +20,38 @@ public class Loader {
     private final PyObject app;
 
     public Loader() {
-        if (!Python.isStarted()) Python.start(Platform.create());
+        startPythonOnce();
         try {
             Python.getInstance().getModule("webhtv_logging").callAttr("install");
         } catch (RuntimeException error) {
             SpiderDebug.log("python-spider", error);
         }
         app = Python.getInstance().getModule("app");
+    }
+
+    /**
+     * Starts CPython at most once per process.
+     *
+     * <p>{@code Python.start()} throws {@code IllegalStateException("Python already started")}
+     * on a second call, and the previous bare {@code if (!Python.isStarted()) Python.start()}
+     * was a check-then-act race: PyLoader, JsLoader and PythonSubtitleScriptRuntime can all
+     * construct a Loader concurrently (the subtitle registry is warmed up on a background
+     * thread at app start, while the vod config loader may already be starting CPython).
+     * When the race was lost the {@code BaseLoader$Loader} static initializer threw, and every
+     * later {@code BaseLoader.get()} failed with {@code NoClassDefFoundError} — restoring a
+     * backup then crashed the process.
+     *
+     * <p>The lock is on this class rather than on {@code Python} because chaquo owns that type.
+     * Losing the race is harmless either way: the loser re-checks under the lock and returns.
+     */
+    private static synchronized void startPythonOnce() {
+        if (Python.isStarted()) return;
+        try {
+            Python.start(Platform.create());
+        } catch (IllegalStateException alreadyStarted) {
+            // Another thread won between the check and the call; the runtime is up either way.
+            if (!Python.isStarted()) throw alreadyStarted;
+        }
     }
 
     public Spider spider(String api) {

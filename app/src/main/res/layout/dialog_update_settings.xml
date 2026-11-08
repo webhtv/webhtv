@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/update_settings_title"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -34,7 +34,7 @@
             android:contentDescription="@string/lut_close"
             android:padding="10dp"
             android:src="@drawable/ic_dialog_close"
-            app:tint="#5F6368" />
+            app:tint="@color/fixed_light_focus_icon" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -55,7 +55,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/update_settings_source"
-                android:textColor="#5F6368"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="13sp" />
 
             <com.google.android.material.tabs.TabLayout
@@ -65,11 +65,11 @@
                 android:layout_marginTop="6dp"
                 android:background="@android:color/transparent"
                 app:tabGravity="fill"
-                app:tabIndicatorColor="#1A73E8"
+                app:tabIndicatorColor="?attr/colorPrimary"
                 app:tabMode="fixed"
                 app:tabRippleColor="@android:color/transparent"
-                app:tabSelectedTextColor="#1A73E8"
-                app:tabTextColor="#5F6368" />
+                app:tabSelectedTextColor="?attr/colorPrimary"
+                app:tabTextColor="?attr/colorOnSurfaceVariant" />
 
             <androidx.appcompat.widget.LinearLayoutCompat
 
@@ -89,7 +89,7 @@
                 android:textColor="@color/dialog_outlined_button_text"
                 android:textSize="14sp"
                 app:backgroundTint="@color/dialog_outlined_button_bg"
-                app:strokeColor="@color/dialog_outlined_button_stroke"
+                app:strokeColor="?attr/colorOutline"
                 tools:text="OCI mirror · dockerproxy.net" />
 
                 <com.google.android.material.textfield.TextInputLayout
@@ -126,6 +126,8 @@
         android:textColor="@color/dialog_primary_button_text"
         android:textSize="14sp"
         app:backgroundTint="@color/dialog_primary_button_bg"
+        app:strokeWidth="@dimen/webhtv_focus_ring_width"
+        app:strokeColor="@color/focus_ring_primary_container"
         app:cornerRadius="8dp" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

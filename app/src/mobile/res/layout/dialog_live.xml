@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/shape_dialog_control_glass_panel"
-    tools:background="#1F1F1F">
+    tools:background="?attr/colorSurfaceContainerLow">
 
     <View
         android:layout_width="match_parent"
@@ -36,7 +36,7 @@
                 android:gravity="center"
                 android:singleLine="true"
                 android:text="@string/live_source_select"
-                android:textColor="@color/white"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Framework secondary/hint text colour. See webhtv_text_primary.xml for why these
+    must be mapped to our tokens rather than left on Material's defaults.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:alpha="0.38" android:color="@color/webhtv_color_on_surface" />
+    <item android:color="@color/webhtv_color_on_surface_variant" />
+</selector>

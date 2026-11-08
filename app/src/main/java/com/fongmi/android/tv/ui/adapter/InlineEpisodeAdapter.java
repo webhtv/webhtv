@@ -105,7 +105,10 @@ public class InlineEpisodeAdapter extends RecyclerView.Adapter<InlineEpisodeAdap
         button.setTextColor(active ? activeText : focused ? focusText : normalText);
         button.setBackgroundTintList(ColorStateList.valueOf(active ? activeBg : focused ? focusBg : normalBg));
         button.setStrokeColor(ColorStateList.valueOf(active ? activeStroke : focused ? COLOR_FOCUS : normalStroke));
-        button.setStrokeWidth(ResUtil.dp2px(active || focused ? 2 : 1));
+        // 焦点/当前态环宽必须走唯一 token（此前写死 2dp）。
+        button.setStrokeWidth(active || focused
+                ? button.getContext().getResources().getDimensionPixelSize(com.fongmi.android.tv.R.dimen.webhtv_focus_ring_width)
+                : ResUtil.dp2px(1));
     }
 
     private String getTitle(Episode item) {

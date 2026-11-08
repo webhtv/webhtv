@@ -36,6 +36,9 @@ public class HlsAdblockPipelineTest {
 
         assertTrue(outcome.structured());
         assertFalse(outcome.manifest().contains("ad.ts"));
+        // The structured rule path must also report the total ad time, not just the segment count.
+        assertEquals("已跳过 1 个广告片段，总广告时长 7.0 秒",
+                HlsAdblockNotice.message(outcome.removedSegments(), outcome.removedDurationSec()));
     }
 
     @Test
@@ -62,6 +65,10 @@ public class HlsAdblockPipelineTest {
         assertEquals(0.0, removed.get(0).startSeconds(), 0.001);
         assertEquals(6.0, removed.get(1).startSeconds(), 0.001);
         assertEquals(12.0, removed.stream().mapToDouble(HlsManifestCleaner.RemovedSegment::durationSec).sum(), 0.001);
+        // Legacy fallback carries a real duration, so the playback notice must show total ad time too.
+        assertEquals("已跳过 2 个广告片段，总广告时长 12.0 秒",
+                HlsAdblockNotice.message(removed.size(),
+                        removed.stream().mapToDouble(HlsManifestCleaner.RemovedSegment::durationSec).sum()));
     }
 
     @Test

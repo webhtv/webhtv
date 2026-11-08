@@ -89,7 +89,7 @@ public final class ManagePageDialog {
 
     private static void setScrollHeight(FragmentActivity activity, View view, float screenFactor, int maxDp) {
         ViewGroup.LayoutParams params = view.getLayoutParams();
-        params.height = Math.min(ResUtil.dp2px(maxDp), Math.round(ResUtil.getScreenHeight(activity) * screenFactor));
+        params.height = Math.min(ResUtil.dp2px(maxDp), Math.round(DialogSafeArea.height(activity) * screenFactor));
         view.setLayoutParams(params);
     }
 

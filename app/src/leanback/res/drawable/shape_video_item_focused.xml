@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版播放页「剧集/清晰度/线路」等文本芯片的旧焦点形状。
+
+    当前无消费者（selector_video_item 已取代它），保留文件以免外部引用失效；
+    宽度改用唯一来源 @dimen/webhtv_focus_ring_width，避免以后接回时重新引入
+    1.5dp 这套旧规范。环色保持与调色板无关的白色：它属于叠在视频画面上的播放器层，
+    按仓库既有契约不与应用表面共用调色板环色。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
@@ -11,7 +19,7 @@
         android:top="8dp" />
 
     <stroke
-        android:width="1.5dp"
+        android:width="@dimen/webhtv_focus_ring_width"
         android:color="@color/white" />
 
 </shape>

@@ -65,26 +65,70 @@ public class PlayerManagerLifecycleSourceTest {
     }
 
     @Test
-    public void exoBufferingStateArmsOnlyTheExoStallWatchdog() throws Exception {
+    public void bufferingStateArmsTheStallWatchdogForEveryEngine() throws Exception {
         String source = readPlayerManager();
         int buffering = source.indexOf("} else if (state == Player.STATE_BUFFERING) {");
         int nextBranch = source.indexOf("\n            } else {", buffering);
         assertTrue("state listener must contain the buffering branch", buffering >= 0);
         assertTrue("state listener buffering branch must have a closing boundary", nextBranch > buffering);
-        int arm = source.indexOf("if (isExo()) armBufferingStallWatchdog();", buffering);
-        assertTrue("entering Exo BUFFERING must start only the Exo stall watchdog", arm > buffering && arm < nextBranch);
-        assertTrue("watchdog arming must be restricted to Exo playback",
-                source.contains("if (!isExo() || player == null || spec == null) return;"));
-        assertTrue("watchdog polling must stop for non-Exo playback",
-                source.contains("if (!isExo() || player == null || spec == null) {"));
-        assertTrue("seeking must only re-arm the stall watchdog for Exo playback",
-                source.contains("player.seekTo(time);\n        cancelBufferingStallWatchdog();\n        if (isExo()) armBufferingStallWatchdog();"));
+        int arm = source.indexOf("armBufferingStallWatchdog();", buffering);
+        assertTrue("entering BUFFERING must start the stall watchdog", arm > buffering && arm < nextBranch);
+        // The watchdog is engine-independent: MPV reaches the same frozen-BUFFERING state and
+        // MpvPlayer.timeOutSeekBuffering() already defers to it. Restricting it to Exo left MPV
+        // with no bound at all, because the 15 s startup timer is cancelled by BUFFERING itself.
+        assertFalse("the stall watchdog must not be gated on a single engine",
+                source.contains("if (isExo()) armBufferingStallWatchdog();"));
+        assertTrue("watchdog arming must only require a live player and spec",
+                source.contains("private void armBufferingStallWatchdog() {\n        if (player == null || spec == null) return;"));
+        assertTrue("watchdog polling must only require a live player and spec",
+                source.contains("private void checkBufferingStall() {\n        if (player == null || spec == null) {"));
+        assertTrue("seeking must re-arm the stall watchdog for every engine",
+                source.contains("player.seekTo(time);\n        cancelBufferingStallWatchdog();\n        armBufferingStallWatchdog();"));
         int polling = source.indexOf("private void checkBufferingStall()");
         int observe = source.indexOf("bufferingStallWatchdog.observe(", polling);
         int timeout = source.indexOf("bufferingStallWatchdog.shouldTimeout(", polling);
         assertTrue("buffering polling method must exist", polling >= 0);
         assertTrue("a discontinuity must be observed before timeout is evaluated",
                 observe > polling && timeout > observe);
+    }
+
+    /**
+     * 超时日志里的实测停滞时长必须在停掉看门狗之前读出。
+     *
+     * <p>{@code cancelBufferingStallWatchdog()} 会把看门狗置为未布防，而
+     * {@code stalledDurationMs()} 在未布防时返回 {@code -1}。先取消再读，日志就永远写
+     * {@code stalledMs=-1}，实测时长这个字段等于不存在——排查时无法分辨「刚过 20s 就超时」
+     * 与「卡了 90s 才超时」。
+     */
+    @Test
+    public void stallDurationIsMeasuredBeforeTheWatchdogIsDisarmed() throws Exception {
+        String source = stripComments(readPlayerManager());
+        String body = methodBody(source, "private void onBufferingStall(");
+        int measured = body.indexOf("stalledDurationMs(");
+        int disarmed = body.indexOf("cancelBufferingStallWatchdog();");
+        assertTrue("onBufferingStall must report the measured stall", measured >= 0);
+        assertTrue("onBufferingStall must disarm the watchdog", disarmed >= 0);
+        assertTrue("reading stalledDurationMs() after reset() always yields -1", measured < disarmed);
+    }
+
+    /**
+     * Drops whole-line comments and trailing {@code //} comments.
+     *
+     * <p>Without this, an assertion that looks for a call by name can be satisfied by the same
+     * name inside the explanatory comment that documents it — the guard then passes no matter
+     * what the code does. Verified by mutation: restoring the buggy order while the comment
+     * still names {@code stalledDurationMs()} kept the assertion green until comments were
+     * stripped.
+     */
+    private static String stripComments(String source) {
+        StringBuilder out = new StringBuilder(source.length());
+        for (String line : source.split("\n", -1)) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+            int marker = line.indexOf("//");
+            out.append(marker >= 0 ? line.substring(0, marker) : line).append('\n');
+        }
+        return out.toString();
     }
 
     private static String readPlayerManager() throws IOException {

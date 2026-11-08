@@ -28,11 +28,13 @@ public class PlaybackOwnershipSourceTest {
         String source = read(PLAYBACK);
 
         int owner = source.indexOf("protected boolean isOwner()");
-        int ownerEnd = source.indexOf('}', source.indexOf("return key == null", owner));
-        String body = source.substring(owner, ownerEnd);
+        int ownerEnd = source.indexOf("\n    }", owner);
+        String body = owner < 0 ? "" : source.substring(owner, ownerEnd);
 
         assertTrue("isOwner must exist", owner > 0);
         assertTrue("ownership must read the pinned session key", body.contains("activePlaybackKey()"));
+        assertTrue("ownership must compare sessions, not raw strings",
+                body.contains("PlaybackOwnershipKeys.sameSession("));
         assertFalse("ownership must not recompute the key from the live intent",
                 body.contains("getPlaybackKey()"));
     }
@@ -128,6 +130,33 @@ public class PlaybackOwnershipSourceTest {
 
         assertTrue("TMDB detail must reset stale ownership on item switch", newIntent >= 0 && reset > newIntent);
         assertTrue("TMDB detail must refresh the service navigation key after that reset", navigation > reset);
+    }
+
+    @Test
+    public void kernelRebuildBindsTheNewEngineToThePlayerViewByInstanceIdentity() throws Exception {
+        // 自动下一集先 clear() 把 Manager.spec 置空，再 preparePlayer() 重建引擎；此时
+        // isOwner() 为 false，onPlayerRebuild() 里的 setRender() 整段被跳过，render 值不变。
+        // 只按“PlayerView.player 是否为空”判断，就会把已释放的旧引擎留在 View 上，
+        // 新引擎从未拿到 Surface —— 画面全黑、声音正常，手动切内核/软硬解才恢复。
+        // AUTONEXT-02 起判定收敛到 VideoSurfaceBinding，attachSurface 只执行它的结论。
+        String source = read(PLAYBACK);
+        int attach = source.indexOf("private void attachSurface(boolean restoreExoShutter)");
+        int end = source.indexOf("\n    }", attach);
+        assertTrue("attachSurface must exist", attach > 0 && end > attach);
+        String body = source.substring(attach, end);
+
+        assertTrue("the surface rebind must compare the live engine instance, not emptiness",
+                body.contains("Player currentPlayer = getExoView().getPlayer();")
+                        && body.contains("Player nextPlayer = player().getPlayer();")
+                        && body.contains("VideoSurfaceBinding.resolve(currentPlayer, nextPlayer);"));
+        assertTrue("the identity branch must hand the view the new engine",
+                body.contains("getExoView().setPlayer(binding.player());"));
+        int detach = body.indexOf("if (binding.detachedFirst()) getExoView().setPlayer(null);");
+        int rebind = body.indexOf("getExoView().setPlayer(binding.player());");
+        assertTrue("the released engine must be detached before the replacement is bound",
+                detach > 0 && rebind > detach);
+        assertFalse("attachment must no longer depend on the view merely being empty",
+                body.contains("if (getExoView().getPlayer() == null)"));
     }
 
     @Test
@@ -307,6 +336,99 @@ public class PlaybackOwnershipSourceTest {
                         && leanback.contains("playerKernelSwitchRefreshing = false;"));
         assertTrue("mobile item switch must discard a result waiting for the service",
                 mobile.contains("mPendingPlayerResult = null;"));
+    }
+
+    /**
+     * 退出播放页必须确定性停播。
+     *
+     * <p>旧实现只在「服务在且本页是归属方」时 shutdown，其余情况交给控制器。控制器是异步连上的，
+     * 播放又由服务侧直接起播，于是控制器未就绪时整次停播是空操作；播放器处于 IDLE（取流中退出）时
+     * 会被会话里的 stop 直接忽略；这条路径也从不撤销前台通知。用户看到的就是
+     * 「退回详情页后还有声音、通知栏还显示播放中」。
+     */
+    @Test
+    public void exitingThePlayerPageAlwaysStopsThroughTheService() throws Exception {
+        String source = read(PLAYBACK);
+
+        int stop = source.indexOf("protected void stopPlayback()");
+        assertTrue("stopPlayback must exist", stop > 0);
+        int end = source.indexOf("\n    }", stop);
+        assertTrue("stopPlayback must be readable", end > stop);
+        String body = source.substring(stop, end);
+
+        assertTrue("the owner must still shut the service down", body.contains("mService.shutdown();"));
+        assertTrue("a non-owner exit must stop through the service as well",
+                body.contains("mService.suspend();"));
+        assertTrue("the controller may only remain as the no-service fallback",
+                body.indexOf("mController.stop();") > body.indexOf("if (mService == null)"));
+        assertFalse("the non-owner stop must not stay gated on an asynchronous controller",
+                body.contains("else if (mController != null)"));
+    }
+
+    /**
+     * 已经决定退出的播放页不能再起播。
+     *
+     * <p>自动换源、换线路、取流结果这些链路最终都回到 startPlayer；迟到的一次起播会在服务里正常
+     * 播放并挂上前台通知，而页面已经退出，没有人再停它。
+     */
+    @Test
+    public void anExitingPlayerPageNeverStartsPlaybackAgain() throws Exception {
+        String source = read(PLAYBACK);
+
+        int startPlayer = source.indexOf("protected void startPlayer(String key, Result result, boolean useParse, long timeout,");
+        assertTrue("the six-argument startPlayer must exist", startPlayer > 0);
+        int body = source.indexOf("MediaMetadata metadata, long startPositionMs) {", startPlayer);
+        assertTrue("the six-argument startPlayer body must be readable", body > startPlayer);
+        int route = source.indexOf("NovelRouter.isReaderUrl(result)", body);
+        assertTrue("the reader route must still be the first dispatch", route > body);
+
+        String guard = source.substring(body, route);
+        assertTrue("startPlayer must refuse to start once the page is exiting",
+                guard.contains("isPlaybackExiting()"));
+        assertTrue("startPlayer must refuse to start once the page is finishing or destroyed",
+                guard.contains("isFinishing()") && guard.contains("isDestroyed()"));
+    }
+
+    /**
+     * 归属判定两侧必须同源：页面与服务各用一份，任一侧退回字符串相等就会重现 AUTONEXT-02。
+     */
+    @Test
+    public void serviceNavigationOwnershipComparesTheSameSessions() throws Exception {
+        String service = read("app/src/main/java/com/fongmi/android/tv/service/PlaybackService.java");
+
+        int owner = service.indexOf("private boolean isNavigationOwner()");
+        int ownerEnd = service.indexOf("\n    }", owner);
+        assertTrue("isNavigationOwner must exist", owner > 0 && ownerEnd > owner);
+        assertTrue("service-side navigation ownership must compare sessions, not raw strings",
+                service.substring(owner, ownerEnd).contains("PlaybackOwnershipKeys.sameSession("));
+
+        // 选集键前缀在 browse 与 player 两个包里各写一份，必须同值，否则归属判定会静默失效。
+        assertTrue("VodBrowse must keep the episode prefix",
+                read("app/src/main/java/com/fongmi/android/tv/browse/VodBrowse.java")
+                        .contains("static final String VOD_EP = \"VE:\";"));
+        assertTrue("PlaybackOwnershipKeys must use the same episode prefix",
+                read("app/src/main/java/com/fongmi/android/tv/player/PlaybackOwnershipKeys.java")
+                        .contains("static final String EPISODE_PREFIX = \"VE:\";"));
+    }
+
+    /**
+     * Surface 补绑只能在用户实际在看的那一页执行，否则后台旧页面会把引擎抢走。
+     */
+    @Test
+    public void surfaceTopUpRunsOnlyWhileThePageIsResumedAndNeverUnbinds() throws Exception {
+        String source = read(PLAYBACK);
+
+        int topUp = source.indexOf("private void ensureVideoSurfaceBound(String reason)");
+        int end = source.indexOf("\n    }", topUp);
+        assertTrue("ensureVideoSurfaceBound must exist", topUp > 0 && end > topUp);
+        String body = source.substring(topUp, end);
+
+        assertTrue("only a RESUMED page may re-bind the shared engine",
+                body.contains("isAtLeast(Lifecycle.State.RESUMED)"));
+        assertTrue("an engine that is not ready must not unbind the view",
+                body.contains("if (nextPlayer == null) return;"));
+        assertTrue("the top-up must not drop the ASS/subtitle sessions",
+                !body.contains("detachSurface()"));
     }
 
     private static int countOccurrences(String text, String needle) {

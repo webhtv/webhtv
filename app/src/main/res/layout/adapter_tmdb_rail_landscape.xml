@@ -9,11 +9,11 @@
     android:defaultFocusHighlightEnabled="false"
     android:focusable="true"
     android:stateListAnimator="@null"
-    app:cardBackgroundColor="#B314202A"
-    app:cardCornerRadius="8dp"
+    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+    app:cardCornerRadius="@dimen/webhtv_card_radius_default"
     app:cardElevation="0dp"
     app:rippleColor="@android:color/transparent"
-    app:strokeColor="#33FFFFFF"
+    app:strokeColor="?attr/colorOutlineVariant"
     app:strokeWidth="1dp">
 
     <FrameLayout
@@ -56,7 +56,7 @@
                 android:minWidth="52dp"
                 android:paddingStart="7dp"
                 android:paddingEnd="7dp"
-                android:textColor="#FFD35C"
+                android:textColor="@color/webhtv_color_player_control_active"
                 android:textSize="10sp"
                 android:textStyle="bold"
                 android:visibility="gone"
@@ -74,7 +74,7 @@
                 android:minWidth="48dp"
                 android:paddingStart="7dp"
                 android:paddingEnd="7dp"
-                android:textColor="#78E08F"
+                android:textColor="@color/webhtv_color_success"
                 android:textSize="10sp"
                 android:textStyle="bold"
                 android:visibility="gone"
@@ -109,7 +109,7 @@
                 android:layout_marginTop="4dp"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#B3FFFFFF"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp" />
         </LinearLayout>
     </FrameLayout>

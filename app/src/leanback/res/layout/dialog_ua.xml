@@ -23,7 +23,7 @@
         android:maxLines="3"
         android:paddingStart="4dp"
         android:paddingEnd="4dp"
-        android:textColor="#5F6368"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="18sp"
         tools:text="@string/push_info" />
 
@@ -40,8 +40,8 @@
         android:inputType="text"
         android:nextFocusDown="@id/positive"
         android:singleLine="true"
-        android:textColor="#202124"
-        android:textColorHint="#8A8F98"
+        android:textColor="?attr/colorOnSurface"
+        android:textColorHint="?attr/colorOnSurfaceVariant"
         android:textSize="18sp" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -65,7 +65,9 @@
             android:text="@string/dialog_positive"
             android:textColor="@color/dialog_primary_button_text"
             android:textSize="14sp"
-            app:backgroundTint="@color/dialog_primary_button_bg" />
+            app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/negative"
@@ -80,7 +82,7 @@
             android:textColor="@color/dialog_outlined_button_text"
             android:textSize="14sp"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 </RelativeLayout>

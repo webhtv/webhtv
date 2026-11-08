@@ -12,9 +12,9 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogRecommendationFeedbackBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.service.RecommendationFeedbackStore;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.adapter.RecommendationFeedbackAdapter;
 import com.fongmi.android.tv.utils.Notify;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class RecommendationFeedbackDialog implements RecommendationFeedbackAdapter.OnClickListener {
 
@@ -33,7 +33,7 @@ public class RecommendationFeedbackDialog implements RecommendationFeedbackAdapt
         binding.recycler.setLayoutManager(new LinearLayoutManager(activity));
         binding.recycler.setAdapter(adapter);
         binding.recycler.setItemAnimator(null);
-        dialog = new MaterialAlertDialogBuilder(activity)
+        dialog = new WebHtvAlertDialogBuilder(activity)
                 .setTitle(R.string.recommendation_feedback_title)
                 .setView(binding.getRoot())
                 .setNegativeButton(R.string.detail_close, null)

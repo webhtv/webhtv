@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版广告统计/拦截日志行的焦点态。
+
+    只统一**宽度**：@dimen/webhtv_focus_ring_width（此前写死 2dp），与电视端其余焦点环
+    一致，消除用户报告的「边框粗细也貌似不一样」。
+
+    环色刻意保持与调色板无关的深蓝：宿主内容面板 shape_ad_stats_content 是固定浅色
+    （两张表相同），若改取 ?attr/tvFocusRing，夜间表取值（浅蓝）在该浅底上只有
+    约 1.6:1，焦点环会看不见。这是与 shape_chip_focused.xml 同一条「宿主固定明暗则环色必须与
+    调色板无关」的判据。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="#E8F0FE" />
             <corners android:radius="10dp" />
-            <stroke android:width="2dp" android:color="#1A73E8" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="#1A73E8" />
         </shape>
     </item>
     <item android:state_pressed="true">

@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="#F6F8FC"
+    android:background="?attr/colorSurfaceContainerLow"
     android:fillViewport="true">
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -18,10 +18,10 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardBackgroundColor="@color/white"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
             app:cardCornerRadius="18dp"
             app:cardElevation="0dp"
-            app:strokeColor="#D8E0EA"
+            app:strokeColor="?attr/colorOutlineVariant"
             app:strokeWidth="1dp">
 
             <androidx.appcompat.widget.LinearLayoutCompat
@@ -31,7 +31,7 @@
                 android:padding="16dp">
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_ai_section_service" />
@@ -42,7 +42,7 @@
                     android:layout_height="48dp"
                     android:layout_marginTop="8dp"
                     android:text="@string/dialog_ai_enable"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="15sp"
                     app:thumbTint="@color/dialog_switch_thumb"
                     app:trackTint="@color/dialog_switch_track" />
@@ -52,7 +52,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:text="@string/dialog_ai_title_extraction"
-                    android:textColor="#202124"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="15sp"
                     app:thumbTint="@color/dialog_switch_thumb"
                     app:trackTint="@color/dialog_switch_track" />
@@ -64,10 +64,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            app:cardBackgroundColor="@color/white"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
             app:cardCornerRadius="18dp"
             app:cardElevation="0dp"
-            app:strokeColor="#D8E0EA"
+            app:strokeColor="?attr/colorOutlineVariant"
             app:strokeWidth="1dp">
 
             <androidx.appcompat.widget.LinearLayoutCompat
@@ -77,13 +77,13 @@
                 android:padding="16dp">
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_ai_section_connection" />
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="14dp"
@@ -91,7 +91,7 @@
                     android:text="@string/dialog_ai_protocol_label" />
 
                 <androidx.appcompat.widget.AppCompatAutoCompleteTextView
-                    style="@style/Widget.WebHTV.LightDialog.Input"
+                    style="@style/Widget.WebHTV.Input"
                     android:id="@+id/protocol"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
@@ -99,12 +99,12 @@
                     android:gravity="center_vertical"
                     android:inputType="none"
                     android:maxLines="1"
-                    android:popupBackground="@color/white"
+                    android:popupBackground="?attr/colorSurfaceContainerHigh"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp" />
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="14dp"
@@ -112,7 +112,7 @@
                     android:text="@string/dialog_ai_endpoint_label" />
 
                 <com.google.android.material.textfield.TextInputEditText
-                    style="@style/Widget.WebHTV.LightDialog.Input"
+                    style="@style/Widget.WebHTV.Input"
                     android:id="@+id/endpoint"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
@@ -124,7 +124,7 @@
                     android:paddingEnd="12dp" />
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="14dp"
@@ -132,7 +132,7 @@
                     android:text="@string/dialog_ai_api_key_label" />
 
                 <com.google.android.material.textfield.TextInputEditText
-                    style="@style/Widget.WebHTV.LightDialog.Input"
+                    style="@style/Widget.WebHTV.Input"
                     android:id="@+id/apiKey"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
@@ -150,10 +150,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            app:cardBackgroundColor="@color/white"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
             app:cardCornerRadius="18dp"
             app:cardElevation="0dp"
-            app:strokeColor="#D8E0EA"
+            app:strokeColor="?attr/colorOutlineVariant"
             app:strokeWidth="1dp">
 
             <androidx.appcompat.widget.LinearLayoutCompat
@@ -163,13 +163,13 @@
                 android:padding="16dp">
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/dialog_ai_section_model" />
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="14dp"
@@ -183,7 +183,7 @@
                     android:orientation="horizontal">
 
                     <androidx.appcompat.widget.AppCompatAutoCompleteTextView
-                        style="@style/Widget.WebHTV.LightDialog.Input"
+                        style="@style/Widget.WebHTV.Input"
                         android:id="@+id/model"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
@@ -193,12 +193,12 @@
                         android:hint="@string/dialog_ai_model_hint"
                         android:inputType="text"
                         android:maxLines="1"
-                        android:popupBackground="@color/white"
+                        android:popupBackground="?attr/colorSurfaceContainerHigh"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp" />
 
                     <com.google.android.material.button.MaterialButton
-                        style="@style/Widget.WebHTV.LightDialog.Button.Tonal"
+                        style="@style/Widget.WebHTV.Button.Tonal"
                         android:id="@+id/fetchModels"
                         android:layout_width="142dp"
                         android:layout_height="48dp"
@@ -209,7 +209,7 @@
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
                 <com.google.android.material.textview.MaterialTextView
-                    style="@style/Widget.WebHTV.LightDialog.Label"
+                    style="@style/Widget.WebHTV.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingTop="14dp"
@@ -217,7 +217,7 @@
                     android:text="@string/dialog_ai_user_agent_label" />
 
                 <com.google.android.material.textfield.TextInputEditText
-                    style="@style/Widget.WebHTV.LightDialog.Input"
+                    style="@style/Widget.WebHTV.Input"
                     android:id="@+id/userAgent"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
@@ -239,7 +239,7 @@
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
-                style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+                style="@style/Widget.WebHTV.Button.Outlined"
                 android:id="@+id/prompt"
                 android:layout_width="0dp"
                 android:layout_height="52dp"
@@ -248,7 +248,7 @@
                 android:textAllCaps="false" />
 
             <com.google.android.material.button.MaterialButton
-                style="@style/Widget.WebHTV.LightDialog.Button.Tonal"
+                style="@style/Widget.WebHTV.Button.Tonal"
                 android:id="@+id/test"
                 android:layout_width="0dp"
                 android:layout_height="52dp"

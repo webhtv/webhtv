@@ -3,7 +3,7 @@
     android:id="@+id/contentScroll"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="#F6F8FC"
+    android:background="?attr/colorSurfaceContainerLow"
     android:descendantFocusability="afterDescendants"
     android:fillViewport="true"
     android:focusable="false"
@@ -22,12 +22,12 @@
             android:id="@+id/summary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#202124"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="15sp"
             android:textStyle="bold" />
 
         <com.google.android.material.textview.MaterialTextView
-            style="@style/Widget.WebHTV.LightDialog.Label"
+            style="@style/Widget.WebHTV.Label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="18dp"
@@ -38,14 +38,14 @@
             android:id="@+id/groupsText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/white"
+            android:background="?attr/colorSurfaceContainerHigh"
             android:lineSpacingExtra="4dp"
             android:padding="14dp"
-            android:textColor="#3C4043"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="14sp" />
 
         <com.google.android.material.textview.MaterialTextView
-            style="@style/Widget.WebHTV.LightDialog.Label"
+            style="@style/Widget.WebHTV.Label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="18dp"
@@ -60,7 +60,7 @@
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/note"
-            style="@style/Widget.WebHTV.LightDialog.Helper"
+            style="@style/Widget.WebHTV.Helper"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="14dp"

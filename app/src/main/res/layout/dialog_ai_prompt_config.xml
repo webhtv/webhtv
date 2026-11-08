@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@color/white">
+    android:background="?attr/colorSurfaceContainerHigh">
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
@@ -11,14 +11,14 @@
         android:padding="16dp">
 
         <com.google.android.material.textview.MaterialTextView
-            style="@style/Widget.WebHTV.LightDialog.Label"
+            style="@style/Widget.WebHTV.Label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingBottom="8dp"
             android:text="@string/dialog_ai_recommend_prompt_label" />
 
         <com.google.android.material.textfield.TextInputEditText
-            style="@style/Widget.WebHTV.LightDialog.Input"
+            style="@style/Widget.WebHTV.Input"
             android:id="@+id/recommendPrompt"
             android:layout_width="match_parent"
             android:layout_height="180dp"
@@ -32,7 +32,7 @@
             android:paddingBottom="10dp" />
 
         <com.google.android.material.textview.MaterialTextView
-            style="@style/Widget.WebHTV.LightDialog.Label"
+            style="@style/Widget.WebHTV.Label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="14dp"
@@ -40,7 +40,7 @@
             android:text="@string/dialog_ai_title_extraction_prompt_label" />
 
         <com.google.android.material.textfield.TextInputEditText
-            style="@style/Widget.WebHTV.LightDialog.Input"
+            style="@style/Widget.WebHTV.Input"
             android:id="@+id/titleExtractionPrompt"
             android:layout_width="match_parent"
             android:layout_height="180dp"
@@ -54,7 +54,7 @@
             android:paddingBottom="10dp" />
 
         <com.google.android.material.textview.MaterialTextView
-            style="@style/Widget.WebHTV.LightDialog.Label"
+            style="@style/Widget.WebHTV.Label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="14dp"
@@ -62,7 +62,7 @@
             android:text="@string/dialog_ai_viewing_report_prompt_label" />
 
         <com.google.android.material.textfield.TextInputEditText
-            style="@style/Widget.WebHTV.LightDialog.Input"
+            style="@style/Widget.WebHTV.Input"
             android:id="@+id/viewingReportPrompt"
             android:layout_width="match_parent"
             android:layout_height="180dp"
@@ -76,7 +76,7 @@
             android:paddingBottom="10dp" />
 
         <com.google.android.material.textview.MaterialTextView
-            style="@style/Widget.WebHTV.LightDialog.Label"
+            style="@style/Widget.WebHTV.Label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="14dp"
@@ -84,7 +84,7 @@
             android:text="@string/dialog_ai_ad_detection_prompt_label" />
 
         <com.google.android.material.textfield.TextInputEditText
-            style="@style/Widget.WebHTV.LightDialog.Input"
+            style="@style/Widget.WebHTV.Input"
             android:id="@+id/adDetectionPrompt"
             android:layout_width="match_parent"
             android:layout_height="180dp"
@@ -98,7 +98,7 @@
             android:paddingBottom="10dp" />
 
         <com.google.android.material.textview.MaterialTextView
-            style="@style/Widget.WebHTV.LightDialog.Label"
+            style="@style/Widget.WebHTV.Label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="14dp"
@@ -107,7 +107,7 @@
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/groupRulePrompt"
-            style="@style/Widget.WebHTV.LightDialog.Input"
+            style="@style/Widget.WebHTV.Input"
             android:layout_width="match_parent"
             android:layout_height="180dp"
             android:gravity="top|start"

@@ -125,6 +125,46 @@ public class MediaTitleParserTest {
     }
 
     @Test
+    public void cleanSearchTitles_stripsGenreAndRegionGroupLabels() {
+        List<String> titles = new MediaTitleParser().cleanSearchTitles(
+                MediaTitleRequest.builder()
+                        .rawTitle("[电影] 小丑回魂：德里故事 (2026) [小丑回魂：欢迎来到德里镇 万圣节特别集][美国 恐怖 奇幻]")
+                        .build());
+
+        assertEquals("小丑回魂：德里故事", titles.get(0));
+    }
+
+    @Test
+    public void cleanSearchTitles_keepsTitleBracketOnlyCategoryLabelsPresent() {
+        List<String> titles = new MediaTitleParser().cleanSearchTitles(
+                MediaTitleRequest.builder()
+                        .rawTitle("[美国][恐怖][我的电影].mkv")
+                        .build());
+
+        assertEquals("我的电影", titles.get(0));
+    }
+
+    @Test
+    public void cleanSearchTitles_dropsResidualNonCategoryBracketNoise() {
+        List<String> titles = new MediaTitleParser().cleanSearchTitles(
+                MediaTitleRequest.builder()
+                        .rawTitle("[北美票房][美国][阿凡达].mkv")
+                        .build());
+
+        assertEquals("阿凡达", titles.get(0));
+    }
+
+    @Test
+    public void cleanSearchTitles_ignoresTrailingReleaseNoiseBracket() {
+        List<String> titles = new MediaTitleParser().cleanSearchTitles(
+                MediaTitleRequest.builder()
+                        .rawTitle("[美国][阿凡达][完整版].mkv")
+                        .build());
+
+        assertEquals("阿凡达", titles.get(0));
+    }
+
+    @Test
     public void candidates_doNotReuseLearningOnlyBecauseBothTitlesHaveTrueColorTag() {
         MediaTitleLearningExample unrelated = MediaTitleLearningExample.manual(
                 "千香（真彩）",

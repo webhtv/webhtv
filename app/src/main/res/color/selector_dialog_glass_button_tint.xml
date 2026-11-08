@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="#3DFFFFFF" android:state_checked="true" />
-    <item android:color="#3DFFFFFF" android:state_selected="true" />
-    <item android:color="#2EFFFFFF" android:state_focused="true" />
-    <item android:color="#1FFFFFFF" />
+    <item android:color="?attr/colorOutline" android:state_checked="true" />
+    <item android:color="?attr/colorOutline" android:state_selected="true" />
+    <item android:color="?attr/colorOutlineVariant" android:state_focused="true" />
+    <item android:color="?attr/colorOutlineVariant" />
 </selector>

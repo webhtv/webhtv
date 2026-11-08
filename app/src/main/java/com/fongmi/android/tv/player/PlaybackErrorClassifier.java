@@ -135,6 +135,24 @@ public final class PlaybackErrorClassifier {
         return new Failure(stage, confidence, evidence, PlaybackException.getErrorCodeName(errorCode), route);
     }
 
+    /**
+     * 「取不到 / 读不懂流」的临时失败：重试本项可能恢复，换内核通常没有意义。
+     *
+     * <p>判定必须区分「临时」与「持续」：网络 I/O、本机端点，以及 HLS manifest 解析失败
+     * （实测合并直播源会返回 200 空体 / 非 m3u8 文本）都属于前者；而媒体容器「不支持」是
+     * 内容能力边界，换 IJK/MPV 往往还能播，不能一起挡在内核回退之外（否则 AVS3/RMVB 等
+     * EXO 不支持的源会从「换核可播」退化成「直接报错」）。容器损坏同样保留换核机会，
+     * 只把 manifest 格式错误视为临时失败。
+     */
+    public static boolean isTransientSourceFailure(Stage stage, int errorCode) {
+        if (stage == null) return false;
+        return switch (stage) {
+            case LOCAL_ENDPOINT, NETWORK_IO -> true;
+            case MEDIA_PARSING -> errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED;
+            default -> false;
+        };
+    }
+
     public enum Stage {
         LOCAL_ENDPOINT("local-endpoint"),
         NETWORK_IO("network-io"),

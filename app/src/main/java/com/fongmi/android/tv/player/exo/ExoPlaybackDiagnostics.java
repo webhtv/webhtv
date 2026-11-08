@@ -113,6 +113,25 @@ final class ExoPlaybackDiagnostics {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-buffer", "loadControl profile=%s mode=media3-default", profileName(profile));
     }
 
+    /**
+     * Records the frame-pacing values that reached the renderer factory.
+     *
+     * <p>A dropped-frame report is unattributable while the exported log carries no configuration
+     * at all, because the same "掉帧" sentence then covers four different switch states. One line
+     * per player build closes that gap; it says what was applied, not how playback looked.
+     */
+    static void logFrameScheduling(
+            ExoFrameSchedulingExperimentPolicy.Decision decision,
+            String codecQueueMode,
+            boolean dynamicSchedulingEnabled,
+            long lateDropThresholdUs) {
+        if (!SpiderDebug.isEnabled()) return;
+        SpiderDebug.log("exo-frame", "renderer %s",
+                ExoFrameSchedulingRendererSettings.describe(
+                        decision, codecQueueMode, dynamicSchedulingEnabled,
+                        lateDropThresholdUs));
+    }
+
     static void logTrackFormats(@Nullable Format video, @Nullable Format audio, int effectiveCapacityBytes) {
         if (!SpiderDebug.isEnabled()) return;
         long videoBitrate = formatBitrate(video);

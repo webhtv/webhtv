@@ -1,4 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版搜索范围下拉菜单项（SearchActivity / CollectActivity 的范围/分组选择弹窗）的焦点态。
+
+    只统一**宽度**：@dimen/webhtv_focus_ring_width（此前写死 2dp），与电视端其余焦点环
+    一致。环色保持与调色板无关的白色：宿主 shape_search_scope_popup 是固定深色玻璃
+    （两张表相同），浅色表的 FOCUS 槽（深蓝）在该底上只有约 1.9:1，
+    白色约 12:1。见 shape_chip_focused.xml 的同一判据。
+
+    焦点**填充**必须是半透明白，不能是 @color/white_90（#E6FFFFFF）：
+    它与 selector_search_scope_text 的 state_focused 前景 #FFFFFF 配成「白字压白底」，
+    合成到玻璃面板上实测 1.19:1（用户报告「TV 版搜索选中这里看不清」）。
+    改为 @color/white_20（#33FFFFFF）后同一配对为 6.27–7.11:1（三档壁纸 × 日/夜），
+    白色焦点环对底色同为 6.27–7.11:1。判据与实测由 TvFocusStatePairContrastTest 固化。
+
+    另补 focused+selected 合并态：Android selector 取首个匹配项，focused 会吃掉 selected，
+    用户聚焦到当前分组时看不到「当前选的是哪个」。合并态沿用焦点填充，只把环换成
+    选中琥珀，使「焦点」与「当前选中」同时可辨。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item android:state_pressed="true">
@@ -6,17 +24,27 @@
             <solid android:color="@color/white_90" />
             <corners android:radius="6dp" />
             <stroke
-                android:width="2dp"
+                android:width="@dimen/webhtv_focus_ring_width"
                 android:color="@color/white" />
+        </shape>
+    </item>
+
+    <item android:state_focused="true" android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/white_20" />
+            <corners android:radius="6dp" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="@color/display_option_bg_selected" />
         </shape>
     </item>
 
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/white_90" />
+            <solid android:color="@color/white_20" />
             <corners android:radius="6dp" />
             <stroke
-                android:width="2dp"
+                android:width="@dimen/webhtv_focus_ring_width"
                 android:color="@color/white" />
         </shape>
     </item>

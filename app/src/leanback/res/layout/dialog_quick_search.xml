@@ -10,7 +10,8 @@
     android:clipToPadding="false"
     android:orientation="vertical"
     android:paddingStart="16dp"
-    android:paddingEnd="16dp">
+    android:paddingEnd="16dp"
+    android:theme="@style/ThemeOverlay.WebHTV.GlassFocusRings">
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/status"
@@ -18,7 +19,7 @@
         android:layout_height="52dp"
         android:gravity="center"
         android:text="@string/search_progress"
-        android:textColor="@color/white"
+        android:textColor="?attr/webhtvColorOnWallpaper"
         android:textSize="18sp"
         tools:text="(12/38)" />
 
@@ -37,7 +38,7 @@
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:text="@string/search_loading"
-            android:textColor="@color/white_80"
+            android:textColor="?attr/webhtvColorOnWallpaper"
             android:textSize="18sp" />
 
         <com.fongmi.android.tv.ui.custom.CustomRecyclerView

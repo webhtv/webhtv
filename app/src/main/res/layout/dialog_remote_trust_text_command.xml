@@ -17,7 +17,7 @@
         android:layout_height="wrap_content"
         android:ellipsize="end"
         android:singleLine="true"
-        android:textColor="#202124"
+        android:textColor="?attr/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold"
         tools:text="搜索播放" />
@@ -27,9 +27,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="14dp"
-        app:boxBackgroundColor="@color/white"
-        app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-        app:hintTextColor="#5F6368"
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHighest"
+        app:boxStrokeColor="?attr/colorOutline"
+        app:hintTextColor="?attr/colorOnSurfaceVariant"
         tools:hint="搜索关键词">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -40,8 +40,8 @@
             android:importantForAutofill="no"
             android:inputType="textUri"
             android:singleLine="true"
-            android:textColor="#202124"
-            android:textColorHint="#8A8F98" />
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -66,7 +66,7 @@
             android:text="@string/dialog_cancel"
             android:textColor="@color/dialog_outlined_button_text"
             app:backgroundTint="@color/dialog_outlined_button_bg"
-            app:strokeColor="@color/dialog_outlined_button_stroke" />
+            app:strokeColor="?attr/colorOutline" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
@@ -77,6 +77,8 @@
             android:minHeight="40dp"
             android:textColor="@color/dialog_primary_button_text"
             app:backgroundTint="@color/dialog_primary_button_bg"
+            app:strokeWidth="@dimen/webhtv_focus_ring_width"
+            app:strokeColor="@color/focus_ring_primary_container"
             tools:text="发送搜索" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>

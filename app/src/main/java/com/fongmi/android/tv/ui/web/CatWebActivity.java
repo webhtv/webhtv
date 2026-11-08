@@ -20,6 +20,8 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewFeature;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.FileChooser;
@@ -40,9 +42,13 @@ import java.io.File;
  */
 public class CatWebActivity extends AppCompatActivity {
 
+    private static final String DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
     /** 不带 TV- 前缀：SpiderDebug 自己会加，与 cat-msg / cat-source 保持一致。 */
     private static final String TAG = "cat-web";
     private static final String EXTRA_URL = "url";
+    private static final String EXTRA_TITLE = "title";
+    private static final String EXTRA_LOADING_TEXT = "loadingText";
 
     private WebView webView;
     private ProgressBar progress;
@@ -55,7 +61,18 @@ public class CatWebActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> chooser;
 
     public static Intent intent(Context context, String url) {
-        return new Intent(context, CatWebActivity.class).putExtra(EXTRA_URL, url);
+        return intent(context, url, "", "");
+    }
+
+    public static Intent browserIntent(Context context, String url, String title, String loadingText) {
+        return intent(context, url, title, loadingText);
+    }
+
+    private static Intent intent(Context context, String url, String title, String loadingText) {
+        return new Intent(context, CatWebActivity.class)
+                .putExtra(EXTRA_URL, url)
+                .putExtra(EXTRA_TITLE, title)
+                .putExtra(EXTRA_LOADING_TEXT, loadingText);
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -69,6 +86,8 @@ public class CatWebActivity extends AppCompatActivity {
             finish();
             return;
         }
+        String title = getIntent().getStringExtra(EXTRA_TITLE);
+        if (!TextUtils.isEmpty(title)) setTitle(title);
 
         // Android 13+ 手势返回与系统返回键都先让 WebView 回退，退到底再关页面
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -82,7 +101,8 @@ public class CatWebActivity extends AppCompatActivity {
         webView = findViewById(R.id.web_view);
         progress = findViewById(R.id.progress);
         loading = findViewById(R.id.loading);
-        ((TextView) findViewById(R.id.loading_text)).setText(R.string.cat_web_opening);
+        String loadingText = getIntent().getStringExtra(EXTRA_LOADING_TEXT);
+        ((TextView) findViewById(R.id.loading_text)).setText(TextUtils.isEmpty(loadingText) ? getString(R.string.cat_web_opening) : loadingText);
         ((TextView) findViewById(R.id.address)).setText(url);
 
         configure();
@@ -98,17 +118,27 @@ public class CatWebActivity extends AppCompatActivity {
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setUseWideViewPort(true);
-        s.setLoadWithOverviewMode(true);
         s.setSupportZoom(true);
         s.setBuiltInZoomControls(true);
         s.setDisplayZoomControls(false);
+        s.setUserAgentString(DESKTOP_UA);
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
+        s.setTextZoom(100);
+        // 外部站点自带浅色主题时，系统算法深色化会把加载框变成黑底灰字。
+        // 内置页只负责承载网页，不强制替站点换肤。
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(s, false);
+        } else if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+            WebSettingsCompat.setForceDark(s, WebSettingsCompat.FORCE_DARK_OFF);
+        }
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         // TV 上没有触摸，靠 D-pad 移动焦点；这两项让 WebView 参与焦点链
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
+        webView.setInitialScale(100);
         webView.setBackgroundColor(0xFF101216);
         webView.setWebChromeClient(new WebChromeClient() {
             @Override

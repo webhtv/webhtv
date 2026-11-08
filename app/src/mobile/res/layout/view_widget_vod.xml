@@ -5,7 +5,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.google.android.material.textview.MaterialTextView
+    <!--
+        错误层：设计文档 §9.9 要求「错误色 + 原因 + 重试动作」。
+
+        改动前这里是一个**纯文本** TextView，只有失败原因、没有任何可操作的东西。
+        现在改成容器：原因文本 + 重试按钮，与电视端同构（电视端见 docs/TV-PLAYER-ERROR-RETRY-20261013.md）。
+        重试复用控制层同一条 onReset()，因此不新写播放/恢复路径。
+    -->
+    <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/error"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -13,11 +20,33 @@
         android:layout_marginTop="24dp"
         android:background="@drawable/shape_widget"
         android:gravity="center"
-        android:textColor="@color/white"
-        android:textSize="14sp"
+        android:orientation="vertical"
         android:visibility="gone"
-        tools:text="@string/error_play_url"
-        tools:visibility="visible" />
+        tools:visibility="visible">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/errorText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            tools:text="@string/error_play_url" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/errorRetry"
+            style="@style/Widget.WebHTV.Button.Tonal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:text="@string/error_retry"
+            android:textSize="13sp" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/seek"

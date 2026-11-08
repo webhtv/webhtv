@@ -171,7 +171,8 @@ public class ExoDecoderRuntimeSessionTest {
         ExoDecoderRuntimeSession session = session(profiles);
         ExoDecoderRuntimeSession.Evidence evidence =
                 new ExoDecoderRuntimeSession.Evidence(
-                        "decoder", format(3840, 2160), false, 24, 1);
+                        "decoder", format(3840, 2160), false, 24, 1,
+                        ExoDecoderRuntimeSession.STABLE_PLAYBACK_WINDOW_MS);
 
         session.recordStable(
                 evidence,
@@ -181,6 +182,66 @@ public class ExoDecoderRuntimeSessionTest {
         assertEquals(0, profiles.successKeys.size());
         assertEquals(1, profiles.observationKeys.size());
         assertEquals(0, profiles.failureKeys.size());
+    }
+
+    @Test
+    public void slowDropsOverALongWindowStayHealthy() {
+        // 40 drops is well past the old fixed count of 23, but spread over two minutes it is
+        // 0.33/s, below the 0.77/s the 23-frames-per-30s budget has always meant. Reading the
+        // rate instead of the raw total is what keeps a long playback from being condemned for
+        // the tail media3 settles at every pause.
+        FakeProfiles profiles = new FakeProfiles();
+        ExoDecoderRuntimeSession session = session(profiles);
+        ExoDecoderRuntimeSession.Evidence evidence =
+                new ExoDecoderRuntimeSession.Evidence(
+                        "decoder", format(3840, 2160), false, 40, 0, 120_000L);
+
+        session.recordStable(
+                evidence,
+                ELAPSED + ExoDecoderRuntimeSession.STABLE_PLAYBACK_WINDOW_MS,
+                EPOCH);
+
+        assertEquals(1, profiles.successKeys.size());
+        assertEquals(0, profiles.observationKeys.size());
+    }
+
+    @Test
+    public void shortWindowWithTheSameTotalIsUnhealthy() {
+        // Identical dropped-frame total in only 10 played seconds is 4/s: the rate holds the
+        // line the fixed count drew, instead of the window length deciding the verdict.
+        FakeProfiles profiles = new FakeProfiles();
+        ExoDecoderRuntimeSession session = session(profiles);
+        ExoDecoderRuntimeSession.Evidence evidence =
+                new ExoDecoderRuntimeSession.Evidence(
+                        "decoder", format(3840, 2160), false, 40, 0, 10_000L);
+
+        session.recordStable(
+                evidence,
+                ELAPSED + ExoDecoderRuntimeSession.STABLE_PLAYBACK_WINDOW_MS,
+                EPOCH);
+
+        assertEquals(0, profiles.successKeys.size());
+        assertEquals(1, profiles.observationKeys.size());
+    }
+
+    @Test
+    public void unmeasuredPlayTimeFallsBackToTheFixedCount() {
+        // Played time is only measured while the analysis listener sees isPlaying; if that
+        // never happened the old fixed count still applies, so an unmeasured session cannot
+        // become healthier than it was before.
+        FakeProfiles profiles = new FakeProfiles();
+        ExoDecoderRuntimeSession session = session(profiles);
+        ExoDecoderRuntimeSession.Evidence evidence =
+                new ExoDecoderRuntimeSession.Evidence(
+                        "decoder", format(3840, 2160), false, 40, 0);
+
+        session.recordStable(
+                evidence,
+                ELAPSED + ExoDecoderRuntimeSession.STABLE_PLAYBACK_WINDOW_MS,
+                EPOCH);
+
+        assertEquals(0, profiles.successKeys.size());
+        assertEquals(1, profiles.observationKeys.size());
     }
 
     @Test

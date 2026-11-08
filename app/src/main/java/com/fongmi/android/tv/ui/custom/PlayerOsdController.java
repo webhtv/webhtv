@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.custom;
 
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.graphics.drawable.GradientDrawable;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.media.MediaFormat;
@@ -13,8 +14,13 @@ import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Display;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.webkit.WebView;
 import android.widget.TextView;
 
@@ -28,6 +34,8 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.DolbyVisionFormatLabel;
 import com.fongmi.android.tv.player.AudioPlaybackDiagnostics;
 import com.fongmi.android.tv.player.GpuLoadMonitor;
+import com.fongmi.android.tv.player.MediaBadgeCatalog;
+import com.fongmi.android.tv.player.MediaBadgeResolver;
 import com.fongmi.android.tv.player.ijk.IjkDecodePressurePolicy;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.PlaybackPanelResourceMonitor;
@@ -41,11 +49,15 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Util;
+import com.google.android.flexbox.FlexboxLayout;
 
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class PlayerOsdController {
 
@@ -53,12 +65,30 @@ public class PlayerOsdController {
         PlayerManager getPlayer();
 
         String getTitle();
+
+        /**
+         * 是否处于全屏播放。媒体信息徽标只属于全屏画面：半屏/小窗（详情页内嵌、竖屏小屏）里
+         * 它会和一堆控件挤在一起，因此非全屏时无论屏显开关如何都不显示。
+         */
+        default boolean isFullscreen() {
+            return true;
+        }
     }
 
     private static volatile String cachedDeviceText;
     private static volatile String cachedSystemText;
     private static volatile String cachedWebViewText;
     private static volatile String cachedHevcDecoderText;
+    /**
+     * The verdict threshold for "掉帧较多". It used to be a bare raw count of 60, but media3
+     * settles its dropped-frame accumulator whenever the renderer stops, so the count also
+     * jumps at every pause. The rate is the comparable measure; it matches
+     * ExoUtil.ENHANCED_DROPPED_FRAMES_PER_SECOND_THRESHOLD, the local downgrade trigger.
+     */
+    private static final double DROPPED_FRAMES_PER_SECOND_DIAGNOSIS = 4d;
+    /** Below this played time a rate is not yet meaningful; the raw count is used instead. */
+    private static final long DROPPED_FRAMES_RATE_MIN_PLAY_TIME_MS = 30_000L;
+    private static final long DROPPED_FRAMES_RAW_COUNT_DIAGNOSIS = 60;
 
     private final SimpleDateFormat timeFormat;
     private final TextView topLeft;
@@ -68,6 +98,7 @@ public class PlayerOsdController {
     private final TextView diagnostics;
     private final TextView diagnosticsExtra;
     private final View diagnosticsPanel;
+    private final ViewGroup mediaBadges;
     private final MiniProgressView miniProgress;
     private final Runnable update;
     private final Source source;
@@ -79,18 +110,24 @@ public class PlayerOsdController {
     private final DecimalFormat frameFormat;
     private final DecimalFormat refreshFormat;
     private final DecimalFormat bitrateFormat;
+    private final DecimalFormat frameDropRateFormat;
     private final PlaybackSpeedMeter speedMeter = new PlaybackSpeedMeter();
     private long lastSpeedKBps;
     private String lastSpeedText;
     private boolean controlsVisible;
     private boolean diagnosticsVisible;
     private boolean persistentSuppressed;
+    private String mediaBadgeSignature = "";
+    private View observedControlBar;
+    private View.OnLayoutChangeListener observedControlBarListener;
     private boolean started;
     private PlayerManager diagnosticsSamplingPlayer;
 
     public PlayerOsdController(View root, TextView topLeft, TextView topRight, TextView bottomLeft, TextView bottomRight, TextView diagnostics, MiniProgressView miniProgress, Source source, float miniSp) {
         this.timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
         this.bitrateFormat = new DecimalFormat("#.0");
+        // "#.0" prints 0.5 as ".5"; a rate must keep its leading digit.
+        this.frameDropRateFormat = new DecimalFormat("0.0");
         this.refreshFormat = new DecimalFormat("#.##");
         this.frameFormat = new DecimalFormat("#.###");
         this.miniProgress = miniProgress;
@@ -99,6 +136,7 @@ public class PlayerOsdController {
         this.diagnostics = diagnostics;
         this.diagnosticsExtra = root.findViewById(R.id.osdDiagnosticsExtra);
         this.diagnosticsPanel = root.findViewById(R.id.osdDiagnosticsPanel);
+        this.mediaBadges = root.findViewById(R.id.osdMediaBadges);
         this.topRight = topRight;
         this.topLeft = topLeft;
         this.miniSp = miniSp;
@@ -136,6 +174,7 @@ public class PlayerOsdController {
 
     public void release() {
         stop();
+        stopObservingControlBar();
     }
 
     public void setSuppressed(boolean suppressed) {
@@ -195,6 +234,9 @@ public class PlayerOsdController {
 
     private boolean render() {
         if (suppressed) {
+            // mobile 播放器在控制栏出现时会抑制整个 OSD 根（控制栏自带标题与分辨率）。
+            // 媒体信息徽标是唯一的例外：它只在「屏显设置 → 媒体信息」开启时才放行。
+            if (controlsVisible && renderMediaBadgesOnly()) return true;
             root.setVisibility(View.GONE);
             return false;
         }
@@ -212,9 +254,11 @@ public class PlayerOsdController {
             bottomLeft.setVisibility(View.GONE);
             bottomRight.setVisibility(View.GONE);
             diagnosticsPanel.setVisibility(View.GONE);
+            setMediaBadges(player);
             if (miniProgress != null) miniProgress.setVisibility(View.GONE);
-            // 如果标题或时间至少有一个显示，则显示 root
-            boolean hasVisible = topLeft.getVisibility() == View.VISIBLE || topRight.getVisibility() == View.VISIBLE;
+            // 标题、时间、媒体信息徽标，至少一个可见就显示 root
+            boolean hasVisible = topLeft.getVisibility() == View.VISIBLE || topRight.getVisibility() == View.VISIBLE
+                    || (mediaBadges != null && mediaBadges.getVisibility() == View.VISIBLE);
             root.setVisibility(hasVisible ? View.VISIBLE : View.GONE);
             return true;
         }
@@ -227,7 +271,8 @@ public class PlayerOsdController {
             return false;
         }
 
-        // 控制栏隐藏时，按用户设置显示
+        // 控制栏隐藏时，按用户设置显示常驻屏显；用户打开「媒体信息」开关后，
+        // 徽标与标题 / 时间 / 进度 / 码率同级常驻，不再依赖控制栏是否唤醒。
         root.setVisibility(View.VISIBLE);
         if (persistentSuppressed) {
             hidePersistent();
@@ -241,7 +286,50 @@ public class PlayerOsdController {
         setBottomRight();
         setDiagnosticsPanel(player);
         setMiniProgress(player);
+        setMediaBadges(player);
+        // 常驻项（含媒体信息徽标）全不可见时不再保留一个空的 OSD 根
+        boolean persistentVisible = topLeft.getVisibility() == View.VISIBLE
+                || topRight.getVisibility() == View.VISIBLE
+                || bottomLeft.getVisibility() == View.VISIBLE
+                || bottomRight.getVisibility() == View.VISIBLE
+                || diagnosticsPanel.getVisibility() == View.VISIBLE
+                || (mediaBadges != null && mediaBadges.getVisibility() == View.VISIBLE)
+                || (miniProgress != null && miniProgress.getVisibility() == View.VISIBLE);
+        root.setVisibility(persistentVisible ? View.VISIBLE : View.GONE);
         return true;
+    }
+
+    /**
+     * 控制栏出现但 OSD 根被抑制（mobile 播放器）时的渲染路径。
+     * 只放行媒体信息徽标，四角文本、诊断面板与迷你进度一律隐藏；
+     * 徽标自身的两条约束与常驻路径完全一致：必须全屏、且媒体信息总开关打开，
+     * 否则控制栏唤醒也不显示（「媒体信息位置 = 关闭」时正是这种情况）。
+     */
+    private boolean renderMediaBadgesOnly() {
+        if (!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()) {
+            topLeft.setVisibility(View.GONE);
+            topRight.setVisibility(View.GONE);
+            bottomLeft.setVisibility(View.GONE);
+            bottomRight.setVisibility(View.GONE);
+            diagnosticsPanel.setVisibility(View.GONE);
+            if (miniProgress != null) miniProgress.setVisibility(View.GONE);
+            if (mediaBadges != null) {
+                mediaBadges.setVisibility(View.GONE);
+                mediaBadgeSignature = "";
+            }
+            root.setVisibility(View.GONE);
+            return false;
+        }
+        topLeft.setVisibility(View.GONE);
+        topRight.setVisibility(View.GONE);
+        bottomLeft.setVisibility(View.GONE);
+        bottomRight.setVisibility(View.GONE);
+        diagnosticsPanel.setVisibility(View.GONE);
+        if (miniProgress != null) miniProgress.setVisibility(View.GONE);
+        setMediaBadges(source.getPlayer());
+        boolean visible = mediaBadges != null && mediaBadges.getVisibility() == View.VISIBLE;
+        root.setVisibility(visible ? View.VISIBLE : View.GONE);
+        return visible;
     }
 
     private void setTopLeft(PlayerManager player) {
@@ -366,6 +454,470 @@ public class PlayerOsdController {
         miniProgress.setVisibility(View.VISIBLE);
     }
 
+    /**
+     * 屏显媒体信息徽标：只显示播放器能直接证明的事实。
+     * 每秒轮询都会走到这里，因此只有徽标文本发生变化时才重建子视图，
+     * 避免每秒钟反复 addView 触发测量与布局。
+     */
+    private void setMediaBadges(PlayerManager player) {
+        if (mediaBadges == null) return;
+        // 三条判断：
+        // 1. 只在全屏画面里出现——半屏/小窗里它会把本来就拥挤的控件堆得更挤；
+        // 2. 媒体信息总开关（设置页「媒体信息位置」）必须打开——选「关闭」时任何情况都不显示；
+        // 3. 控制栏唤醒时直接显示（用户要的就是唤醒时能看到），
+        //    控制栏隐藏时则看「屏显设置」里的常驻开关，两者互不牵连。
+        if (player == null || !source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()
+                || (!controlsVisible && !PlayerSetting.isDisplayMediaBadgesPersistent())) {
+            mediaBadges.setVisibility(View.GONE);
+            mediaBadgeSignature = "";
+            return;
+        }
+        Format video = player.getVideoFormat();
+        PlayerEngine.VideoPlaybackDetails details = player.getVideoPlaybackDetails();
+        AudioPlaybackDiagnostics.Snapshot audio = player.getAudioPlaybackDiagnostics();
+        List<MediaBadgeResolver.MediaBadge> badges = MediaBadgeResolver.resolve(video, details, audio == null ? null : audio.activeTrack(), player.getUrl(), source.getTitle());
+        if (badges.isEmpty()) {
+            mediaBadges.setVisibility(View.GONE);
+            mediaBadgeSignature = "";
+            return;
+        }
+        applyMediaBadgePosition();
+        StringBuilder signature = new StringBuilder();
+        for (MediaBadgeResolver.MediaBadge badge : badges) signature.append(badge.group()).append(':').append(badge.plate()).append(':').append(badge.text()).append('|');
+        String next = signature.toString();
+        if (!next.equals(mediaBadgeSignature)) {
+            mediaBadgeSignature = next;
+            mediaBadges.removeAllViews();
+            for (MediaBadgeResolver.MediaBadge badge : badges) mediaBadges.addView(createMediaBadge(badge));
+        }
+        mediaBadges.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * 徽标贴角规则：
+     * 1. 控制栏唤醒时，控制栏占据画面顶部与底部，四角都要让开它的高度，否则会压住标题栏 /
+     *    进度条；这是唯一的「无条件内缩」场景。
+     * 2. 控制栏隐藏时徽标是常驻项，此时只有在同一个角**确实还有别的常驻文本**
+     *    （同角的标题 / 时间 / 进度 / 网速）时才抬高一行躲开它；没有邻居就直接贴到画面边缘，
+     *    这才是用户要的「最靠边缘」。
+     * 3. 布局给四角留了内边距，而 margin 是从内沿开始量的；所以要把它折算掉，让「徽标到正下方
+     *    障碍物」的肉眼间距无论控制栏在不在、手机还是电视，都正好等于 {@link #badgeGap()}。
+     */
+    private void applyMediaBadgePosition() {
+        if (mediaBadges == null) return;
+        ViewGroup.LayoutParams params = mediaBadges.getLayoutParams();
+        if (!(params instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) params;
+        int position = PlayerSetting.getMediaBadgePosition();
+        View neighbour = persistentNeighbour(position);
+        boolean stacked = !controlsVisible && neighbour != null;
+        // 邻居的实际高度 + 一点呼吸位；量不到时退回一条文本行的高度。
+        int clear = (stacked ? Math.max(neighbour.getHeight(), dp(18)) : 0) + dp(4);
+        // 贴边 / 避让控制栏用的 margin：都把容器内边距折算掉，肉眼间距才等于 badgeGap()。
+        // 用负 margin 去顶边缘会顶进系统栏导致胶囊被裁切，所以下限取 0。
+        View badgeParent = mediaBadges.getParent() instanceof View ? (View) mediaBadges.getParent() : null;
+        int gap = badgeGap();
+        int edgeTop = Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingTop()));
+        int edgeBottom = Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingBottom()));
+        int edgeStart = Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingLeft()));
+        int edgeEnd = Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingRight()));
+        // 控制栏唤醒时的避让：必须按控制栏的真实高度算，不能写死。
+        // 电视端控制栏是底部一整条（按钮行 + 进度条），手机端高度也不同；写死 64/80dp 会让
+        // 徽标落到按钮行上，看起来就像「被塞进了控制栏」。
+        View bar = controlBar();
+        observeControlBar(bar);
+        int barTop = controlBarTopInset(bar, edgeBottom);
+        int gravity;
+        int marginStart;
+        int marginEnd;
+        int topMargin;
+        int bottomMargin;
+        switch (position) {
+            case 0:
+                gravity = Gravity.TOP | Gravity.START;
+                marginStart = stacked ? 0 : edgeStart;
+                marginEnd = 0;
+                topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeTop);
+                bottomMargin = 0;
+                break;
+            case 1:
+                gravity = Gravity.TOP | Gravity.END;
+                marginStart = 0;
+                marginEnd = stacked ? 0 : edgeEnd;
+                topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeTop);
+                bottomMargin = 0;
+                break;
+            case 2:
+                gravity = Gravity.BOTTOM | Gravity.START;
+                marginStart = stacked ? 0 : edgeStart;
+                marginEnd = 0;
+                topMargin = 0;
+                bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeBottom);
+                break;
+            default:
+                gravity = Gravity.BOTTOM | Gravity.END;
+                marginStart = 0;
+                marginEnd = stacked ? 0 : edgeEnd;
+                topMargin = 0;
+                bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeBottom);
+                break;
+        }
+        if (layoutParams.gravity == gravity && layoutParams.topMargin == topMargin && layoutParams.bottomMargin == bottomMargin
+                && layoutParams.getMarginStart() == marginStart && layoutParams.getMarginEnd() == marginEnd) return;
+        layoutParams.gravity = gravity;
+        layoutParams.topMargin = topMargin;
+        layoutParams.bottomMargin = bottomMargin;
+        layoutParams.setMarginStart(marginStart);
+        layoutParams.setMarginEnd(marginEnd);
+        mediaBadges.setLayoutParams(layoutParams);
+    }
+
+    /**
+     * 徽标与「正下方 / 正上方障碍物」之间要留的呼吸位。控制栏唤醒时是控制栏边缘，
+     * 控制栏隐藏且同角无邻居时是画面边缘；手机与电视共用同一个值。
+     *
+     * <p>这个 16dp 是**扣除** app/src/main/res/layout/view_player_osd.xml 外层 FrameLayout 的
+     * android:padding="14dp" 之后生效的肉眼间距；改那个 padding 会同步改变肉眼距离
+     * （{@link #applyMediaBadgePosition()} 用 Math.max(0, gap - getPaddingXxx()) 折算）。
+     */
+    private int badgeGap() {
+        return dp(16);
+    }
+
+    /**
+     * 下两角控制栏可见时的 bottomMargin：控制栏高度 + 呼吸位，再扣掉容器内边距。
+     * 电视端是底部一整条（按钮行 + 进度条），手机端真正占位的只是它内部的 bottom 条；
+     * 写死数值会让徽标落到按钮行上，看起来像「被塞进控制栏」。
+     * 量不到时退回旧常量，保证首帧不会跳到画面外。
+     */
+    private int controlBarTopInset(View bar, int edgeGap) {
+        if (bar == null || bar.getVisibility() != View.VISIBLE) return dp(80) + edgeGap;
+        // 手机端控制栏根是 match_parent（整屏铺底），真正占位的是它里面的 bottom 底部条；
+        // 电视端控制栏根本身就是底部一整条。两种都按「实际占位的那个」来量。
+        // 手机端内联控制栏的底部条是 {@code @+id/bottom}，电视端详情页内嵌播放器是 {@code @+id/playerBottom}。
+        View bottom = bar.findViewById(R.id.bottom);
+        if (bottom == null) bottom = bar.findViewById(R.id.playerBottom);
+        int height = bottom != null && bottom.getVisibility() == View.VISIBLE && bottom.getHeight() > 0
+                ? bottom.getHeight()
+                : bar.getHeight();
+        if (height <= 0 || height >= root.getHeight()) return dp(80) + edgeGap;
+        return height + edgeGap;
+    }
+
+    /**
+     * 控制栏与 OSD 是同一父容器下的兄弟节点，不是 OSD 的子节点，所以要从父容器里找。
+     * 详情页内嵌播放器没有 {@code @+id/control}：手机端的内联控件容器是
+     * {@code @+id/detailControlHost}，电视端是 {@code @+id/playerControls}。按可见性挑第一个，
+     * 避免拿到 GONE 的那个容器从而错误回退 dp(80)；都还没有时返回 null，
+     * 由 {@link #controlBarTopInset(View, int)} 回退 dp(80)。
+     */
+    private View controlBar() {
+        ViewParent parent = root.getParent();
+        if (!(parent instanceof View)) return null;
+        View host = (View) parent;
+        return firstVisible(host.findViewById(R.id.control), host.findViewById(R.id.detailControlHost), host.findViewById(R.id.playerControls));
+    }
+
+    private static View firstVisible(View... candidates) {
+        for (View candidate : candidates) {
+            if (candidate != null && candidate.getVisibility() == View.VISIBLE) return candidate;
+        }
+        for (View candidate : candidates) {
+            if (candidate != null) return candidate;
+        }
+        return null;
+    }
+
+    /**
+     * 控制栏唤醒的那一帧，它内部的按钮行 / 进度条可能还没完成布局，此时量到的高度偏小，
+     * 徽标就会压到按钮行上（看起来像被塞进了控制栏）。所以登记一次布局监听：
+     * 控制栏每次布局定稿后重算徽标位置，保证等到的永远是最终高度。
+     */
+    private void observeControlBar(View bar) {
+        if (bar == null || bar == observedControlBar) return;
+        stopObservingControlBar();
+        observedControlBar = bar;
+        observedControlBarListener = (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                root.post(this::applyMediaBadgePosition);
+        bar.addOnLayoutChangeListener(observedControlBarListener);
+    }
+
+    /**
+     * 注销控制栏布局监听，避免 OSD 释放后仍被控制栏布局回调持有（回调泄漏）。
+     */
+    private void stopObservingControlBar() {
+        if (observedControlBar != null && observedControlBarListener != null) {
+            observedControlBar.removeOnLayoutChangeListener(observedControlBarListener);
+        }
+        observedControlBar = null;
+        observedControlBarListener = null;
+    }
+
+    /**
+     * 徽标所在的角在控制栏隐藏时是否还有别的常驻文本。只有此时才需要把徽标抬高 / 内缩，
+     * 否则应当贴住画面边缘（用户要的「最靠边缘」）。
+     */
+    private View persistentNeighbour(int position) {
+        switch (position) {
+            case 0:
+                return isShown(topLeft) ? topLeft : null;
+            case 1:
+                return isShown(topRight) ? topRight : null;
+            case 2:
+                return isShown(bottomLeft) ? bottomLeft : null;
+            default:
+                return isShown(bottomRight) ? bottomRight : null;
+        }
+    }
+
+    private static boolean isShown(View view) {
+        return view != null && view.getVisibility() == View.VISIBLE;
+    }
+
+    /**
+     * 一个徽标 = 成品牌 + 事实文本，整块包在分组色胶囊里。
+     * 图形全部来自随包内置的参考实现牌（离线可用，不会出现首帧空白）；
+     * 没有对应牌的纯数值事实（帧率、码率、容器、少见编码）只显示文本，
+     * 不再用语义无关的自绘占位图标，避免「图标和内容不搭边」。
+     */
+    private View createMediaBadge(MediaBadgeResolver.MediaBadge badge) {
+        Context context = root.getContext();
+        boolean hasPlate = badge.plate() != null;
+        boolean hasText = badge.text() != null && !badge.text().isEmpty();
+        LinearLayout view = new LinearLayout(context);
+        view.setOrientation(LinearLayout.HORIZONTAL);
+        view.setGravity(Gravity.CENTER_VERTICAL);
+        // 固定胶囊高度：有牌的徽标由 16dp 牌撑高，纯文本徽标只有一行 10sp 文本，
+        // 不固定高度时两者会差 4px 左右，一行里看起来参差不齐。
+        FlexboxLayout.LayoutParams params = new FlexboxLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(20));
+        params.setMargins(0, dp(2), dp(4), 0);
+        view.setLayoutParams(params);
+        view.setBackground(categoryBackground(badge.group()));
+        view.setPadding(dp(6), dp(2), dp(6), dp(2));
+
+        int plate = hasPlate ? plateResource(badge.plate()) : 0;
+        if (plate != 0) {
+            ImageView icon = new ImageView(context);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(16));
+            if (hasText) iconParams.setMarginEnd(dp(4));
+            icon.setLayoutParams(iconParams);
+            icon.setImageResource(plate);
+            icon.setAdjustViewBounds(true);
+            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            view.addView(icon);
+        }
+
+        if (hasText) {
+            TextView text = new TextView(context);
+            text.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            text.setSingleLine(true);
+            text.setText(badge.text());
+            text.setTextColor(0xFFFFFFFF);
+            text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+            text.setShadowLayer(2f, 1.2f, 1.2f, App.get().getResources().getColor(R.color.webhtv_color_player_scrim));
+            view.addView(text);
+        }
+        return view;
+    }
+
+    /** 类别色胶囊：左侧偏类别色、右侧压暗，既有颜色又保证任意画面下白字可读。 */
+    private GradientDrawable categoryBackground(MediaBadgeCatalog.Group group) {
+        int color = mediaBadgeColor(group);
+        GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{withAlpha(color, 0x8A), 0xD9040A12});
+        background.setCornerRadius(dp(4));
+        background.setStroke(dp(1), withAlpha(color, 0xE6));
+        return background;
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (alpha << 24);
+    }
+
+    /**
+     * 每个分组的主题色。参考实现的 JSON 只给了黑白边框，
+     * 这里的彩色是本项目自己分的组，让一行里「分辨率/画质/编码/音轨/来源」一眼可分。
+     */
+    private static int mediaBadgeColor(MediaBadgeCatalog.Group group) {
+        switch (group) {
+            case RESOLUTION:
+                return 0xFF5A8DEE;
+            case DYNAMIC_RANGE:
+                return 0xFF7B61FF;
+            case VIDEO_TECH:
+                return 0xFF22D3EE;
+            case VIDEO_CODEC:
+                return 0xFF14B8A6;
+            case AUDIO:
+                return 0xFFEF4444;
+            case CHANNELS:
+                return 0xFFF97316;
+            case FRAME_RATE:
+                return 0xFF10B981;
+            case BITRATE:
+                return 0xFFF59E0B;
+            case CONTAINER:
+                return 0xFF64748B;
+            case MEDIA_SOURCE:
+                return 0xFF0EA5E9;
+            case QUALITY:
+                return 0xFFA855F7;
+            case EDITION:
+                return 0xFF8B5CF6;
+            case SPECIAL_TAG:
+                return 0xFFEC4899;
+            case IMAX:
+                return 0xFF2563EB;
+            case STREAMING:
+                return 0xFFDC2626;
+            default:
+                return 0xFF64748B;
+        }
+    }
+
+    /**
+     * 牌资源映射：键与 {@link MediaBadgeCatalog} 的 plate 一一对应，
+     * 资源名规则为 {@code badge_<plate>}。这里写成显式常量引用，
+     * 保证 release 的资源压缩不会把只在运行时拼名字的牌删掉。
+     */
+    private static int plateResource(String plate) {
+        Integer resource = PLATES.get(plate);
+        return resource == null ? 0 : resource;
+    }
+
+    private static final Map<String, Integer> PLATES = plates();
+
+    private static Map<String, Integer> plates() {
+        Map<String, Integer> map = new HashMap<>();
+        map.put("gst_seadex", R.drawable.badge_gst_seadex);
+        map.put("gst_hybrid", R.drawable.badge_gst_hybrid);
+        map.put("gst_criterion", R.drawable.badge_gst_criterion);
+        map.put("gst_proper", R.drawable.badge_gst_proper);
+        map.put("gst_repack", R.drawable.badge_gst_repack);
+        map.put("gst_remastered", R.drawable.badge_gst_remastered);
+        map.put("gst_open_matte", R.drawable.badge_gst_open_matte);
+        map.put("gst_regraded", R.drawable.badge_gst_regraded);
+        map.put("gst_directors_cut", R.drawable.badge_gst_directors_cut);
+        map.put("gst_extended", R.drawable.badge_gst_extended);
+        map.put("gst_uncut", R.drawable.badge_gst_uncut);
+        map.put("gst_uncensored", R.drawable.badge_gst_uncensored);
+        map.put("gst_black_and_white", R.drawable.badge_gst_black_and_white);
+        map.put("gst_true_hue", R.drawable.badge_gst_true_hue);
+        map.put("gst_theatrical", R.drawable.badge_gst_theatrical);
+        map.put("ged_cc", R.drawable.badge_ged_cc);
+        map.put("ged_hk", R.drawable.badge_ged_hk);
+        map.put("ged_tw", R.drawable.badge_ged_tw);
+        map.put("ged_jp", R.drawable.badge_ged_jp);
+        map.put("ged_us", R.drawable.badge_ged_us);
+        map.put("ged_uk", R.drawable.badge_ged_uk);
+        map.put("ged_de", R.drawable.badge_ged_de);
+        map.put("ged_fr", R.drawable.badge_ged_fr);
+        map.put("ged_eu", R.drawable.badge_ged_eu);
+        map.put("ged_kr", R.drawable.badge_ged_kr);
+        map.put("ged_arrow", R.drawable.badge_ged_arrow);
+        map.put("ged_dieying", R.drawable.badge_ged_dieying);
+        map.put("ged_allregion", R.drawable.badge_ged_allregion);
+        map.put("gms_iso", R.drawable.badge_gms_iso);
+        map.put("gms_high_bitrate", R.drawable.badge_gms_high_bitrate);
+        map.put("gms_remux_1", R.drawable.badge_gms_remux_1);
+        map.put("gms_remux_2", R.drawable.badge_gms_remux_2);
+        map.put("gms_remux_3", R.drawable.badge_gms_remux_3);
+        map.put("gms_blu_ray_1", R.drawable.badge_gms_blu_ray_1);
+        map.put("gms_blu_ray_2", R.drawable.badge_gms_blu_ray_2);
+        map.put("gms_blu_ray_3", R.drawable.badge_gms_blu_ray_3);
+        map.put("gms_blu_ray_4", R.drawable.badge_gms_blu_ray_4);
+        map.put("gms_blu_ray_5", R.drawable.badge_gms_blu_ray_5);
+        map.put("gms_blu_ray_6", R.drawable.badge_gms_blu_ray_6);
+        map.put("gms_blu_ray_7", R.drawable.badge_gms_blu_ray_7);
+        map.put("gms_blu_ray_8", R.drawable.badge_gms_blu_ray_8);
+        map.put("gms_web_1", R.drawable.badge_gms_web_1);
+        map.put("gms_web_2", R.drawable.badge_gms_web_2);
+        map.put("gms_web_3", R.drawable.badge_gms_web_3);
+        map.put("gms_web_4", R.drawable.badge_gms_web_4);
+        map.put("gms_web_5", R.drawable.badge_gms_web_5);
+        map.put("gms_web_6", R.drawable.badge_gms_web_6);
+        map.put("gr_8k", R.drawable.badge_gr_8k);
+        map.put("gr_4k", R.drawable.badge_gr_4k);
+        map.put("gr_1440p", R.drawable.badge_gr_1440p);
+        map.put("gr_1080p", R.drawable.badge_gr_1080p);
+        map.put("gr_720p", R.drawable.badge_gr_720p);
+        map.put("gr_576p", R.drawable.badge_gr_576p);
+        map.put("gr_480p", R.drawable.badge_gr_480p);
+        map.put("gr_360p", R.drawable.badge_gr_360p);
+        map.put("gr_240p", R.drawable.badge_gr_240p);
+        map.put("gr_144p", R.drawable.badge_gr_144p);
+        map.put("gq_remux", R.drawable.badge_gq_remux);
+        map.put("gq_bluray", R.drawable.badge_gq_bluray);
+        map.put("gq_web_dl", R.drawable.badge_gq_web_dl);
+        map.put("gq_webrip", R.drawable.badge_gq_webrip);
+        map.put("gq_hdrip", R.drawable.badge_gq_hdrip);
+        map.put("gq_hc_hdrip", R.drawable.badge_gq_hc_hdrip);
+        map.put("gq_dvdrip", R.drawable.badge_gq_dvdrip);
+        map.put("gq_hdtv", R.drawable.badge_gq_hdtv);
+        map.put("gq_scr", R.drawable.badge_gq_scr);
+        map.put("gq_tc", R.drawable.badge_gq_tc);
+        map.put("gq_ts", R.drawable.badge_gq_ts);
+        map.put("gq_cam", R.drawable.badge_gq_cam);
+        map.put("imax_imax_enhanced", R.drawable.badge_imax_imax_enhanced);
+        map.put("imax_imax", R.drawable.badge_imax_imax);
+        map.put("gv_dolby_vision_hdr10_plus", R.drawable.badge_gv_dolby_vision_hdr10_plus);
+        map.put("gv_dolby_vision_hdr10", R.drawable.badge_gv_dolby_vision_hdr10);
+        map.put("gv_dolby_vision_hdr", R.drawable.badge_gv_dolby_vision_hdr);
+        map.put("gv_12bit", R.drawable.badge_gv_12bit);
+        map.put("gv_8bit", R.drawable.badge_gv_8bit);
+        map.put("gvf_hdrvivid", R.drawable.badge_gvf_hdrvivid);
+        map.put("gvf_3d", R.drawable.badge_gvf_3d);
+        map.put("gv_dolby_vision", R.drawable.badge_gv_dolby_vision);
+        map.put("gv_hdr10_plus", R.drawable.badge_gv_hdr10_plus);
+        map.put("gv_hdr10", R.drawable.badge_gv_hdr10);
+        map.put("gv_hdr", R.drawable.badge_gv_hdr);
+        map.put("gv_hlg", R.drawable.badge_gv_hlg);
+        map.put("gv_10bit", R.drawable.badge_gv_10bit);
+        map.put("gv_sdr", R.drawable.badge_gv_sdr);
+        map.put("gv_ai", R.drawable.badge_gv_ai);
+        map.put("ga_dolby_atmos_truehd", R.drawable.badge_ga_dolby_atmos_truehd);
+        map.put("ga_dts_x_hd_ma", R.drawable.badge_ga_dts_x_hd_ma);
+        map.put("ga_dolby_atmos_digital_plus", R.drawable.badge_ga_dolby_atmos_digital_plus);
+        map.put("ga_dts_x_hd", R.drawable.badge_ga_dts_x_hd);
+        map.put("ga_dolby_atmos", R.drawable.badge_ga_dolby_atmos);
+        map.put("ga_dts_x", R.drawable.badge_ga_dts_x);
+        map.put("ga_dolby_truehd", R.drawable.badge_ga_dolby_truehd);
+        map.put("ga_dts_hd_ma", R.drawable.badge_ga_dts_hd_ma);
+        map.put("ga_flac", R.drawable.badge_ga_flac);
+        map.put("ga_dts_hd", R.drawable.badge_ga_dts_hd);
+        map.put("ga_dolby_digital_plus", R.drawable.badge_ga_dolby_digital_plus);
+        map.put("ga_dts_es", R.drawable.badge_ga_dts_es);
+        map.put("ga_dts", R.drawable.badge_ga_dts);
+        map.put("ga_opus", R.drawable.badge_ga_opus);
+        map.put("ga_dolby_digital", R.drawable.badge_ga_dolby_digital);
+        map.put("ga_aac", R.drawable.badge_ga_aac);
+        map.put("ga_lpcm", R.drawable.badge_ga_lpcm);
+        map.put("ga_lossless", R.drawable.badge_ga_lossless);
+        map.put("gc_7_1", R.drawable.badge_gc_7_1);
+        map.put("gc_6_1", R.drawable.badge_gc_6_1);
+        map.put("gc_5_1", R.drawable.badge_gc_5_1);
+        map.put("gc_2_0", R.drawable.badge_gc_2_0);
+        map.put("gc_7_1_4", R.drawable.badge_gc_7_1_4);
+        map.put("gc_5_1_4", R.drawable.badge_gc_5_1_4);
+        map.put("gc_5_1_2", R.drawable.badge_gc_5_1_2);
+        map.put("ge_av1", R.drawable.badge_ge_av1);
+        map.put("ge_vvc", R.drawable.badge_ge_vvc);
+        map.put("gfr_hfr", R.drawable.badge_gfr_hfr);
+        map.put("ge_hevc", R.drawable.badge_ge_hevc);
+        map.put("ge_avc", R.drawable.badge_ge_avc);
+        map.put("ge_xvid", R.drawable.badge_ge_xvid);
+        map.put("ge_divx", R.drawable.badge_ge_divx);
+        map.put("gs_peacock", R.drawable.badge_gs_peacock);
+        map.put("gs_netflix", R.drawable.badge_gs_netflix);
+        map.put("gs_prime_video", R.drawable.badge_gs_prime_video);
+        map.put("gs_apple_tv_plus", R.drawable.badge_gs_apple_tv_plus);
+        map.put("gs_disney_plus", R.drawable.badge_gs_disney_plus);
+        map.put("gs_hbo_max", R.drawable.badge_gs_hbo_max);
+        map.put("gs_hulu", R.drawable.badge_gs_hulu);
+        map.put("gs_paramount_plus", R.drawable.badge_gs_paramount_plus);
+        map.put("gs_crunchyroll", R.drawable.badge_gs_crunchyroll);
+        return map;
+    }
+
     private void setTextSize(float sp) {
         topLeft.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         topLeft.setTextColor(0xFFFFFFFF);
@@ -387,6 +939,7 @@ public class PlayerOsdController {
         bottomLeft.setVisibility(View.GONE);
         bottomRight.setVisibility(View.GONE);
         miniProgress.setVisibility(View.GONE);
+        if (mediaBadges != null) mediaBadges.setVisibility(View.GONE);
     }
 
     private void updateSpeed(PlayerManager player) {
@@ -408,9 +961,10 @@ public class PlayerOsdController {
         Format audio = snapshot.audioFormat();
         String state = stateText(player.getPlaybackState()) + (player.isLoading() ? " / 正在加载" : "");
         String buffer = join(" / ", formatDuration(player.getBufferedDuration()), player.getBufferedPercentage() > 0 ? player.getBufferedPercentage() + "%" : "");
-        // MPV has no Exo analytics snapshot; its buffering tracker belongs to PlayerManager.
-        int rebufferCount = player.isMpv() ? player.getRebufferCount() : snapshot.rebufferCount();
-        long rebufferTotalMs = player.isMpv() ? player.getRebufferTotalMs() : snapshot.rebufferTotalMs();
+        // 只有 Exo 有 analytics 快照；IJK/MPV 走的是 PlayerManager 的引擎无关缓冲追踪器。
+        // 原先只对 MPV 分支，IJK 因此落到 Exo 分支读到 Snapshot.empty()，重缓冲计数恒为 0。
+        int rebufferCount = player.isExo() ? snapshot.rebufferCount() : player.getRebufferCount();
+        long rebufferTotalMs = player.isExo() ? snapshot.rebufferTotalMs() : player.getRebufferTotalMs();
         String rebuffer = rebufferCount <= 0 ? "0 次" : rebufferCount + " 次 / " + formatDuration(rebufferTotalMs);
         long stableThroughput = player.getNetworkProtectionStableThroughput();
         long consumption = player.getNetworkProtectionConsumption();
@@ -439,8 +993,9 @@ public class PlayerOsdController {
         String frameTiming = player.isExo() ? summarizeFrameTiming() : "";
         PlayerEngine.VideoPlaybackDetails videoDetails =
                 player.getVideoPlaybackDetails();
+        VideoTrackState videoTrack = getVideoTrackState(player);
         String videoText = summarizeVideo(video, player,
-                snapshot.videoDecoderName(), getVideoTrackState(player),
+                snapshot.videoDecoderName(), videoTrack,
                 videoDetails);
         AudioTrackState audioTrack = getAudioTrackState(player);
         AudioPlaybackDiagnostics.Snapshot audioDetails = player.getAudioPlaybackDiagnostics();
@@ -456,7 +1011,7 @@ public class PlayerOsdController {
         String frameRateMatch = player.isExo() ? "帧率匹配 开" : "";
         String softTune = getSoftDecodeTuneText(player);
         String playerText = join(" / ", player.getPlayerText(), player.getDecodeText(), render, "隧道" + tunnel, "性能" + performance, frameRateMatch, preload, softTune, player.isExo() ? "兜底开" : "");
-        String playback = join(" / ", state, buffer, "重缓冲 " + rebuffer, "掉帧 " + player.getDroppedFrames());
+        String playback = join(" / ", state, buffer, "重缓冲 " + rebuffer, droppedFrameText(player));
         String startup = getStartupText(player);
         String error = getErrorText(player, snapshot);
         String main = join("\n",
@@ -474,7 +1029,7 @@ public class PlayerOsdController {
                 row("播放", playback),
                 row("配置", playerText),
                 TextUtils.isEmpty(startup) ? "" : row("起播", startup),
-                row("结论", getDiagnosis(player, snapshot, video, audioTrack, audioDetails, localSource)));
+                row("结论", getDiagnosis(player, snapshot, video, videoTrack, audioTrack, audioDetails, localSource)));
         String extra = join("\n",
                 row("设备", getDeviceText()),
                 row("系统", getSystemText()),
@@ -496,12 +1051,46 @@ public class PlayerOsdController {
         return TextUtils.isEmpty(slowest) ? summary : summary + "  最慢 " + slowest;
     }
 
-    private String getDiagnosis(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot, Format video, AudioTrackState audioTrack, AudioPlaybackDiagnostics.Snapshot audioDetails, boolean localSource) {
+    /**
+     * "掉帧 12（1.4/秒）" for EXO. The rate is what the number should be read against: media3
+     * settles a renderer's dropped-frame accumulator from onStopped(), so a pause adds
+     * whatever tail accumulated while playing and a bare total looks like pause damage.
+     * MPV and the other engines keep reporting their own raw counter unchanged.
+     */
+    private String droppedFrameText(PlayerManager player) {
+        long dropped = player.getDroppedFrames();
+        if (!player.isExo()) return "掉帧 " + dropped;
+        double rate = PlaybackAnalyticsListener.droppedFramesPerSecond();
+        return "掉帧 " + dropped + "（" + frameDropRateFormat.format(rate) + "/秒）";
+    }
+
+    /**
+     * Whether the drop count is worth a verdict. The raw total is only comparable to a fixed
+     * budget while there is no measured play time to divide by; after that the rate decides,
+     * so a pause that settles the accumulator no longer reads as decoder pressure.
+     */
+    private boolean excessiveDroppedFrames(PlayerManager player) {
+        if (!player.isExo()) return player.getDroppedFrames() >= DROPPED_FRAMES_RAW_COUNT_DIAGNOSIS;
+        long playTimeMs = PlaybackAnalyticsListener.playTimeMs();
+        if (playTimeMs < DROPPED_FRAMES_RATE_MIN_PLAY_TIME_MS) {
+            return player.getDroppedFrames() >= DROPPED_FRAMES_RAW_COUNT_DIAGNOSIS;
+        }
+        return PlaybackAnalyticsListener.droppedFramesPerSecond() >= DROPPED_FRAMES_PER_SECOND_DIAGNOSIS;
+    }
+
+    private String getDiagnosis(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot, Format video, VideoTrackState videoTrack, AudioTrackState audioTrack, AudioPlaybackDiagnostics.Snapshot audioDetails, boolean localSource) {
         if (audioDetails.runtimeState() == AudioPlaybackDiagnostics.RuntimeState.FAILED) return "音频链路失败，先看音频和错误行";
         if (isDecodeError(snapshot) && player.isHardDecode()) return "硬件解码失败：设备可能不支持该视频编码、分辨率、帧率或规格";
         if (!TextUtils.isEmpty(snapshot.errorCode())) return "播放器报错，先看错误行";
         if (audioTrack.hasTracks() && audioTrack.isUnsupported()) return "音频轨不支持：" + summarizeAudioFormat(audioTrack.format()) + " / " + supportText(audioTrack.support());
         if (player.isExo() && audioTrack.hasTracks() && !audioTrack.selected() && snapshot.audioFormat() == null && player.getPlaybackState() == androidx.media3.common.Player.STATE_READY) return "已发现音轨但未选中，可能无声";
+        // A video track without any usable decoder is dropped silently: playback
+        // keeps advancing with audio and subtitles only, so nothing else in this
+        // panel would flag it and the verdict would read as healthy. "Handled" is
+        // the test rather than the unsupported codes alone: EXCEEDS_CAPABILITIES
+        // drops the track the same way, and it is one of the two states
+        // PlayerManager.needsSoftDecode reacts to.
+        if (videoTrack.hasTracks() && !videoTrack.selected() && !videoTrack.isHandled()) return videoDiagnosis(player, videoTrack);
         if (!localSource) {
             long mediaBitrate = getMediaBitrate(video, snapshot.audioFormat() != null ? snapshot.audioFormat() : audioTrack.format());
             long availableBitrate = snapshot.bandwidthEstimate() > 0 ? snapshot.bandwidthEstimate() : lastSpeedKBps * 1024 * 8;
@@ -510,7 +1099,7 @@ public class PlayerOsdController {
             // disk ranges, which reads high enough that this hint could never fire.
             if (player.isLoading() && player.getNativeBufferedDuration() < 3000) return "缓冲偏少，可能是网络或源响应慢";
         }
-        if (player.getDroppedFrames() >= 60) return "掉帧较多，可能是解码或渲染压力";
+        if (excessiveDroppedFrames(player)) return "掉帧较多，可能是解码或渲染压力";
         if (!localSource && formatBitrateValue(video) >= 30_000_000) return "资源码率较高，对网络和解码要求高";
         // Use the same observed output as the audio row. A missing decoder name
         // is not a failure signal, and encoded output does not need an app decoder.
@@ -527,6 +1116,19 @@ public class PlayerOsdController {
         if (player.isExo() && audioTrack.hasTracks() && snapshot.audioFormat() == null) return "正在等待音频轨信息";
         if (audioTrack.hasTracks() || audioDetails.runtimeState() == AudioPlaybackDiagnostics.RuntimeState.PENDING) return "音频输出状态待确认";
         return "正常";
+    }
+
+    /**
+     * The verdict for a video track no renderer can decode. The support code is spelled out the
+     * way the audio rows and the video summary row already do it, and an encrypted track does not
+     * get the "switch to software decode" advice: no decoder choice fixes a DRM rejection.
+     */
+    private String videoDiagnosis(PlayerManager player, VideoTrackState videoTrack) {
+        String support = supportText(videoTrack.support());
+        if (videoTrack.support() == C.FORMAT_UNSUPPORTED_DRM) return "视频轨" + support + "，加密轨请更换资源";
+        return player.isHardDecode()
+                ? "视频轨无可用解码器：" + support + "，请切软解或更换资源"
+                : "视频轨无可用解码器：" + support + "，请更换资源";
     }
 
     private String getSystemGpuText() {

@@ -1,10 +1,21 @@
 package com.fongmi.android.tv.db;
 
+import android.content.ContentValues;
 import android.database.Cursor;
 
 import androidx.annotation.NonNull;
 import androidx.room.migration.Migration;
 import androidx.sqlite.db.SupportSQLiteDatabase;
+
+import com.fongmi.android.tv.playback.PlaybackConfigIdentity;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 public class Migrations {
 
@@ -154,6 +165,80 @@ public class Migrations {
         public void migrate(@NonNull SupportSQLiteDatabase database) {
             addColumnIfMissing(database, "History", "subtitleSource",
                     "ALTER TABLE History ADD COLUMN `subtitleSource` TEXT DEFAULT ''");
+        }
+    };
+
+    public static final Migration MIGRATION_45_46 = new Migration(45, 46) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            addColumnIfMissing(database, "Config", "interfaceKey",
+                    "ALTER TABLE Config ADD COLUMN `interfaceKey` TEXT");
+            addColumnIfMissing(database, "Config", "urlsJson",
+                    "ALTER TABLE Config ADD COLUMN `urlsJson` TEXT");
+            database.execSQL("DROP INDEX IF EXISTS `index_Config_url_type`");
+            database.execSQL("UPDATE Config SET interfaceKey = lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) WHERE interfaceKey IS NULL OR trim(interfaceKey) = ''");
+            database.execSQL("UPDATE Config SET urlsJson = '[\"' || replace(replace(url, '\\\\', '\\\\\\\\'), '\"', '\\\"') || '\"]' WHERE (urlsJson IS NULL OR trim(urlsJson) = '') AND url IS NOT NULL AND trim(url) != ''");
+            database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_Config_interfaceKey_type` ON `Config` (`interfaceKey`, `type`)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_Config_url_type` ON `Config` (`url`, `type`)");
+        }
+    };
+
+    public static final Migration MIGRATION_46_47 = new Migration(46, 47) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            addColumnIfMissing(database, "History", "sourceBindingKey",
+                    "ALTER TABLE History ADD COLUMN `sourceBindingKey` TEXT DEFAULT ''");
+        }
+    };
+
+    /** Initializes compatibility clues without changing the stable interfaceKey. */
+    public static final Migration MIGRATION_47_48 = new Migration(47, 48) {
+        private final Gson gson = new Gson();
+        private final Type listType = TypeToken.getParameterized(List.class, String.class).getType();
+
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            addColumnIfMissing(database, "Config", "legacyConfigKeysJson",
+                    "ALTER TABLE Config ADD COLUMN `legacyConfigKeysJson` TEXT DEFAULT '[]'");
+            addColumnIfMissing(database, "Config", "addressMatchAliasesJson",
+                    "ALTER TABLE Config ADD COLUMN `addressMatchAliasesJson` TEXT DEFAULT '[]'");
+            addColumnIfMissing(database, "Config", "identityResolutionState",
+                    "ALTER TABLE Config ADD COLUMN `identityResolutionState` TEXT DEFAULT 'unresolved'");
+            try (Cursor cursor = database.query("SELECT id, type, url, urlsJson FROM Config")) {
+                int id = cursor.getColumnIndex("id");
+                int type = cursor.getColumnIndex("type");
+                int url = cursor.getColumnIndex("url");
+                int urlsJson = cursor.getColumnIndex("urlsJson");
+                while (cursor.moveToNext()) {
+                    List<String> urls = urls(cursor, url >= 0 ? cursor.getString(url) : "", urlsJson >= 0 ? cursor.getString(urlsJson) : "");
+                    Set<String> legacy = new LinkedHashSet<>();
+                    for (String item : urls) {
+                        String key = PlaybackConfigIdentity.keyForUrl(item);
+                        if (!key.isEmpty()) legacy.add(key);
+                    }
+                    List<String> aliases = new ArrayList<>();
+                    aliases.addAll(PlaybackConfigIdentity.strictAddressKeys(type >= 0 ? cursor.getInt(type) : 0, urls));
+                    aliases.addAll(PlaybackConfigIdentity.endpointMatchKeys(type >= 0 ? cursor.getInt(type) : 0, urls));
+                    aliases.addAll(PlaybackConfigIdentity.hostMatchKeys(type >= 0 ? cursor.getInt(type) : 0, urls));
+                    ContentValues values = new ContentValues();
+                    values.put("legacyConfigKeysJson", gson.toJson(new ArrayList<>(legacy)));
+                    values.put("addressMatchAliasesJson", gson.toJson(aliases));
+                    values.put("identityResolutionState", "unresolved");
+                    if (id >= 0) database.update("Config", 0, values, "id = ?", new String[]{String.valueOf(cursor.getInt(id))});
+                }
+            }
+        }
+
+        private List<String> urls(Cursor cursor, String primary, String json) {
+            LinkedHashSet<String> result = new LinkedHashSet<>();
+            if (primary != null && !primary.trim().isEmpty()) result.add(primary.trim());
+            try {
+                List<String> values = gson.fromJson(json, listType);
+                if (values != null) for (String value : values) if (value != null && !value.trim().isEmpty()) result.add(value.trim());
+            } catch (Exception ignored) {
+                // A malformed legacy urlsJson must not abort the database upgrade.
+            }
+            return new ArrayList<>(result);
         }
     };
 

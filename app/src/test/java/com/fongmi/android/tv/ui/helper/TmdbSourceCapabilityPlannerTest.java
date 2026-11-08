@@ -63,6 +63,20 @@ public class TmdbSourceCapabilityPlannerTest {
     }
 
     @Test
+    public void incompatibleLanguageMarksCompleteCoreMissing() {
+        TmdbSourcePayload payload = payload("""
+                {"schema":1,"id":550,"media_type":"movie","language":"en-US","complete":["core"],
+                 "detail":{"id":550,"title":"Movie","overview":"Overview","release_date":"1999","vote_average":8.4,"genres":[]}}
+                """);
+
+        TmdbBundle bundle = TmdbSourceAdapter.toBundle(payload, null, new TmdbConfig());
+        TmdbSourceCapabilityPlanner.Plan plan = TmdbSourceCapabilityPlanner.plan(bundle, payload,
+                TmdbSourceCapabilityPlanner.UiState.initialScreen(), "zh-CN");
+
+        assertTrue(plan.missing().contains(TmdbSourceCapabilityPlanner.CORE));
+    }
+
+    @Test
     public void emptyCompleteRecommendationsDoNotRequestNetwork() {
         TmdbSourcePayload payload = payload("""
                 {"schema":1,"id":550,"media_type":"movie","complete":["recommendations"],

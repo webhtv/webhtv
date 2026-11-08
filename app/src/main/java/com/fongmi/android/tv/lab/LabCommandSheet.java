@@ -15,8 +15,8 @@ import androidx.appcompat.app.AlertDialog;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.MaterialAutoCompleteTextView;
 import com.google.android.material.textfield.TextInputLayout;
@@ -147,6 +147,22 @@ public final class LabCommandSheet implements LabRunner.OutputListener {
         loaded = true;
         running = LabRunner.isRunning(key());
         syncRunning();
+        requestSheetFocus();
+    }
+
+    /**
+     * 把弹窗的初始焦点放在按钮上，而不是命令预览输入框。
+     *
+     * <p>BottomSheetDialog 默认把焦点交给第一个可聚焦控件（命令预览 EditText）。实测遥控方向键
+     * 在单行输入框里出不去（DOWN / RIGHT / UP 都不移动焦点，只有 TAB 能到按钮），电视遥控器没有 TAB，
+     * 于是用户打开了命令弹窗却按不到「运行」——这也是「只能改配置文件启动」的一部分。
+     *
+     * <p>只设一次初始锚点，不参与 1 秒状态轮询：否则用户在输入框里编辑时焦点会被抢回来。
+     * 触摸/键盘路径不受影响：输入框仍可点选，从按钮按 UP 也能回到输入框。
+     */
+    private void requestSheetFocus() {
+        View anchor = sheetBtnRun.getVisibility() == View.VISIBLE && sheetBtnRun.isEnabled() ? sheetBtnRun : sheetBtnEdit;
+        if (anchor != null) anchor.requestFocus();
     }
 
     private void renderVariables() {
@@ -362,7 +378,7 @@ public final class LabCommandSheet implements LabRunner.OutputListener {
         progress.setTextColor(Color.WHITE);
         progress.setTextSize(14);
         progress.setPadding(48, 32, 48, 32);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_App_Lab_Dialog)
                 .setTitle("下载依赖" + (command.download.title == null ? "" : " · " + command.download.title))
                 .setView(progress)
                 .setCancelable(false)

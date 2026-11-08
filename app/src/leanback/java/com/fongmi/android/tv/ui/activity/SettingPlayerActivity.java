@@ -53,6 +53,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private String[] playCache;
     private String[] render;
     private String[] scale;
+    private String[] badgePosition;
     private String[] osd;
 
     public static void start(Activity activity) {
@@ -87,6 +88,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         setPreloadText();
         mBinding.autoPlayText.setText(getSwitch(PlayerSetting.isAutoPlay()));
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+        mBinding.deferFlagSwitchText.setText(getSwitch(PlayerSetting.isDeferFlagSwitchPlayback()));
         mBinding.liveSourceFallbackText.setText(getSwitch(LiveSetting.isSourceFallback()));
         mBinding.failureFallbackText.setText((failureFallback = ResUtil.getStringArray(R.array.select_player_failure_fallback))[PlayerSetting.getFailureFallback()]);
         mBinding.backgroundText.setText(getSwitch(PlayerSetting.isBackgroundOn()));
@@ -96,6 +98,8 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.audioPassThroughText.setText(getSwitch(PlayerSetting.isAudioPassThrough()));
         mBinding.videoDecodeText.setText(getSwitch(PlayerSetting.isVideoPrefer()));
         mBinding.osdText.setText(getOsdText(osd = ResUtil.getStringArray(R.array.select_player_osd)));
+        badgePosition = ResUtil.getStringArray(R.array.select_media_badge_position);
+        updateBadgePositionText();
         mBinding.kernelText.setText((kernel = ResUtil.getStringArray(R.array.select_player_kernel))[PlayerSetting.getPlayer()]);
         mpvRender = ResUtil.getStringArray(R.array.select_mpv_render);
         mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);
@@ -120,6 +124,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         });
         mBinding.mpvRender.setOnClickListener(this::setMpvRender);
         mBinding.osd.setOnClickListener(this::onOsd);
+        mBinding.osdMediaBadgePosition.setOnClickListener(this::onBadgePosition);
         mBinding.playerButtons.setOnClickListener(view -> PlayerButtonConfigDialog.show(this, this::setPlayerButtonsText));
         mBinding.speed.setOnClickListener(this::onSpeed);
         mBinding.buffer.setOnClickListener(this::onBuffer);
@@ -134,6 +139,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.preloadPause.setOnClickListener(this::setPreloadPause);
         mBinding.autoPlay.setOnClickListener(this::setAutoPlay);
         mBinding.autoChange.setOnClickListener(this::setAutoChange);
+        mBinding.deferFlagSwitch.setOnClickListener(this::setDeferFlagSwitch);
         mBinding.liveSourceFallback.setOnClickListener(view -> {
             LiveSetting.putSourceFallback(!LiveSetting.isSourceFallback());
             mBinding.liveSourceFallbackText.setText(getSwitch(LiveSetting.isSourceFallback()));
@@ -223,6 +229,18 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
             setOsdChecked(checked);
             mBinding.osdText.setText(getOsdText(osd));
         });
+    }
+
+    private void onBadgePosition(View view) {
+        ChoiceDialog.showSingle(this, R.string.osd_media_badge_position, badgePosition, PlayerSetting.getMediaBadgeChoice(), which -> {
+            PlayerSetting.putMediaBadgeChoice(which);
+            updateBadgePositionText();
+        });
+    }
+
+    private void updateBadgePositionText() {
+        int which = PlayerSetting.getMediaBadgeChoice();
+        mBinding.osdMediaBadgePositionText.setText(badgePosition != null && badgePosition.length > which ? badgePosition[which] : getString(R.string.setting_off));
     }
 
     private void setPlayerButtonsText() {
@@ -377,6 +395,11 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private void setAutoChange(View view) {
         PlayerSetting.putAutoChange(!PlayerSetting.isAutoChange());
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+    }
+
+    private void setDeferFlagSwitch(View view) {
+        PlayerSetting.putDeferFlagSwitchPlayback(!PlayerSetting.isDeferFlagSwitchPlayback());
+        mBinding.deferFlagSwitchText.setText(getSwitch(PlayerSetting.isDeferFlagSwitchPlayback()));
     }
 
     private void setFailureFallback(View view) {

@@ -85,7 +85,7 @@
                 android:paddingTop="2dp"
                 android:paddingEnd="7dp"
                 android:paddingBottom="2dp"
-                android:textColor="#174EA6"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="11sp"
                 android:visibility="gone"
                 tools:text="待确认"

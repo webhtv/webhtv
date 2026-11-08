@@ -8,7 +8,9 @@
     android:paddingEnd="8dp"
     android:scrollbars="none">
 
+    <!-- container 供 PlayerButtonSetting.applyOrder 重排播放器按钮，直播专属按钮（配置/直播源/线路等）不登记。 -->
     <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal">
@@ -21,6 +23,9 @@
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/source"
             style="@style/Control"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:maxWidth="160dp"
             android:text="@string/live_control_source" />
 
         <com.google.android.material.textview.MaterialTextView

@@ -179,6 +179,7 @@ public final class AudioMiniPlayer implements ServiceConnection {
     }
 
     private void applyInsets() {
+        if (root == null) return;
         root.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> updateWindowBounds());
         if (root.getParent() instanceof View) {
             ((View) root.getParent()).addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> updateWindowBounds());
@@ -189,7 +190,13 @@ public final class AudioMiniPlayer implements ServiceConnection {
             return insets;
         });
         ViewCompat.requestApplyInsets(root);
-        root.post(() -> ViewCompat.requestApplyInsets(root));
+        // The host activity can be recreated (theme/language change) before this
+        // posted runnable executes; capture the view and bail out once detached.
+        View target = root;
+        target.post(() -> {
+            if (root != target) return;
+            ViewCompat.requestApplyInsets(target);
+        });
     }
 
     private void updateWindowBounds() {

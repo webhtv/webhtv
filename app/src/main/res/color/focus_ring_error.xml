@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    危险/错误容器填充（error container）控件的统一边框环，规则同 `focus_ring_primary.xml`：
+    环色取该填充的配对 on-色，始终受主题控制。
+
+    配对对象是 on_error_container 而不是 on_error：使用它的控件填充为
+    `?attr/colorErrorContainer`（TV 暗色表下是一支深红），而 on_error 与它只有 1.40:1，
+    环会贴在几乎同色的填充上完全看不出来；on_error_container 则是 7.24:1。
+
+    本文件只允许引用语义 token：说明文字里也不写裸十六进制色值，否则会被
+    scripts/check_ui_tokens.sh 的 strict 模式判为违规（该门禁按整行正则匹配）。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/focus_ring_on_error_container" android:state_focused="true" />
+    <item android:color="@color/focus_ring_on_error_container" android:state_pressed="true" />
+    <item android:color="@android:color/transparent" />
+</selector>

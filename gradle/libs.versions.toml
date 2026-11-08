@@ -62,7 +62,6 @@ smbj = "0.14.0"
 textdrawable = "1.0.3"
 tensorflowLite = "2.17.0"
 tukaaniXz = "1.12"
-tink = "1.23.0"
 zxingAndroidEmbedded = "4.3.0"
 zxingCore = "3.5.4"
 
@@ -79,6 +78,7 @@ preference = { group = "androidx.preference", name = "preference", version.ref =
 recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 startup = { group = "androidx.startup", name = "startup-runtime", version.ref = "startup" }
 swiperefreshlayout = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayout", version.ref = "swiperefreshlayout" }
@@ -152,7 +152,6 @@ simple-xml = { group = "org.simpleframework", name = "simple-xml", version.ref =
 smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
 textdrawable = { group = "com.github.jahirfiquitiva", name = "TextDrawable", version.ref = "textdrawable" }
 tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
-tink-android = { group = "com.google.crypto.tink", name = "tink-android", version.ref = "tink" }
 tukaani-xz = { group = "org.tukaani", name = "xz", version.ref = "tukaaniXz" }
 zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }

@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/danmaku_select"
-            android:textColor="@color/white_70"
+            android:textColor="@color/webhtv_color_player_control_muted"
             android:textSize="16sp" />
 
         <androidx.appcompat.widget.AppCompatImageView
@@ -32,7 +32,7 @@
             android:layout_marginEnd="16dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_action_search"
-            app:tint="@color/white_90"
+            app:tint="?attr/webhtvColorOnWallpaper"
             android:visibility="gone" />
 
         <com.google.android.material.materialswitch.MaterialSwitch
@@ -52,7 +52,7 @@
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_action_choose"
-            app:tint="@color/white_90" />
+            app:tint="?attr/webhtvColorOnWallpaper" />
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/setting"
@@ -61,7 +61,7 @@
             android:layout_marginStart="16dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_danmaku_setting"
-            app:tint="@color/white_90" />
+            app:tint="?attr/webhtvColorOnWallpaper" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

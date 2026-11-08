@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    电视版站点卡片的常态（未选中、未聚焦）样式。填充取 colorSurfaceContainerHigh，
+    比面板的 colorSurfaceContainer 高一层，卡片边界才可见；描边用 colorOutlineVariant
+    与运行时 SiteDialogTheme.siteItem() 的常态分支保持一致。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="#747474" />
+    <solid android:color="?attr/colorSurfaceContainerHigh" />
 
     <corners android:radius="12dp" />
+
+    <stroke
+        android:width="1dp"
+        android:color="?attr/colorOutlineVariant" />
 
     <padding
         android:bottom="10dp"

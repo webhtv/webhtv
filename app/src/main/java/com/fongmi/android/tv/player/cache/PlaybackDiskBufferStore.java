@@ -15,6 +15,7 @@ public final class PlaybackDiskBufferStore {
     private static final int MAX_MEDIA_ENTRIES = 16;
     private static final int MAX_RANGES_PER_MEDIA = 128;
     private static final long QUERY_LOG_INTERVAL_MS = 5000;
+    private static final long RANGE_LOG_INTERVAL_MS = 2000;
     private static final PlaybackDiskBufferStore PROCESS = new PlaybackDiskBufferStore();
 
     private final Map<String, RangeSet> mediaRanges = new LinkedHashMap<>(16, 0.75f, true);
@@ -70,8 +71,17 @@ public final class PlaybackDiskBufferStore {
         queryLogs.clear();
     }
 
-    private static void log(String action, String mediaKey, long startMs, long endMs, long resultMs) {
+    /**
+     * Range writes repeat for as long as data keeps landing, so throttle identical states the same
+     * way {@link #logQuery} does; otherwise this fills the log on the UI thread during buffering.
+     */
+    private void log(String action, String mediaKey, long startMs, long endMs, long resultMs) {
         if (!SpiderDebug.isEnabled()) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        String key = action + '|' + mediaKey;
+        QueryLogState previous = queryLogs.get(key);
+        if (previous != null && previous.resultMs() == resultMs && now - previous.loggedAtMs() < RANGE_LOG_INTERVAL_MS) return;
+        queryLogs.put(key, new QueryLogState(resultMs, now));
         SpiderDebug.log("playback-disk-buffer",
                 "action=%s key=%s startMs=%d endMs=%d resultMs=%d",
                 action, Integer.toHexString(mediaKey == null ? 0 : mediaKey.hashCode()),

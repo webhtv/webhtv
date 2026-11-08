@@ -54,6 +54,20 @@ public class TmdbMatchCacheTest {
     }
 
     @Test
+    public void displayItemHidesMismatchedLanguageButKeepsIdentity() {
+        TmdbMatchCache.Entry entry = TmdbMatchCache.Entry.from(item(200, "中文标题"), "zh-Hans");
+
+        assertEquals("中文标题", entry.toDisplayItem("zh-CN").getTitle());
+        assertEquals(200, entry.toDisplayItem("en-US").getTmdbId());
+        assertEquals("", entry.toDisplayItem("en-US").getTitle());
+        assertEquals("中文标题", entry.toDisplayItem("").getTitle());
+
+        TmdbMatchCache.Entry traditional = TmdbMatchCache.Entry.from(item(201, "繁體標題"), "zh-TW");
+        assertEquals("繁體標題", traditional.toDisplayItem("zh-TW").getTitle());
+        assertEquals("", traditional.toDisplayItem("zh-CN").getTitle());
+    }
+
+    @Test
     public void manualMatchSurvivesTitleRewriteAndBlocksAutomaticOverwrite() {
         TmdbMatchCache cache = new TmdbMatchCache();
 

@@ -4,13 +4,13 @@
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0F141A">
+    android:background="?attr/colorSurfaceContainerLowest">
 
     <FrameLayout
         android:id="@+id/hero"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#0F141A">
+        android:background="?attr/colorSurfaceContainerLowest">
 
         <ImageView
             android:id="@+id/backdropFill"
@@ -28,7 +28,7 @@
             android:id="@+id/backdropShade"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#7A0F141A" />
+            android:background="@color/webhtv_color_player_scrim" />
     </FrameLayout>
 
     <androidx.core.widget.NestedScrollView
@@ -76,7 +76,7 @@
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:strokeColor="@android:color/transparent" />
 
                 <com.google.android.material.button.MaterialButton
@@ -92,7 +92,7 @@
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:strokeColor="@android:color/transparent" />
 
                 <com.google.android.material.button.MaterialButton
@@ -108,7 +108,7 @@
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:strokeColor="@android:color/transparent" />
 
                 <com.google.android.material.button.MaterialButton
@@ -124,7 +124,7 @@
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:strokeColor="@android:color/transparent" />
             </LinearLayout>
 
@@ -178,7 +178,7 @@
                     android:textColor="@android:color/white"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:layout_flexBasisPercent="0%"
                     app:layout_flexGrow="1"
                     app:strokeColor="@android:color/transparent" />
@@ -201,7 +201,7 @@
                     android:textColor="@android:color/white"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:layout_flexBasisPercent="0%"
                     app:layout_flexGrow="1"
                     app:strokeColor="@android:color/transparent" />
@@ -223,7 +223,7 @@
                     android:textColor="@android:color/white"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:layout_flexBasisPercent="0%"
                     app:layout_flexGrow="1"
                     app:strokeColor="@android:color/transparent" />
@@ -246,7 +246,7 @@
                     android:textColor="@android:color/white"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:layout_flexBasisPercent="0%"
                     app:layout_flexGrow="1"
                     app:strokeColor="@android:color/transparent" />
@@ -269,7 +269,7 @@
                     android:textColor="@android:color/white"
                     android:textSize="12sp"
                     android:textStyle="bold"
-                    app:backgroundTint="#3A4652"
+                    app:backgroundTint="?attr/colorSurfaceContainerHighest"
                     app:layout_flexBasisPercent="0%"
                     app:layout_flexGrow="1"
                     app:strokeColor="@android:color/transparent" />
@@ -287,10 +287,10 @@
                 android:layout_marginStart="16dp"
                 android:layout_marginEnd="16dp"
                 android:visibility="gone"
-                app:cardBackgroundColor="#D9141B23"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                 app:cardCornerRadius="20dp"
                 app:cardElevation="0dp"
-                app:strokeColor="#26FFFFFF"
+                app:strokeColor="?attr/colorOutlineVariant"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
@@ -312,7 +312,7 @@
                             android:layout_height="160dp"
                             app:cardCornerRadius="16dp"
                             app:cardElevation="0dp"
-                            app:strokeColor="#30FFFFFF"
+                            app:strokeColor="?attr/colorOutlineVariant"
                             app:strokeWidth="1dp">
 
                             <ImageView
@@ -343,7 +343,7 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="8dp"
-                                android:textColor="#CCFFFFFF"
+                                android:textColor="?attr/colorOnSurface"
                                 android:textSize="14sp" />
 
                             <com.google.android.flexbox.FlexboxLayout
@@ -368,7 +368,7 @@
                                 android:layout_marginTop="10dp"
                                 android:lineSpacingExtra="3dp"
                                 android:maxLines="5"
-                                android:textColor="#E6FFFFFF"
+                                android:textColor="?attr/colorOnSurface"
                                 android:textSize="13sp" />
 
                             <TextView
@@ -376,7 +376,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="6dp"
-                                android:textColor="#7EE7A2"
+                                android:textColor="@color/webhtv_color_success"
                                 android:textSize="12sp"
                                 android:textStyle="bold"
                                 android:visibility="gone" />
@@ -400,7 +400,7 @@
                             android:singleLine="true"
                             android:textColor="@android:color/white"
                             android:textStyle="bold"
-                            app:backgroundTint="#2CC56F" />
+                            app:backgroundTint="@color/webhtv_color_success" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -425,7 +425,7 @@
                                 android:text="@string/play_change"
                                 android:textColor="@android:color/white"
                                 android:textSize="13sp"
-                                app:backgroundTint="#2B3743"
+                                app:backgroundTint="?attr/colorSurfaceContainerHigh"
                                 app:strokeColor="@android:color/transparent" />
 
                             <com.google.android.material.button.MaterialButton
@@ -445,7 +445,7 @@
                                 android:singleLine="true"
                                 android:textColor="@android:color/white"
                                 android:textSize="13sp"
-                                app:backgroundTint="#2B3743"
+                                app:backgroundTint="?attr/colorSurfaceContainerHigh"
                                 app:strokeColor="@android:color/transparent" />
 
                             <com.google.android.material.button.MaterialButton
@@ -466,7 +466,7 @@
                                 android:text="@string/following"
                                 android:textColor="@android:color/white"
                                 android:textSize="13sp"
-                                app:backgroundTint="#2B3743"
+                                app:backgroundTint="?attr/colorSurfaceContainerHigh"
                                 app:strokeColor="@android:color/transparent" />
 
                             <com.google.android.material.button.MaterialButton
@@ -487,7 +487,7 @@
                                 android:text="@string/detail_tmdb_rematch"
                                 android:textColor="@android:color/white"
                                 android:textSize="13sp"
-                                app:backgroundTint="#2B3743"
+                                app:backgroundTint="?attr/colorSurfaceContainerHigh"
                                 app:strokeColor="@android:color/transparent" />
 
                             <com.google.android.material.button.MaterialButton
@@ -508,10 +508,45 @@
                                 android:text="@string/detail_theme_light"
                                 android:textColor="@android:color/white"
                                 android:textSize="13sp"
-                                app:backgroundTint="#2B3743"
+                                app:backgroundTint="?attr/colorSurfaceContainerHigh"
                                 app:strokeColor="@android:color/transparent" />
                         </LinearLayout>
                     </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/pluginHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="22dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/pluginTitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/detail_plugin"
+                            android:textColor="@android:color/white"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <HorizontalScrollView
+                        android:id="@+id/pluginScroll"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:clipToPadding="false"
+                        android:scrollbars="none"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:id="@+id/pluginRow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
 
                     <LinearLayout
                         android:id="@+id/flagHeader"
@@ -545,7 +580,7 @@
                             android:gravity="end"
                             android:maxLines="1"
                             android:maxWidth="260dp"
-                            android:textColor="#99FFFFFF"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="12sp" />
                     </LinearLayout>
 
@@ -623,7 +658,7 @@
                             android:minWidth="0dp"
                             android:contentDescription="@string/detail_episode_reverse"
                             android:padding="0dp"
-                            app:backgroundTint="#2B3743"
+                            app:backgroundTint="?attr/colorSurfaceContainerHigh"
                             app:icon="@drawable/ic_action_sort_asc"
                             app:iconGravity="textStart"
                             app:iconPadding="0dp"
@@ -641,7 +676,7 @@
                             android:minWidth="0dp"
                             android:contentDescription="@string/detail_episode_file_name_scraped_action"
                             android:padding="0dp"
-                            app:backgroundTint="#2B3743"
+                            app:backgroundTint="?attr/colorSurfaceContainerHigh"
                             app:icon="@drawable/ic_action_name_full"
                             app:iconGravity="textStart"
                             app:iconPadding="0dp"
@@ -659,7 +694,7 @@
                             android:minWidth="0dp"
                             android:contentDescription="@string/detail_episode_view_grid_action"
                             android:padding="0dp"
-                            app:backgroundTint="#2B3743"
+                            app:backgroundTint="?attr/colorSurfaceContainerHigh"
                             app:icon="@drawable/ic_site_list"
                             app:iconGravity="textStart"
                             app:iconPadding="0dp"
@@ -704,7 +739,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:textColor="#B3FFFFFF"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="13sp"
                         android:visibility="gone" />
 
@@ -760,10 +795,10 @@
                     android:id="@+id/tmdbPanel"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:cardBackgroundColor="#D9141B23"
+                    app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
                     app:cardCornerRadius="20dp"
                     app:cardElevation="0dp"
-                    app:strokeColor="#26FFFFFF"
+                    app:strokeColor="?attr/colorOutlineVariant"
                     app:strokeWidth="1dp">
 
                     <LinearLayout
@@ -959,7 +994,7 @@
                             android:includeFontPadding="false"
                             android:lineSpacingExtra="2dp"
                             android:maxLines="2"
-                            android:textColor="#B3FFFFFF"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp"
                             android:visibility="gone" />
 
@@ -987,7 +1022,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
-                            android:textColor="#B3FFFFFF"
+                            android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp"
                             android:visibility="gone" />
                     </LinearLayout>
@@ -1014,7 +1049,7 @@
         app:cardBackgroundColor="@android:color/black"
         app:cardCornerRadius="20dp"
         app:cardElevation="0dp"
-        app:strokeColor="#26FFFFFF"
+        app:strokeColor="?attr/colorOutlineVariant"
         app:strokeWidth="1dp">
 
         <androidx.media3.ui.PlayerView
@@ -1022,6 +1057,7 @@
             style="@style/Player.Vod"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            app:shutter_background_color="@android:color/black"
             app:surface_type="none" />
 
         <master.flame.danmaku.ui.widget.DanmakuView
@@ -1121,8 +1157,8 @@
                 android:layout_marginTop="8dp"
                 android:max="10000"
                 android:progress="0"
-                android:progressBackgroundTint="@color/white_40"
-                android:progressTint="#2196F3" />
+                android:progressBackgroundTint="@color/webhtv_color_player_control_muted"
+                android:progressTint="?attr/colorPrimary" />
 
         </LinearLayout>
 
@@ -1137,7 +1173,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:indeterminate="true"
-                app:indicatorColor="@color/white" />
+                app:indicatorColor="@color/webhtv_color_player_control" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/playerLoadingTraffic"
@@ -1146,7 +1182,7 @@
                 android:layout_gravity="center"
                 android:layout_marginTop="44dp"
                 android:fontFeatureSettings="tnum"
-                android:textColor="@color/white"
+                android:textColor="@color/webhtv_color_player_control"
                 android:textSize="16sp"
                 android:visibility="gone" />
 
@@ -1254,7 +1290,7 @@
                 android:layout_height="4dp"
                 android:max="100"
                 android:progress="0"
-                android:progressBackgroundTint="@color/white_40"
+                android:progressBackgroundTint="@color/webhtv_color_player_control_muted"
                 android:progressTint="@android:color/white" />
         </LinearLayout>
 
@@ -1283,7 +1319,7 @@
                 android:layout_height="4dp"
                 android:max="100"
                 android:progress="0"
-                android:progressBackgroundTint="@color/white_40"
+                android:progressBackgroundTint="@color/webhtv_color_player_control_muted"
                 android:progressTint="@android:color/white" />
         </LinearLayout>
 
@@ -1529,6 +1565,11 @@
                             style="@style/Control"
                             android:text="@string/play_repeat" />
 
+                        <!--
+                            插件 chip 追加在这排末尾（由 PluginUiPresenter 动态 addView），
+                            所以这里只留一个空位标记，不预置按钮。
+                        -->
+
                     </LinearLayout>
                 </HorizontalScrollView>
 
@@ -1572,7 +1613,7 @@
             <ProgressBar
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:indeterminateTint="#FFFFFF" />
+                android:indeterminateTint="?attr/colorOnSurface" />
 
             <TextView
                 android:id="@+id/loadingText"
@@ -1580,7 +1621,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text="@string/detail_tmdb_loading_detail"
-                android:textColor="#FFFFFF"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="12sp"
                 android:alpha="1.0" />
         </LinearLayout>

@@ -2,6 +2,7 @@ package com.fongmi.android.tv.setting;
 
 import android.content.SharedPreferences;
 
+import com.fongmi.android.tv.player.exo.ExoDecoderRuntimeProfiles;
 import com.github.catvod.utils.Prefers;
 
 import java.util.Collections;
@@ -33,6 +34,8 @@ public class PlaybackPerformanceSetting {
     private static final String KEY_EXO_LOAD_CONTROL_MIGRATED = "playback_performance_exo_load_control_v2";
     private static final String KEY_EXO_BACK_BUFFER_MIGRATED = "playback_performance_exo_back_buffer_v1";
     private static final String KEY_EXO_REBUFFER_MIGRATED = "playback_performance_exo_rebuffer_v3";
+    private static final String KEY_EXO_FRAME_SCHEDULING_PARITY_MIGRATED =
+            "playback_performance_exo_frame_scheduling_parity_v1";
     private static final String KEY_MPV_REBUFFER_MIGRATED = "playback_performance_mpv_rebuffer_v1";
     private static final String KEY_MPV_AUTO_BASELINE_MIGRATED = "playback_performance_mpv_auto_baseline_v1";
     private static final String KEY_PROFILE_MERGE_SCHEMA =
@@ -79,6 +82,7 @@ public class PlaybackPerformanceSetting {
         migrateExoLoadControl();
         migrateExoBackBuffer();
         migrateExoRebuffer();
+        migrateExoFrameSchedulingParity();
         migrateMpvRebuffer();
         migrateMpvAutoBaseline();
         // The former recommended-profile rollback must not run after the
@@ -331,7 +335,7 @@ public class PlaybackPerformanceSetting {
 
     public static boolean isVideoDurationProgressEnabled() {
         ensureInitialized();
-        return Prefers.getBoolean(KEY_VIDEO_DURATION_PROGRESS, true);
+        return Prefers.getBoolean(KEY_VIDEO_DURATION_PROGRESS, false);
     }
 
     public static void putVideoDurationProgressEnabled(boolean value) {
@@ -495,7 +499,11 @@ public class PlaybackPerformanceSetting {
 
     public static String getSummary() {
         ensureInitialized();
-        return getProfileName();
+        // The decoder exclusion is EXO-only, while the profile name follows the selected kernel.
+        // Appending it for MPV/IJK would report a hardware-decode fallback that cannot happen there.
+        String exclusions = PlayerSetting.getPlayer() == PlayerSetting.EXO
+                ? ExoDecoderRuntimeProfiles.process().blacklistSummary() : "";
+        return exclusions.isEmpty() ? getProfileName() : getProfileName() + "，" + exclusions;
     }
 
     public static String getForwardBufferText() {
@@ -578,7 +586,7 @@ public class PlaybackPerformanceSetting {
     private static void putRecommendedFlags() {
         put(KEY_CODEC_ASYNC_QUEUEING, true);
         put(KEY_DYNAMIC_SCHEDULING, true);
-        put(KEY_VIDEO_DURATION_PROGRESS, true);
+        put(KEY_VIDEO_DURATION_PROGRESS, false);
         put(KEY_LATE_DROP_INPUT, true);
         put(KEY_TRACK_LIMIT, true);
         put(KEY_ADAPTIVE_DOWNGRADE, true);
@@ -725,6 +733,20 @@ public class PlaybackPerformanceSetting {
     }
 
     static boolean shouldMigrateExoRebuffer(int profile) {
+        return clampProfile(profile) != PROFILE_CUSTOM;
+    }
+
+    private static void migrateExoFrameSchedulingParity() {
+        if (Prefers.getBoolean(KEY_EXO_FRAME_SCHEDULING_PARITY_MIGRATED)) return;
+        int profile = clampProfile(Prefers.getInt(profileKey(PlayerSetting.EXO), PROFILE_RECOMMENDED));
+        if (shouldMigrateExoFrameSchedulingParity(profile)
+                && !isOverridden(PlayerSetting.EXO, PlaybackPerformanceCatalog.DURATION_PROGRESS)) {
+            put(KEY_VIDEO_DURATION_PROGRESS, false);
+        }
+        Prefers.put(KEY_EXO_FRAME_SCHEDULING_PARITY_MIGRATED, true);
+    }
+
+    static boolean shouldMigrateExoFrameSchedulingParity(int profile) {
         return clampProfile(profile) != PROFILE_CUSTOM;
     }
 
@@ -939,10 +961,22 @@ public class PlaybackPerformanceSetting {
 
     private static int rawProfileValue(String key, int fallback) {
         try {
-            Object value = Prefers.getPrefers().getAll().get(key);
-            return value instanceof Number
-                    ? clampProfile(((Number) value).intValue())
-                    : clampProfile(fallback);
+            SharedPreferences prefs = Prefers.getPrefers();
+            if (prefs.contains(key)) {
+                try {
+                    return clampProfile(prefs.getInt(key, fallback));
+                } catch (ClassCastException ignored) {
+                }
+                try {
+                    return clampProfile((int) prefs.getLong(key, fallback));
+                } catch (ClassCastException ignored) {
+                }
+                try {
+                    return clampProfile((int) prefs.getFloat(key, fallback));
+                } catch (ClassCastException ignored) {
+                }
+            }
+            return clampProfile(fallback);
         } catch (Throwable ignored) {
             return clampProfile(fallback);
         }
