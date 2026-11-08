@@ -1118,7 +1118,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     @Override
     public boolean canSeek() {
-        return service() != null && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect() && isOwner() && !player().isLive() && dispatch(true)
+        return service() != null && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect() && isOwner() && !player().isLive()
                 && !player().isEmpty();
     }
 

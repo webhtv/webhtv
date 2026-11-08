@@ -156,3 +156,17 @@ bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest --tests 'com.fongmi.andro
 - 单元证据：21项真实输入/消费者测试和双端Java编译通过；完整设备生命周期未测
 - 联合验证（2026-11-08 集成树 fresh）：9 类 94 项定向测试 0 失败/0 错误/0 跳过；Leanback Mobile arm64 Debug Java、Mobile UnitTestJavaCompile 编译通过；日志 `.codex/task-state/reports/TV-SMALL-FIXES-INTEGRATION-final.log`。整批仍不冒充 decoder 实播/设备/性能验收。
 - 回滚：针对本任务按上述代码链逆序git revert；合并历史保留真实来源，不reset原工作区或移动tag。
+
+## 本轮评审修复
+
+改动范围仅 `CustomKeyDownVod.java`、`CustomKeyDownLive.java`、`LiveActivity.java`、`CustomKeyDownSeekOwnershipTest.java` 与本文件；无新增/删除文件。
+
+1. `CustomKeyDownVod.SeekSession.onUp`：原先 `if (!owns(event)) return;` 让"没有配对 DOWN 的左右 UP"被完全丢弃，回归了旧实现（旧 `CustomKeyDownVod`/`CustomKeyDownLive` 的 ACTION_UP 分支无条件调用 `onKeyLeft`/`onKeyRight`）。现改为 `pending == false` 时先 `listener.onSeekUnavailable(event)` 再 return；`pending == true`（有进行中的 seek 却收到错配 UP）仍直接 return，不误切线路。
+2. `LiveActivity.canSeek()`：删除 `dispatch(true)` 条件。面板/列表可见性已在 `CustomKeyDownLive.onKeyDown` 的 DOWN 阶段判过；保留它会让 UP 之后 250ms 的合法时移 seek 在面板恰好出现时被静默丢弃。其余条件与顺序保持原样。
+3. `CustomKeyDownLive.check()`：`listener.onKeyDown();` 后的多余空行删除，if/else 链连续，无逻辑变化。
+
+影响面：VOD/Cast 不受影响（`onSeekUnavailable` 只被 `CustomKeyDownLive.Listener` 覆盖，VOD/Cast 侧仍是默认 no-op，`unownedRepeatAndReleaseCannotCreateBurst` 语义保持）；普通 Live 恢复左右 UP 立即切线路的旧行为；`canSeek` 不再因控制面板可见性丢弃已提交的 seek。`CustomKeyDownVod.SeekListener`/`CustomKeyDownLive.Listener` 方法集合与实现者保持一致，没有新增抽象方法。
+
+新增测试：`CustomKeyDownSeekOwnershipTest.unpairedLiveReleaseStillSwitchesLineWithoutSeek` —— 只发左右 UP、无配对 DOWN 时 `LiveHost` 的 `lefts`/`rights` 各 1 且 `seeks` 为空，再断言 `VodHost` 同输入下 `seeks` 仍为空（VOD 默认 no-op）。
+
+验证状态（2026-11-09，Asia/Shanghai，父代理执行）：`gradlew.bat --console=plain :app:compileMobileArm64_v8aDebugJavaWithJavac :app:testLeanbackArm64_v8aDebugUnitTest --tests <6 类>` → `BUILD SUCCESSFUL in 7m29s`，mobile 与 leanback 主源集及 `compileLeanbackArm64_v8aDebugUnitTestJavaWithJavac` 全部通过；6 类共 80 tests / 0 failures / 0 errors / 0 skipped（`DanmakuApiOwnershipTest` 3、`StrmHttpTest` 19、`TvSeekOwnershipIntegrationTest` 5、`VideoDanmakuOwnershipTest` 22、`CustomKeyDownSeekOwnershipTest` 17、`ProxyResponseCompatibilityTest` 14）。仍未验：设备/真机（实机 seek、直播即时切线路、时移、慢响应弹幕覆盖、mobile 真实消费者）、全量 Gradle 矩阵/`connectedAndroidTest`/APK 打包安装、QuickJS/Python 真桥的 `destroy` 清理与 gzip 端到端播放。

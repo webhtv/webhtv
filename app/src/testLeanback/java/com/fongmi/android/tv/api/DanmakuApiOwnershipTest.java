@@ -35,7 +35,7 @@ public class DanmakuApiOwnershipTest {
         client.connectionPool().evictAll(); client.dispatcher().executorService().shutdownNow();
     }
 
-    @Test public void defaultManualCleanupAndOldCallCancellationCannotCancelNewAutomaticOwner() throws Exception {
+    @Test public void oldOwnerCallCancellationCannotCancelNewAutomaticOwner() throws Exception {
         CountDownLatch aReceived = new CountDownLatch(1), releaseA = new CountDownLatch(1), idle = new CountDownLatch(1);
         server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
             @Override public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
@@ -51,7 +51,6 @@ public class DanmakuApiOwnershipTest {
         assertTrue(aReceived.await(5, TimeUnit.SECONDS));
         client.dispatcher().setIdleCallback(idle::countDown);
         Call current = DanmakuApi.searchOwned("B", "2", "owner-B", item -> found.add(item.getUrl()));
-        DanmakuApi.cancel();
         old.cancel();
         releaseA.countDown();
         assertTrue(idle.await(5, TimeUnit.SECONDS));
@@ -60,7 +59,7 @@ public class DanmakuApiOwnershipTest {
         assertEquals(Collections.singletonList(server.url("/current.xml").toString()), found);
     }
 
-    @Test public void ownedQueryDoesNotCancelExistingManualCallAndManualApiStillCancelsDefaultTag() throws Exception {
+    @Test public void ownedQueryDoesNotCancelExistingManualCallButManualCleanupCancelsOwnedCall() throws Exception {
         CountDownLatch received = new CountDownLatch(1), release = new CountDownLatch(1), idle = new CountDownLatch(1);
         server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
             @Override public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
@@ -82,11 +81,40 @@ public class DanmakuApiOwnershipTest {
         client.dispatcher().setIdleCallback(idle::countDown);
         DanmakuApi.cancel();
         assertTrue(manual.isCanceled());
-        assertFalse(owned.isCanceled());
+        assertTrue("manual cleanup must also cancel the in-flight automatic owned call", owned.isCanceled());
         release.countDown();
         assertTrue(idle.await(5, TimeUnit.SECONDS));
         drain();
-        assertEquals(Collections.singletonList(server.url("/owned.xml").toString()), found);
+        assertTrue("canceled owned call must not deliver a result", found.isEmpty());
+    }
+    @Test public void pageScopedCleanupCancelsOnlyItsOwnAutomaticCall() throws Exception {
+        CountDownLatch aReceived = new CountDownLatch(1), releaseA = new CountDownLatch(1);
+        CountDownLatch bReceived = new CountDownLatch(1), releaseB = new CountDownLatch(1), idle = new CountDownLatch(1);
+        server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
+            @Override public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                String body = request.getBody().readUtf8();
+                if (body.contains("name=A")) {
+                    aReceived.countDown(); releaseA.await(5, TimeUnit.SECONDS);
+                } else if (body.contains("name=B")) {
+                    bReceived.countDown(); releaseB.await(5, TimeUnit.SECONDS);
+                }
+                return new MockResponse().setBody("[{\"url\":\"" + server.url("/owner.xml") + "\"}]");
+            }
+        });
+        List<String> found = new ArrayList<>();
+        Call a = DanmakuApi.searchOwned("A", "1", "owner-A", item -> found.add("A"));
+        assertTrue(aReceived.await(5, TimeUnit.SECONDS));
+        Call b = DanmakuApi.searchOwned("B", "2", "owner-B", item -> found.add(item.getUrl()));
+        assertTrue(bReceived.await(5, TimeUnit.SECONDS));
+        client.dispatcher().setIdleCallback(idle::countDown);
+        DanmakuApi.cancel("owner-A");
+        assertTrue("page scoped cleanup must cancel its own automatic call", a.isCanceled());
+        assertFalse("page scoped cleanup must not cancel another owner in-flight call", b.isCanceled());
+        releaseA.countDown();
+        releaseB.countDown();
+        assertTrue(idle.await(5, TimeUnit.SECONDS));
+        drain();
+        assertEquals(Collections.singletonList(server.url("/owner.xml").toString()), found);
     }
     private static void drain() { ((ShadowLooper) org.robolectric.shadow.api.Shadow.extract(Looper.getMainLooper())).idle(); }
 }

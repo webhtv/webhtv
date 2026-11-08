@@ -91,7 +91,9 @@ public class VideoDanmakuOwnershipTest {
         accepted(host, shared);
         awaitPosted();
         String a1 = host.manager.getPlaybackTraceId();
+        DanmakuSetting.putAuto(false);
         host.onItemClick(shared);
+        DanmakuSetting.putAuto(true);
         response("a2.xml");
         accepted(host, shared);
         awaitPosted();
@@ -130,9 +132,27 @@ public class VideoDanmakuOwnershipTest {
         response("old.xml");
         accepted(host, result());
         awaitPosted();
+        DanmakuSetting.putAuto(false);
         host.onItemClick(result());
+        DanmakuSetting.putAuto(true);
         drain();
         assertTrue(host.manager.applied.isEmpty());
+    }
+
+    @Test public void qualitySwitchSearchesAutomaticDanmakuOnItsNewTrace() throws Exception {
+        TestVideo host = host();
+        response("old.xml");
+        accepted(host, result());
+        awaitPosted();
+        String old = host.manager.getPlaybackTraceId();
+        drain();
+        assertEquals(Collections.singletonList(server.url("/old.xml").toString()), host.manager.applied);
+        host.onItemClick(result());
+        response("switch.xml");
+        assertNotEquals("quality switch must start a new playback session", old, host.manager.getPlaybackTraceId());
+        awaitPosted();
+        drain();
+        assertEquals(Arrays.asList(server.url("/old.xml").toString(), server.url("/switch.xml").toString()), host.manager.applied);
     }
 
     @Test public void disconnectAndRedirectRejectQueuedResult() throws Exception {
@@ -174,7 +194,9 @@ public class VideoDanmakuOwnershipTest {
         response("old-parse.xml");
         accepted(host, parsed);
         awaitPosted();
+        DanmakuSetting.putAuto(false);
         host.onItemClick(parsed);
+        DanmakuSetting.putAuto(true);
         drain();
         assertEquals(1, host.manager.applied.size());
     }

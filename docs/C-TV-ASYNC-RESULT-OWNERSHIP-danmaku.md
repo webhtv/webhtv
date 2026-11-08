@@ -244,3 +244,30 @@ F3、F4 各自真实业务 RED 已保留；Mobile 8-case GREEN 与 Mobile Java �
 - Mobile 生产 Java 编译在 GREEN 同轮成功，之后仅测试证据/文档编辑，未重跑成功编译。没有重跑 9 类联合验证；由父在最后独立 review 后统一验证。
 - 审计首轮对唯一 taskdoc 缺标准 Checkpoint heading，已把真实自检闭环记录为本节；这是文档格式修复，不放宽安全检查。branch/HEAD/source scope 保持原样，所有未验设备/Native/R1风险仍显式列出。
 - 下一步仅 task_guard finish：本轮 code/test/doc 原子提交及立即 recovery tag，精确值写忽略 report 给父最终归档；不 push/第二 docs commit。
+
+## 本轮评审修复 — 自动弹幕 owner token（F1–F6）
+
+改动范围：`DanmakuApi`、双端 `VideoActivity`、两个 testLeanback 测试、本文档；mobile 侧改动与 `cancel(ownerTag)` 拆分裁定见下一节。
+
+- **F1（高，主要回归）**：leanback `onItemClick(Result)` 原先直接 `startPlayer(...)`；`startPlayer` 覆盖层先 `invalidateAutoDanmaku()`，新 trace 没有 owner token，`STATE_READY` 时 `renewAutoDanmaku` 因 `mAutoDanmaku == null` 直接返回，整段会话再无自动弹幕。改为与 `setPlayer` 一致：先取 `player()`/`beforeTrace`，`startPlayer` 后 `searchAutoDanmaku(result, manager, beforeTrace)`，并在 `beginPlayHealth()` 前 `cancelKeySeek()`。
+- **F2（中）**：弹幕搜索对话框的 `DanmakuApi.cancel()`（`DanmakuSearchDialog:164`、`DanmakuSearchInputDialog:150`）在改用独立 ownerTag 后不再取消在飞自动请求，手动选择的弹幕会被在飞自动结果覆盖。`DanmakuApi` 新增 owned Call 集合（`ConcurrentHashMap.newKeySet()`）：`searchOwned` 创建出非 null Call 时登记，`enqueue` 的 `onResponse`/`onFailure` 终态移除，`cancel()` 取消并清空；内部 `newCall(name, episode)` 的 `OkHttp.cancel(TAG)` 语义不变（仍只影响默认 tag，不取消 owned 请求）。
+- **F3（低）**：`searchAutoDanmaku` 入口若 `mAutoDanmakuCall != null` 先 `invalidateAutoDanmaku()`，避免将来新增调用点静默遗留在飞请求；既有调用点的前置 invalidate 未改动。
+- **F4（低）**：`ownsAutoDanmaku`/`searchAutoDanmaku` 改为局部 `Episode episode = getEpisode()` 判空后返回再复用，避免 `App.post`/`onStateChanged` 等新异步路径在无剧集状态 NPE；token 保存的字段语义不变。
+- **F5（低）**：leanback `renewAutoDanmaku` 以 mobile 版本为准统一分支：trace 相同且 Call 仍在飞则 return，否则按 `PlaybackTrace.NONE` 重新搜索。
+- **F6（低）**：`RefreshEvent.Type.DANMAKU` 分支在 `reloadDanmaku(...)` 前 `invalidateAutoDanmaku()`，让手动应用的弹幕优先。
+- 测试：`DanmakuApiOwnershipTest` 由“`cancel()` 不取消 owned”改为“取消 owned”（`ownedQueryDoesNotCancelExistingManualCallButManualCleanupCancelsOwnedCall`），并把原用例中唯一的 `DanmakuApi.cancel()` 调用移除、其余断言保留为 `oldOwnerCallCancellationCannotCancelNewAutomaticOwner`；`VideoDanmakuOwnershipTest` 新增 `qualitySwitchSearchesAutomaticDanmakuOnItsNewTrace` 覆盖切清晰度后按新 trace 重新发起自动搜索并 apply，其余三个调用 `onItemClick(Result)` 的既有用例仅在调用前后关闭/恢复 `DanmakuSetting` 自动搜索，断言未改。
+- 已知风险及处理：无参 `DanmakuApi.cancel()` 会取消所有页面在飞的自动请求，而两端 `onDestroy` 也调用它，会把"旧页面销毁取消新页面在飞自动请求"这一同类缺陷重新引入。已按下一节的 owner 作用域入口拆分，该风险不再存在。
+- 验证状态：本节的编译与单元测试证据见下一节末尾的联合验证结果（2026-11-09，父代理执行）。
+
+## 本轮评审修复（第二轮）— mobile 等价改动与取消入口拆分
+
+- 授权范围修正：mobile `VideoActivity` 同属本任务（兄弟代理只改 `CustomKeyDown*/LiveActivity` 与 `Strm`/`ProxyResponse`/`quickjs`），上一轮"mobile 由并行子代理负责"的判断作废。
+- **mobile F1**：`onItemClick(Result)`（原约 1571 行）与 leanback 同构——`PlayerManager manager = service() != null ? player() : null;`、取 `beforeTrace`、原 `startPlayer(...)`，其后 `if (manager != null) searchAutoDanmaku(result, manager, beforeTrace);`。mobile 无 `cancelKeySeek`，未新增。
+- **mobile F3**：`searchAutoDanmaku` 入口 `if (mAutoDanmakuCall != null) invalidateAutoDanmaku();`（与 leanback 一致；`refreshAndSwitchDecode`/`switchDecodeWithResult` 已在前置 `finishDecodeRestore` 消费还原槽，入口失效不会误清仍挂起的 decode 令牌）。
+- **mobile F4**：`ownsAutoDanmaku`/`searchAutoDanmaku` 改为 `Episode episode = getEpisode(); if (episode == null) return false/return;` 后复用该局部值；`refreshAndSwitchDecode` 已有 `getEpisode() == null` 早退，未改动。
+- **mobile F5**：mobile `renewAutoDanmaku` 本就是完整版（trace 相同且 Call 在飞则 return，否则按 `PlaybackTrace.NONE` 重搜），未改动，仅核对与 leanback 现版本等价。
+- **mobile F6**：`RefreshEvent.Type.DANMAKU` 分支改花括号块，`invalidateAutoDanmaku()` 在 `player().reloadDanmaku(...)` 之前。
+- **取消入口拆分（取代上一轮的单入口设计）**：`DanmakuApi.cancel()`（无参）保留给两个弹幕搜索对话框——`OkHttp.cancel(TAG)` + 取消并清空 `OWNED` 集合，用户手动清理必须压过在飞自动结果；新增 `public static void cancel(String ownerTag)`——`OkHttp.cancel(TAG)` 后先 `if (TextUtils.isEmpty(ownerTag)) return;` 再 `OkHttp.cancel(ownerTag)`（catvod 的 `OkHttp.cancel` 内部对 tag 做 `equals`，空/`null` 会 NPE，故必须守卫），只收拾本页面 tag 的自动请求，不动其它 owner（`OWNED` 中其它条目仍由各自终态回调移除，不会泄漏）。
+- 两端 `onDestroy` 的 `DanmakuApi.cancel();` 改为 `DanmakuApi.cancel(mDanmakuOwnerTag);`（leanback 与 mobile），各自 onDestroy 里既有的 `invalidateAutoDanmaku()` 保持不变。理由：页面销毁只该收拾自己那一份自动请求，跨页面隔离由此恢复。
+- 测试：`DanmakuApiOwnershipTest` 新增 `pageScopedCleanupCancelsOnlyItsOwnAutomaticCall`——两个 owner 的在飞请求分别占住各自的 dispatcher 线程，`cancel("owner-A")` 后断言 A 被取消、B 未被取消，且最终只有 B 的结果投递。上一轮的无参 `cancel()` 新语义（取消 owned）与 `oldOwnerCallCancellationCannotCancelNewAutomaticOwner` 保持。
+- 验证状态（2026-11-09，Asia/Shanghai，父代理执行）：`gradlew.bat --console=plain :app:compileMobileArm64_v8aDebugJavaWithJavac :app:testLeanbackArm64_v8aDebugUnitTest --tests <6 类>` → `BUILD SUCCESSFUL in 7m29s`，mobile 与 leanback 主源集及 `compileLeanbackArm64_v8aDebugUnitTestJavaWithJavac` 全部通过；6 类共 80 tests / 0 failures / 0 errors / 0 skipped（`DanmakuApiOwnershipTest` 3、`StrmHttpTest` 19、`TvSeekOwnershipIntegrationTest` 5、`VideoDanmakuOwnershipTest` 22、`CustomKeyDownSeekOwnershipTest` 17、`ProxyResponseCompatibilityTest` 14）。仍未验：设备/真机（实机 seek、直播即时切线路、时移、慢响应弹幕覆盖、mobile 真实消费者）、全量 Gradle 矩阵/`connectedAndroidTest`/APK 打包安装、QuickJS/Python 真桥的 `destroy` 清理与 gzip 端到端播放。

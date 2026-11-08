@@ -126,10 +126,13 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     @Override
     public void destroy() {
-        try {
-            call("destroy");
-        } catch (Throwable e) {
-            e.printStackTrace();
+        if (jsObject != null) {
+            // init 早期失败时 jsObject 为空，跳过 destroy 以免 Async 的 NPE 噪声盖住真正的初始化错误
+            try {
+                call("destroy");
+            } catch (Throwable e) {
+                e.printStackTrace();
+            }
         }
         try {
             releaseJS();

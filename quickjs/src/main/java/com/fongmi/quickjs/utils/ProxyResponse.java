@@ -17,9 +17,11 @@ public final class ProxyResponse {
     public static Object[] fromJson(String json) {
         Gson gson = new Gson();
         JsonElement element = gson.fromJson(json, JsonElement.class);
-        Res res = gson.fromJson(element, Res.class);
+        if (element == null || !element.isJsonObject()) throw new IllegalArgumentException("Proxy response requires a JSON object");
+        JsonObject root = element.getAsJsonObject();
+        Res res = gson.fromJson(root, Res.class);
         if (res == null) throw new IllegalArgumentException("Proxy response requires status, MIME and body");
-        JsonObject rawHeaders = Json.safeObject(element.getAsJsonObject().get("headers"));
+        JsonObject rawHeaders = Json.safeObject(root.get("headers"));
         for (Map.Entry<String, JsonElement> entry : rawHeaders.entrySet()) {
             requireSafe(entry.getKey(), "Proxy response header name");
             if (entry.getValue().isJsonPrimitive()) requireSafe(entry.getValue().getAsString(), "Proxy response header value");
@@ -30,7 +32,8 @@ public final class ProxyResponse {
         Map<String, String> headers = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : source.entrySet()) {
             String name = entry.getKey();
-            if (name.equalsIgnoreCase("Content-Type") || name.equalsIgnoreCase("Content-Length") || name.equalsIgnoreCase("Transfer-Encoding")) continue;
+            if (name.equalsIgnoreCase("Content-Type") || name.equalsIgnoreCase("Content-Length")
+                    || name.equalsIgnoreCase("Transfer-Encoding") || name.equalsIgnoreCase("Content-Encoding")) continue;
             headers.put(name, entry.getValue());
         }
         return new Object[]{res.getCode(), mime, res.getStream(), headers};

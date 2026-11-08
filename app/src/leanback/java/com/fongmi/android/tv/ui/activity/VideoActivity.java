@@ -292,24 +292,29 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private boolean ownsAutoDanmaku(AutoDanmakuToken token) {
+        Episode episode = getEpisode();
+        if (episode == null) return false;
         return token != null && token == mAutoDanmaku && !mDanmakuRetired
                 && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect()
                 && service() == token.binding && service() != null && player() == token.manager && isOwner()
                 && TextUtils.equals(token.key, getHistoryKey())
                 && TextUtils.equals(token.url, token.result.getRealUrl())
-                && TextUtils.equals(token.episodeName, getEpisode().getName())
-                && TextUtils.equals(token.episodeUrl, getEpisode().getUrl())
-                && TextUtils.equals(token.flag, getEpisodePlayFlag(getFlag(), getEpisode()));
+                && TextUtils.equals(token.episodeName, episode.getName())
+                && TextUtils.equals(token.episodeUrl, episode.getUrl())
+                && TextUtils.equals(token.flag, getEpisodePlayFlag(getFlag(), episode));
     }
 
     private void searchAutoDanmaku(Result result, PlayerManager manager, String beforeTrace) {
+        if (mAutoDanmakuCall != null) invalidateAutoDanmaku();
         if (service() == null || player() != manager || mDanmakuRetired || isRedirect() || isPlaybackExiting()
                 || !isOwner() || isFinishing() || isDestroyed()) return;
+        Episode episode = getEpisode();
+        if (episode == null) return;
         String trace = manager.getPlaybackTraceId();
         if (com.fongmi.android.tv.player.PlaybackTrace.NONE.equals(trace) || TextUtils.equals(beforeTrace, trace)
                 || !DanmakuApi.canAutoSearch(result.getDanmaku())) return;
-        AutoDanmakuToken token = new AutoDanmakuToken(service(), manager, result, getHistoryKey(), getEpisode(),
-                getEpisodePlayFlag(getFlag(), getEpisode()), mHistory.getVodName());
+        AutoDanmakuToken token = new AutoDanmakuToken(service(), manager, result, getHistoryKey(), episode,
+                getEpisodePlayFlag(getFlag(), episode), mHistory.getVodName());
         mAutoDanmaku = token;
         mAutoDanmakuCall = DanmakuApi.searchOwned(token.name, token.episodeName, mDanmakuOwnerTag, item -> {
             if (ownsAutoDanmaku(token) && TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) {
@@ -320,9 +325,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private void renewAutoDanmaku() {
         AutoDanmakuToken token = mAutoDanmaku;
-        if (!ownsAutoDanmaku(token) || TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) return;
+        if (!ownsAutoDanmaku(token)) return;
+        String beforeTrace = token.trace;
+        if (TextUtils.equals(beforeTrace, token.manager.getPlaybackTraceId())) {
+            if (mAutoDanmakuCall != null) return;
+            beforeTrace = com.fongmi.android.tv.player.PlaybackTrace.NONE;
+        }
         invalidateAutoDanmaku();
-        searchAutoDanmaku(token.result, token.manager, token.trace);
+        searchAutoDanmaku(token.result, token.manager, beforeTrace);
     }
 
     @Override
@@ -1423,8 +1433,12 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     @Override
     public void onItemClick(Result result) {
+        PlayerManager manager = service() != null ? player() : null;
+        String beforeTrace = manager != null ? manager.getPlaybackTraceId() : null;
+        cancelKeySeek();
         beginPlayHealth();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
+        if (manager != null) searchAutoDanmaku(result, manager, beforeTrace);
     }
 
     private void reverseEpisode(boolean scroll) {
@@ -5682,7 +5696,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
         else if (event.getType() == RefreshEvent.Type.VOD) updateVod(event.getVod());
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
-        else if (event.getType() == RefreshEvent.Type.DANMAKU) player().reloadDanmaku(Danmaku.from(event.getPath()));
+        else if (event.getType() == RefreshEvent.Type.DANMAKU) {
+            invalidateAutoDanmaku();
+            player().reloadDanmaku(Danmaku.from(event.getPath()));
+        }
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -6534,7 +6551,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         if (mKaraoke != null) mKaraoke.release();
         mClock.release();
         saveHistory(true);
-        DanmakuApi.cancel();
+        DanmakuApi.cancel(mDanmakuOwnerTag);
         dismissQuickSearchDialog();
         RefreshEvent.keep();
         App.removeCallbacks(mR1, mR2, mR3, mR4, mAudioRefreshLyricsRunnable, mApplyAudioBackgroundRunnable, mHideAudioFocusRunnable);

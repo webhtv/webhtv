@@ -232,6 +232,22 @@ public class CustomKeyDownSeekOwnershipTest {
         assertTrue(host.seeks.isEmpty());
     }
 
+    @Test
+    public void unpairedLiveReleaseStillSwitchesLineWithoutSeek() {
+        LiveHost host = live();
+        host.seekable = false;
+        host.input.onKeyDown(key(10, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT, 0, 1, 0));
+        host.input.onKeyDown(key(20, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT, 0, 1, 0));
+        assertEquals(1, host.lefts);
+        assertEquals(1, host.rights);
+        assertTrue(host.seeks.isEmpty());
+        VodHost vodHost = vod();
+        vodHost.input.onKeyDown(key(10, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT, 0, 1, 0));
+        vodHost.input.onKeyDown(key(20, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT, 0, 1, 0));
+        drain(250);
+        assertTrue(vodHost.seeks.isEmpty());
+    }
+
     private static VodHost vod() {
         VodHost host = Robolectric.buildActivity(VodHost.class).setup().get();
         host.trace.begin();

@@ -55,7 +55,6 @@ public class CustomKeyDownLive extends GestureDetector.SimpleOnGestureListener {
             listener.onKeyUp();
         } else if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event)) {
             listener.onKeyDown();
-
         } else if (KeyUtil.isActionUp(event) && KeyUtil.isDigitKey(event)) {
             onKeyDown(event.getKeyCode());
         } else if (KeyUtil.isActionUp(event) && KeyUtil.isEnterKey(event)) {

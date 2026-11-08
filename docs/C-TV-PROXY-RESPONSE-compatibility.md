@@ -268,3 +268,12 @@ rollback锚：`47454687f504955775b398905ba09d73aeb9f20c`。阶段2经guard原子
 - 单元证据：18项定向测试通过；测试source set修正后Mobile单测编译通过；QuickJS/Python完整native链未测
 - 联合验证（2026-11-08 集成树 fresh）：9 类 94 项定向测试 0 失败/0 错误/0 跳过；Leanback Mobile arm64 Debug Java、Mobile UnitTestJavaCompile 编译通过；日志 `.codex/task-state/reports/TV-SMALL-FIXES-INTEGRATION-final.log`。整批仍不冒充 decoder 实播/设备/性能验收。
 - 回滚：针对本任务按上述代码链逆序git revert；合并历史保留真实来源，不reset原工作区或移动tag。
+
+## 本轮评审修复 — 解码后响应头与crawler收尾 — 2026-11-08
+
+- 缺陷（F3，回归风险）：`ProxyResponse.fromJson`此前只过滤Content-Type/Content-Length/Transfer-Encoding，而`Res.getStream()`返回的是**已解码String**；站点回显`Content-Encoding: gzip`时本地`/proxy`会声明gzip却发明文，客户端gunzip失败。修法：过滤集合补`Content-Encoding`（`equalsIgnoreCase`，大小写均丢弃），Content-Type继续单独走`rs[1]`，其它头照旧透传；返回值仍是4元素`Object[]`，`Proxy.createResponse`契约不变。
+- 为什么只过滤这4个头：本地`/proxy`由自己决定响应体形态，凡描述“上游线上字节”的头都必须丢弃——Content-Type单独作为MIME返回，Content-Length/Transfer-Encoding由本地按解码后字节重新计算，Content-Encoding因解码已经发生必然失真；其余头（ETag、Cache-Control、Content-Disposition、Set-Cookie等）与字节编码无关，透传才不会破坏调用方既有行为。
+- 缺陷（F4）：顶层非对象JSON（`[]`、`123`、`"x"`）此前漏出Gson的`JsonSyntaxException`。修法：解析后显式判断`element == null || !element.isJsonObject()`并抛受控`IllegalArgumentException`（信息风格与既有一致），后续统一用局部`root`，不再对非对象调用`getAsJsonObject()`。
+- 缺陷（F5，日志噪声）：`Spider.destroy()`在`init`早期失败（`jsObject == null`）时仍`call("destroy")`，`Async.run(null, ...)`在executor里NPE → `.get()`抛`ExecutionException`并在真正的init错误之前printStackTrace。修法：`jsObject == null`时跳过`call("destroy")`，直接走既有`releaseJS()`+`executor.shutdownNow()`收尾路径；异常兜底不变，`proxy1`/`proxy2`结构与loaders未触碰。
+- 新增测试（`ProxyResponseCompatibilityTest`）：`contentEncodingIsDroppedBecauseTheBodyIsAlreadyDecoded`（`Content-Encoding`/`content-encoding`均被丢弃，Content-Type仍走`rs[1]`，ETag保留）、`nonObjectTopLevelJsonIsARejectedResponse`（`[]`/`123`/`"x"`抛`IllegalArgumentException`）。既有断言全部保留。
+- 测试结果（2026-11-09，Asia/Shanghai，父代理执行）：`gradlew.bat --console=plain :app:compileMobileArm64_v8aDebugJavaWithJavac :app:testLeanbackArm64_v8aDebugUnitTest --tests <6 类>` → `BUILD SUCCESSFUL in 7m29s`，mobile 与 leanback 主源集及 `compileLeanbackArm64_v8aDebugUnitTestJavaWithJavac` 全部通过；6 类共 80 tests / 0 failures / 0 errors / 0 skipped（`DanmakuApiOwnershipTest` 3、`StrmHttpTest` 19、`TvSeekOwnershipIntegrationTest` 5、`VideoDanmakuOwnershipTest` 22、`CustomKeyDownSeekOwnershipTest` 17、`ProxyResponseCompatibilityTest` 14）。仍未验：设备/真机（实机 seek、直播即时切线路、时移、慢响应弹幕覆盖、mobile 真实消费者）、全量 Gradle 矩阵/`connectedAndroidTest`/APK 打包安装、QuickJS/Python 真桥的 `destroy` 清理与 gzip 端到端播放。

@@ -222,6 +222,37 @@ public class StrmHttpTest {
         }
     }
 
+    @Test
+    public void headerSuffixedPointersKeepTheirWholeLine() throws Exception {
+        String target = "http://host/x.m3u8|User-Agent=A&Referer=B";
+        assertTarget(target, target + "\n");
+    }
+
+    @Test
+    public void nonAsciiPointersKeepTheirWholeLine() throws Exception {
+        String target = "https://media.example/电影/第01集.mp4";
+        assertTarget(target, target + "\n");
+    }
+
+    @Test
+    public void mediaResponsesAreNeverTreatedAsPointers() throws Exception {
+        assertFallback(new MockResponse().setHeader("Content-Type", "video/mp4")
+                .setChunkedBody("https://media.example/direct.mp4\n", 1));
+        assertFallback(new MockResponse().setHeader("Content-Type", "audio/mpeg")
+                .setChunkedBody("https://media.example/direct.mp3\n", 1));
+        assertFallback(new MockResponse().setHeader("Content-Type", "application/vnd.apple.mpegurl")
+                .setChunkedBody("https://media.example/direct.m3u8\n", 1));
+    }
+
+    @Test
+    public void knownLengthMediaResponsesStillResolveTheirPointer() throws Exception {
+        assertTarget("https://media.example/direct.mp4", new MockResponse()
+                .setHeader("Content-Type", "application/vnd.apple.mpegurl")
+                .setBody("https://media.example/direct.mp4\n"));
+        assertFallback(new MockResponse().setHeader("Content-Type", "application/vnd.apple.mpegurl")
+                .setBody("#EXTM3U\nhttps://media.example/direct.mp4\n"));
+    }
+
     private static String body(String target, int total) {
         return target + "\n" + " ".repeat(total - target.length() - 1);
     }

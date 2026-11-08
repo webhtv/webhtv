@@ -2,6 +2,7 @@ package com.fongmi.quickjs.utils;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -107,6 +108,25 @@ public class ProxyResponseCompatibilityTest {
         assertArrayEquals(new byte[]{(byte) 0xc3, (byte) 0xa9}, bytes(text));
         Object[] literal = ProxyResponse.fromJson("{\"content\":\"null\"}");
         assertArrayEquals(new byte[]{'n', 'u', 'l', 'l'}, bytes(literal));
+    }
+
+    @Test
+    public void contentEncodingIsDroppedBecauseTheBodyIsAlreadyDecoded() {
+        Object[] result = ProxyResponse.fromJson("{\"code\":206,\"headers\":{\"Content-Encoding\":\"gzip\",\"content-encoding\":\"br\",\"Content-Type\":\"text/plain\",\"ETag\":\"x\"},\"content\":\"plain\"}");
+        assertEquals(206, result[0]);
+        assertEquals("text/plain", result[1]);
+        Map<?, ?> headers = (Map<?, ?>) result[3];
+        assertFalse(headers.containsKey("Content-Encoding"));
+        assertFalse(headers.containsKey("content-encoding"));
+        assertFalse(headers.containsKey("Content-Type"));
+        assertEquals("x", headers.get("ETag"));
+    }
+
+    @Test
+    public void nonObjectTopLevelJsonIsARejectedResponse() {
+        for (String json : new String[]{"[]", "123", "\"x\""}) {
+            assertThrows(IllegalArgumentException.class, () -> ProxyResponse.fromJson(json));
+        }
     }
 
     private static int read(Object[] result) throws IOException {

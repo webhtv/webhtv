@@ -148,7 +148,11 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         }
 
         private void onUp(KeyEvent event) {
-            if (!owns(event)) return;
+            if (!owns(event)) {
+                // 无配对 DOWN 的按键仍交给监听者判定（VOD/Cast 为 no-op）
+                if (!pending) listener.onSeekUnavailable(event);
+                return;
+            }
             keyCode = KeyEvent.KEYCODE_UNKNOWN;
             if (event.isCanceled()) {
                 cancelSeek();

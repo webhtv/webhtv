@@ -370,3 +370,12 @@ $env:GIT_CONFIG_VALUE_0='true'
 - 单元证据：16项定向测试通过；HTTP/Source公共链，不等于decoder实播
 - 联合验证（2026-11-08 集成树 fresh）：9 类 94 项定向测试 0 失败/0 错误/0 跳过；Leanback Mobile arm64 Debug Java、Mobile UnitTestJavaCompile 编译通过；日志 `.codex/task-state/reports/TV-SMALL-FIXES-INTEGRATION-final.log`。整批仍不冒充 decoder 实播/设备/性能验收。
 - 回滚：针对本任务按上述代码链逆序git revert；合并历史保留真实来源，不reset原工作区或移动tag。
+
+## 本轮评审修复 — 指针解析容忍变形 / 媒体响应免 peek — 2026-11-08
+
+- 缺陷（F1，播放回归）：`Strm.parseTarget`只用`new URI(line)`做严格语法门，而站点回显的`url|User-Agent=...`（本仓库一等输入，见`LiveParser`的`split("\\|", 2)`）与中文路径在`java.net.URI`里都是非法字符，抛`URISyntaxException`后整行被丢弃、回退成`.strm`自身URL，播放退化。
+- 修法：拆成`isPointer(String)`+`normalizeTolerated(String)`两支。`isPointer`保留原严格判据（isAbsolute、scheme-specific-part非空、http/https必须有authority）作为第一判据；仅当严格判据失败时，`normalizeTolerated`截掉首个`|`之后的整段、把>U+007F的字符逐个替换成`'a'`，再用同一套`isPointer`复核；复核通过返回**原始整行**（保留`|headers`与中文），否则返回original。控制字符行仍在解析前直接拒绝，未放宽。
+- 缺陷（F2，启动延迟）：`contentLength() == -1`时对真实媒体/流响应多做一次最多64KiB阻塞peek。修法：仅在响应长度未知（`contentLength() < 0`）时才套内容类型门`isMediaType`——`video/`、`audio/`前缀或含`mpegurl`、`dash+xml`（忽略大小写）直接返回原URL；已知长度的响应本来就受64KiB上限约束，照常peek解析（站点把`.strm`指针以`application/vnd.apple.mpegurl`下发时不会因此被放弃）；缺失Content-Type、`text/*`、`application/octet-stream`仍走原peek逻辑。206/重定向/64KiB上限语义未改。
+- 仍然拒绝（既有用例全部保留）：`https://host/a b`、含制表符的`https://host/a<TAB>b`、`https://host/%GG`、`https://[bad]/a`、`http:///a`、`https:`、`<html>error</html>`、`{"error":"failed"}`、`/media/a`、`//host/a`与控制字符行；原因是容忍只处理`|`与非ASCII，不替换空格/制表符/非法百分号转义/坏authority。
+- 新增测试（`StrmHttpTest`，沿用既有`assertTarget`/`assertFallback`/MockWebServer，无新依赖）：`headerSuffixedPointersKeepTheirWholeLine`、`nonAsciiPointersKeepTheirWholeLine`、`mediaResponsesAreNeverTreatedAsPointers`。既有16项断言未改动、未放宽。
+- 测试结果（2026-11-09，Asia/Shanghai，父代理执行）：`gradlew.bat --console=plain :app:compileMobileArm64_v8aDebugJavaWithJavac :app:testLeanbackArm64_v8aDebugUnitTest --tests <6 类>` → `BUILD SUCCESSFUL in 7m29s`，mobile 与 leanback 主源集及 `compileLeanbackArm64_v8aDebugUnitTestJavaWithJavac` 全部通过；6 类共 80 tests / 0 failures / 0 errors / 0 skipped（`DanmakuApiOwnershipTest` 3、`StrmHttpTest` 19、`TvSeekOwnershipIntegrationTest` 5、`VideoDanmakuOwnershipTest` 22、`CustomKeyDownSeekOwnershipTest` 17、`ProxyResponseCompatibilityTest` 14）。仍未验：设备/真机（实机 seek、直播即时切线路、时移、慢响应弹幕覆盖、mobile 真实消费者）、全量 Gradle 矩阵/`connectedAndroidTest`/APK 打包安装、QuickJS/Python 真桥的 `destroy` 清理与 gzip 端到端播放。

@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Locale;
 
 import okhttp3.Response;
 import okhttp3.ResponseBody;
@@ -35,6 +36,7 @@ public class Strm implements Source.Extractor {
         try (Response res = OkHttp.newCall(OkHttp.noRedirect(), url).execute()) {
             if (!res.isSuccessful() || res.code() == 206) return url;
             if (res.body().contentLength() >= MAX_STRM_BYTES) return url;
+            if (res.body().contentLength() < 0 && isMediaType(res.header("Content-Type"))) return url;
             try (ResponseBody body = res.peekBody(MAX_STRM_BYTES)) {
                 if (body.contentLength() >= MAX_STRM_BYTES) return url;
                 return parseTarget(body.string(), url);
@@ -52,18 +54,39 @@ public class Strm implements Source.Extractor {
             if (Character.isISOControl(c) && c != '\t') return original;
         }
         line = line.trim();
+        if (isPointer(line)) return line;
+        // 站点常回显 url|User-Agent=... 与中文路径，严格 URI 校验会误判，故容忍变形后复核，命中仍返回原整行
+        return isPointer(normalizeTolerated(line)) ? line : original;
+    }
+
+    private boolean isPointer(String line) {
         try {
             URI target = new URI(line);
-            if (!target.isAbsolute() || target.getRawSchemeSpecificPart().isEmpty()) return original;
+            if (!target.isAbsolute() || target.getRawSchemeSpecificPart().isEmpty()) return false;
             String scheme = target.getScheme();
-            if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                    && (target.getRawAuthority() == null || target.getRawAuthority().isEmpty())) {
-                return original;
-            }
-            return line;
+            return !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    || (target.getRawAuthority() != null && !target.getRawAuthority().isEmpty());
         } catch (URISyntaxException e) {
-            return original;
+            return false;
         }
+    }
+
+    private String normalizeTolerated(String line) {
+        int bar = line.indexOf('|');
+        if (bar >= 0) line = line.substring(0, bar);
+        StringBuilder builder = new StringBuilder(line.length());
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            builder.append(c > '\u007F' ? 'a' : c);
+        }
+        return builder.toString();
+    }
+
+    private boolean isMediaType(String type) {
+        if (type == null) return false;
+        String lower = type.trim().toLowerCase(Locale.ROOT);
+        return lower.startsWith("video/") || lower.startsWith("audio/")
+                || lower.contains("mpegurl") || lower.contains("dash+xml");
     }
 
     @Override
