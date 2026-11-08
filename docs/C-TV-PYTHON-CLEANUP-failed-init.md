@@ -209,3 +209,33 @@ helper是包内的**创建—初始化—缓存事务**，不是BaseLoader父类
 - 变更：两loader/SpiderInit/两test/本唯一doc；忽略日志与report不提交。
 - 未实测：native资源实际释放、第三方destroy挂死/跨站副作用；新owner/clear合同仍未批准。本阶段明确不做设备装包/native rebuild。
 - 唯一下步：执行guard finish原子提交并立即恢复tag，把其完整输出与最终交付状态写入指定report，交父独立复核。
+## 独立审查F1/P2返工（实施run2/3，2026-11-08 16:00 UTC+08）
+
+- 父独立review `F:\Workspace\fish2018\webhtv\.git\tv-implementation\reviews\C-TV-PYTHON-CLEANUP-review.md` 对首个commit `d3a7298d5f3a6f76f5f2a256d4fd6f02ff7cecef` 判定Spec FAIL/Quality changes-needed，唯一F1/P2：SpiderInit原:38与:51的最后备用printStackTrace未隔离，primary打印/toString/输出设施继续抛Throwable时会逸出computeIfAbsent，遮盖错误fallback。原23项正常GREEN仍有效，但不能证明此异常分支。
+- 已读review与实际源码，缺陷静态可达，本返工不扩大到bridge/native/owner。16:00:29固定clean leaf HEAD仍首个commit，新guard `C-TV-PYTHON-CLEANUP-DIAGNOSTICS`，scope仅SpiderInit.java、SpiderInitTest.java、本唯一doc。原guard/旧commit/tag不改。
+- 精准RED用真实SpiderInit事务+真实FakeSpider init/destroy行为：primary覆写printStackTrace持续抛AssertionError，同时诊断callback抛IllegalArgumentException；期望无diagnostic逸出、public非null SpiderNull、已创建实例destroy一次、same-key后续恢复成功并cache。不是mock返回值，不加生产hook。
+- 新日志：本叶子授权忽略文本 `C-TV-PYTHON-CLEANUP-diagnostics-{red,red-xml,green,closure}.log`，RED会保存完整XML为文本log以免最终GREEN覆盖；不重复Python标准流/native/device测试。
+- 最小修复设计：只把两处最后后备printStackTrace收束到同一私有best-effort打印函数，捕获Throwable后停止输出，禁止继续递归诊断；正常回调/primary/suppressed/一次destroy/成功cache无改动。
+
+### F1精准RED结果（生产返工前）
+
+- 原精准测试一次：`./gradlew.bat :app:testLeanbackArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.api.loader.SpiderInitTest.failedFallbackPrinterCannotEscapeOrPreventSameKeyRecovery --console=plain`。
+- 2026-11-08T08:03:04.084Z的原始XML：1 test /1 failure /0 errors，断言为 `Diagnostic output must not escape the fallback expected null, but was:<java.lang.AssertionError: fallback printer failed>`；此前failed实例init/destroy事件及资源断言已过，证明缺陷只在最后诊断异常逸出，不是未回收或失败缓存。
+- 完整原始XML已保存为授权文本 `C-TV-PYTHON-CLEANUP-diagnostics-red-xml.log`；background job登记消失后由原生工具直接收取，没有重复启动RED或推测shell退出码。RED Gradle日志结尾不完整与完整JUnit证据分别说明。
+- 最小实现：两处最后打印改调同一私有 `printBestEffort(Throwable)`，该函数捕获任意Throwable后直接结束，既不递归日志也不改primary/suppressed；正常log callback、成功路径、cache/fallback、一次destroy均未改。最终focused GREEN只运行一次新case+既有14+9项，不重跑Python/bridge/device。
+
+### F1 GREEN、自审与返工闭环（实施run2/3）
+
+- 最终focused命令：`./gradlew.bat :app:testLeanbackArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.api.loader.SpiderInitTest --tests com.fongmi.android.tv.api.loader.LoaderFailureLoggingTest --console=plain`；exit0，BUILD SUCCESSFUL in 44s。
+- JUnit：SpiderInitTest 15 tests /0 failures /0 errors（原14项+精准F1 case）；LoaderFailureLoggingTest 9 tests /0 failures /0 errors；共24项。新case实际返回non-null SpiderNull、失败资源回收事件恰一次、原diagnostic仍suppressed于primary、同key后续成功且保持cache。原14+9正常日志/异常/成功缓存合同不退化。
+- diff自审仅SpiderInit两处最后后备输出换私有best-effort函数、一个精准test与本doc；未改两loader或loggingtest、未加public API/test hook、未改native/依赖/设备。无法再输出错误时停止输出而保证fallback，不将“日志永远可见”作为物理坏stderr条件下不可能的合同。
+- 风险路由：独立review唯一F1已用实际RED→GREEN修复，不只记风险放行；native实际释放/第三方destroy质量/owner与模块副作用仍按首轮批准边界未实测或暂不做，不重复测试、不扩大功能。
+- 第二原子闭环由新guard `C-TV-PYTHON-CLEANUP-DIAGNOSTICS` finish负责，仅source/test/doc三个文件，不amend首个commit或移动旧tag。完整第二commit/tag写授权report及closure日志，父最终归档exactID，无第二纯doc闭环提交。
+- 回滚诊断返工时revert第二原子commit；若需撤整个失败初始化修复，逆序revert第二及首个commit，不reset父index或原root。
+
+### 最新Recovery anchor（F1返工自检完成）
+
+- 固定父review head `d3a7298d5f3a6f76f5f2a256d4fd6f02ff7cecef`，implementation累计run2/3，leaf分支与scope不变。
+- 已完成：原精准RED完整XML文本快照1 failure；F1两处诊断隔离；最终24项GREEN+目标生产/test Java编译；三个路径diff/格式验收。
+- 当前tracked变更仅SpiderInit、SpiderInitTest、本唯一doc；原两loader/bridge/依赖/first commit/tag不改；忽略日志/report只用于证据。
+- 唯一下步：新guard finish第二原子commit/tag并追加报告，交父独立re-review。

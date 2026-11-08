@@ -188,6 +188,36 @@ public class SpiderInitTest {
         assertSame(ready, load("site", () -> ready));
     }
 
+    @Test
+    public void failedFallbackPrinterCannotEscapeOrPreventSameKeyRecovery() {
+        RuntimeException diagnostic = new IllegalArgumentException("diagnostic failed");
+        RuntimeException primary = new IllegalStateException("primary init failure") {
+            @Override
+            public void printStackTrace() {
+                throw new AssertionError("fallback printer failed");
+            }
+        };
+        FakeSpider failed = new FakeSpider(primary, null);
+        Spider result = null;
+        Throwable escaped = null;
+        try {
+            result = SpiderInit.load(cache, "site", () -> failed,
+                    value -> value.init(null, "{}"), failure -> { throw diagnostic; });
+        } catch (Throwable error) {
+            escaped = error;
+        }
+
+        assertEquals(List.of("init", "destroy"), failed.events);
+        assertEquals(0, failed.resources);
+        org.junit.Assert.assertNull("Diagnostic output must not escape the fallback", escaped);
+        assertTrue(result instanceof SpiderNull);
+        assertSame(diagnostic, primary.getSuppressed()[0]);
+        FakeSpider ready = new FakeSpider(null, null);
+        assertSame(ready, load("site", () -> ready));
+        assertSame(ready, load("site", () -> failed));
+        assertEquals(List.of("init"), ready.events);
+    }
+
     private void concurrentInitialization(boolean failFirst) throws Exception {
         CountDownLatch initialized = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);

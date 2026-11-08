@@ -35,7 +35,7 @@ final class SpiderInit {
                     log.accept(failure);
                 } catch (Throwable diagnostic) {
                     suppress(failure, diagnostic);
-                    failure.printStackTrace();
+                    printBestEffort(failure);
                 }
                 return null;
             }
@@ -43,12 +43,18 @@ final class SpiderInit {
         return result != null ? result : new SpiderNull();
     }
 
+    private static void printBestEffort(Throwable failure) {
+        try {
+            failure.printStackTrace();
+        } catch (Throwable ignored) {
+        }
+    }
     private static void suppress(Throwable failure, Throwable secondary) {
         if (failure == secondary) return;
         try {
             failure.addSuppressed(secondary);
         } catch (Throwable ignored) {
-            secondary.printStackTrace();
+            printBestEffort(secondary);
         }
     }
 }
