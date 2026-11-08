@@ -1162,32 +1162,6 @@
 
         </LinearLayout>
 
-        <FrameLayout
-            android:id="@+id/playerLoading"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="gone">
-
-            <com.google.android.material.progressindicator.CircularProgressIndicator
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:indeterminate="true"
-                app:indicatorColor="@color/webhtv_color_player_control" />
-
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/playerLoadingTraffic"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:layout_marginTop="44dp"
-                android:fontFeatureSettings="tnum"
-                android:textColor="@color/webhtv_color_player_control"
-                android:textSize="16sp"
-                android:visibility="gone" />
-
-        </FrameLayout>
-
         <TextView
             android:id="@+id/playerDisplayTraffic"
             style="@style/Shadow"
@@ -1587,6 +1561,34 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone" />
+
+        <!-- 加载圈必须压在控制栏之上：影视原生模式里 progress 也排在 control 之后。
+             中心播放/暂停按钮在加载期间由代码隐藏，加载时屏幕中央只有一个圈加网速。 -->
+        <FrameLayout
+            android:id="@+id/playerLoading"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                app:indicatorColor="@color/webhtv_color_player_control" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/playerLoadingTraffic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="44dp"
+                android:fontFeatureSettings="tnum"
+                android:textColor="@color/webhtv_color_player_control"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+        </FrameLayout>
 
         <com.fongmi.android.tv.ui.custom.LutQuickPanel
             android:id="@+id/lutQuick"
