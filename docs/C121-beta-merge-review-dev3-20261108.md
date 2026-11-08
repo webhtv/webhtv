@@ -118,6 +118,18 @@
 
 ## 7. 回滚锚点与交付坐标
 
-- 回滚基线：`f375e7019d`（合并前 HEAD）；回退合并提交 `1943086d9c` 与修复提交即可恢复。
+- 回滚基线：`f375e7019d`（合并前 HEAD）；回退合并提交 `1943086d9c` 与修复提交 `3b4b6d3e47` 即可恢复。
 - 合并提交：`1943086d9c`
-- 修复提交 / recovery tag / PR / 拉取最新：见本节后续回填。
+- 修复提交：`3b4b6d3e47`（5 文件，`+310/−2`）
+- recovery tag：`recovery/C121-beta-merge-review-dev3/20261108113318-3b4b6d3e47`（annotated，指向 `3b4b6d3e47`）
+- 推送：`origin dev3`（`a19433f7ef..3b4b6d3e47`）
+- PR：<https://github.com/Silent1566/webhtv/pull/538>（base `beta`，head `dev3`）
+- 拉取最新：`git pull --ff-only origin dev3` → `Already up to date.`
+
+### 7.1 环境差异记录
+
+`task_guard.sh` 依赖 bash，本机只有 WSL 的 `C:\WINDOWS\system32\bash.exe`，运行时报
+`Bash/Service/CreateInstance/CreateVm/HCS/HCS_E_SERVICE_NOT_AVAILABLE`，脚本无法执行。本轮改为手工等价操作：
+只 `git add` 本任务的 5 个路径（不触碰任何预存脏文件）、按任务 ID 打 annotated recovery tag。预存的
+`%SystemDrive%/`、`.dbg.txt`、`.design-evidence/` 与约 200 个 `.tmp-*` 全部保持未跟踪状态未纳入提交。
+
