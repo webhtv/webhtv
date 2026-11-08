@@ -3083,12 +3083,22 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void tmdbDetailThemeDefaultsToDarkWhenPreferenceIsAbsent() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "Setting.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String getter = methodBody(source, "public static int getTmdbDetailTheme()", "public static void putTmdbDetailTheme(int theme)");
+
+        assertTrue("TMDB detail theme must default to dark when no preference has been saved",
+                getter.contains("Prefers.getInt(\"tmdb_detail_theme\", 1)"));
+    }
+
+    @Test
     public void mobileVideoFusionThemeToggleActuallyChangesThemeMode() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
 
         assertTrue("fusion theme button must switch light to dark and dark to light",
-                source.contains("int theme = isFusionLightTheme() ? 2 : 1;"));
+                source.contains("int theme = isFusionLightTheme() ? 1 : 2;"));
     }
 
     @Test
