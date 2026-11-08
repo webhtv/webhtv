@@ -228,7 +228,6 @@ import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.TmdbEpisodeSorter;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.TmdbImageSaver;
-import com.fongmi.android.tv.utils.Traffic;
 import com.fongmi.android.tv.utils.Util;
 import com.fongmi.android.tv.utils.WebViewUtil;
 import com.fongmi.android.tv.utils.Clock;
@@ -2484,6 +2483,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void tintTextTree(View view, ThemeColors colors) {
         if (view instanceof RecyclerView) return;
         if (view.getId() == R.id.loading) return;
+        // 加载中的网速文字固定压在黑色播放面板上，必须与同屏 spinner 一样是白色；
+        // 跟随主题色在浅色主题下会变成深色（0xFF12202D），在黑底上几乎不可见。
+        if (view.getId() == R.id.playerLoading) return;
         if (view instanceof TextView textView && !(view instanceof MaterialButton)) {
             textView.setTextColor(colors.primary);
         }
@@ -8667,6 +8669,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerLoading.removeCallbacks(inlineLoadingSpeedRefresh);
         binding.playerLoading.setVisibility(loading ? View.VISIBLE : View.GONE);
         if (loading && inlinePauseInfo) hideInlinePauseInfo();
+        // 加载中只留转圈和网速，中心播放/暂停按钮会压在转圈上——影视原生模式同屏也只有一个加载圈。
+        updateMobileInlinePlayVisibility(!loading);
         if (!loading) {
             binding.playerLoadingTraffic.setText("");
             binding.playerLoadingTraffic.setVisibility(View.GONE);
@@ -8677,9 +8681,14 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void updateInlineLoadingSpeed() {
-        String traffic = inlineOsd == null ? "" : inlineOsd.sampleSpeedText();
+        String traffic = inlineOsd == null ? "" : inlineOsd.sampleSpeedTextNow();
         binding.playerLoadingTraffic.setText(traffic);
         binding.playerLoadingTraffic.setVisibility(TextUtils.isEmpty(traffic) ? View.GONE : View.VISIBLE);
+    }
+
+    private void updateMobileInlinePlayVisibility(boolean visible) {
+        if (!Util.isMobile() || detailControlRoot == null) return;
+        detailControlView(R.id.play, View.class).setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
     private void setButtonEnabled(View button, boolean enabled) {
