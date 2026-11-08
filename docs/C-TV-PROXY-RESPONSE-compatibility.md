@@ -242,3 +242,19 @@ rollback锚：`47454687f504955775b398905ba09d73aeb9f20c`。阶段2经guard原子
 - 实测：真正proxy2映射→Proxy.createResponse→Nano.send的206 Content-Range、302 Location、唯一Content-Type、Nano-owned chunked、599扩展状态、binary octets；旧3/4/5 server tuple及旧body converter，Res默认值/JSONnull/literalnull、nonobject/nonstring header fallback、raw CR/LF/NUL和mixedcase Content-Type。
 - 未实测：Android/Chaquopy Python真桥、QuickJS实际native脚本调用与完整proxy1 JSArray stringify入口、设备播放；不做性能/包大小量化声明。脚本调用seam仅纯提取不改变提交顺序，已获父授权。
 - 查取：此doc所属source commit在交付report中；可用`git log --format=%H -- docs/C-TV-PROXY-RESPONSE-compatibility.md`定位，`git tag --points-at <codecommit>`取annotated recovery tag。回滚采用`git revert <report记录的codecommit>`，不reset root dirty tree。
+
+## run2/3 独立review返工：限定Leanback测试sourceSet
+
+2026-11-08 15:48 +08:00，父review发现本任务新增Robolectric测试误放common `app/src/test/java`。`app/build.gradle`仅`testLeanbackImplementation`提供Robolectric4.16；baseline `47454687f504955775b398905ba09d73aeb9f20c` common test无Robolectric引用（git grep无匹配），所以本任务增加Mobile unit Java编译障碍，不能凭Leanback PASS交付。
+
+- 新guard：`C-TV-PROXY-RESPONSE-TEST-SOURCESET`，不改旧finished guard。基线是代码commit`e81ae22a1cdc4d026d6d5ecbbb11b96ddc3e9103`。
+- 两旧文件的最近提交均为本任务e81；迁移前绝对源/目标已确认，目标不存在。git mv到`app/src/testLeanback/java/com/fongmi/android/tv/server/process/ProxyResponseConsumerTest.java`及`app/src/testLeanback/java/com/fongmi/quickjs/utils/ProxyResponseCompatibilityTest.java`；SHA256迁移前后一致，类/包/内容零改动。
+- scope仅两旧test、两新test与唯一doc；累计受控路径7。production/helper/Res/chaquo/build.gradle/locks不修改；旧code commit/tag不rewrite。
+- 这次仅测试归属纠错，无业务行为改变，不重复业务Red；验收新sourceSet原18项Leanback GREEN及Mobile UnitTestJavaCompile，不修无关既有失败。
+
+### run2验证与提交规则
+
+- 实际验证命令：`gradlew.bat :app:testLeanbackArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.server.process.ProxyResponseConsumerTest --tests com.fongmi.quickjs.utils.ProxyResponseCompatibilityTest :app:compileMobileArm64_v8aDebugUnitTestJavaWithJavac --console=plain`。
+- exit0，Leanback 6+12=18 tests、0 failures/0 errors；`compileMobileArm64_v8aDebugUnitTestJavaWithJavac`实际执行成功，Mobile不再编译本任务Robolectric fixtures。整项2m27s，未构建native；日志`.codex/task-state/reports/C-TV-PROXY-RESPONSE-sourceset-verified.log`。
+- 两测试新sourceSet内容100% unchanged；Java包名/类名不变。生产代码与`e81ae22a1cdc4d026d6d5ecbbb11b96ddc3e9103`完全一致，review回归以测试迁移消除而不是添加Mobile依赖。
+- 第二原子test/doc commit/tag记录在忽略report及父回报；不rewrite e81或旧tag。父集成cherry-pick原code commit后再pick本sourceSet commit，回滚反序revert两commit；父归档再将确定ID追加本唯一doc，不自引用、不留dirty。
