@@ -8857,7 +8857,7 @@ private void checkOrientation() {
     }
 
     private void cycleFusionTheme() {
-        int theme = isFusionLightTheme() ? 2 : 1;
+        int theme = isFusionLightTheme() ? 1 : 2;
         Setting.putTmdbDetailTheme(theme);
         getIntent().putExtra(EXTRA_TMDB_DETAIL_THEME, theme);
         applyFusionThemeSurface();
