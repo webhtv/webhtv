@@ -149,4 +149,10 @@ public String sampleSpeedTextNow() {
 
 ## 9. 交付坐标
 
-- 修复提交、recovery tag、PR 编号见本文件提交后的回填记录。
+| 项 | 值 |
+| --- | --- |
+| 修复提交 | `d10b1112965`（`fix(tmdb): 手机端内联加载圈显示实时网速并压在控制栏之上`） |
+| recovery tag | `recovery/C121-BETA-MERGE-REVIEW-DEV1/20261108033319-d10b1112965f` |
+| 推送 | `origin/dev1`：`ec56e4a598..d10b111296` |
+| PR | #537 → `beta` |
+| 拉取远端最新 | `git pull --ff-only origin beta` → `Already up to date`（`origin/beta` 仍为 `7c64c9f5f11`） |
