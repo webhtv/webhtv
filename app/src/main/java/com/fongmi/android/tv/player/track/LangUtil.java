@@ -17,11 +17,42 @@ public final class LangUtil {
     private static final String TAG_HANT = "zh-Hant";
 
     public static String[] getPreferredTextLanguages() {
+        return getPreferredTextLanguages(null);
+    }
+
+    /**
+     * 显式语言设置优先于设备语言；空值回落到设备语言。
+     * 默认值 zh 表示「中文优先 + 设备字形」，zh-Hans / zh-Hant 表示明确指定字形。
+     */
+    public static String[] getPreferredTextLanguages(String preferredLanguage) {
+        String setting = normalize(preferredLanguage);
+        if (!setting.isEmpty() && !"any".equals(setting) && !"all".equals(setting)) {
+            String script = chineseScriptTag(setting);
+            String primary = primarySubtag(setting);
+            if (script != null) return unique(script, primary);
+            if (LANGUAGE_CHINESE.equals(primary) && primary.equals(setting)) return unique(getChineseScript(Locale.getDefault()), primary);
+            return unique(primary);
+        }
         Locale locale = Locale.getDefault();
         String tag = locale.toLanguageTag();
         String language = locale.getLanguage();
         if (!isChinese(locale)) return tag.equals(language) ? new String[]{language} : unique(tag, language);
         return tag.equals(language) ? unique(getChineseScript(locale), language) : unique(tag, getChineseScript(locale), language);
+    }
+
+    /** 返回设置值对应的中文字形标签，非中文返回 null。 */
+    private static String chineseScriptTag(String normalized) {
+        if (normalized.startsWith("zhhans") || normalized.startsWith("zh-hans")
+                || normalized.equals("chs") || normalized.equals("sc")) return TAG_HANS;
+        if (normalized.startsWith("zhhant") || normalized.startsWith("zh-hant")
+                || normalized.startsWith("zhtw") || normalized.startsWith("zh-tw")
+                || normalized.equals("cht") || normalized.equals("tc")) return TAG_HANT;
+        return null;
+    }
+
+    private static String primarySubtag(String normalized) {
+        int separator = normalized.indexOf('-');
+        return separator > 0 ? normalized.substring(0, separator) : normalized;
     }
 
     public static int getPreferredTextLanguageScore(String languageTag) {

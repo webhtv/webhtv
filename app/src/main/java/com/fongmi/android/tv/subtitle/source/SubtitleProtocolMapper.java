@@ -72,6 +72,7 @@ public final class SubtitleProtocolMapper {
                     source.getKey(), id, string(item, "name"), string(item, "language"),
                     string(item, "format"), string(item, "releaseInfo"), integer(item, "score"),
                     integer(item, "year"), integer(item, "season", -1), integer(item, "episode", -1),
+                    longValue(item, "duration"),
                     matchType(string(item, "matchType")), query == null ? "" : query.getText(),
                     bool(item, "requiresResolve"), payload));
         }
@@ -118,6 +119,7 @@ public final class SubtitleProtocolMapper {
         value.addProperty("canonicalTitle", context.getCanonicalTitle());
         value.addProperty("originalTitle", context.getOriginalTitle());
         value.addProperty("year", context.getYear());
+        value.addProperty("durationMs", context.getDurationMs());
         value.addProperty("season", context.getSeasonNumber());
         value.addProperty("episode", context.getEpisodeNumber());
         value.addProperty("episodeTitle", context.getEpisodeTitle());

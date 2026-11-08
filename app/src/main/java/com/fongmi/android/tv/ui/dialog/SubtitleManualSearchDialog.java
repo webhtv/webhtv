@@ -23,6 +23,8 @@ import com.fongmi.android.tv.subtitle.model.SubtitleMatchType;
 import com.fongmi.android.tv.subtitle.model.SubtitleRequest;
 import com.fongmi.android.tv.subtitle.translate.SubtitleTranslationRequest;
 import com.fongmi.android.tv.subtitle.translate.SubtitleTranslationResult;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -57,8 +59,11 @@ public final class SubtitleManualSearchDialog {
         input.setText(defaultKeyword);
         input.setSelectAllOnFocus(false);
         input.setSelection(input.getText() == null ? 0 : input.getText().length());
-        input.setTextColor(0xFF202124);
-        input.setHintTextColor(0xFF5F6368);
+        // 这里过去写死深灰 0xFF202124，深色主题下剧集名几乎看不见。对话框底色由
+        // ThemeController 决定，文字必须跟着主题走，不能写死某个色值。
+        ThemeTokens tokens = ThemeController.current();
+        input.setTextColor(tokens.colorOnSurface());
+        input.setHintTextColor(tokens.colorOnSurfaceVariant());
 
         AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.subtitle_manual_search)

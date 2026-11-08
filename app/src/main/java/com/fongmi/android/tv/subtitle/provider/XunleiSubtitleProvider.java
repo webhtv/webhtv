@@ -139,7 +139,7 @@ public final class XunleiSubtitleProvider implements SubtitleProvider {
         payload.addProperty("duration", duration);
         payload.addProperty("gcid", safeString(item, "gcid"));
         payload.addProperty("cid", safeString(item, "cid"));
-        return new SubtitleCandidate(NAME, id, name, language, format, releaseInfo(extraName, duration), score, year, season, episode, matchType, query.getKey(), true, payload.toString());
+        return new SubtitleCandidate(NAME, id, name, language, format, releaseInfo(extraName, duration), score, year, season, episode, duration, matchType, query.getKey(), true, payload.toString());
     }
 
     private static String computeContentId(SubtitleContext context) {

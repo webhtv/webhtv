@@ -12,12 +12,17 @@ public final class SubtitleCandidate {
     private final int year;
     private final int seasonNumber;
     private final int episodeNumber;
+    private final long durationMs;
     private final SubtitleMatchType matchType;
     private final String queryKey;
     private final boolean requiresResolve;
     private final String providerPayload;
 
     public SubtitleCandidate(String provider, String candidateId, String displayName, String language, String format, String releaseInfo, int score, int year, int seasonNumber, int episodeNumber, SubtitleMatchType matchType, String queryKey, boolean requiresResolve, String providerPayload) {
+        this(provider, candidateId, displayName, language, format, releaseInfo, score, year, seasonNumber, episodeNumber, 0L, matchType, queryKey, requiresResolve, providerPayload);
+    }
+
+    public SubtitleCandidate(String provider, String candidateId, String displayName, String language, String format, String releaseInfo, int score, int year, int seasonNumber, int episodeNumber, long durationMs, SubtitleMatchType matchType, String queryKey, boolean requiresResolve, String providerPayload) {
         this.provider = provider == null ? "" : provider;
         this.candidateId = candidateId == null ? "" : candidateId;
         this.displayName = displayName == null ? "" : displayName;
@@ -28,6 +33,7 @@ public final class SubtitleCandidate {
         this.year = year;
         this.seasonNumber = seasonNumber;
         this.episodeNumber = episodeNumber;
+        this.durationMs = Math.max(0L, durationMs);
         this.matchType = matchType == null ? SubtitleMatchType.METADATA_FUZZY : matchType;
         this.queryKey = queryKey == null ? "" : queryKey;
         this.requiresResolve = requiresResolve;
@@ -74,6 +80,11 @@ public final class SubtitleCandidate {
         return episodeNumber;
     }
 
+    /** 字幕对应的影片时长；0 表示provider 没有提供。 */
+    public long getDurationMs() {
+        return durationMs;
+    }
+
     public SubtitleMatchType getMatchType() {
         return matchType;
     }
@@ -91,6 +102,10 @@ public final class SubtitleCandidate {
     }
 
     public SubtitleCandidate withScore(int score, SubtitleMatchType matchType) {
-        return new SubtitleCandidate(provider, candidateId, displayName, language, format, releaseInfo, score, year, seasonNumber, episodeNumber, matchType, queryKey, requiresResolve, providerPayload);
+        return new SubtitleCandidate(provider, candidateId, displayName, language, format, releaseInfo, score, year, seasonNumber, episodeNumber, durationMs, matchType, queryKey, requiresResolve, providerPayload);
+    }
+
+    public SubtitleCandidate withDurationMs(long durationMs) {
+        return new SubtitleCandidate(provider, candidateId, displayName, language, format, releaseInfo, score, year, seasonNumber, episodeNumber, durationMs, matchType, queryKey, requiresResolve, providerPayload);
     }
 }

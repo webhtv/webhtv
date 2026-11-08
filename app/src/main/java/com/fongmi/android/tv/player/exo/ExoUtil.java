@@ -471,7 +471,11 @@ public class ExoUtil {
                                 ? TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
                                 : TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED)
                         .build());
-        builder.setPreferredTextLanguages(LangUtil.getPreferredTextLanguages());
+        // 只有开启了自动匹配的用户才让「字幕优先语言」影响播放器选轨；关闭时保持纯粹的
+        // 设备 Locale 行为，避免为自动匹配引入的偏好改变这些用户原有的选轨结果。
+        builder.setPreferredTextLanguages(Setting.isSubtitleAutoMatchEnabled()
+                ? LangUtil.getPreferredTextLanguages(Setting.getSubtitlePreferredLanguage())
+                : LangUtil.getPreferredTextLanguages());
         ExoTunnelingPolicy.Decision tunneling = getTunnelingDecision(decode, tunnelingFallbackAttempted);
         builder.setTunnelingEnabled(tunneling.enabled());
         if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-tunnel", "requested=%s enabled=%s reason=%s decode=%d render=%d lut=%s fallback=%s", PlayerSetting.isTunnel(), tunneling.enabled(), tunneling.reason(), decode, PlayerSetting.getRender(), LutSetting.isEnabled(), tunnelingFallbackAttempted);
