@@ -39,10 +39,17 @@ public final class CachePolicyStore {
         }
     }
 
-    /** Modules whose limit is a user-tunable preference; playback caches stay player-owned. */
+    /**
+     * Modules whose limit is a user-tunable preference.
+     *
+     * <p>The playback cache still owns its own capacity, but it now honours a user limit as well:
+     * the capacity the player computes is capped by it, which is what lets the total limit bound
+     * the largest cache on the device. Its default stays unlimited so the preload setting keeps
+     * deciding for every user who never opened the panel.</p>
+     */
     private static boolean supportsPersistedLimit(CacheModuleId id) {
         return switch (id) {
-            case GLIDE, LYRICS, KARAOKE, WEBHOME_EXT, EPG, PLUGIN_SCRIPTS, TEMP_FILES, LEGACY_FILES -> true;
+            case EXO, GLIDE, LYRICS, KARAOKE, WEBHOME_EXT, EPG, PLUGIN_SCRIPTS, TEMP_FILES, LEGACY_FILES -> true;
             // Diagnostic logs are bounded by the owner's own rolling segment budget, and
             // unclassified cache is report-only: neither may gain a second, conflicting limit.
             case DIAGNOSTIC_LOGS, UNCLASSIFIED -> false;
