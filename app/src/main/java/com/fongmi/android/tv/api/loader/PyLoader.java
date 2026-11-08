@@ -5,7 +5,6 @@ import android.text.TextUtils;
 import com.fongmi.android.tv.App;
 import com.fongmi.chaquo.Loader;
 import com.github.catvod.crawler.Spider;
-import com.github.catvod.crawler.SpiderNull;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,17 +35,10 @@ public class PyLoader {
     }
 
     public Spider getSpider(String key, String api, String ext) {
-        return spiders.computeIfAbsent(key, k -> {
-            try {
-                Spider spider = loader.spider(api);
-                spider.siteKey = key;
-                spider.init(App.get(), normalizeExt(ext));
-                return spider;
-            } catch (Throwable e) {
-                e.printStackTrace();
-                return new SpiderNull();
-            }
-        });
+        return SpiderInit.load(spiders, key, () -> loader.spider(api), spider -> {
+            spider.siteKey = key;
+            spider.init(App.get(), normalizeExt(ext));
+        }, Throwable::printStackTrace);
     }
 
     private String normalizeExt(String ext) {
