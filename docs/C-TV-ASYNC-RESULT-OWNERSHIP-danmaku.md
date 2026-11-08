@@ -192,7 +192,7 @@ run 1/3，自检完成：15/15 最终测试、双端 Java 编译、scope/diff/ch
 
 ## 最终集成归档 — 2026-11-08
 
-本节记录 run1 集成结果；下文 F2/run2 为其后的独立返工，不把 94 项基线通过冒称 F2 已通过。
+本节记录 run1 集成结果；F2/run2 及 F3/F4/run3 为其后的独立返工，不把 94 项基线通过冒称后续返工已通过。
 
 - 用户已批准本任务窄适配，原始代码提交及恢复点在合并历史保留，不重写。
 - 代码/修复提交：`1425d0118975ed9412cb85a688a8de9f0f6b3c10`
@@ -200,3 +200,45 @@ run 1/3，自检完成：15/15 最终测试、双端 Java 编译、scope/diff/ch
 - 单元证据：15项API/Leanback实际Activity测试及双端Java编译通过；Mobile真消费者/ARM设备未测
 - 联合验证（2026-11-08 集成树 fresh）：9 类 94 项定向测试 0 失败/0 错误/0 跳过；Leanback Mobile arm64 Debug Java、Mobile UnitTestJavaCompile 编译通过；日志 `.codex/task-state/reports/TV-SMALL-FIXES-INTEGRATION-final.log`。整批仍不冒充 decoder 实播/设备/性能验收。
 - 回滚：针对本任务按上述代码链逆序git revert；合并历史保留真实来源，不reset原工作区或移动tag。
+
+## F3/F4 / implementation run3/3 — decode restore 请求归属
+
+- 2026-11-08 Asia/Shanghai，18:20:37 亲自复核 HEAD `3e39a08eb900b92579e90a68782e5ce18d519b9d`、clean、无 MERGE_HEAD、上一 guard finished；新 guard `C-TV-ASYNC-RESULT-OWNERSHIP-DECODE-RESTORE` standard，仅 Mobile VideoActivity、既有 testLeanback 测试、唯一本文档。
+- **F3 根因**：A decode refresh pending 后，Mobile 侧 B replacement invalidate 清空 restore 槽并接纳 B token；A late null/error fallback 无条件 `mAutoDanmaku = mDecodeRestoreToken` 覆盖 B 为 null，丢失合法 B 自动查询。run2 的旧 late-fallback 案例只在 Leanback host 调 request 而没有在 Mobile seam 接纳 B，没证明 B token/positive；本轮改为实际 Mobile seam 的 invalidate/接纳 B。
+- **F4 根因**：SiteApi.playerContent 抛 Throwable 的 catch 只重置 UI/Notify，未消费/恢复 restore 槽；mAuto=null 使合法当前查询永久丢失。仅把旧 token 还原还不够：原 renew 对相同 trace 直接 return，而 Throwable 没有 toggleDecode/新 trace，已 cancel/null Call 永远不会重新建立。
+- 父明确确认本轮指定窄设计与同 trace 补足；没有重开 controller/native 设计，没有增加生产文件/API。
+
+### 两个独立业务 RED（生产改动前）
+
+命令与原始日志 `.codex/task-state/reports/C-TV-ASYNC-RESULT-OWNERSHIP-DECODE-RESTORE-red.log`；XML `...-red.xml.log`，退出 1，2 tests / 2 business failures / 0 errors：
+
+1. `mobileLateFallbackKeepsNewMobileTokenAndItsCurrentPositive`：已 post 的 B 先真实 apply 一次，再释放 A late fallback；期望同一个 B token 被保留，实际 null（`A late fallback must not overwrite B's real Mobile token`）。这是 token 被覆盖的业务断言，不是 fixture/classpath 失败。由于 baseline fallback toggle 会更新 trace，随后 B 在新 trace 的 READY 恢复与第二次 positive 也列入 GREEN，不能跨 trace 直接沿用旧结果。
+2. `mobileThrowableConsumesRestoreAndRecoversSameTraceCurrentQueryOnce`：测试侧 SiteApi 隔离**实际抛 IllegalStateException**，生产 catch 经真实 App.post 执行；期望 restore slot 已消费，实际仍是旧 AutoToken（`Throwable path must consume its pending restore slot`）。当前 positive 要求相同 trace 下补发一次 owned 查询并 apply，不靠全部丢弃。
+
+### 最小实现
+
+- 每次 refresh 在 invalidate 后创建 `Object owner`，存到 `mDecodeRestoreOwner`，与 restore token 一起保存，并传给成功、null/error、Throwable catch 三条 UI 终结路径。
+- `invalidateAutoDanmaku` 同时清 owner/token；任何新 replacement 都使旧 restore 请求过期。
+- 共用 `finishDecodeRestore(owner, restoreCurrent)`：owner 不匹配直接返回；匹配时取 pending 后清两个槽，仅在 restoreCurrent 且当前 mAuto==null 时恢复 pending。绝不覆盖已有更新 token，终结后无残留。
+- 成功仍按 fresh Result 与真实 before/after trace 走 searchAutoDanmaku；null/error 保留 toggleDecode；catch 不改变 baseline 播放行为，仅安全消费并恢复当前查询。
+- renew 的同 trace 分支仅在当前 token identity/完整 owns 条件通过且 `mAutoDanmakuCall == null` 时，以 NONE beforeTrace 经 searchAutoDanmaku 重新建立 token/请求一次。活跃或已完成（nonnull）的同 trace Call 一律不重发；既有 trace-change 恢复语义保留。
+- 测试增加 active/complete same-trace 请求数检查；旧 pending 测试释放其受控 SiteApi latch，避免挂起 callback 逃逸测试周期。既有测试侧外部 native prepare/rebuild 隔离不变，实际 Mobile owned-token 与两个真实源方法仍在源码 seam 执行，HTTP/App.post/consumer 不 mock。
+
+### 验证与未验边界
+
+- Mobile seam GREEN：`...-green.log` / `...-green.xml.log`，退出 0，8 tests（既有 Mobile 5 + F3/F4/active-vs-complete 3）/ 0 failure / 0 error / 0 skipped；同轮 `:app:compileMobileArm64_v8aDebugJavaWithJavac` 成功。
+- 为遵守成功 revision 不重复检查，剩余 13 个非 Mobile Activity + API 2 个案例另跑不重叠定向 regression，命令完整保留 `...-regression-command.log`，结果补于最终闭环记录。
+- 没有重跑父的 9 类联合验证。仍未执行 Mobile 真布局/设备 consumer、ARM/native decode 实播、DRM/PiP/后台实机；这是实际 Mobile 源码 seam + Mobile 生产编译，不冒充设备验收。
+- R1（kernel-refresh 成功晚回按当前 episode 建立新 token）依父裁定仍是 baseline start 归属已知未修风险，本轮不扩范围。restore 同类槽的三终结路径均已收束，未发现其他同类遗漏。
+- 回滚本轮 commit 时只 revert 本轮 code/test/doc；不 reset 先前 merge/seek/root，不 push。精确 commit/tag 只写忽略报告，父最终统一归档，禁止自引用第二 docs commit。
+
+### Recovery anchor — run3/3
+
+F3、F4 各自真实业务 RED 已保留；Mobile 8-case GREEN 与 Mobile Java 编译通过。下一步只收集不重叠 regression 结果、更新闭环记录，task_guard finish 原子提交并立即 tag，然后把精确 hash/tag 发父。
+
+## Checkpoint 3: F3/F4 最终自检闭环（2026-11-08）
+
+- Mobile 新旧 8-case GREEN + 不重叠 regression（API 2 + 既有非 Mobile Activity 13）共 **23 项 / 0 failure / 0 error / 0 skipped**，两个命令均 exit0。既有 Activity 18 项全部保留通过，新三项包含 F3 current-positive、F4 Throwable 同 trace 一次恢复、活跃及已完成 Call 同 trace 不重发；原始 XML 分别在 `...-green.xml.log` 与 `...-regression-*.xml.log`。
+- Mobile 生产 Java 编译在 GREEN 同轮成功，之后仅测试证据/文档编辑，未重跑成功编译。没有重跑 9 类联合验证；由父在最后独立 review 后统一验证。
+- 审计首轮对唯一 taskdoc 缺标准 Checkpoint heading，已把真实自检闭环记录为本节；这是文档格式修复，不放宽安全检查。branch/HEAD/source scope 保持原样，所有未验设备/Native/R1风险仍显式列出。
+- 下一步仅 task_guard finish：本轮 code/test/doc 原子提交及立即 recovery tag，精确值写忽略 report 给父最终归档；不 push/第二 docs commit。

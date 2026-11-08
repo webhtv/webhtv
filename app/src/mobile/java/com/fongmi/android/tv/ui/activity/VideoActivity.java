@@ -290,6 +290,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private AutoDanmakuToken mAutoDanmaku;
     private okhttp3.Call mAutoDanmakuCall;
     private AutoDanmakuToken mDecodeRestoreToken;
+    private Object mDecodeRestoreOwner;
     private boolean mDanmakuRetired;
 
     private static final class AutoDanmakuToken {
@@ -316,6 +317,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private void invalidateAutoDanmaku() {
         mAutoDanmaku = null;
         mDecodeRestoreToken = null;
+        mDecodeRestoreOwner = null;
         if (mAutoDanmakuCall != null) mAutoDanmakuCall.cancel();
         mAutoDanmakuCall = null;
     }
@@ -347,11 +349,24 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         });
     }
 
+    private void finishDecodeRestore(Object owner, boolean restoreCurrent) {
+        if (mDecodeRestoreOwner != owner) return;
+        AutoDanmakuToken pending = mDecodeRestoreToken;
+        mDecodeRestoreOwner = null;
+        mDecodeRestoreToken = null;
+        if (restoreCurrent && mAutoDanmaku == null) mAutoDanmaku = pending;
+    }
+
     private void renewAutoDanmaku() {
         AutoDanmakuToken token = mAutoDanmaku;
-        if (!ownsAutoDanmaku(token) || TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) return;
+        if (!ownsAutoDanmaku(token)) return;
+        String beforeTrace = token.trace;
+        if (TextUtils.equals(beforeTrace, token.manager.getPlaybackTraceId())) {
+            if (mAutoDanmakuCall != null) return;
+            beforeTrace = com.fongmi.android.tv.player.PlaybackTrace.NONE;
+        }
         invalidateAutoDanmaku();
-        searchAutoDanmaku(token.result, token.manager, token.trace);
+        searchAutoDanmaku(token.result, token.manager, beforeTrace);
     }
 
     @Override
@@ -3975,6 +3990,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         decodeSwitchRefreshing = true;
         AutoDanmakuToken restore = mAutoDanmaku;
         invalidateAutoDanmaku();
+        Object owner = new Object();
+        mDecodeRestoreOwner = owner;
         mDecodeRestoreToken = restore;
         setNextDecodeText();
         setDecodeSwitchPending(true);
@@ -3983,10 +4000,11 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         Task.execute(() -> {
             try {
                 Result result = SiteApi.playerContent(key, flag, episode);
-                App.post(() -> switchDecodeWithResult(result, position, speed, repeat, metadata));
+                App.post(() -> switchDecodeWithResult(owner, result, position, speed, repeat, metadata));
             } catch (Throwable e) {
                 App.post(() -> {
                     decodeSwitchRefreshing = false;
+                    finishDecodeRestore(owner, true);
                     setDecodeSwitchPending(false);
                     setDecode();
                     Notify.show(e.getMessage());
@@ -3996,14 +4014,13 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         return true;
     }
 
-    private void switchDecodeWithResult(Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
+    private void switchDecodeWithResult(Object owner, Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
         decodeSwitchRefreshing = false;
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
-            mAutoDanmaku = mDecodeRestoreToken;
-            mDecodeRestoreToken = null;
+            finishDecodeRestore(owner, true);
             player().toggleDecode();
         } else {
-            mDecodeRestoreToken = null;
+            finishDecodeRestore(owner, false);
             PlayerManager danmakuManager = player();
             String beforeTrace = danmakuManager.getPlaybackTraceId();
             player().switchDecode(result, getHistoryKey(), metadata, isUseParse(), position, speed, repeat);

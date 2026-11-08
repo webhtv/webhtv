@@ -265,6 +265,7 @@ public class VideoDanmakuOwnershipTest {
         assertEquals(oldTrace, host.manager.getPlaybackTraceId());
         drain();
         assertEquals("Mobile decode HTTP is pending: posted old auto result must not apply", 0, host.manager.applied.size());
+        MobileSiteIsolation.release.countDown(); awaitMobilePosted(); drain();
     }
 
     @Test public void mobileFreshDecodeUsesFreshSpiderFirstResultRatherThanOldEmptySiteList() throws Exception {
@@ -322,11 +323,76 @@ public class VideoDanmakuOwnershipTest {
         MobileSiteIsolation.pending();
         ReflectionHelpers.callInstanceMethod(mobile, "refreshAndSwitchDecode");
         assertTrue(MobileSiteIsolation.entered.await(5, TimeUnit.SECONDS));
+        ReflectionHelpers.callInstanceMethod(mobile, "invalidateAutoDanmaku");
         request(host);
         MobileSiteIsolation.release.countDown(); awaitMobilePosted(); drain();
         assertNull("newer replacement must discard the suspended decode token",
                 ReflectionHelpers.getField(mobile, "mDecodeRestoreToken"));
         assertEquals(0, host.manager.applied.size());
+    }
+
+    @Test public void mobileLateFallbackKeepsNewMobileTokenAndItsCurrentPositive() throws Exception {
+        TestVideo host = host(); Object mobile = mobileSeam(host);
+        DanmakuSetting.putSpiderFirst(false);
+        response("a.xml"); acceptedMobile(host, mobile, result()); awaitPosted();
+        MobileSiteIsolation.pending();
+        ReflectionHelpers.callInstanceMethod(mobile, "refreshAndSwitchDecode");
+        assertTrue(MobileSiteIsolation.entered.await(5, TimeUnit.SECONDS));
+        Result b = result(); b.setUrl("https://example.test/b.mp4");
+        response("b.xml"); acceptedMobile(host, mobile, b); awaitPosted();
+        Object bToken = ReflectionHelpers.getField(mobile, "mAutoDanmaku");
+        drain();
+        assertEquals(Collections.singletonList(server.url("/b.xml").toString()), host.manager.applied);
+        MobileSiteIsolation.release.countDown(); awaitMobilePosted(); drain();
+        assertSame("A late fallback must not overwrite B's real Mobile token", bToken,
+                ReflectionHelpers.getField(mobile, "mAutoDanmaku"));
+        response("b-renewed.xml"); ReflectionHelpers.callInstanceMethod(mobile, "renewAutoDanmaku");
+        pollDanmakuPosted(); drain();
+        assertEquals(Arrays.asList(server.url("/b.xml").toString(), server.url("/b-renewed.xml").toString()), host.manager.applied);
+        ReflectionHelpers.callInstanceMethod(mobile, "renewAutoDanmaku");
+        assertEquals(3, server.getRequestCount());
+    }
+
+    @Test public void mobileThrowableConsumesRestoreAndRecoversSameTraceCurrentQueryOnce() throws Exception {
+        TestVideo host = host(); Object mobile = mobileSeam(host);
+        DanmakuSetting.putSpiderFirst(false);
+        response("before-throw.xml"); acceptedMobile(host, mobile, result()); awaitPosted();
+        String sameTrace = host.manager.getPlaybackTraceId();
+        MobileSiteIsolation.pending();
+        MobileSiteIsolation.failure = new IllegalStateException("real thrown SiteApi failure");
+        ReflectionHelpers.callInstanceMethod(mobile, "refreshAndSwitchDecode");
+        assertTrue(MobileSiteIsolation.entered.await(5, TimeUnit.SECONDS));
+        drain();
+        assertTrue(host.manager.applied.isEmpty());
+        MobileSiteIsolation.release.countDown(); awaitMobilePosted(); drain();
+        assertNull("Throwable path must consume its pending restore slot", ReflectionHelpers.getField(mobile, "mDecodeRestoreToken"));
+        assertNotNull("Throwable must preserve a recoverable current Mobile token", ReflectionHelpers.getField(mobile, "mAutoDanmaku"));
+        assertEquals(sameTrace, host.manager.getPlaybackTraceId());
+        response("throw-recovered.xml"); ReflectionHelpers.callInstanceMethod(mobile, "renewAutoDanmaku");
+        pollDanmakuPosted(); drain();
+        assertEquals(Collections.singletonList(server.url("/throw-recovered.xml").toString()), host.manager.applied);
+        ReflectionHelpers.callInstanceMethod(mobile, "renewAutoDanmaku");
+        ReflectionHelpers.callInstanceMethod(mobile, "renewAutoDanmaku");
+        assertEquals(2, server.getRequestCount());
+    }
+
+    @Test public void mobileSameTraceReadyDoesNotRepeatActiveOrCompletedOwnedCall() throws Exception {
+        TestVideo host = host(); Object mobile = mobileSeam(host);
+        CountDownLatch received = new CountDownLatch(1), release = new CountDownLatch(1);
+        server.setDispatcher(new okhttp3.mockwebserver.Dispatcher() {
+            @Override public MockResponse dispatch(okhttp3.mockwebserver.RecordedRequest request) throws InterruptedException {
+                received.countDown(); release.await(10, TimeUnit.SECONDS);
+                return new MockResponse().setBody("[{\"url\":\"" + server.url("/active.xml") + "\"}]");
+            }
+        });
+        acceptedMobile(host, mobile, result());
+        assertTrue(received.await(5, TimeUnit.SECONDS));
+        ReflectionHelpers.callInstanceMethod(mobile, "renewAutoDanmaku");
+        assertEquals(1, server.getRequestCount());
+        release.countDown(); pollDanmakuPosted(); drain();
+        assertEquals(Collections.singletonList(server.url("/active.xml").toString()), host.manager.applied);
+        ReflectionHelpers.callInstanceMethod(mobile, "renewAutoDanmaku");
+        assertEquals(1, server.getRequestCount());
     }
 
     private static void pollDanmakuPosted() {
@@ -356,6 +422,7 @@ public class VideoDanmakuOwnershipTest {
     }
 
     private static void acceptedMobile(TestVideo host, Object mobile, Result result) {
+        ReflectionHelpers.callInstanceMethod(mobile, "invalidateAutoDanmaku");
         String before = host.manager.getPlaybackTraceId();
         DanmakuSetting.putAuto(false);
         accepted(host, result);
@@ -448,9 +515,12 @@ public class VideoDanmakuOwnershipTest {
     public static class MobileSiteIsolation {
         static CountDownLatch entered, release;
         static Result result;
-        static void pending() { entered = new CountDownLatch(1); release = new CountDownLatch(1); result = Result.error("fixture"); }
+        static RuntimeException failure;
+        static void pending() { entered = new CountDownLatch(1); release = new CountDownLatch(1); result = Result.error("fixture"); failure = null; }
         @Implementation protected static Result playerContent(String key, String flag, String episode) throws InterruptedException {
-            entered.countDown(); release.await(5, TimeUnit.SECONDS); return result;
+            entered.countDown(); release.await(30, TimeUnit.SECONDS);
+            if (failure != null) throw failure;
+            return result;
         }
     }
 
