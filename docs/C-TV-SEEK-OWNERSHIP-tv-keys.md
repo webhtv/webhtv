@@ -147,3 +147,12 @@ bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest --tests 'com.fongmi.andro
 ### 最终 Recovery anchor
 
 状态：局部seek实现与21聚焦测试/双flavor编译已PASS，代码审阅/范围/索引保护PASS；完整设备生命周期/Live网络/MPV/后台/PiP未验且已明确路由给父。下一动作：task_guard finish，生成本单元原子commit与recovery tag，报告精确ID，交父独立复核后串行弹幕。
+
+## 最终集成归档 — 2026-11-08
+
+- 用户已批准本任务窄适配，原始代码提交及恢复点在合并历史保留，不重写。
+- 代码/修复提交：`dc5f1e60c4f96f88f5183cbf11b50bf97f2c6b65`
+- 本地恢复 tag：`recovery/C-TV-SEEK-OWNERSHIP/20261108075050-dc5f1e60c4f9`
+- 单元证据：21项真实输入/消费者测试和双端Java编译通过；完整设备生命周期未测
+- 联合验证（2026-11-08 集成树 fresh）：9 类 94 项定向测试 0 失败/0 错误/0 跳过；Leanback Mobile arm64 Debug Java、Mobile UnitTestJavaCompile 编译通过；日志 `.codex/task-state/reports/TV-SMALL-FIXES-INTEGRATION-final.log`。整批仍不冒充 decoder 实播/设备/性能验收。
+- 回滚：针对本任务按上述代码链逆序git revert；合并历史保留真实来源，不reset原工作区或移动tag。

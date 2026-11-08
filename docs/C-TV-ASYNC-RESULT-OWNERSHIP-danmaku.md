@@ -151,3 +151,12 @@ acceptance：已post→pending换片→drain、A→B→A同URL、逆序完成、
 ### Recovery anchor
 
 run 1/3，自检完成：15/15 最终测试、双端 Java 编译、scope/diff/checkpoint通过，索引字节不变。剩余 Mobile/设备 gate 已明确交父，不冒称行为验证。下一步仅执行 task_guard finish 原子提交与立即 tag，然后把精确 code hash/tag 写忽略 report 发父；不追加自引用 docs commit、不 push、不删除工作树。
+
+## 最终集成归档 — 2026-11-08
+
+- 用户已批准本任务窄适配，原始代码提交及恢复点在合并历史保留，不重写。
+- 代码/修复提交：`1425d0118975ed9412cb85a688a8de9f0f6b3c10`
+- 本地恢复 tag：`recovery/C-TV-ASYNC-RESULT-OWNERSHIP/20261108084316-1425d0118975`
+- 单元证据：15项API/Leanback实际Activity测试及双端Java编译通过；Mobile真消费者/ARM设备未测
+- 联合验证（2026-11-08 集成树 fresh）：9 类 94 项定向测试 0 失败/0 错误/0 跳过；Leanback Mobile arm64 Debug Java、Mobile UnitTestJavaCompile 编译通过；日志 `.codex/task-state/reports/TV-SMALL-FIXES-INTEGRATION-final.log`。整批仍不冒充 decoder 实播/设备/性能验收。
+- 回滚：针对本任务按上述代码链逆序git revert；合并历史保留真实来源，不reset原工作区或移动tag。

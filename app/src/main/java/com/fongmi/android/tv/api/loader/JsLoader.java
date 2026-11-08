@@ -5,7 +5,6 @@ import com.fongmi.quickjs.crawler.Loader;
 import com.fongmi.quickjs.utils.Module;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
-import com.github.catvod.crawler.SpiderNull;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,19 +36,15 @@ public class JsLoader {
     }
 
     public Spider getSpider(String key, String api, String ext, String jar) {
-        return spiders.computeIfAbsent(key, k -> {
-            try {
-                Spider spider = loader.spider(api, BaseLoader.get().dex(jar));
-                spider.siteKey = key;
-                spider.init(App.get(), ext);
-                return spider;
-            } catch (Throwable e) {
-                SpiderDebug.log("JsLoader", "JS spider init failed: key=%s api=%s", key, api);
-                SpiderDebug.log("JsLoader", e);
-                e.printStackTrace();
-                return new SpiderNull();
-            }
-        });
+        return SpiderInit.load(spiders, key,
+                () -> loader.spider(api, BaseLoader.get().dex(jar)), spider -> {
+                    spider.siteKey = key;
+                    spider.init(App.get(), ext);
+                }, e -> {
+                    SpiderDebug.log("JsLoader", "JS spider init failed: key=%s api=%s", key, api);
+                    SpiderDebug.log("JsLoader", e);
+                    e.printStackTrace();
+                });
     }
 
     public Object[] proxy(Map<String, String> params) throws Exception {
