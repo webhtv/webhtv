@@ -94,6 +94,25 @@ public final class CacheCenter {
         RefreshEvent.cache();
     }
 
+    /**
+     * Bytes currently held by every module except {@code excluded}, read from the cached snapshot.
+     *
+     * <p>Deliberately does not scan: callers sit on the player construction and release paths, so a
+     * full inventory there would stall playback. A missing snapshot reports 0, which hands the
+     * excluded module its largest share; the next convergence pass recomputes from a fresh
+     * snapshot, so the error never accumulates.</p>
+     */
+    public long cachedOthersBytes(CacheModuleId excluded) {
+        CacheSnapshot current = snapshot;
+        if (current == null) return 0;
+        long others = 0;
+        for (CacheMeasurement module : current.modules()) {
+            if (excluded != null && module.id() == excluded) continue;
+            others += Math.max(0, module.bytes());
+        }
+        return others;
+    }
+
     public long systemQuotaBytes() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return 0;
         try {

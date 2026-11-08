@@ -5098,3 +5098,22 @@ C3 的触发来源主要是 media `990abc2368fd74779f525ee345734470659f3d53`（`
 - 验证：`app` 双 flavor arm64 Debug Java 编译 `BUILD SUCCESSFUL`；定向单测 633 例 / 1 skipped / 0 失败；全量 leanback 单测 4492 例 / 3 skipped / 8 失败，8 例在合并前基线独立 worktree 中逐条复现（失败名 `diff` 无差异）⇒ 0 新增失败；`git diff --check` 与冲突标记扫描为空。
 - 未执行：设备端 `exo-frame` / `exo-frame-timing` / 输入侧计数读数（X7 Ultra 未连接）。
 - 下一动作：PR #478 合并后，下一轮任务开头合并 `origin/beta` 的最新 tip（已前进到 `d72134c5aa`，与本轮 0 路径交集）。
+
+## 检查点 65：2026-11-07 C120 dev2 合并上游播放缓存上限（Silent1566）
+
+- 基线：`dev2@85afd14593`（已快进 `origin/dev2`，含 PR #531 的 lab 焦点链修复）；目标：`webhtv/webhtv:Silent1566@47454687f5`，merge-base `15e8f6af48`（C93 已合并的上游 tip）。增量 4 个提交 / 12 路径 `+396 −33`，`git cherry` 四行全 `+` 且 `PlaybackCacheBudget.java` 在 dev2 不存在 ⇒ 确属新代码，非重复。
+- 内容：`ff960e1072` 播放缓存受总上限约束并修正面板「Total:」误导文案；`2303a8b9bc` 总量上限仅在播放结束后生效；`900e58341c` MPV HLS 缓存空闲收敛；`47454687f5` 上限接入 EXO 容量计算并修正评审缺陷（`PlaybackCacheBudget.ceilingBytes` 作为预加载设置之上的额外天花板，默认不限故老用户行为不变）。
+- 冲突 1 处：`CacheManagementDialog.java` 双方同位置插入（上游新增 `applyPlaybackLimit()` / 本地 `applyFocusRing()` 实测因果注释），解决为两侧全保留，本地语义描边通道不回退到已删除的 `selector_cache_button_focus`；其余 8 路径自动合并。
+- 验证：`:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.cache.*"` 88 例 / 0 失败（16 suite 含 `PlaybackCacheBudgetTest`）；`:app:compileLeanbackArm64_v8aDebugJavaWithJavac` BUILD SUCCESSFUL；冲突标记扫描为空；三语 `cache_management_playback_budget` 占位符一致。
+- 未执行：设备端实测（面板播放缓存行文案、退出播放后 EXO 目录实际收缩、选上限后即时收敛），本机无连接设备。
+- 下一动作：本任务闭环；`dev2` 仅落本地未推送。下一轮任务开头先合并 `origin/beta` / `origin/dev2` 最新 tip。
+
+## 检查点 66：2026-11-07 C120 dev2 合并 origin/beta 并三轮复评插件全屏/电视插件行/面板加载壳
+
+- 合并：dev2@cd3643faab ← `origin/beta@f375e7019d`（PR #533），0 冲突，双父 `--no-ff`，合并提交 `52cd03beb2`。相对 parent1 净差异 23 路径全为 beta 带入；相对 parent2 净差异 14 路径全为 C120 自有 ⇒ 两块互不覆盖，无 evil merge、无删除、无键丢失（三语键集合 HEAD ⊇ 两父）。
+- 评审（三轮）：第一轮两轴（正确性/生命周期、规格/接线）必修 0，18 条契约全兑现；第二轮对抗性证伪推翻"0 必修"的三个预设靶子均不成立（12h 兜底门控、refresh 丢弃、zh-rTW 缺 detail_plugin），但发现 1 条遗漏必修 N1；第三轮复审修复本身四条裁决全通过，必修 0。
+- 必修 N1：`CacheManagementDialog.chooseTotalLimit()` 只做 `putTotalLimitBytes` + `updatePolicyButtons()`，而摘要行"退出播放后收至 Y"由 `render()` 现算（`targetCapacityBytes()` → `desiredCapacityBytes(IDLE)` → `getTotalLimitBytes()`），改总上限后不重绘 ⇒ 显示已不成立的承诺值。修复：回调补 `applyPlaybackLimit()`，与 EXO 单项上限复用同一路径；新增 `CacheTotalLimitApplyContractTest`（2 例）钉住两条上限入口一致性。
+- 验证：双 flavor Java 编译 BUILD SUCCESSFUL；mobile 511 tests / 0 失败（cache.* + plugin.* + 契约测试 + TmdbDetailActivityLayoutTest）；leanback 391 tests / 0 失败；变异探针（删 `applyPlaybackLimit()` 行）契约测试转红、还原转绿。
+- 记录不修：`CacheScheduler` 12h 兜底受自动清理开关门控（该兜底在活会话下本就不可能生效）；`values-zh-rTW` 缺 95 键（beta 侧既有系统性滞后）；`SCHEMA_VERSION` 未递增（无行为缺陷）；`targetCapacityBytes()` 的 UI 持锁窗口（EXO 单项上限路径早已存在）。
+- 未执行：设备端实测（面板 X/Y 实际数值、退出播放后 EXO 目录收缩、PiP 下插件 chip 闪烁），本机无连接设备。
+- 下一动作：提交推送 `dev2` 并向 `beta` 提 PR，随后拉取远端最新。

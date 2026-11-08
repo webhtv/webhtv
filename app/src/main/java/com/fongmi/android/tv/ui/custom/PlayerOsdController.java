@@ -10,6 +10,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
@@ -89,6 +90,8 @@ public class PlayerOsdController {
     /** Below this played time a rate is not yet meaningful; the raw count is used instead. */
     private static final long DROPPED_FRAMES_RATE_MIN_PLAY_TIME_MS = 30_000L;
     private static final long DROPPED_FRAMES_RAW_COUNT_DIAGNOSIS = 60;
+    /** 强制采样间隔下限：该 meter 还被 OSD 1s 循环与加载圈 1s 定时器共用。 */
+    private static final long SPEED_SAMPLE_THROTTLE_MS = 500L;
 
     private final SimpleDateFormat timeFormat;
     private final TextView topLeft;
@@ -114,6 +117,7 @@ public class PlayerOsdController {
     private final PlaybackSpeedMeter speedMeter = new PlaybackSpeedMeter();
     private long lastSpeedKBps;
     private String lastSpeedText;
+    private long lastSpeedSampleAt;
     private boolean controlsVisible;
     private boolean diagnosticsVisible;
     private boolean persistentSuppressed;
@@ -209,8 +213,25 @@ public class PlayerOsdController {
         return diagnosticsVisible;
     }
 
-    public String sampleSpeedText() {
-        return lastSpeedText;
+    /**
+     * 立即采样一次网速并返回读数。
+     *
+     * <p>手机端控制栏出现时 {@code suppressed} 为真，{@link #render()} 会提前返回，
+     * 渲染循环里的采样随之停摆。加载圈要的正是这一刻的读数，所以这里绕开渲染直接采样，
+     * 仍然复用同一个 meter，不额外引入第二个网速源。
+     *
+     * <p>这个 meter 被三路共用：OSD 1s 循环、加载圈 1s 定时器，以及加载中每次 UI 刷新。
+     * 采样本身会推进 meter 的时间戳与计数器基线，调用过密会把采样窗口切到毫秒级，
+     * 零增量分支随即把读数归零，表现为网速抖动或偶发闪 0。因此这里做节流：
+     * 距上次强制采样不足 {@link #SPEED_SAMPLE_THROTTLE_MS} 时直接返回上一次的读数。
+     */
+    public String sampleSpeedTextNow() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastSpeedSampleAt >= SPEED_SAMPLE_THROTTLE_MS) {
+            lastSpeedSampleAt = now;
+            updateSpeed(source.getPlayer());
+        }
+        return lastSpeedText == null ? "" : lastSpeedText;
     }
 
     public void setDiagnosticsVisible(boolean visible) {

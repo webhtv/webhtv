@@ -47,6 +47,8 @@ public class FuncPresenter extends Presenter {
     public void onUnbindViewHolder(@NonNull Presenter.ViewHolder viewHolder) {
     }
 
+    // 首页功能区行已由 CustomRowPresenter.setWrapFocus 在行级接管左右边界（grid 的按键拦截器早于
+    // 子项 OnKeyListener），这里的项级环绕退为未开启行级环绕时的落点，不再是该界面实际走到的路径。
     private boolean onKeyDown(android.view.View view, KeyEvent event) {
         if (!KeyUtil.isActionDown(event) || (!KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event))) return false;
         if (!(view.getParent() instanceof RecyclerView recyclerView) || recyclerView.getAdapter() == null) return false;
