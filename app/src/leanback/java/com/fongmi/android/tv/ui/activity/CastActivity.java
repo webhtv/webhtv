@@ -168,6 +168,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void start() {
+        cancelKeySeek();
         mPlaybackKey = mAction.getCurrentURI();
         startPlayer(mPlaybackKey, mAction.result(), false, Constant.TIMEOUT_PLAY, buildMetadata());
     }
@@ -237,6 +238,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void switchPlayerKernel(int type) {
+        cancelKeySeek();
         if (player().isEmpty()) return;
         position = player().getPosition();
         player().switchPlayer(type);
@@ -245,6 +247,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void onDecode() {
+        cancelKeySeek();
         if (player().isEmpty()) return;
         position = player().getPosition();
         player().toggleDecode();
@@ -257,6 +260,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void onToggle() {
+        cancelKeySeek();
         if (isVisible(mBinding.control.getRoot())) hideControl();
         else showControl();
     }
@@ -298,12 +302,14 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void showControl() {
+        cancelKeySeek();
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
         mBinding.control.action.reset.requestFocus();
         setR1Callback();
     }
 
     private void hideControl() {
+        cancelKeySeek();
         mBinding.control.getRoot().setVisibility(View.GONE);
         App.removeCallbacks(mR1);
     }
@@ -339,16 +345,19 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void onPaused() {
+        cancelKeySeek();
         controller().pause();
     }
 
     private void onPlay() {
+        cancelKeySeek();
         if (isEnded()) controller().seekTo(0);
         if (!player().isEmpty() && isIdle()) controller().prepare();
         controller().play();
     }
 
     private void consumePendingSeek() {
+        cancelKeySeek();
         if (service() == null || player().isEmpty() || mRenderer == null) return;
         long seekMs = mRenderer.consumePendingSeekMs();
         if (seekMs >= 0) player().seekTo(seekMs);
@@ -398,6 +407,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         if (mRenderer != null) mRenderer.notifyError();
         player().resetTrack();
         player().reset();
+        cancelKeySeek();
         player().stop();
         showError(msg);
     }
@@ -447,6 +457,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
+        if (!isPlaying && isPaused()) cancelKeySeek();
         if (isPlaying) {
             hideCenter();
         } else if (isPaused()) {
@@ -462,10 +473,36 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (KeyUtil.isActionDown(event) && (isVisible(mBinding.control.getRoot()) || (!KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event) && !KeyUtil.isBackKey(event)))) cancelKeySeek();
+        if (KeyUtil.isActionDown(event) && KeyUtil.isBackKey(event)) {
+            boolean preview = isVisible(mBinding.widget.center);
+            cancelKeySeek();
+            if (preview) mBinding.widget.center.setVisibility(View.VISIBLE);
+        }
         if (KeyUtil.isMenuKey(event)) onToggle();
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
         if (isGone(mBinding.control.getRoot()) && mKeyDown.hasEvent(event) && service() != null) return mKeyDown.onKeyDown(event);
         return super.dispatchKeyEvent(event);
+    }
+
+    private void cancelKeySeek() {
+        if (mKeyDown != null) mKeyDown.cancelSeek();
+    }
+
+    @Override
+    public boolean canSeek() {
+        return service() != null && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect() && isOwner()
+                && !player().isEmpty();
+    }
+
+    @Override
+    public String getSeekSession() {
+        return service() == null ? com.fongmi.android.tv.player.PlaybackTrace.NONE : player().getPlaybackTraceId();
+    }
+
+    @Override
+    public void onSeekCancel() {
+        hideCenter();
     }
 
     @Override
@@ -535,6 +572,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     @Override
     protected void onStop() {
+        cancelKeySeek();
         super.onStop();
         if (PlayerSetting.isBackgroundOff()) mClock.stop();
     }
@@ -544,8 +582,10 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         if (isVisible(mBinding.control.getRoot())) {
             hideControl();
         } else if (isVisible(mBinding.widget.center)) {
+            cancelKeySeek();
             hideCenter();
         } else {
+            cancelKeySeek();
             finishPlayback();
         }
     }
@@ -558,6 +598,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     @Override
     protected void onDestroy() {
+        cancelKeySeek();
         mClock.release();
         releaseRenderer();
         App.removeCallbacks(mR1, mR2);
