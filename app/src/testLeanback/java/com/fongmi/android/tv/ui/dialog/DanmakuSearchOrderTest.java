@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.dialog;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.view.KeyEvent;
@@ -114,6 +115,78 @@ public class DanmakuSearchOrderTest {
         assertEquals(View.GONE, order.getVisibility());
         publish();
         assertEquals(View.GONE, order.getVisibility());
+    }
+
+    @Test
+    public void ascendingInitialResultsSortFlatItemsAfterSingleGroupsAreAdded() {
+        open();
+        publish(item("tencent", "尚公主", "第10集"), item("tencent", "其他剧", "第2集"));
+        assertEquals(Arrays.asList(2, 10), episodes());
+        assertEquals(activity.getString(R.string.setting_order_normal), orderButton().getText().toString());
+    }
+
+    @Test
+    public void ascendingNewResultsSortFlatItemsAfterSingleGroupsAreAdded() {
+        open();
+        publish(item("tencent", "尚公主", "第1集"));
+        publish(item("tencent", "尚公主", "第10集"), item("tencent", "其他剧", "第2集"));
+        assertEquals(Arrays.asList(2, 10), episodes());
+    }
+
+    @Test
+    public void ascendingFlatOrderAfterRoundTripSurvivesNewResults() {
+        open();
+        publish(item("tencent", "尚公主", "第10集"), item("tencent", "其他剧", "第2集"));
+        TextView order = orderButton();
+        order.performClick();
+        assertEquals(Arrays.asList(10, 2), episodes());
+        order.performClick();
+        assertEquals(Arrays.asList(2, 10), episodes());
+
+        publish(item("tencent", "尚公主", "第10集"), item("tencent", "其他剧", "第2集"));
+        assertEquals(Arrays.asList(2, 10), episodes());
+        assertEquals(activity.getString(R.string.setting_order_normal), order.getText().toString());
+    }
+
+    @Test
+    public void ascendingFlatOrderPersistsAcrossSources() {
+        open();
+        publish(item("tencent", "尚公主", "第10集"), item("tencent", "其他剧", "第2集"),
+                item("hongguo", "尚公主", "第20集"), item("hongguo", "其他剧", "第3集"));
+        TextView order = orderButton();
+        order.performClick();
+        order.performClick();
+        assertEquals(Arrays.asList(2, 10), episodes());
+
+        List<TextView> sources = ReflectionHelpers.getField(dialog, "sourceViews");
+        sources.get(1).performClick();
+        assertEquals(Arrays.asList(3, 20), episodes());
+        sources.get(0).performClick();
+        assertEquals(Arrays.asList(2, 10), episodes());
+        assertEquals(activity.getString(R.string.setting_order_normal), order.getText().toString());
+    }
+
+    @Test
+    public void unknownFlatItemStaysLastAcrossRebuildsAndBothDirections() {
+        open();
+        Danmaku unknown = Danmaku.from("https://example.com/tencent/special");
+        unknown.setName("(2026)【电视剧】 from tencent - 特别篇");
+        assertNull("The unknown fixture must take the ungrouped path", DanmakuTitle.titleKey(unknown));
+        assertEquals("tencent", unknown.getSourceName());
+        assertEquals(DanmakuTitle.EPISODE_UNKNOWN, DanmakuTitle.getEpisode(unknown));
+        publish(item("tencent", "尚公主", "第10集"), item("tencent", "其他剧", "第2集"), unknown);
+        assertEquals(Arrays.asList(2, 10, DanmakuTitle.EPISODE_UNKNOWN), episodes());
+        assertEquals(unknown.getName(), label(2));
+
+        TextView order = orderButton();
+        order.performClick();
+        assertEquals(Arrays.asList(10, 2, DanmakuTitle.EPISODE_UNKNOWN), episodes());
+        assertEquals(unknown.getName(), label(2));
+        order.performClick();
+        assertEquals(Arrays.asList(2, 10, DanmakuTitle.EPISODE_UNKNOWN), episodes());
+        publish(item("tencent", "尚公主", "第10集"), item("tencent", "其他剧", "第2集"), unknown);
+        assertEquals(Arrays.asList(2, 10, DanmakuTitle.EPISODE_UNKNOWN), episodes());
+        assertEquals(unknown.getName(), label(2));
     }
 
     @Test

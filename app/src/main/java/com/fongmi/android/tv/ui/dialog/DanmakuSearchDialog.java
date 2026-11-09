@@ -716,7 +716,6 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
             }
             // 组内按集数排序
             for (List<Danmaku> items : grouped.values()) DanmakuTitle.sortByEpisode(items, reverseOrder);
-            DanmakuTitle.sortByEpisode(ungrouped, reverseOrder);
             // 分组头按关键词相似度排序
             List<String> titleKeys = new ArrayList<>(grouped.keySet());
             DanmakuTitle.sortByKeyword(titleKeys, keyword);
@@ -732,7 +731,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
                     if (hasSelected) rows.addAll(items); // 默认展开：预插入子项
                 }
             }
-            if (reverseOrder) DanmakuTitle.sortByEpisode(ungrouped, true);
+            DanmakuTitle.sortByEpisode(ungrouped, reverseOrder);
             rows.addAll(ungrouped);
             if (!rows.isEmpty()) notifyItemRangeInserted(0, rows.size());
         }
