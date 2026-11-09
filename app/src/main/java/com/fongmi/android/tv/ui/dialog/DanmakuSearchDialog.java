@@ -29,6 +29,7 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.AppCompatButton;
 import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -72,6 +73,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
     private final List<MaterialTextView> sourceViews;
     private TextInputEditText keywordView;
     private MaterialTextView searchView;
+    private TextView orderView;
     private HorizontalScrollView sourceScroller;
     private LinearLayout searchRow;
     private LinearLayout sourceTabs;
@@ -206,11 +208,39 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         root.setClipChildren(false);
         root.setClipToPadding(false);
         root.setBackground(round(Color.parseColor("#F226282C"), 10, Color.TRANSPARENT));
-        root.addView(createTitleView(), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(28)));
+        root.addView(createTitleRow(), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));
         root.addView(createSearchRow(), createTopParams(16));
         root.addView(createSourceScroller(), createTopParams(14));
         root.addView(createResultFrame(), createTopParams(16));
         return root;
+    }
+
+    private LinearLayout createTitleRow() {
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(createTitleView(), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1));
+        AppCompatButton orderButton = new AppCompatButton(requireContext());
+        orderButton.setAllCaps(false);
+        orderButton.setSingleLine(true);
+        orderButton.setTextColor(Color.WHITE);
+        orderButton.setTextSize(Util.isLeanback() ? 16 : 14);
+        orderButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        orderButton.setPadding(dp(8), 0, dp(8), 0);
+        orderButton.setSupportBackgroundTintList(null);
+        orderView = orderButton;
+        orderView.setId(View.generateViewId());
+        orderView.setText(adapter.reverseOrder ? R.string.setting_order_reverse : R.string.setting_order_normal);
+        orderView.setBackground(new android.graphics.drawable.RippleDrawable(
+                ColorStateList.valueOf(Color.parseColor("#40FFFFFF")),
+                buttonBackground("#FF3A7AFE", "#4DFFFFFF", 7), null));
+        orderView.setVisibility(GONE);
+        orderView.setOnClickListener(view -> {
+            adapter.setReverseOrder(!adapter.reverseOrder);
+            orderView.setText(adapter.reverseOrder ? R.string.setting_order_reverse : R.string.setting_order_normal);
+            recycler.scrollToPosition(0);
+        });
+        row.addView(orderView, new LinearLayout.LayoutParams(dp(88), dp(48)));
+        return row;
     }
 
     private MaterialTextView createTitleView() {
@@ -228,7 +258,10 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         keywordView.setId(View.generateViewId());
         searchView.setId(View.generateViewId());
         keywordView.setNextFocusRightId(searchView.getId());
+        keywordView.setNextFocusUpId(orderView.getId());
         searchView.setNextFocusLeftId(keywordView.getId());
+        searchView.setNextFocusUpId(orderView.getId());
+        orderView.setNextFocusDownId(searchView.getId());
 
         LinearLayout row = new LinearLayout(requireContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -338,6 +371,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
             return true;
         });
         keywordView.setOnKeyListener((view, keyCode, event) -> {
+            if (Util.isLeanback() && KeyUtil.isActionDown(event) && KeyUtil.isUpKey(event) && orderView.getVisibility() == VISIBLE) return orderView.requestFocus();
             if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event) && recycler.getVisibility() == VISIBLE) return focusResultGroup();
             return false;
         });
@@ -404,6 +438,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         recycler.setVisibility(GONE);
         sourceScroller.setVisibility(GONE);
         progress.setVisibility(VISIBLE);
+        orderView.setVisibility(GONE);
     }
 
     private void hideProgress(boolean emptyResult) {
@@ -411,6 +446,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         recycler.setVisibility(emptyResult ? GONE : VISIBLE);
         sourceScroller.setVisibility(!emptyResult && groups.size() > 1 ? VISIBLE : GONE);
         empty.setVisibility(emptyResult ? VISIBLE : GONE);
+        orderView.setVisibility(emptyResult ? GONE : VISIBLE);
     }
 
     private void search() {
@@ -642,6 +678,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
 
         private final OnClickListener listener;
         private final List<Object> rows;
+        private boolean reverseOrder;
 
         private interface OnClickListener {
 
@@ -678,8 +715,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
                 }
             }
             // 组内按集数排序
-            for (List<Danmaku> items : grouped.values()) DanmakuTitle.sortByEpisode(items);
-            DanmakuTitle.sortByEpisode(ungrouped);
+            for (List<Danmaku> items : grouped.values()) DanmakuTitle.sortByEpisode(items, reverseOrder);
             // 分组头按关键词相似度排序
             List<String> titleKeys = new ArrayList<>(grouped.keySet());
             DanmakuTitle.sortByKeyword(titleKeys, keyword);
@@ -695,6 +731,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
                     if (hasSelected) rows.addAll(items); // 默认展开：预插入子项
                 }
             }
+            DanmakuTitle.sortByEpisode(ungrouped, reverseOrder);
             rows.addAll(ungrouped);
             if (!rows.isEmpty()) notifyItemRangeInserted(0, rows.size());
         }
@@ -724,6 +761,23 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         @Override
         public int getItemCount() {
             return rows.size();
+        }
+
+        private void setReverseOrder(boolean reverse) {
+            reverseOrder = reverse;
+            int position = 0;
+            while (position < rows.size() && rows.get(position) instanceof Header header) {
+                DanmakuTitle.sortByEpisode(header.items, reverseOrder);
+                position++;
+                if (header.expanded) {
+                    for (Danmaku item : header.items) rows.set(position++, item);
+                }
+            }
+            List<Danmaku> ungrouped = new ArrayList<>();
+            for (int i = position; i < rows.size(); i++) ungrouped.add((Danmaku) rows.get(i));
+            DanmakuTitle.sortByEpisode(ungrouped, reverseOrder);
+            for (Danmaku item : ungrouped) rows.set(position++, item);
+            notifyDataSetChanged();
         }
 
         /** 切换某分组的展开/折叠状态，插入或移除其子项。 */
