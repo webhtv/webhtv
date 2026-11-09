@@ -3070,7 +3070,7 @@
     <string name="plugin_manager_entry_meta">v%1$s · %2$s · %3$s</string>
     <string name="plugin_manager_params">Parameters</string>
     <string name="plugin_manager_params_title">Parameters for %1$s</string>
-    <string name="plugin_manager_params_hint">JSON object, e.g. {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
+    <string name="plugin_manager_params_hint">JSON object, e.g. {\&quot;DOUBAN_TOKEN\&quot;:\&quot;abc\&quot;}</string>
     <string name="plugin_manager_params_invalid">Parameters must be a JSON object</string>
     <string name="plugin_manager_params_too_large">Parameters are too large to save</string>
     <string name="plugin_manager_remote_import">Import from URL</string>

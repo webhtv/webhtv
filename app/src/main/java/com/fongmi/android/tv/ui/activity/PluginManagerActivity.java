@@ -5,15 +5,19 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 import android.view.LayoutInflater;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -23,6 +27,9 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
@@ -41,12 +48,14 @@ import com.fongmi.android.tv.plugin.PluginPackageImporter;
 import com.fongmi.android.tv.plugin.PluginRemoteSource;
 import com.fongmi.android.tv.plugin.PluginSourceConfig;
 import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
+import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Path;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
@@ -105,6 +114,19 @@ public class PluginManagerActivity extends BaseActivity {
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        if (Util.isMobile()) {
+            View root = mBinding.getRoot();
+            int left = root.getPaddingLeft();
+            int top = root.getPaddingTop();
+            int right = root.getPaddingRight();
+            int bottom = root.getPaddingBottom();
+            ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
+                Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+                view.setPadding(left + bars.left, top + bars.top, right + bars.right, bottom + bars.bottom);
+                return windowInsets;
+            });
+            ViewCompat.requestApplyInsets(root);
+        }
         mBinding.toolbar.setNavigationOnClickListener(view -> finish());
         mAdapter = new EntryAdapter(new EntryAdapter.Listener() {
             @Override
@@ -580,6 +602,7 @@ public class PluginManagerActivity extends BaseActivity {
         TextInputEditText input = new TextInputEditText(this);
         input.setSingleLine(false);
         input.setMinLines(4);
+        if (Util.isLeanback()) input.setMaxLines(8);
         input.setText(PluginEnvironmentStore.get().get(entry.id()));
 
         TextInputLayout layout = new TextInputLayout(this);
@@ -605,6 +628,7 @@ public class PluginManagerActivity extends BaseActivity {
                     String value = input.getText() == null ? "" : input.getText().toString().trim();
                     if (!value.isEmpty() && !isJsonObject(value)) {
                         layout.setError(getString(R.string.plugin_manager_params_invalid));
+                        if (Util.isLeanback()) input.requestFocus();
                         return;
                     }
                     PluginEnvironmentStore store = PluginEnvironmentStore.get();
@@ -618,6 +642,49 @@ public class PluginManagerActivity extends BaseActivity {
                 }));
         dialog.show();
         LightDialog.apply(dialog);
+        if (Util.isLeanback()) wireParameterDialogFocus(dialog, input);
+    }
+
+    private static void wireParameterDialogFocus(androidx.appcompat.app.AlertDialog dialog, TextInputEditText input) {
+        Button cancel = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE);
+        Button confirm = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE);
+        ThemeTokens tokens = ThemeController.current();
+        int[][] states = {{-android.R.attr.state_enabled}, {android.R.attr.state_focused},
+                {android.R.attr.state_pressed}, {}};
+        ColorStateList background = new ColorStateList(states, new int[]{tokens.colorSurfaceContainerHighest(),
+                tokens.colorPrimaryContainer(), tokens.colorPrimaryContainer(), Color.TRANSPARENT});
+        ColorStateList text = new ColorStateList(states, new int[]{tokens.colorOnSurfaceVariant(),
+                tokens.colorPrimary(), tokens.colorPrimary(), tokens.colorPrimary()});
+        ColorStateList stroke = new ColorStateList(new int[][]{{android.R.attr.state_focused},
+                {android.R.attr.state_pressed}, {}}, new int[]{tokens.colorOnPrimaryContainer(),
+                tokens.colorOnPrimaryContainer(), Color.TRANSPARENT});
+        for (Button action : new Button[]{cancel, confirm}) {
+            action.setBackgroundTintList(background);
+            action.setTextColor(text);
+            if (action instanceof MaterialButton material) {
+                material.setStrokeColor(stroke);
+                material.setStrokeWidth(Math.round(input.getResources().getDisplayMetrics().density * 2));
+            }
+        }
+        if (input.getId() == View.NO_ID) input.setId(View.generateViewId());
+        input.setNextFocusDownId(cancel.getId());
+        input.setNextFocusForwardId(cancel.getId());
+        cancel.setNextFocusRightId(confirm.getId());
+        confirm.setNextFocusLeftId(cancel.getId());
+        cancel.setNextFocusUpId(input.getId());
+        confirm.setNextFocusUpId(input.getId());
+        cancel.setFocusableInTouchMode(true);
+        confirm.setFocusableInTouchMode(true);
+        input.setOnKeyListener((view, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_DOWN
+                    || !event.hasNoModifiers() || input.hasSelection()) return false;
+            Layout textLayout = input.getLayout();
+            if (textLayout == null) return false;
+            int cursor = Math.max(0, input.getSelectionEnd());
+            if (textLayout.getLineForOffset(cursor) < textLayout.getLineCount() - 1) return false;
+            return cancel.requestFocus();
+        });
+        input.requestFocus();
     }
 
     private static boolean isJsonObject(String value) {
@@ -693,6 +760,7 @@ public class PluginManagerActivity extends BaseActivity {
     private void scheduleReload() {
         synchronized (this) {
             if (mReloadQueued) return;
+            if (!beginBusy()) return;
             mReloadQueued = true;
         }
         mWorker.execute(() -> {
@@ -700,7 +768,11 @@ public class PluginManagerActivity extends BaseActivity {
                 mReloadQueued = false;
             }
             PluginBootstrap.installAndReloadQuietly();
-            publishEntries();
+            Snapshot snapshot = readEntries();
+            App.post(() -> {
+                endBusy();
+                applySnapshot(snapshot);
+            });
         });
     }
 
@@ -732,6 +804,7 @@ public class PluginManagerActivity extends BaseActivity {
         mBinding.importPlugin.setEnabled(false);
         mBinding.remoteImportPlugin.setEnabled(false);
         mBinding.reloadPlugins.setEnabled(false);
+        updateBusyState();
         return true;
     }
 
@@ -741,6 +814,15 @@ public class PluginManagerActivity extends BaseActivity {
         mBinding.importPlugin.setEnabled(true);
         mBinding.remoteImportPlugin.setEnabled(true);
         mBinding.reloadPlugins.setEnabled(true);
+        updateBusyState();
+    }
+
+    private void updateBusyState() {
+        mBinding.emptyImport.setEnabled(!mBusy);
+        View progress = mBinding.getRoot().findViewWithTag("pluginManagerProgress");
+        if (progress != null) progress.setVisibility(mBusy ? View.VISIBLE : View.GONE);
+        mAdapter.busy = mBusy;
+        mAdapter.notifyItemRangeChanged(0, mAdapter.getItemCount());
     }
 
     private boolean canTouchView() {
@@ -789,6 +871,7 @@ public class PluginManagerActivity extends BaseActivity {
 
         private final List<PluginSourceConfig.Entry> items = new ArrayList<>();
         private final Listener listener;
+        private boolean busy;
 
         private EntryAdapter(Listener listener) {
             this.listener = listener;
@@ -817,9 +900,24 @@ public class PluginManagerActivity extends BaseActivity {
             // 先摘监听器再设状态：复用 ViewHolder 时旧的监听器会用上一条数据再切一次。
             holder.binding.entryEnabled.setOnCheckedChangeListener(null);
             holder.binding.entryEnabled.setChecked(entry.enabled());
-            holder.binding.entryEnabled.setOnCheckedChangeListener((button, checked) -> listener.onToggle(entry, checked));
-            holder.binding.entryParams.setOnClickListener(view -> listener.onParams(entry));
-            holder.binding.entryDelete.setOnClickListener(view -> listener.onDelete(entry));
+            holder.binding.entryEnabled.setEnabled(!busy);
+            holder.binding.entryParams.setEnabled(!busy);
+            holder.binding.entryDelete.setEnabled(!busy);
+            if (Util.isMobile()) {
+                holder.binding.entryEnabled.setText(state);
+                holder.binding.entryEnabled.setContentDescription(name + " · " + state);
+                holder.binding.entryParams.setContentDescription(context.getString(R.string.plugin_manager_params) + " · " + name);
+                holder.binding.entryDelete.setContentDescription(context.getString(R.string.setting_delete) + " · " + name);
+            }
+            holder.binding.entryEnabled.setOnCheckedChangeListener((button, checked) -> {
+                if (!busy) listener.onToggle(entry, checked);
+            });
+            holder.binding.entryParams.setOnClickListener(view -> {
+                if (!busy) listener.onParams(entry);
+            });
+            holder.binding.entryDelete.setOnClickListener(view -> {
+                if (!busy) listener.onDelete(entry);
+            });
         }
 
         @Override
