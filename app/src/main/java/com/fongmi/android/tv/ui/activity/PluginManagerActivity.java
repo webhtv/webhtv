@@ -23,6 +23,9 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
@@ -47,6 +50,7 @@ import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
+import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Path;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
@@ -105,6 +109,19 @@ public class PluginManagerActivity extends BaseActivity {
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        if (Util.isMobile()) {
+            View root = mBinding.getRoot();
+            int left = root.getPaddingLeft();
+            int top = root.getPaddingTop();
+            int right = root.getPaddingRight();
+            int bottom = root.getPaddingBottom();
+            ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
+                Insets bars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+                view.setPadding(left + bars.left, top + bars.top, right + bars.right, bottom + bars.bottom);
+                return windowInsets;
+            });
+            ViewCompat.requestApplyInsets(root);
+        }
         mBinding.toolbar.setNavigationOnClickListener(view -> finish());
         mAdapter = new EntryAdapter(new EntryAdapter.Listener() {
             @Override
@@ -693,6 +710,7 @@ public class PluginManagerActivity extends BaseActivity {
     private void scheduleReload() {
         synchronized (this) {
             if (mReloadQueued) return;
+            if (Util.isMobile() && !beginBusy()) return;
             mReloadQueued = true;
         }
         mWorker.execute(() -> {
@@ -700,7 +718,11 @@ public class PluginManagerActivity extends BaseActivity {
                 mReloadQueued = false;
             }
             PluginBootstrap.installAndReloadQuietly();
-            publishEntries();
+            Snapshot snapshot = readEntries();
+            App.post(() -> {
+                if (Util.isMobile()) endBusy();
+                applySnapshot(snapshot);
+            });
         });
     }
 
@@ -732,6 +754,7 @@ public class PluginManagerActivity extends BaseActivity {
         mBinding.importPlugin.setEnabled(false);
         mBinding.remoteImportPlugin.setEnabled(false);
         mBinding.reloadPlugins.setEnabled(false);
+        updateMobileBusyState();
         return true;
     }
 
@@ -741,6 +764,16 @@ public class PluginManagerActivity extends BaseActivity {
         mBinding.importPlugin.setEnabled(true);
         mBinding.remoteImportPlugin.setEnabled(true);
         mBinding.reloadPlugins.setEnabled(true);
+        updateMobileBusyState();
+    }
+
+    private void updateMobileBusyState() {
+        if (!Util.isMobile()) return;
+        mBinding.emptyImport.setEnabled(!mBusy);
+        View progress = mBinding.getRoot().findViewWithTag("pluginManagerProgress");
+        if (progress != null) progress.setVisibility(mBusy ? View.VISIBLE : View.GONE);
+        mAdapter.busy = mBusy;
+        mAdapter.notifyItemRangeChanged(0, mAdapter.getItemCount());
     }
 
     private boolean canTouchView() {
@@ -789,6 +822,7 @@ public class PluginManagerActivity extends BaseActivity {
 
         private final List<PluginSourceConfig.Entry> items = new ArrayList<>();
         private final Listener listener;
+        private boolean busy;
 
         private EntryAdapter(Listener listener) {
             this.listener = listener;
@@ -817,9 +851,24 @@ public class PluginManagerActivity extends BaseActivity {
             // 先摘监听器再设状态：复用 ViewHolder 时旧的监听器会用上一条数据再切一次。
             holder.binding.entryEnabled.setOnCheckedChangeListener(null);
             holder.binding.entryEnabled.setChecked(entry.enabled());
-            holder.binding.entryEnabled.setOnCheckedChangeListener((button, checked) -> listener.onToggle(entry, checked));
-            holder.binding.entryParams.setOnClickListener(view -> listener.onParams(entry));
-            holder.binding.entryDelete.setOnClickListener(view -> listener.onDelete(entry));
+            if (Util.isMobile()) {
+                holder.binding.entryEnabled.setText(state);
+                holder.binding.entryEnabled.setContentDescription(name + " · " + state);
+                holder.binding.entryEnabled.setEnabled(!busy);
+                holder.binding.entryParams.setEnabled(!busy);
+                holder.binding.entryDelete.setEnabled(!busy);
+                holder.binding.entryParams.setContentDescription(context.getString(R.string.plugin_manager_params) + " · " + name);
+                holder.binding.entryDelete.setContentDescription(context.getString(R.string.setting_delete) + " · " + name);
+            }
+            holder.binding.entryEnabled.setOnCheckedChangeListener((button, checked) -> {
+                if (!busy) listener.onToggle(entry, checked);
+            });
+            holder.binding.entryParams.setOnClickListener(view -> {
+                if (!busy) listener.onParams(entry);
+            });
+            holder.binding.entryDelete.setOnClickListener(view -> {
+                if (!busy) listener.onDelete(entry);
+            });
         }
 
         @Override
