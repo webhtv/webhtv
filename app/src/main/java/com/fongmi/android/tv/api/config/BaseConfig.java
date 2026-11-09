@@ -51,6 +51,17 @@ abstract class BaseConfig {
     protected void onLoadSuccess() {
     }
 
+    private static volatile boolean originPrivateLoad;
+
+    /** 仅原源 worker：禁主 Server、禁失败切换、禁主进程事件。 */
+    public static void setOriginPrivateLoad(boolean enabled) {
+        originPrivateLoad = enabled;
+    }
+
+    public static boolean isOriginPrivateLoad() {
+        return originPrivateLoad;
+    }
+
     public void ensureLoaded() {
         try {
             if (isLoaded()) return;
@@ -59,7 +70,7 @@ abstract class BaseConfig {
                 if (isLoaded()) return;
                 beforeLoad();
                 if (config == null) config = defaultConfig();
-                Server.get().start();
+                if (!originPrivateLoad) Server.get().start();
                 load(config);
                 onLoadSuccess();
             }
@@ -112,13 +123,13 @@ abstract class BaseConfig {
     protected void loadConfig(int id, Config config, Callback callback) {
         try {
             BaseLoader.get().awaitClear();
-            Server.get().start();
+            if (!originPrivateLoad) Server.get().start();
             OkHttp.cancel(getTag());
             load(config);
             if (taskId.get() != id) return;
             if (config.equals(this.config)) config.update();
             onLoadSuccess();
-            App.post(() -> Notify.show(config.getNotice()));
+            if (!originPrivateLoad) App.post(() -> Notify.show(config.getNotice()));
             App.post(callback::success);
         } catch (Throwable e) {
             e.printStackTrace();
@@ -132,7 +143,7 @@ abstract class BaseConfig {
             else if (this instanceof VodConfig) ((VodConfig) this).onConfigFailure(config, callback, e);
             else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
         } finally {
-            if (taskId.get() == id) postEvent();
+            if (taskId.get() == id && !originPrivateLoad) postEvent();
         }
     }
 

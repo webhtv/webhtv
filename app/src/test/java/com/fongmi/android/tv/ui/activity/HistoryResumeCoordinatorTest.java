@@ -25,6 +25,25 @@ public class HistoryResumeCoordinatorTest {
         assertTrue(HistoryResumeCoordinator.isSameResumeVersion(requested, restored));
     }
 
+    @Test
+    public void sameNamedHistoryInAnotherConfigIsNotTheClickedResumeSnapshot() {
+        History requested = history(2, 5, 100, "e5", "line#1");
+        History other = history(2, 5, 100, "e5", "line#1");
+        other.setCid(8);
+        assertFalse(HistoryResumeCoordinator.isSameResumeVersion(requested, other));
+    }
+
+    @Test
+    public void originalProgressOrStableLineChangeInvalidatesALateReply() {
+        History requested = history(2, 5, 100, "e5", "line#1");
+        History progressed = history(2, 5, 100, "e5", "line#1");
+        progressed.setPosition(20);
+        assertFalse(HistoryResumeCoordinator.isSameResumeVersion(requested, progressed));
+        History switched = history(2, 5, 100, "e5", "line#2");
+        assertFalse(HistoryResumeCoordinator.isSameResumeVersion(requested, switched));
+        assertFalse(HistoryResumeCoordinator.isSameResumeVersion(requested, null));
+    }
+
     private static History history(int season, int episode, long updatedAt,
                                    String episodeUrl, String sourceBindingKey) {
         History history = new History();

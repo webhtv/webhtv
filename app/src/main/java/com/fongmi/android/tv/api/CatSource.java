@@ -40,6 +40,7 @@ public class CatSource {
      * 把 bundle 跑起来，返回本机可读的配置地址。阻塞到服务就绪——调用方本身在后台线程。
      */
     public static String serve(String url) throws Exception {
+        if (com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()) return serveOrigin(url);
         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.atomic.AtomicReference<String> error = new java.util.concurrent.atomic.AtomicReference<>();
         NodeRuntime.start(App.get(), url, new NodeRuntime.Callback() {
@@ -77,8 +78,27 @@ public class CatSource {
      * @throws IllegalStateException 当前服务的是别的 bundle，或根本没有 bundle 在服务
      */
     public static String reuse(String url) {
+        if (com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()) {
+            if (!NodeRuntime.isServing(url)) throw new IllegalStateException("ISOLATION_ERROR: original bundle has no live Node lease");
+            return NodeRuntime.configUrl();
+        }
         if (!NodeRuntime.isServing(url)) throw new IllegalStateException("该配置的猫源需要另起 node 运行时，为避免打断当前激活配置已拒绝解析");
         return NodeRuntime.configUrl();
+    }
+
+    private static String serveOrigin(String url) throws Exception {
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<String> ready = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> error = new java.util.concurrent.atomic.AtomicReference<>();
+        NodeRuntime.startOrigin(url, new NodeRuntime.Callback() {
+            @Override public void onProgress(String text) { SpiderDebug.log("origin-node", "%s", text); }
+            @Override public void onReady(String baseUrl) { ready.set(baseUrl); latch.countDown(); }
+            @Override public void onError(String text) { error.set(text); latch.countDown(); }
+        });
+        if (!latch.await(NodeRuntime.START_TIMEOUT_MS, TimeUnit.MILLISECONDS)) throw new IllegalStateException("ISOLATION_ERROR: origin Node timeout");
+        if (error.get() != null) throw new IllegalStateException(error.get());
+        if (ready.get() == null || !NodeRuntime.isServing(url)) throw new IllegalStateException("WORKER_DIED: origin Node not ready");
+        return ready.get() + "/config";
     }
 
     /** 本机跑的 bundle 按媒体类型分组，点播站点在这个键下面。 */

@@ -45,6 +45,23 @@ public final class HistoryResumeCoordinator {
             VideoActivity.startFromHistory(activity, history);
             return;
         }
+        if (android.os.Build.VERSION.SDK_INT < 28) {
+            Notify.show("当前系统暂不支持原源隔离，保留原有当前源匹配策略");
+            fallbackToCurrent(activity, history);
+            return;
+        }
+        // 跨配置历史：原源在先，走租约单入口；只有五个业务 reason 才回到当前配置匹配。
+        if (com.fongmi.android.tv.bean.Config.find(history.getCid()) != null) {
+            OriginPlaybackActivity.start(activity, history);
+            return;
+        }
+        fallbackToCurrent(activity, history);
+    }
+
+    /** 原源不可用（五个业务原因之一）后的既有当前配置匹配路径；不由起播后错误调用。 */
+    public static void fallbackToCurrent(Activity activity, History history) {
+        if (activity == null || history == null) return;
+        REQUESTS.incrementAndGet();
         if (Setting.isGlobalHistorySearch()) {
             SearchActivity.directFromHistory(activity, history);
             return;

@@ -67,6 +67,13 @@ public abstract class AppDatabase extends RoomDatabase {
         return instance;
     }
 
+    /** 仅原源 worker 使用：在租约私有目录里建库，主库路径与内容不受影响。 */
+    public static synchronized void installOrigin(Context context) {
+        if (!(context instanceof com.fongmi.android.tv.playback.origin.OriginStorageContext)) throw new IllegalStateException("ISOLATION_ERROR");
+        if (instance != null) throw new IllegalStateException("ISOLATION_ERROR");
+        instance = create(context);
+    }
+
     public static void backup() {
         backup(new com.fongmi.android.tv.impl.Callback());
     }

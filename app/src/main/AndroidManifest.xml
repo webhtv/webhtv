@@ -118,6 +118,12 @@
             android:theme="@style/Theme.App.Lab" />
 
         <activity
+            android:name=".ui.activity.OriginPlaybackActivity"
+            android:exported="false"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:launchMode="singleTop" />
+
+        <activity
             android:name=".lab.LabOutputActivity"
             android:exported="false"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
@@ -191,6 +197,19 @@
             android:exported="false"
             android:process=":node"
             android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
+        <service
+            android:name=".playback.origin.OriginSessionService"
+            android:exported="false"
+            android:process=":origin"
+            android:stopWithTask="false" />
+
+        <service
+            android:name=".node.OriginNodeService"
+            android:exported="false"
+            android:process=":origin_node"
+            android:foregroundServiceType="mediaPlayback"
             android:stopWithTask="false" />
 
         <service

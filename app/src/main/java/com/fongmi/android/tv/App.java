@@ -3,6 +3,7 @@ package com.fongmi.android.tv;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -45,6 +46,8 @@ import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.Init;
 import com.google.gson.Gson;
 
+import java.io.File;
+
 public class App extends Application implements Application.ActivityLifecycleCallbacks {
 
     private static volatile App instance;
@@ -57,6 +60,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
 
     private volatile Activity activity;
     private volatile int foregroundActivities;
+    private volatile Context originContext;
     private Hook hook;
 
     /** 同一语言上语言更新连续失败的次数上限，超过后放弃该语言，避免热路径无限重试。 */
@@ -120,14 +124,78 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
+        // 原源子进程必须先被识别：它的私有 Context 只在租约 open 时安装，此前不得做任何主进程初始化。
+        if (com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.identify(base)) return;
         if (PlaybackRecoveryMonitor.isRecoveryProcess(base)) return;
         WebViewDataDirectoryGuard.clearStaleLock(base);
         Init.set(base);
     }
 
+    /** 仅原源 worker 在 lease open 后调用：持有私有 Context 并显式代理目录查询，绝不二次 setBaseContext。 */
+    public void installOriginContext(Context context) {
+        originContext = context;
+    }
+
+    private Context storage() {
+        Context value = originContext;
+        return value == null ? getBaseContext() : value;
+    }
+
+    @Override
+    public Context getApplicationContext() {
+        return originContext == null ? super.getApplicationContext() : originContext;
+    }
+
+    @Override public java.io.FileInputStream openFileInput(String name) throws java.io.FileNotFoundException { return storage().openFileInput(name); }
+    @Override public java.io.FileOutputStream openFileOutput(String name, int mode) throws java.io.FileNotFoundException { return storage().openFileOutput(name, mode); }
+    @Override public boolean deleteFile(String name) { return storage().deleteFile(name); }
+    @Override public String[] fileList() { return storage().fileList(); }
+    @Override public File getDataDir() { return storage().getDataDir(); }
+    @Override public android.content.pm.ApplicationInfo getApplicationInfo() { return originContext == null ? super.getApplicationInfo() : originContext.getApplicationInfo(); }
+    @Override public File getExternalFilesDir(String type) { return storage().getExternalFilesDir(type); }
+    @Override public File[] getExternalFilesDirs(String type) { return storage().getExternalFilesDirs(type); }
+    @Override public File getExternalCacheDir() { return storage().getExternalCacheDir(); }
+    @Override public File[] getExternalCacheDirs() { return storage().getExternalCacheDirs(); }
+
+    @Override
+    public File getFilesDir() {
+        return storage().getFilesDir();
+    }
+
+    @Override
+    public File getCacheDir() {
+        return storage().getCacheDir();
+    }
+
+    @Override
+    public File getCodeCacheDir() {
+        return storage().getCodeCacheDir();
+    }
+
+    @Override
+    public File getNoBackupFilesDir() {
+        return storage().getNoBackupFilesDir();
+    }
+
+    @Override
+    public File getDir(String name, int mode) {
+        return storage().getDir(name, mode);
+    }
+
+    @Override
+    public File getDatabasePath(String name) {
+        return storage().getDatabasePath(name);
+    }
+
+    @Override
+    public SharedPreferences getSharedPreferences(String name, int mode) {
+        return storage().getSharedPreferences(name, mode);
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
+        if (com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()) return;
         if (PlaybackRecoveryMonitor.isRecoveryProcess(this)) return;
         PlaybackMemoryMonitor.process().initialize(this);
         PlaybackSystemConditionMonitor.process().initialize(this);
@@ -203,13 +271,13 @@ public class App extends Application implements Application.ActivityLifecycleCal
 
     @Override
     public void onTrimMemory(int level) {
-        if (!PlaybackRecoveryMonitor.isRecoveryProcess(this)) PlaybackMemoryMonitor.process().onTrimMemory(level);
+        if (!com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker() && !PlaybackRecoveryMonitor.isRecoveryProcess(this)) PlaybackMemoryMonitor.process().onTrimMemory(level);
         super.onTrimMemory(level);
     }
 
     @Override
     public void onLowMemory() {
-        if (!PlaybackRecoveryMonitor.isRecoveryProcess(this)) PlaybackMemoryMonitor.process().onLowMemory();
+        if (!com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker() && !PlaybackRecoveryMonitor.isRecoveryProcess(this)) PlaybackMemoryMonitor.process().onLowMemory();
         super.onLowMemory();
     }
 
@@ -239,6 +307,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     }
 
     public static void resumeBackgroundServices() {
+        if (com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()) return;
         removeCallbacks(get().backgroundServicesStarter);
         DanmakuSearchListFocusFixer.start();
         post(get().backgroundServicesStarter, 1200);
