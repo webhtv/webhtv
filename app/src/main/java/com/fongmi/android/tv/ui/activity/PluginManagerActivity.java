@@ -9,11 +9,13 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.Layout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 import android.view.LayoutInflater;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -23,6 +25,7 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -597,6 +600,7 @@ public class PluginManagerActivity extends BaseActivity {
         TextInputEditText input = new TextInputEditText(this);
         input.setSingleLine(false);
         input.setMinLines(4);
+        if (Util.isLeanback()) input.setMaxLines(8);
         input.setText(PluginEnvironmentStore.get().get(entry.id()));
 
         TextInputLayout layout = new TextInputLayout(this);
@@ -622,6 +626,7 @@ public class PluginManagerActivity extends BaseActivity {
                     String value = input.getText() == null ? "" : input.getText().toString().trim();
                     if (!value.isEmpty() && !isJsonObject(value)) {
                         layout.setError(getString(R.string.plugin_manager_params_invalid));
+                        if (Util.isLeanback()) input.requestFocus();
                         return;
                     }
                     PluginEnvironmentStore store = PluginEnvironmentStore.get();
@@ -635,6 +640,39 @@ public class PluginManagerActivity extends BaseActivity {
                 }));
         dialog.show();
         LightDialog.apply(dialog);
+        if (Util.isLeanback()) wireParameterDialogFocus(dialog, input);
+    }
+
+    private static void wireParameterDialogFocus(androidx.appcompat.app.AlertDialog dialog, TextInputEditText input) {
+        Button cancel = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE);
+        Button confirm = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE);
+        for (Button action : new Button[]{cancel, confirm}) {
+            action.setBackgroundTintList(ContextCompat.getColorStateList(action.getContext(), R.color.dialog_outlined_button_bg));
+            action.setTextColor(ContextCompat.getColorStateList(action.getContext(), R.color.dialog_outlined_button_text));
+            if (action instanceof MaterialButton material) {
+                material.setStrokeColor(ContextCompat.getColorStateList(action.getContext(), R.color.focus_ring_primary_container));
+                material.setStrokeWidth(Math.round(input.getResources().getDisplayMetrics().density * 2));
+            }
+        }
+        if (input.getId() == View.NO_ID) input.setId(View.generateViewId());
+        input.setNextFocusDownId(cancel.getId());
+        input.setNextFocusForwardId(cancel.getId());
+        cancel.setNextFocusRightId(confirm.getId());
+        confirm.setNextFocusLeftId(cancel.getId());
+        cancel.setNextFocusUpId(input.getId());
+        confirm.setNextFocusUpId(input.getId());
+        cancel.setFocusableInTouchMode(true);
+        confirm.setFocusableInTouchMode(true);
+        input.setOnKeyListener((view, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_DOWN
+                    || !event.hasNoModifiers() || input.hasSelection()) return false;
+            Layout textLayout = input.getLayout();
+            if (textLayout == null) return false;
+            int cursor = Math.max(0, input.getSelectionEnd());
+            if (textLayout.getLineForOffset(cursor) < textLayout.getLineCount() - 1) return false;
+            return cancel.requestFocus();
+        });
+        input.requestFocus();
     }
 
     private static boolean isJsonObject(String value) {
@@ -710,7 +748,7 @@ public class PluginManagerActivity extends BaseActivity {
     private void scheduleReload() {
         synchronized (this) {
             if (mReloadQueued) return;
-            if (Util.isMobile() && !beginBusy()) return;
+            if (!beginBusy()) return;
             mReloadQueued = true;
         }
         mWorker.execute(() -> {
@@ -720,7 +758,7 @@ public class PluginManagerActivity extends BaseActivity {
             PluginBootstrap.installAndReloadQuietly();
             Snapshot snapshot = readEntries();
             App.post(() -> {
-                if (Util.isMobile()) endBusy();
+                endBusy();
                 applySnapshot(snapshot);
             });
         });
@@ -754,7 +792,7 @@ public class PluginManagerActivity extends BaseActivity {
         mBinding.importPlugin.setEnabled(false);
         mBinding.remoteImportPlugin.setEnabled(false);
         mBinding.reloadPlugins.setEnabled(false);
-        updateMobileBusyState();
+        updateBusyState();
         return true;
     }
 
@@ -764,11 +802,10 @@ public class PluginManagerActivity extends BaseActivity {
         mBinding.importPlugin.setEnabled(true);
         mBinding.remoteImportPlugin.setEnabled(true);
         mBinding.reloadPlugins.setEnabled(true);
-        updateMobileBusyState();
+        updateBusyState();
     }
 
-    private void updateMobileBusyState() {
-        if (!Util.isMobile()) return;
+    private void updateBusyState() {
         mBinding.emptyImport.setEnabled(!mBusy);
         View progress = mBinding.getRoot().findViewWithTag("pluginManagerProgress");
         if (progress != null) progress.setVisibility(mBusy ? View.VISIBLE : View.GONE);
@@ -851,12 +888,12 @@ public class PluginManagerActivity extends BaseActivity {
             // 先摘监听器再设状态：复用 ViewHolder 时旧的监听器会用上一条数据再切一次。
             holder.binding.entryEnabled.setOnCheckedChangeListener(null);
             holder.binding.entryEnabled.setChecked(entry.enabled());
+            holder.binding.entryEnabled.setEnabled(!busy);
+            holder.binding.entryParams.setEnabled(!busy);
+            holder.binding.entryDelete.setEnabled(!busy);
             if (Util.isMobile()) {
                 holder.binding.entryEnabled.setText(state);
                 holder.binding.entryEnabled.setContentDescription(name + " · " + state);
-                holder.binding.entryEnabled.setEnabled(!busy);
-                holder.binding.entryParams.setEnabled(!busy);
-                holder.binding.entryDelete.setEnabled(!busy);
                 holder.binding.entryParams.setContentDescription(context.getString(R.string.plugin_manager_params) + " · " + name);
                 holder.binding.entryDelete.setContentDescription(context.getString(R.string.setting_delete) + " · " + name);
             }
