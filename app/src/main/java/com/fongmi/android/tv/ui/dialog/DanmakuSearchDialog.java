@@ -258,6 +258,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         keywordView.setId(View.generateViewId());
         searchView.setId(View.generateViewId());
         keywordView.setNextFocusRightId(searchView.getId());
+        keywordView.setNextFocusUpId(orderView.getId());
         searchView.setNextFocusLeftId(keywordView.getId());
         searchView.setNextFocusUpId(orderView.getId());
         orderView.setNextFocusDownId(searchView.getId());
@@ -370,6 +371,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
             return true;
         });
         keywordView.setOnKeyListener((view, keyCode, event) -> {
+            if (Util.isLeanback() && KeyUtil.isActionDown(event) && KeyUtil.isUpKey(event) && orderView.getVisibility() == VISIBLE) return orderView.requestFocus();
             if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event) && recycler.getVisibility() == VISIBLE) return focusResultGroup();
             return false;
         });

@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -122,6 +123,27 @@ public class DanmakuSearchOrderTest {
         orderButton().performClick();
         publish(item("tencent", "尚公主", "第2集"), item("tencent", "其他剧", "第10集"));
         assertEquals(Arrays.asList(10, 2), episodes());
+    }
+    @Test
+    public void remoteUpFromKeywordFocusesOrderWithoutChangingSearchText() {
+        open();
+        publish(item("tencent", "尚公主", "第1集"));
+        ReflectionHelpers.callInstanceMethod(dialog, "bindEvents");
+        TextView keyword = ReflectionHelpers.getField(dialog, "keywordView");
+        assertTrue(keyword.requestFocus());
+        keyword.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP));
+        assertTrue("Remote UP must move focus from the input to the order button", orderButton().isFocused());
+        assertEquals("尚公主", keyword.getText().toString());
+    }
+    @Test
+    public void remoteUpKeepsInputFocusWhenOrderIsHiddenDuringSearch() {
+        open();
+        ReflectionHelpers.callInstanceMethod(dialog, "bindEvents");
+        ReflectionHelpers.callInstanceMethod(dialog, "showProgress");
+        TextView keyword = ReflectionHelpers.getField(dialog, "keywordView");
+        assertTrue(keyword.requestFocus());
+        keyword.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP));
+        assertTrue(keyword.isFocused());
     }
     private Danmaku item(String source, String title, String episode) {
         Danmaku item = Danmaku.from("https://example.com/" + source + "/" + title + "/" + episode);
