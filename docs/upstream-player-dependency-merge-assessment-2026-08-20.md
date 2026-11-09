@@ -36,6 +36,8 @@
 | P2 子阶段 | `P2-4` | MPV/native/App | Android BL 硬解 + EL 软解 + GPU FEL 重建，新增手动选择项 | 日志33否决9.20的整体性能收益；9.22完成跨项目/二进制复核，推荐先修正重复建链，再做绑定类型/外部图像对照；新方案未实施，电视实时性能未验收 | [P2-4-mpv-android-fel.md](P2-4-mpv-android-fel.md) |
 | 38 | `P9-MPV-BLURAY-MENU` | MPV/native/App | HDMV Blu-ray 菜单画面、按钮高亮、方向/确认/返回/Popup、菜单跳转与 still frame；BD-J 无提示回退现状 | 2026-09-11父菜单未命中修复已实现，定向验证及构建通过，用户测试确认并要求tag | [P9-MPV-BLURAY-MENU.md](P9-MPV-BLURAY-MENU.md) |
 
+| 上游同步 | `C123` | common / 上游同步 | 完整合并 `webhtv/webhtv:Silent1566@fbe5fe91db9ba41fd380929ebc039a699dba463b` 至 `dev1`，保留本地播放/字幕/爬虫保护 | 已实现、验证与两轴复审闭合：15提交、29上游路径、7文件36冲突；双端Java/mobile测试Java通过，18类186测试0失败/错误/跳过；服务实例与无Call重试回归红绿闭合。原子合并提交由 `Task-Guard: C123` 定位、恢复标签为 `recovery/C123/`；仅本地，不推送。SDK27测试路径不代表SDK28或真机渲染，旧清理模块诊断缺陷经用户选择不扩范围 | [C123-upstream-sync-silent1566.md](C123-upstream-sync-silent1566.md) |
+
 新增产品需求（不改变既有上游提交的实施顺序）：
 
 | 任务 ID | 类别 | 功能/能力 | 状态 | 唯一文档 |
@@ -5117,3 +5119,11 @@ C3 的触发来源主要是 media `990abc2368fd74779f525ee345734470659f3d53`（`
 - 记录不修：`CacheScheduler` 12h 兜底受自动清理开关门控（该兜底在活会话下本就不可能生效）；`values-zh-rTW` 缺 95 键（beta 侧既有系统性滞后）；`SCHEMA_VERSION` 未递增（无行为缺陷）；`targetCapacityBytes()` 的 UI 持锁窗口（EXO 单项上限路径早已存在）。
 - 未执行：设备端实测（面板 X/Y 实际数值、退出播放后 EXO 目录收缩、PiP 下插件 chip 闪烁），本机无连接设备。
 - 下一动作：提交推送 `dev2` 并向 `beta` 提 PR，随后拉取远端最新。
+
+## 检查点 67：2026-11-09 C123 dev1 合并 Silent1566 最新窄修复
+
+- 恢复锚点：唯一任务记录 [C123-upstream-sync-silent1566.md](C123-upstream-sync-silent1566.md)；本地原基线 `e00f1e862dfd4aef0051190cccc723377999ecc9`，共同祖先 `47454687f504955775b398905ba09d73aeb9f20c`；目标 `webhtv/webhtv:Silent1566@fbe5fe91db9ba41fd380929ebc039a699dba463b`。
+- 完整15提交已列唯一记录，29上游路径与2本地任务文档同一C123 guard；7文件36文本冲突按上游窄修复与本地namespace/标题匹配/字幕/短剧/loading/owner并集闭合，禁止复活9个本地历史删除路径，当前波18新增路径无丢失。
+- 独立两轴run1发现2项必修；同执行者run2补原service/manager实例校验、无Call同trace恢复与取消状态；8条业务反例先红后绿。最终双端生产Java及mobile unit Java成功，同19过滤实际18类186项测试0失败/错误/跳过，两轴run2最终增量新增必修0。最终source tree `0faa7a140468d0b0e3bb0994cd25cd1400a64719`；mobile SHA256 `824072dd842ed55d3b4635321a3226fbc05cde2bf3ed6847b129c31c172bdd96` 与实际XML一致。
+- 风险处置：旧SpiderCleanup diagnostic自身异常经用户明确不扩范围；SDK28 ImageDecoder资源布局通道0×0为测试环境未解边界，SDK27仍真实Activity/PlayerView，未改生产PNG/依赖/native。未做真机Exo/MPV、真实Python/QuickJS生命周期、SDK28图像、完整mobile UI或APK安装，不以单测冒称设备验收。
+- 下一步：本地C123原子双父合并提交和recovery/C123标签交付，由Task-Guard记录定位；不push、不发布。回滚对本次合并提交使用git revert -m 1，禁止reset --hard。
