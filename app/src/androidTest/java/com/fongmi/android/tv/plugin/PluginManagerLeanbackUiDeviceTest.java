@@ -54,6 +54,23 @@ public class PluginManagerLeanbackUiDeviceTest {
     }
 
     @Test
+    public void parameterHintPreservesJsonQuotesInAllTranslations() {
+        android.content.Context target = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        for (java.util.Locale locale : new java.util.Locale[]{java.util.Locale.ENGLISH,
+                java.util.Locale.SIMPLIFIED_CHINESE, java.util.Locale.TRADITIONAL_CHINESE}) {
+            android.content.res.Configuration configuration = new android.content.res.Configuration(
+                    target.getResources().getConfiguration());
+            configuration.setLocale(locale);
+            String hint = target.createConfigurationContext(configuration).getString(R.string.plugin_manager_params_hint);
+            String example = hint.substring(hint.indexOf('{'));
+            assertTrue(locale + " JSON key quotes are visible", example.contains("\"DOUBAN_TOKEN\""));
+            assertTrue(locale + " JSON string quotes are visible", example.contains("\"abc\""));
+            assertEquals("abc", com.google.gson.JsonParser.parseString(example).getAsJsonObject()
+                    .get("DOUBAN_TOKEN").getAsString());
+        }
+    }
+
+    @Test
     public void emptyParameterEditorReachesCancelConfirmAndReturnsToEditing() {
         try (ActivityScenario<PluginManagerActivity> scenario = ActivityScenario.launch(PluginManagerActivity.class)) {
             openParams(scenario);
