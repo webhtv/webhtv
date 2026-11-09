@@ -7,10 +7,16 @@ import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.View;
 
+import androidx.media3.common.C;
+import androidx.media3.common.ForwardingPlayer;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.Player;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.bean.Channel;
+import com.fongmi.android.tv.bean.Group;
+import com.fongmi.android.tv.model.LiveViewModel;
 import com.fongmi.android.tv.databinding.ActivityCastBinding;
 import com.fongmi.android.tv.databinding.ActivityLiveBinding;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
@@ -111,7 +117,137 @@ public class TvSeekOwnershipIntegrationTest {
         assertEquals(0, host.seeks);
     }
 
+    @Test
+    public void liveUnknownDurationSwitchesBothLinesWithoutSeekPreview() {
+        TestLive host = live();
+        assertFalse(host.manager.isLive());
+        assertFalse(host.manager.isEmpty());
+        burst(host, 10);
+        assertEquals(1, host.channel.getIndex());
+        burst(host, 20, KeyEvent.KEYCODE_DPAD_LEFT);
+        assertEquals(0, host.channel.getIndex());
+        drain();
+        assertEquals(0, host.seeks);
+        assertEquals(View.GONE, liveBinding(host).widget.center.getVisibility());
+    }
 
+    @Test
+    public void stoppedLiveStillSwitchesLineAndResetsExhaustedFallback() {
+        TestLive host = live();
+        host.manager.reset();
+        host.manager.stop();
+        ReflectionHelpers.setField(host, "mLineFallbackAnchor", 0);
+        ReflectionHelpers.setField(host, "mLineFallbackExhausted", true);
+        burst(host, 10);
+        assertEquals(1, host.channel.getIndex());
+        assertFalse(ReflectionHelpers.getField(host, "mLineFallbackExhausted"));
+        drain();
+        assertEquals(0, host.seeks);
+        assertEquals(View.GONE, liveBinding(host).widget.center.getVisibility());
+    }
+
+    @Test
+    public void loadingLiveWithoutPlaybackSpecStillSwitchesLine() {
+        TestLive host = live();
+        host.manager.clear();
+        host.manager.stop();
+        burst(host, 10, KeyEvent.KEYCODE_DPAD_LEFT);
+        assertEquals(2, host.channel.getIndex());
+        drain();
+        assertEquals(0, host.seeks);
+    }
+
+    @Test
+    public void ordinaryLiveWithVodLikeDurationStillSwitchesLine() {
+        TestLive host = live();
+        host.seekPlayer.duration = 120_000;
+        host.seekPlayer.seekable = true;
+        burst(host, 10);
+        assertEquals(1, host.channel.getIndex());
+        drain();
+        assertEquals(0, host.seeks);
+    }
+
+    @Test
+    public void catchupWithKnownDurationKeepsSeekWithoutSwitchingLine() {
+        TestLive host = live();
+        ReflectionHelpers.setField(host, "playbackCatchup", true);
+        host.seekPlayer.duration = 120_000;
+        host.seekPlayer.seekable = true;
+        burst(host, 10);
+        assertEquals(View.VISIBLE, liveBinding(host).widget.center.getVisibility());
+        drain();
+        assertEquals(1, host.seeks);
+        assertEquals(0, host.channel.getIndex());
+    }
+
+    @Test
+    public void catchupWithUnknownDurationDoesNotSeekOrSwitchLine() {
+        TestLive host = live();
+        ReflectionHelpers.setField(host, "playbackCatchup", true);
+        host.seekPlayer.seekable = true;
+        burst(host, 10);
+        drain();
+        assertEquals(0, host.seeks);
+        assertEquals(0, host.channel.getIndex());
+        assertEquals(View.GONE, liveBinding(host).widget.center.getVisibility());
+    }
+
+    @Test
+    public void catchupWithoutSeekCommandDoesNotSeekOrSwitchLine() {
+        TestLive host = live();
+        ReflectionHelpers.setField(host, "playbackCatchup", true);
+        host.seekPlayer.duration = 120_000;
+        burst(host, 10);
+        drain();
+        assertEquals(0, host.seeks);
+        assertEquals(0, host.channel.getIndex());
+        assertEquals(View.GONE, liveBinding(host).widget.center.getVisibility());
+    }
+
+    @Test
+    public void visibleLiveControlsKeepDirectionalKeysForFocus() {
+        TestLive host = live();
+        liveBinding(host).control.getRoot().setVisibility(View.VISIBLE);
+        burst(host, 10);
+        drain();
+        assertEquals(0, host.seeks);
+        assertEquals(0, host.channel.getIndex());
+    }
+
+    @Test
+    public void singleLineLiveDoesNotSeekWhenDurationIsUnknown() {
+        TestLive host = live();
+        host.channel.setUrls(Collections.singletonList("https://example.test/a.ts"));
+        burst(host, 10);
+        drain();
+        assertEquals(0, host.seeks);
+        assertEquals(0, host.channel.getIndex());
+        assertEquals(View.GONE, liveBinding(host).widget.center.getVisibility());
+    }
+
+    private TestLive live() {
+        TestLive host = Robolectric.buildActivity(TestLive.class).get();
+        host.manager = configure(host);
+        host.seekPlayer = new TestSeekPlayer(host.manager.getPlayer());
+        ReflectionHelpers.setField(host.manager, "player", host.seekPlayer);
+        host.channel = Channel.create("Test live").group(new Group("Test group"));
+        host.channel.setUrls(java.util.Arrays.asList("https://example.test/a.ts", "https://example.test/b.ts", "https://example.test/c.ts"));
+        ReflectionHelpers.setField(host, "mChannel", host.channel);
+        ReflectionHelpers.setField(host, "mViewModel", new LiveViewModel() {
+            @Override public void getEpg(Channel channel) { }
+            @Override public void getUrl(Channel channel) { }
+        });
+        for (String callback : java.util.Arrays.asList("mR2", "mR3", "mEndRetry", "mBufferingTimeout")) {
+            ReflectionHelpers.setField(host, callback, (Runnable) () -> { });
+        }
+        liveBinding(host).widget.center.setVisibility(View.GONE);
+        return host;
+    }
+
+    private static ActivityLiveBinding liveBinding(TestLive host) {
+        return ReflectionHelpers.getField(host, "mBinding");
+    }
 
     private TestCast cast() {
         TestCast host = Robolectric.buildActivity(TestCast.class).get();
@@ -155,8 +291,11 @@ public class TvSeekOwnershipIntegrationTest {
 
     private static PlaybackTrace trace(PlayerManager manager) { return ReflectionHelpers.getField(manager, "playbackTrace"); }
     private static void burst(PlaybackActivity host, long time) {
-        host.dispatchKeyEvent(new KeyEvent(time, time, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT, 0));
-        host.dispatchKeyEvent(new KeyEvent(time, time, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT, 0));
+        burst(host, time, KeyEvent.KEYCODE_DPAD_RIGHT);
+    }
+    private static void burst(PlaybackActivity host, long time, int keyCode) {
+        host.dispatchKeyEvent(new KeyEvent(time, time, KeyEvent.ACTION_DOWN, keyCode, 0));
+        host.dispatchKeyEvent(new KeyEvent(time, time, KeyEvent.ACTION_UP, keyCode, 0));
     }
     private static void drain() { ((ShadowLooper) Shadow.extract(Looper.getMainLooper())).idleFor(Duration.ofMillis(250)); }
 
@@ -172,8 +311,22 @@ public class TvSeekOwnershipIntegrationTest {
         @Override protected boolean seekTo(long deltaMs) { seeks++; return false; }
         void stopped() { onStop(); }
     }
+    private static final class TestSeekPlayer extends ForwardingPlayer {
+        long duration = C.TIME_UNSET;
+        boolean seekable;
+
+        TestSeekPlayer(Player player) { super(player); }
+        @Override public long getDuration() { return duration; }
+        @Override public boolean isCommandAvailable(int command) {
+            return command == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM ? seekable : super.isCommandAvailable(command);
+        }
+    }
+
     public static class TestLive extends LiveActivity {
         int seeks;
+        PlayerManager manager;
+        Channel channel;
+        TestSeekPlayer seekPlayer;
         @Override protected boolean seekTo(long deltaMs) { seeks++; return false; }
         void stopped() { onStop(); }
     }
