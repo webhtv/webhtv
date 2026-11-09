@@ -5,6 +5,8 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
@@ -25,7 +27,6 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -47,6 +48,7 @@ import com.fongmi.android.tv.plugin.PluginPackageImporter;
 import com.fongmi.android.tv.plugin.PluginRemoteSource;
 import com.fongmi.android.tv.plugin.PluginSourceConfig;
 import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.LightDialog;
@@ -646,11 +648,21 @@ public class PluginManagerActivity extends BaseActivity {
     private static void wireParameterDialogFocus(androidx.appcompat.app.AlertDialog dialog, TextInputEditText input) {
         Button cancel = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE);
         Button confirm = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE);
+        ThemeTokens tokens = ThemeController.current();
+        int[][] states = {{-android.R.attr.state_enabled}, {android.R.attr.state_focused},
+                {android.R.attr.state_pressed}, {}};
+        ColorStateList background = new ColorStateList(states, new int[]{tokens.colorSurfaceContainerHighest(),
+                tokens.colorPrimaryContainer(), tokens.colorPrimaryContainer(), Color.TRANSPARENT});
+        ColorStateList text = new ColorStateList(states, new int[]{tokens.colorOnSurfaceVariant(),
+                tokens.colorPrimary(), tokens.colorPrimary(), tokens.colorPrimary()});
+        ColorStateList stroke = new ColorStateList(new int[][]{{android.R.attr.state_focused},
+                {android.R.attr.state_pressed}, {}}, new int[]{tokens.colorOnPrimaryContainer(),
+                tokens.colorOnPrimaryContainer(), Color.TRANSPARENT});
         for (Button action : new Button[]{cancel, confirm}) {
-            action.setBackgroundTintList(ContextCompat.getColorStateList(action.getContext(), R.color.dialog_outlined_button_bg));
-            action.setTextColor(ContextCompat.getColorStateList(action.getContext(), R.color.dialog_outlined_button_text));
+            action.setBackgroundTintList(background);
+            action.setTextColor(text);
             if (action instanceof MaterialButton material) {
-                material.setStrokeColor(ContextCompat.getColorStateList(action.getContext(), R.color.focus_ring_primary_container));
+                material.setStrokeColor(stroke);
                 material.setStrokeWidth(Math.round(input.getResources().getDisplayMetrics().density * 2));
             }
         }

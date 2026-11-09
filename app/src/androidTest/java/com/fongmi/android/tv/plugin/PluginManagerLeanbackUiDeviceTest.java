@@ -9,11 +9,13 @@ import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.core.widget.ImageViewCompat;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -21,9 +23,17 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeMode;
+import com.fongmi.android.tv.theme.ThemeProfile;
+import com.fongmi.android.tv.theme.ThemeResolver;
+import com.fongmi.android.tv.theme.ThemeSeed;
+import com.fongmi.android.tv.theme.ThemeTokens;
+import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.activity.PluginManagerActivity;
+import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.textfield.TextInputEditText;
 
 import org.junit.Assume;
 import org.junit.Before;
@@ -115,6 +125,7 @@ public class PluginManagerLeanbackUiDeviceTest {
             key(KeyEvent.KEYCODE_DPAD_RIGHT);
             key(KeyEvent.KEYCODE_DPAD_CENTER);
             assertNotNull("invalid JSON does not close the dialog", editor());
+            assertEquals("确认无效 JSON 后必须保留用户输入", "/", editor().getText().toString());
             String error = InstrumentationRegistry.getInstrumentation().getTargetContext()
                     .getString(R.string.plugin_manager_params_invalid);
             assertFalse("validation error remains visible", root().findAccessibilityNodeInfosByText(error).isEmpty());
@@ -131,6 +142,67 @@ public class PluginManagerLeanbackUiDeviceTest {
         } finally {
             if (previous.isEmpty()) PluginEnvironmentStore.get().remove(ID);
             else PluginEnvironmentStore.get().put(ID, previous);
+        }
+    }
+
+    @Test
+    public void parameterButtonsPreserveCustomThemeColorsAndTransparentDefaultStroke() {
+        try (ActivityScenario<PluginManagerActivity> scenario = ActivityScenario.launch(PluginManagerActivity.class)) {
+            scenario.onActivity(activity -> {
+                ThemeTokens previous = ThemeController.current();
+                ThemeProfile profile = ThemeProfile.defaultProfile();
+                profile.dark.focus = "#00B0FF";
+                ThemeTokens tokens = ThemeResolver.resolve(ThemeMode.DARK, ThemeSeed.EXPLICIT,
+                        0xFF8E24AA, 0, profile, null, true);
+                assertFalse("测试主题必须不同于编译色板", tokens.colorPrimaryContainer()
+                        == activity.getColor(R.color.webhtv_color_primary_container));
+                assertFalse("配对描边色必须与独立焦点槽区分", tokens.colorOnPrimaryContainer() == tokens.colorFocus());
+                TextInputEditText input = new TextInputEditText(activity);
+                AlertDialog dialog = new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
+                        .setView(input)
+                        .setNegativeButton(R.string.dialog_cancel, null)
+                        .setPositiveButton(R.string.dialog_confirm, null)
+                        .create();
+                try {
+                    ThemeController.apply(activity, tokens);
+                    dialog.show();
+                    LightDialog.apply(dialog);
+                    Method method = PluginManagerActivity.class.getDeclaredMethod("wireParameterDialogFocus",
+                            AlertDialog.class, TextInputEditText.class);
+                    method.setAccessible(true);
+                    method.invoke(null, dialog, input);
+                    int[][] states = {{android.R.attr.state_enabled},
+                            {android.R.attr.state_enabled, android.R.attr.state_focused},
+                            {android.R.attr.state_enabled, android.R.attr.state_pressed}, {},
+                            {android.R.attr.state_focused}};
+                    int[] backgrounds = {Color.TRANSPARENT, tokens.colorPrimaryContainer(),
+                            tokens.colorPrimaryContainer(), tokens.colorSurfaceContainerHighest(),
+                            tokens.colorSurfaceContainerHighest()};
+                    int[] texts = {tokens.colorPrimary(), tokens.colorPrimary(), tokens.colorPrimary(),
+                            tokens.colorOnSurfaceVariant(), tokens.colorOnSurfaceVariant()};
+                    int[] strokes = {Color.TRANSPARENT, tokens.colorOnPrimaryContainer(),
+                            tokens.colorOnPrimaryContainer(), Color.TRANSPARENT, tokens.colorOnPrimaryContainer()};
+                    for (int id : new int[]{AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_POSITIVE}) {
+                        assertTrue("参数操作必须使用 Material 按钮", dialog.getButton(id) instanceof MaterialButton);
+                        MaterialButton button = (MaterialButton) dialog.getButton(id);
+                        for (int index = 0; index < states.length; index++) {
+                            assertEquals("按钮背景必须跟随活动主题，状态 " + index, backgrounds[index],
+                                    button.getBackgroundTintList().getColorForState(states[index], 0));
+                            assertEquals("按钮文字必须跟随活动主题，状态 " + index, texts[index],
+                                    button.getTextColors().getColorForState(states[index], 0));
+                            assertEquals("按钮描边必须保留配对焦点色与默认透明，状态 " + index, strokes[index],
+                                    button.getStrokeColor().getColorForState(states[index], 0));
+                        }
+                        assertEquals("参数按钮描边宽度保持不变",
+                                Math.round(input.getResources().getDisplayMetrics().density * 2), button.getStrokeWidth());
+                    }
+                } catch (ReflectiveOperationException error) {
+                    throw new AssertionError(error);
+                } finally {
+                    dialog.dismiss();
+                    ThemeController.apply(activity, previous);
+                }
+            });
         }
     }
 
