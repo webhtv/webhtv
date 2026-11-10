@@ -1,139 +1,161 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Dialog;
+import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
+import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 
 import androidx.annotation.NonNull;
-import androidx.fragment.app.Fragment;
+import androidx.annotation.Nullable;
+import androidx.fragment.app.DialogFragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.viewbinding.ViewBinding;
 
-import com.fongmi.android.tv.R;
-import com.fongmi.android.tv.databinding.AdapterHomeMenuBinding;
 import com.fongmi.android.tv.databinding.DialogHomeMenuBinding;
-import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.ui.activity.SettingActivity;
+import com.fongmi.android.tv.ui.adapter.HomeMenuAdapter;
+import com.fongmi.android.tv.utils.FocusLoop;
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
-/**
- * 首页菜单键的「选项弹窗」，列出除自身之外的其它菜单键动作供直接选择。
- */
-public class HomeMenuDialog extends BaseAlertDialog {
-
-    private static final String TAG = "home_menu_dialog";
-    // 菜单项按 3 列排布；去掉首项后 11 项共 4 行，仍在 maxHeight 一屏内显示完
-    private static final int GRID_COUNT = 3;
+public class HomeMenuDialog extends DialogFragment implements HomeMenuAdapter.OnClickListener {
 
     private DialogHomeMenuBinding binding;
-    private Listener listener;
-
-    public interface Listener {
-
-        /**
-         * @param index select_home_menu_key 中的下标，取值 1..12
-         */
-        void onHomeMenuItem(int index);
-    }
+    private String[] items;
+    private int spanCount;
 
     public static HomeMenuDialog create() {
         return new HomeMenuDialog();
     }
 
+    public HomeMenuDialog items(String[] items) {
+        this.items = items;
+        this.spanCount = calcSpanCount(items.length);
+        return this;
+    }
+
+    private int calcSpanCount(int count) {
+        int span = (int) Math.ceil(Math.sqrt(count));
+        return Math.max(2, Math.min(5, span));
+    }
+
     public void show(FragmentActivity activity) {
-        if (activity.isFinishing() || activity.isDestroyed()) return;
-        // 菜单键连按时避免叠开多个弹窗
-        for (Fragment fragment : activity.getSupportFragmentManager().getFragments()) {
-            if (fragment instanceof HomeMenuDialog) return;
-        }
-        if (activity instanceof Listener) listener = (Listener) activity;
-        show(activity.getSupportFragmentManager(), TAG);
+        show(activity.getSupportFragmentManager(), HomeMenuDialog.class.getSimpleName());
+    }
+
+    @NonNull
+    @Override
+    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
+        Dialog dialog = new Dialog(requireActivity());
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+        return dialog;
+    }
+
+    @Nullable
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        binding = DialogHomeMenuBinding.inflate(inflater, container, false);
+        return binding.getRoot();
     }
 
     @Override
-    protected ViewBinding getBinding() {
-        return binding = DialogHomeMenuBinding.inflate(getLayoutInflater());
-    }
-
-    @Override
-    protected MaterialAlertDialogBuilder getBuilder() {
-        return builder().setView(getBinding().getRoot());
-    }
-
-    @Override
-    protected void initView() {
-        binding.recycler.setItemAnimator(null);
+    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+        binding.root.setBackground(glassBackground());
+        binding.handle.setBackground(handleBackground());
         binding.recycler.setHasFixedSize(true);
-        // 列数由 dialog_home_menu.xml 的 spanCount 声明，这里只需与之对齐的间距
-        binding.recycler.addItemDecoration(new SpaceItemDecoration(GRID_COUNT, 16));
-        binding.recycler.setAdapter(new MenuAdapter());
+        binding.recycler.setLayoutManager(new GridLayoutManager(getActivity(), spanCount));
+        binding.recycler.addItemDecoration(new GridSpacingItemDecoration(8, spanCount));
+        binding.recycler.setAdapter(new HomeMenuAdapter(this, items, spanCount));
+        Dialog dialog = getDialog();
+        if (dialog != null) {
+            dialog.setOnKeyListener((d, keyCode, event) -> {
+                if (KeyUtil.isMenuKey(event)) {
+                    SettingActivity.start(requireActivity());
+                    dismiss();
+                    return true;
+                }
+                return FocusLoop.handleRecyclerGrid(binding.recycler, items.length, spanCount, FocusLoop.Mode.BOTH, event);
+            });
+        }
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        setWidth(0.6f);
-        binding.recycler.post(() -> {
-            RecyclerView.ViewHolder holder = binding.recycler.findViewHolderForAdapterPosition(0);
-            if (holder == null) binding.recycler.requestFocus();
-            else holder.itemView.requestFocus();
+        Window window = getDialog() == null ? null : getDialog().getWindow();
+        if (window == null) return;
+        window.setBackgroundDrawableResource(android.R.color.transparent);
+        float width = 0.32f + spanCount * 0.1f;
+        window.setLayout((int) (ResUtil.getScreenWidth() * Math.min(width, 0.7f)), ViewGroup.LayoutParams.WRAP_CONTENT);
+        window.setGravity(Gravity.CENTER);
+        binding.recycler.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                binding.recycler.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                RecyclerView.ViewHolder vh = binding.recycler.findViewHolderForAdapterPosition(0);
+                if (vh != null) vh.itemView.requestFocus();
+            }
         });
     }
 
-    private void onItemClick(int position) {
-        // position 为 NO_POSITION 时不能继续，否则 position + 1 == 0 会再次弹出本弹窗
-        if (position == RecyclerView.NO_POSITION) return;
-        Listener target = getListener();
+    @Override
+    public void onItemClick(int position) {
+        ((Listener) requireActivity()).onHomeMenu(position);
         dismiss();
-        if (target != null) target.onHomeMenuItem(position + 1);
     }
 
-    /**
-     * 进程恢复后弹窗由系统重建，listener 会丢失，此时回退到宿主 Activity。
-     */
-    private Listener getListener() {
-        if (listener != null) return listener;
-        return getActivity() instanceof Listener ? (Listener) getActivity() : null;
+    private GradientDrawable glassBackground() {
+        int wallColor = Setting.getWallColor();
+        if (wallColor == 0) wallColor = Setting.getBuiltInWallColor(Setting.getWall());
+        int r = (int) (((wallColor >> 16) & 0xFF) * 0.42);
+        int g = (int) (((wallColor >> 8) & 0xFF) * 0.42);
+        int b = (int) ((wallColor & 0xFF) * 0.42);
+        int rgb = (r << 16) | (g << 8) | b;
+        int[] colors = new int[]{0xEE000000 | rgb, 0xE6000000 | rgb, 0xDE000000 | rgb};
+        GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR, colors);
+        drawable.setCornerRadius(ResUtil.dp2px(22));
+        drawable.setStroke(ResUtil.dp2px(1), 0x66FFFFFF);
+        return drawable;
     }
 
-    private class MenuAdapter extends RecyclerView.Adapter<MenuAdapter.ViewHolder> {
+    private GradientDrawable handleBackground() {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(0x55FFFFFF);
+        drawable.setCornerRadius(ResUtil.dp2px(2));
+        return drawable;
+    }
 
-        private final List<String> items;
+    private static class GridSpacingItemDecoration extends RecyclerView.ItemDecoration {
+        private final int spacing;
+        private final int spanCount;
 
-        MenuAdapter() {
-            items = new ArrayList<>(Arrays.asList(ResUtil.getStringArray(R.array.select_home_menu_key)));
-            if (!items.isEmpty()) items.remove(0);
-        }
-
-        @NonNull
-        @Override
-        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            return new ViewHolder(AdapterHomeMenuBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-            holder.binding.text.setText(items.get(position));
+        GridSpacingItemDecoration(int spacingDp, int spanCount) {
+            this.spacing = ResUtil.dp2px(spacingDp);
+            this.spanCount = spanCount;
         }
 
         @Override
-        public int getItemCount() {
-            return items.size();
+        public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
+            int position = parent.getChildAdapterPosition(view);
+            if (position == RecyclerView.NO_POSITION) return;
+            int column = position % spanCount;
+            outRect.left = column * spacing / spanCount;
+            outRect.right = spacing - (column + 1) * spacing / spanCount;
+            if (position >= spanCount) outRect.top = spacing;
         }
+    }
 
-        private class ViewHolder extends RecyclerView.ViewHolder {
-
-            private final AdapterHomeMenuBinding binding;
-
-            ViewHolder(@NonNull AdapterHomeMenuBinding binding) {
-                super(binding.getRoot());
-                this.binding = binding;
-                binding.text.setOnClickListener(view -> onItemClick(getBindingAdapterPosition()));
-            }
-        }
+    public interface Listener {
+        void onHomeMenu(int which);
     }
 }

@@ -439,6 +439,7 @@ private boolean runtimeSourceOnly;
     private boolean quickSearchDialogClosed;
     private boolean useParse;
     private boolean detailRequested;
+    private final String[] rotateLabels = {"0°", "90°", "180°", "270°"};
     private final ArrayDeque<Runnable> mInitViewStages = new ArrayDeque<>();
     private boolean mInitViewStagesLaunched;
     private long mInitViewLastPumpAt;
@@ -1718,6 +1719,8 @@ private boolean runtimeSourceOnly;
         mBinding.control.action.opening.setDownListener(this::onOpeningSub);
         mBinding.control.action.text.setUpListener(this::onSubtitleClick);
         mBinding.control.action.text.setDownListener(this::onSubtitleClick);
+        mBinding.control.action.rotate.setUpListener(this::onRotateAdd);
+        mBinding.control.action.rotate.setDownListener(this::onRotateSub);
         mBinding.control.action.next.setOnClickListener(view -> checkNext());
         mBinding.control.action.prev.setOnClickListener(view -> checkPrev());
         mBinding.control.action.episodes.setOnClickListener(view -> onEpisodes());
@@ -1728,6 +1731,7 @@ private boolean runtimeSourceOnly;
         mBinding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
         mBinding.episodeFileName.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
         mBinding.control.action.scale.setOnClickListener(guarded(this::onScale));
+        mBinding.control.action.rotate.setOnClickListener(guarded(this::onRotate));
         mBinding.control.action.actionQuality.setOnClickListener(guarded(this::onQuality));
         mBinding.control.action.lut.setOnClickListener(guarded(this::onLut));
         mBinding.control.action.speed.setOnClickListener(guarded(this::onSpeed));
@@ -1739,6 +1743,7 @@ private boolean runtimeSourceOnly;
         mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
         mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
         mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
+        mBinding.control.action.rotate.setOnLongClickListener(view -> onRotateReset());
         mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
         mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
         mBinding.control.action.multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy));
@@ -1866,6 +1871,7 @@ private boolean runtimeSourceOnly;
         addActionButton(PlayerButtonSetting.CODEC_CAPABILITY, mBinding.control.action.codecCapability);
         addActionButton(PlayerButtonSetting.SPEED, mBinding.control.action.speed);
         addActionButton(PlayerButtonSetting.SCALE, mBinding.control.action.scale);
+        addActionButton(PlayerButtonSetting.ROTATE, mBinding.control.action.rotate);
         addActionButton(PlayerButtonSetting.QUALITY, mBinding.control.action.actionQuality);
         addActionButton(PlayerButtonSetting.LUT, mBinding.control.action.lut);
         addActionButton(PlayerButtonSetting.KARAOKE, mBinding.control.action.karaoke);
@@ -5265,6 +5271,31 @@ private boolean runtimeSourceOnly;
 
     public void onScale(int tag) {
         setScale(tag);
+    }
+
+    private void rotate(boolean clockwise) {
+        int current = getVideoRotation();
+        int next = clockwise ? (current + 90) % 360 : (current - 90 + 360) % 360;
+        setVideoRotation(next);
+        mBinding.control.action.rotate.setText(rotateLabels[next / 90]);
+    }
+
+    private void onRotate() {
+        onRotateAdd();
+    }
+
+    private void onRotateAdd() {
+        rotate(true);
+    }
+
+    private void onRotateSub() {
+        rotate(false);
+    }
+
+    private boolean onRotateReset() {
+        setVideoRotation(0);
+        mBinding.control.action.rotate.setText(getString(R.string.play_rotate));
+        return true;
     }
 
     private void onLut() {
@@ -12944,6 +12975,10 @@ private void finishVideoPlaybackNow() {
         stopPlayback();
         if (isTaskRoot()) startActivity(new Intent(this, HomeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
         super.onBackInvoked();
+    }
+
+public void finishVideoForCast() {
+        finishVideoPlaybackNow();
     }
 
 }

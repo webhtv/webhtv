@@ -25,6 +25,7 @@ public class PlayerButtonSetting {
     public static final String CODEC_CAPABILITY = "codec_capability";
     public static final String SPEED = "speed";
     public static final String SCALE = "scale";
+    public static final String ROTATE = "rotate";
     public static final String QUALITY = "quality";
     public static final String LUT = "lut";
     public static final String PAN_DIAGNOSTIC = "pan_diagnostic";
@@ -62,6 +63,7 @@ public class PlayerButtonSetting {
             new Item(CODEC_CAPABILITY, R.string.codec_capability_short),
             new Item(SPEED, R.string.play_speed),
             new Item(SCALE, R.string.play_scale),
+            new Item(ROTATE, R.string.play_rotate),
             new Item(QUALITY, R.string.detail_quality),
             new Item(LUT, R.string.play_lut),
             new Item(PAN_DIAGNOSTIC, R.string.pan_diagnostic_entry),

@@ -135,6 +135,12 @@ public abstract class BaseActivity extends AppCompatActivity {
         return view.getVisibility() == View.GONE;
     }
 
+    protected boolean shouldSkipStartup() {
+        boolean skip = com.github.catvod.utils.Prefers.getBoolean("skip_startup", false);
+        if (skip) com.github.catvod.utils.Prefers.remove("skip_startup");
+        return skip;
+    }
+
     protected void notifyItemChanged(RecyclerView view, RecyclerView.Adapter<?> adapter) {
         postRecyclerUpdate(view, adapter::notifyDataSetChanged);
     }

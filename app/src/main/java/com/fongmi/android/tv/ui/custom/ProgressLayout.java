@@ -35,6 +35,7 @@ public class ProgressLayout extends RelativeLayout {
     private CharSequence mErrorReason;
     private int mErrorRetryRes;
     private OnClickListener mErrorRetryListener;
+    private int mProgressTopOffset;
     private State mState;
 
     public ProgressLayout(Context context) {
@@ -209,7 +210,24 @@ public class ProgressLayout extends RelativeLayout {
     private LayoutParams centerParams() {
         LayoutParams params = new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.addRule(CENTER_IN_PARENT);
+        params.topMargin = mProgressTopOffset;
         return params;
+    }
+
+    /** 让加载中/空态内容在垂直方向避让顶部工具栏。 */
+    public void setProgressTopOffset(int offset) {
+        if (mProgressTopOffset == offset) return;
+        mProgressTopOffset = offset;
+        if (mProgressView != null) {
+            LayoutParams params = (LayoutParams) mProgressView.getLayoutParams();
+            params.topMargin = offset;
+            mProgressView.setLayoutParams(params);
+        }
+        if (mEmptyView != null) {
+            LayoutParams params = (LayoutParams) mEmptyView.getLayoutParams();
+            params.topMargin = offset;
+            mEmptyView.setLayoutParams(params);
+        }
     }
 
     @Override

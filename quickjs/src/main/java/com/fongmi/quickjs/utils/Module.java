@@ -27,12 +27,13 @@ public class Module {
         name = name.replace("clan://", "file://tvbox/");
         String content = cache.get(name);
         if (!TextUtils.isEmpty(content)) return content;
-        if (name.startsWith("http")) cache.put(name, content = OkHttp.string(name));
-        else if (name.startsWith("assets")) cache.put(name, content = Asset.read(name));
-        else if (name.startsWith("lib/")) cache.put(name, content = Asset.read("js/" + name));
-        else if (name.startsWith("/")) cache.put(name, content = Path.read(new File(name)));
-        else if (name.startsWith("file")) cache.put(name, content = Path.read(Path.local(name)));
+        if (name.startsWith("http")) content = OkHttp.string(name);
+        else if (name.startsWith("assets")) content = Asset.read(name);
+        else if (name.startsWith("lib/")) content = Asset.read("js/" + name);
+        else if (name.startsWith("/")) content = Path.read(new File(name));
+        else if (name.startsWith("file")) content = Path.read(Path.local(name));
         else if (looksLikeSource(name)) content = name;
+        if (!TextUtils.isEmpty(content)) cache.put(name, content);
         return content;
     }
 
