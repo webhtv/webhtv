@@ -3709,8 +3709,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void setArtwork(String url) {
-        if (mHistory != null) mHistory.setVodPic(url);
-        loadArtwork(url, mPlaybackEpisodeKey);
+        if (mHistory != null && TextUtils.isEmpty(mHistory.getVodPic())) mHistory.setVodPic(url);
+        loadArtwork(mHistory != null ? mHistory.getVodPic() : url, mPlaybackEpisodeKey);
         setContextWall(getContextWall());
     }
 
@@ -3851,10 +3851,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mOsd.setEnding(mHistory.getEnding());
         mBinding.control.action.speed.setText(player().setSpeed(PlayerSetting.getDefaultSpeed()));
         mHistory.setSpeed(player().getSpeed());
-        mHistory.setVodName(item.getName());
-        // 详情是权威片名，回写 intent：getName() 是启动时传入的快照，
-        // 不回写的话 OSD 左上角会一直停在启动时的旧名字
-        if (!TextUtils.isEmpty(item.getName())) getIntent().putExtra("name", item.getName());
+        if (TextUtils.isEmpty(mHistory.getVodName())) mHistory.setVodName(item.getName());
+        if (!TextUtils.isEmpty(mHistory.getVodName())) getIntent().putExtra("name", mHistory.getVodName());
         PlaybackEventCollector.get().updateHistory(mHistory);
         setArtwork(getInitialArtwork(item));
         setScale(getScale());
@@ -3992,18 +3990,18 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         boolean name = !item.getName().isEmpty();
         if (id) getIntent().putExtra("id", item.getId());
         if (id) mHistory.replace(getHistoryKey());
-        if (name) getIntent().putExtra("name", item.getName());   // 同上：真实片名回写，OSD 才不会停留在启动时的旧值
-        if (name) mHistory.setVodName(item.getName());
-        if (name) mBinding.name.setText(item.getName());
-        if (name) mBinding.widget.title.setText(item.getName());
-        if (name) updateAudioStageText();
+        if (name && TextUtils.isEmpty(mHistory.getVodName())) mHistory.setVodName(item.getName());
+        if (!TextUtils.isEmpty(mHistory.getVodName())) getIntent().putExtra("name", mHistory.getVodName());   // 同上：真实片名回写，OSD 才不会停留在启动时的旧值
+        if (!TextUtils.isEmpty(mHistory.getVodName())) mBinding.name.setText(mHistory.getVodName());
+        if (!TextUtils.isEmpty(mHistory.getVodName())) mBinding.widget.title.setText(mHistory.getVodName());
+        if (!TextUtils.isEmpty(mHistory.getVodName())) updateAudioStageText();
         updateFlag(getFlag(), item.getFlags());
         if (pic) setArtwork(item.getPic());
-        if (pic || name) setMetadata();
-        if (pic || name) syncHistory();
-        if (pic || name) updateKeep();
+        if (pic || !TextUtils.isEmpty(mHistory.getVodName())) setMetadata();
+        if (pic || !TextUtils.isEmpty(mHistory.getVodName())) syncHistory();
+        if (pic || !TextUtils.isEmpty(mHistory.getVodName())) updateKeep();
         if (id) updateNavigationKey();
-        if (name) setPartAdapter();
+        if (!TextUtils.isEmpty(mHistory.getVodName())) setPartAdapter();
         PlaybackEventCollector.get().updateHistory(mHistory);
         setText(item);
     }
