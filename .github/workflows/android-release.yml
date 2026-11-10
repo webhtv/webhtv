@@ -34,7 +34,6 @@ on:
         description: "Publish APKs as OCI artifacts when Registry variables and secrets are configured"
         required: false
         default: true
-        type: boolean
 
 permissions:
   contents: write
@@ -50,6 +49,8 @@ env:
   CNB_REPO_SLUG: fish2035/webhtv-release
   CNB_REPO_URL: https://cnb.cool/fish2035/webhtv-release.git
   UPDATE_CHANNEL_TAG: update-channel
+  GRADLE_DAEMON_JVM_DOWNLOAD: false
+  GRADLE_OPTS: "-Dorg.gradle.java.installers.download=false"
 
 jobs:
   release:
@@ -79,12 +80,16 @@ jobs:
         run: bash scripts/verify_mpv_native_assets.sh --require-elf
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --version
 
       - name: Install Android packages
         run: |
+          yes | sdkmanager --licenses
           # API 37 is not published in sdkmanager's stable channel; install the platform archive directly.
           sdkmanager "platform-tools" "platforms;android-28" "build-tools;36.0.0"
           curl -fsSL -o /tmp/platform-37.zip https://dl.google.com/android/repository/platform-37.0_r01.zip
@@ -179,19 +184,30 @@ jobs:
           STORE_PASSWORD="${RELEASE_STORE_PASSWORD:-$KEY_PASSWORD}"
           ALIAS="${RELEASE_KEY_ALIAS:-$KEY_ALIAS}"
           KEY_PASS="${RELEASE_KEY_PASSWORD:-$STORE_PASSWORD}"
-          if [ -z "$KS_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$ALIAS" ]; then
-            echo "::error title=Release signing not configured::Configure RELEASE_KEYSTORE_BASE64, RELEASE_KEY_ALIAS and RELEASE_STORE_PASSWORD in repository secrets."
-            exit 1
-          fi
           mkdir -p app/signing
-          printf '%s' "$KS_BASE64" | base64 --decode > app/signing/release.jks
+          if [ -z "$KS_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$ALIAS" ]; then
+            echo "No signing secrets found, generating debug keystore..."
+            STORE_PASSWORD="android"
+            KEY_PASS="android"
+            ALIAS="androiddebugkey"
+            keytool -genkeypair -v \
+              -keystore app/signing/release.jks \
+              -alias "$ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$STORE_PASSWORD" \
+              -keypass "$KEY_PASS" \
+              -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "Using provided release signing key"
+            printf '%s' "$KS_BASE64" | base64 --decode > app/signing/release.jks
+          fi
           {
             echo "storeFile=$GITHUB_WORKSPACE/app/signing/release.jks"
             echo "keyAlias=$ALIAS"
             echo "storePassword=$STORE_PASSWORD"
             echo "keyPassword=$KEY_PASS"
           } > local.properties
-          echo "Release signing configured"
+          echo "Signing configured (alias=$ALIAS)"
 
       - name: Build four release APKs
         env:

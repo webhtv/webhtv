@@ -2,6 +2,7 @@
 
     <!-- Home -->
     <string name="home">首頁</string>
+    <string name="home_refresh">刷新</string>
     <string name="home_vod">點播</string>
     <string name="home_live">直播</string>
     <string name="home_search">搜尋</string>
@@ -26,13 +27,13 @@
     <string name="home_buttons_reset">重置</string>
     <string name="home_buttons_selected">已啟用 %1$d/%2$d</string>
     <string name="detail_tmdb_rematch">TMDB</string>
+    <string name="home_switch">選站</string>
 
     <!-- Collect -->
     <string name="collect_result">「<xliff:g name="name">%s</xliff:g>」的搜尋結果</string>
 
     <!-- Push -->
     <string name="push_clip">推送剪貼簿內容</string>
-    <string name="push_info">使用手機掃描 QR Code，或於瀏覽器輸入網址\n<xliff:g name="name">%s</xliff:g></string>
 
     <string name="device_select">選擇裝置</string>
     <string name="device_offline">裝置已離線</string>
@@ -44,4 +45,7 @@
     <string name="timer_delay">延長 5 分鐘</string>
     <string name="timer_cancel">取消定時器</string>
     <string name="filter_reset">已重置篩選</string>
+ 
+    <!-- Live Program -->
+    <string name="live_program_vertical">節\n目\n單</string>
 </resources>

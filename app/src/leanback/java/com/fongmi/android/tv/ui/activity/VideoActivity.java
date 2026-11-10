@@ -640,6 +640,27 @@ private boolean runtimeSourceOnly;
         else startPush(activity, push);
     }
 
+    public static void push(FragmentActivity activity, String text, String name) {
+        PushParser.Parsed push = PushParser.fromText(text);
+        Uri uri = Uri.parse(push.getUrl());
+        String title = TextUtils.isEmpty(name) ? push.getTitle() : name;
+        if (FileChooser.isValid(activity, uri)) file(activity, FileChooser.getPathFromUri(uri), title);
+        else if (!dispatchToContentHandler(activity, push.getUrl(), title)) start(activity, SiteApi.PUSH, push.getId(), TextUtils.isEmpty(name) ? push.getName() : name);
+    }
+
+    private static boolean sPendingFullscreen;
+
+    public static void startFullscreen(Activity activity, History history) {
+        sPendingFullscreen = true;
+        start(activity, history.getSiteKey(), history.getVodId(), history.getVodName(), history.getVodPic(), null, history.getWallPic());
+    }
+
+    private static boolean consumePendingFullscreen() {
+        boolean pending = sPendingFullscreen;
+        sPendingFullscreen = false;
+        return pending;
+    }
+
     @Override
     protected boolean customWall() {
         return true;
@@ -2249,7 +2270,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void checkCast() {
-        if (isCast() && !isFullscreen()) enterFullscreen();
+        if ((consumePendingFullscreen() || isCast()) && !isFullscreen()) enterFullscreen();
         else if (mAudioStageVisible) mBinding.progressLayout.showContent();
         else if (hasInitialPreview()) showInitialPreview();
         else mBinding.progressLayout.showProgress();

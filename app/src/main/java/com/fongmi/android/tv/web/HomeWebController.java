@@ -39,6 +39,7 @@ import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.Util;
@@ -137,6 +138,7 @@ public class HomeWebController {
     private String homePage;
     private String homeIdentity;
     private String lastPageUrl;
+    private final Set<String> sniffedUrls = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private WebHomeRawAdapter rawAdapter;
     private WebHomeViewport viewport = WebHomeViewport.EMPTY;
     private String lastViewportKey;
@@ -203,6 +205,7 @@ public class HomeWebController {
         remoteMessageListener = false;
         webView.setWebViewClient(client());
         webView.setWebChromeClient(chrome());
+        registerSniffQueueScript();
         WebViewUtil.logProvider("webhome");
     }
 
@@ -556,6 +559,37 @@ public class HomeWebController {
         WebHomeTarget configured = WebHomeTarget.resolve("", true, manifestUrl, manifestUrl);
         if (site == null || configured == null || !configured.isManifest() || page == null) return false;
         return loadManifestPage(site, configured, page, route == null ? WebThemeRoute.EMPTY : route, false);
+    }
+
+    /**
+     * 冷启动专用的隐藏实例：只准备站点脚本并加载指定页面，不接管 UI。
+     * 进程重启后网页里的脚本解析器没了，靠这个实例把同一套解析链路重新跑起来。
+     */
+    public boolean loadHidden(Site site, String url) {
+        if (site == null || !site.hasHomePage() || TextUtils.isEmpty(url)) return false;
+        WebHomeTarget target = WebHomeTarget.resolve(site);
+        if (target == null) return false;
+        if (!loadResolved(site, target, WebThemeRoute.EMPTY, true)) return false;
+        loadUrl(url);
+        return true;
+    }
+
+    /** 隐藏实例的解析入口：与网页里点击剧集走的是同一套逻辑。 */
+    public JsonObject resolveEpisode(JsonObject payload) throws Exception {
+        return bridge == null ? null : bridge.resolveInlineEpisode(payload == null ? new JsonObject() : payload);
+    }
+
+    /** 隐藏实例用完即弃：从窗口摘下、停止加载、销毁 WebView。 */
+    public void destroyHidden() {
+        try {
+            if (webView == null) return;
+            android.view.ViewGroup parent = (android.view.ViewGroup) webView.getParent();
+            if (parent != null) parent.removeView(webView);
+            webView.stopLoading();
+            webView.loadUrl("about:blank");
+            webView.destroy();
+        } catch (Throwable ignored) {
+        }
     }
 
     private boolean loadManifestPage(Site site, WebHomeTarget configured, WebThemePage page,
@@ -1617,6 +1651,7 @@ public class HomeWebController {
                 }
                 bridgeReady = false;
                 sdkReady = false;
+                resetSniffedMedia();
                 int generation;
                 synchronized (themeStateLock) {
                     generation = themeSession.invalidate();
@@ -1687,12 +1722,22 @@ public class HomeWebController {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) return false;
                 if (destroyed || view != webView) return true;
+                String target = request.getUrl().toString();
+                String page = view.getUrl();
+                // JS 能隐藏 <a>，但挡不住 location.href= / meta refresh / 脚本重定向，这一层兜底
+                if (WebHomeAdBlocker.get().shouldBlockNavigation(page, target)) {
+                    try {
+                        WebHomeAdBlocker.get().onNavigationBlocked(view, target);
+                    } catch (Throwable ignored) { }
+                    return true;
+                }
                 WebHomeTarget currentTarget = pageHost.target();
                 boolean blocked = currentTarget != null && currentTarget.isRemoteGlobal()
-                        && !currentTarget.allowsMainFrameUrl(request.getUrl().toString());
+                        && !currentTarget.allowsMainFrameUrl(target);
                 if (blocked) SpiderDebug.log("webhome-security", "blocked remote theme navigation url=%s origin=%s",
-                        safeLogUrl(request.getUrl()), currentTarget.getOriginRule());
+                        safeLogUrl(target), currentTarget.getOriginRule());
                 return blocked;
             }
 
@@ -1700,6 +1745,9 @@ public class HomeWebController {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 if (destroyed || view != webView) return blockedNavigation();
                 listener.onWebRequest(request.getMethod(), request.getUrl().toString(), request.isForMainFrame(), request.getRequestHeaders());
+                WebResourceResponse blocked = WebHomeAdBlocker.get().intercept(request);
+                if (blocked != null) return blocked;
+                pushSniffedMedia(request.getUrl().toString(), request.getMethod(), request.getRequestHeaders());
                 WebHomeTarget currentTarget = pageHost.target();
                 if (currentTarget != null && currentTarget.isRemoteGlobal() && request.isForMainFrame()
                         && !currentTarget.allowsMainFrameUrl(request.getUrl().toString())) return blockedNavigation();
@@ -1768,6 +1816,23 @@ public class HomeWebController {
 
     private WebChromeClient chrome() {
         return new WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                // 弹窗目标 URL 无法从回调拿到，只能按「页面 + 是否用户手势」判定
+                String page = view == null ? null : view.getUrl();
+                if (!WebHomeAdBlocker.get().shouldBlockPopupByGesture(page, isUserGesture)) {
+                    return false;
+                }
+                SpiderDebug.log("webhome-adblock", "blocked popup gesture=%s dialog=%s", isUserGesture, isDialog);
+                if (resultMsg != null) {
+                    if (resultMsg.obj instanceof WebView.WebViewTransport) {
+                        ((WebView.WebViewTransport) resultMsg.obj).setWebView(null);
+                    }
+                    resultMsg.sendToTarget();
+                }
+                return true;
+            }
+
             @Override
             public boolean onConsoleMessage(ConsoleMessage message) {
                 if (message != null) {
@@ -1881,8 +1946,74 @@ public class HomeWebController {
         });
     }
 
+    /**
+     * 原生层媒体嗅探：把 shouldInterceptRequest 命中媒体的请求推给 WebHome 页面。
+     * 只推送不拦截，对页面零副作用；JS 侧由 __fmNativeSniff / __fmNativeSniffQ 接收。
+     */
+    private void pushSniffedMedia(String url, String method, Map<String, String> requestHeaders) {
+        if (!Setting.isWebHomeSniffer()) return;
+        if (TextUtils.isEmpty(url) || !Sniffer.isVideoFormat(url)) return;
+        if (!sniffedUrls.add(url)) return;
+        if (webView == null) return;
+        try {
+            org.json.JSONObject headers = new org.json.JSONObject();
+            if (requestHeaders != null) {
+                for (Map.Entry<String, String> entry : requestHeaders.entrySet()) {
+                    String key = entry.getKey();
+                    String value = entry.getValue();
+                    if (key == null || value == null) continue;
+                    String lower = key.toLowerCase();
+                    // Cookie 交给播放侧 credentials:include 补齐，避免重复携带
+                    if ("cookie".equals(lower) || "host".equals(lower) || "content-length".equals(lower)) continue;
+                    headers.put(key, value);
+                }
+            }
+            org.json.JSONObject payload = new org.json.JSONObject();
+            payload.put("url", url);
+            payload.put("method", method == null ? "GET" : method);
+            payload.put("headers", headers);
+            String script = "(function(){try{var p=" + payload + ";"
+                    + "if(window.__fmNativeSniff){window.__fmNativeSniff(p);}"
+                    + "else{(window.__fmNativeSniffQ=window.__fmNativeSniffQ||[]).push(p);}"
+                    + "}catch(e){}})()";
+            webView.post(() -> {
+                try {
+                    webView.evaluateJavascript(script, null);
+                } catch (Throwable ignored) {
+                }
+            });
+            SpiderDebug.log("webhome-sniffer", "hit url=%s method=%s", url, method);
+        } catch (Throwable e) {
+            SpiderDebug.log("webhome-sniffer", "push failed url=%s error=%s", url, e.getMessage());
+        }
+    }
+
+    /**
+     * 页面切换时清空去重集合，避免跨页漏报。
+     */
+    private void resetSniffedMedia() {
+        try {
+            sniffedUrls.clear();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * 在每个文档最开始预置接收队列，避免扩展脚本注入前的请求丢失。
+     */
+    private void registerSniffQueueScript() {
+        if (webView == null || !isDocumentStartSupported()) return;
+        try {
+            WebViewCompat.addDocumentStartJavaScript(webView, "window.__fmNativeSniffQ=window.__fmNativeSniffQ||[];", Collections.singleton("*"));
+        } catch (Throwable e) {
+            SpiderDebug.log("webhome-sniffer", "queue script register failed error=%s", e.getMessage());
+        }
+    }
+
     private void registerDocumentStartScripts() {
         removeDocumentStartScripts();
+        resetSniffedMedia();
+        registerSniffQueueScript();
         WebThemePageHost.Snapshot page = pageHost.snapshot();
         Site site = page.site();
         WebHomeTarget target = page.target();

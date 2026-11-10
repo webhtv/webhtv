@@ -21,6 +21,8 @@ import com.fongmi.android.tv.utils.Util;
 public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener implements ScaleGestureDetector.OnScaleGestureListener {
 
     private static final int DISTANCE = 100;
+    // 静态变量，进程内共享，App关闭就失效，不写Pref
+    private static float sessionBright = -1f;
 
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector detector;
@@ -422,6 +424,10 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
             onSingleTap();
         }
 
+        default void onSingleTap(float x, float y, float width, float height) {
+            onSingleTap(x, width);
+        }
+ 
         void onDoubleTap();
 
         void onTouchEnd();

@@ -168,4 +168,22 @@ public class FileUtil {
         int digitGroups = (int) (Math.log10(size) / Math.log10(1024));
         return new DecimalFormat("#,##0.#").format(size / Math.pow(1024, digitGroups)) + " " + units[digitGroups];
     }
+
+    public static void deleteEpgDir() {
+        synchronized (com.fongmi.android.tv.api.parser.EpgParser.SYNC_LOCK) {
+            File epgDir = new File(Path.files(), "epg");
+            if (!epgDir.exists()) return;
+            deleteRecursive(epgDir);
+        }
+    }
+
+    private static boolean deleteRecursive(File file) {
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) deleteRecursive(child);
+            }
+        }
+        return file.delete();
+    }
 }

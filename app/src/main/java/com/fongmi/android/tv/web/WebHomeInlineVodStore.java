@@ -127,6 +127,40 @@ public class WebHomeInlineVodStore {
         return result;
     }
 
+    /**
+     * 兜底解析用：按剧集地址取原始 payload（找不到返回 null）。
+     */
+    public static JsonObject episodePayload(String key) {
+        EpisodeSpec spec = matchEpisode(key);
+        return spec == null ? null : spec.payload().deepCopy();
+    }
+
+    /**
+     * 兜底解析成功后回写缓存，同一集下次直接播直链，不再嗅探。
+     */
+    public static void cacheMedia(String key, JsonObject resolved) {
+        EpisodeSpec spec = matchEpisode(key);
+        if (spec == null || resolved == null) return;
+        String url = Json.safeString(resolved, "url");
+        if (TextUtils.isEmpty(url)) return;
+        HeaderSpec headerSpec = resolvedHeaders(resolved, spec.headerSpec());
+        String format = first(Json.safeString(resolved, "format"), isHls(url) ? HLS_FORMAT : spec.format());
+        URL_HEADERS.put(url, headerSpec);
+        URL_EPISODES.put(key, new EpisodeSpec(spec.payload().deepCopy(), headerSpec, spec.resolver(), false, url, format));
+        SpiderDebug.log("webhome-inline", "cache fallback media key=%s url=%s", key, url);
+    }
+
+    private static EpisodeSpec matchEpisode(String key) {
+        if (TextUtils.isEmpty(key)) return null;
+        EpisodeSpec spec = URL_EPISODES.get(key);
+        if (spec != null) return spec;
+        for (Map.Entry<String, EpisodeSpec> entry : URL_EPISODES.entrySet()) {
+            JsonObject payload = entry.getValue().payload();
+            if (key.equals(Json.safeString(payload, "pageUrl")) || key.equals(Json.safeString(payload, "href"))) return entry.getValue();
+        }
+        return null;
+    }
+
     private static Map<String, String> headers(String url, HeaderSpec headerSpec) {
         Map<String, String> result = HeaderPolicy.withDefaultUa(headerSpec.headers);
         boolean hasCookie = hasHeader(result, HttpHeaders.COOKIE);

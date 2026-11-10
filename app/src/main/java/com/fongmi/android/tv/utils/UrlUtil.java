@@ -59,6 +59,12 @@ public class UrlUtil {
         return !path.isEmpty() ? path : !host.isEmpty() ? host : url;
     }
 
+    public static java.io.File toLocalFile(String url) {
+        if (url == null) return null;
+        if (url.startsWith("http") || url.startsWith("content")) return null;
+        return com.github.catvod.utils.Path.local(url);
+    }
+
     public static String fixHeader(String key) {
         if (HttpHeaders.USER_AGENT.equalsIgnoreCase(key)) return HttpHeaders.USER_AGENT;
         if (HttpHeaders.REFERER.equalsIgnoreCase(key)) return HttpHeaders.REFERER;

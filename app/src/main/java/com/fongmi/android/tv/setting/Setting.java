@@ -35,10 +35,12 @@ import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Trans;
+import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Prefers;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
+import java.io.File;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -114,6 +116,25 @@ public class Setting {
     public static final int UI_SCALE_LARGER = 7;
     public static final int UI_SCALE_LARGEST = 8;
     private static final int[] UI_SCALE_OPTIONS = {UI_SCALE_FOLLOW_SYSTEM, UI_SCALE_SMALLER, UI_SCALE_MORE_COMPACT, UI_SCALE_COMPACT, UI_SCALE_MILD_COMPACT, UI_SCALE_STANDARD, UI_SCALE_LARGE, UI_SCALE_LARGER, UI_SCALE_LARGEST};
+
+    public static final int TITLE_LINES_OFF = 0;
+    public static final int TITLE_LINES_2 = 1;
+    public static final int TITLE_LINES_3 = 2;
+    public static final int TITLE_LINES_UNLIMITED = 3;
+    private static final int[] TITLE_LINES_OPTIONS = {TITLE_LINES_OFF, TITLE_LINES_2, TITLE_LINES_3, TITLE_LINES_UNLIMITED};
+
+    public static final int DEFAULT_LAUNCH_HOME = 0;
+    public static final int DEFAULT_LAUNCH_LIVE = 1;
+    public static final int DEFAULT_LAUNCH_RECENT = 2;
+
+    public static final int SOURCE_VOD_URL = 1 << 0;
+    public static final int SOURCE_LIVE_URL = 1 << 1;
+    public static final int SOURCE_SITES_JSON = 1 << 2;
+    public static final int SOURCE_SITES_JS = 1 << 3;
+    public static final int SOURCE_SITES_PY = 1 << 4;
+    public static final int SOURCE_SITES_RAW = 1 << 5;
+    public static final int SOURCE_LIVES_FILE = 1 << 6;
+    public static final int[] SOURCE_ALL = {SOURCE_VOD_URL, SOURCE_LIVE_URL, SOURCE_SITES_JSON, SOURCE_SITES_JS, SOURCE_SITES_PY, SOURCE_SITES_RAW, SOURCE_LIVES_FILE};
 
     public static final int WALL_CINEMA = 5;
     public static final int WALL_CINEMA_WARM = 6;
@@ -357,7 +378,7 @@ public class Setting {
     }
 
     public static String getSyncPaths() {
-        return Prefers.getString("sync_paths", "TV\nTVBox\nTVData");
+        return Prefers.getString("sync_paths", "");
     }
 
     public static void putSyncPaths(String paths) {
@@ -410,6 +431,14 @@ public class Setting {
 
     public static void putTouchOptimized(boolean enabled) {
         Prefers.put("touch_optimized", enabled);
+    }
+
+    public static boolean isFileSites() {
+        return Prefers.getBoolean("file_sites", true);
+    }
+
+    public static void putFileSites(boolean fileSites) {
+        Prefers.put("file_sites", fileSites);
     }
 
     public static int getLanguage() {
@@ -507,6 +536,10 @@ public class Setting {
         return context.createConfigurationContext(config);
     }
 
+    public static float getUiScaleFactor() {
+        return getUiScaleFactor(getUiScale());
+    }
+
     public static float getUiScaleFactor(int scale) {
         return switch (scale) {
             case UI_SCALE_SMALLER -> 0.8f;
@@ -523,6 +556,60 @@ public class Setting {
 
     private static int pxToDp(int px, int densityDpi) {
         return Math.max(1, Math.round(px * (float) DisplayMetrics.DENSITY_DEFAULT / densityDpi));
+    }
+
+    public static int getTitleLines() {
+        int lines = Prefers.getInt("title_lines", TITLE_LINES_UNLIMITED);
+        return isTitleLines(lines) ? lines : TITLE_LINES_OFF;
+    }
+
+    public static void putTitleLines(int lines) {
+        Prefers.put("title_lines", isTitleLines(lines) ? lines : TITLE_LINES_OFF);
+    }
+
+    public static int getTitleLinesIndex() {
+        int lines = getTitleLines();
+        for (int i = 0; i < TITLE_LINES_OPTIONS.length; i++) if (TITLE_LINES_OPTIONS[i] == lines) return i;
+        return 0;
+    }
+
+    public static void putTitleLinesIndex(int index) {
+        putTitleLines(index >= 0 && index < TITLE_LINES_OPTIONS.length ? TITLE_LINES_OPTIONS[index] : TITLE_LINES_OFF);
+    }
+
+    private static boolean isTitleLines(int lines) {
+        for (int option : TITLE_LINES_OPTIONS) if (option == lines) return true;
+        return false;
+    }
+
+    public static int getDefaultLaunch() {
+        return Prefers.getInt("default_launch", DEFAULT_LAUNCH_HOME);
+    }
+
+    public static void putDefaultLaunch(int launch) {
+        Prefers.put("default_launch", launch);
+    }
+
+    public static int resolveTitleMaxLines() {
+        return switch (getTitleLines()) {
+            case TITLE_LINES_2 -> 2;
+            case TITLE_LINES_3 -> 3;
+            case TITLE_LINES_UNLIMITED -> Integer.MAX_VALUE;
+            default -> 1;
+        };
+    }
+
+    public static void applyTitleMaxLines(android.widget.TextView textView) {
+        int maxLines = resolveTitleMaxLines();
+        if (maxLines <= 1) {
+            textView.setSingleLine(true);
+            textView.setEllipsize(android.text.TextUtils.TruncateAt.MARQUEE);
+            textView.setMarqueeRepeatLimit(-1);
+        } else {
+            textView.setSingleLine(false);
+            textView.setMaxLines(maxLines);
+            textView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        }
     }
 
     public static boolean isDriveCheck() {
@@ -577,6 +664,38 @@ public class Setting {
         Prefers.put("web_home_extension", extension);
     }
 
+    public static boolean isWebHomeSniffer() {
+        return Prefers.getBoolean("web_home_sniffer", true);
+    }
+
+    public static void putWebHomeSniffer(boolean sniffer) {
+        Prefers.put("web_home_sniffer", sniffer);
+    }
+
+    public static boolean isWebHomeAdblock() {
+        return Prefers.getBoolean("web_home_adblock", true);
+    }
+
+    public static void putWebHomeAdblock(boolean adblock) {
+        Prefers.put("web_home_adblock", adblock);
+    }
+
+    public static boolean isWebHomeAdblockNav() {
+        return Prefers.getBoolean("web_home_adblock_nav", true);
+    }
+
+    public static void putWebHomeAdblockNav(boolean nav) {
+        Prefers.put("web_home_adblock_nav", nav);
+    }
+
+    public static boolean isWebHomeAdblockPopup() {
+        return Prefers.getBoolean("web_home_adblock_popup", false);
+    }
+
+    public static void putWebHomeAdblockPopup(boolean popup) {
+        Prefers.put("web_home_adblock_popup", popup);
+    }
+
     public static boolean isWebHomeThemeEnabled() {
         return Prefers.getBoolean("web_home_theme_enabled");
     }
@@ -620,6 +739,18 @@ public class Setting {
 
     public static void putPlaybackArtworkWall(boolean artworkWall) {
         Prefers.put("playback_artwork_wall", artworkWall);
+    }
+
+    // 播放自动全屏（播放设置 → 播放自动全屏）。
+    // 只管 App(Java) 侧发起的播放；网页嗅探(JS) "自动播" 发起的播放无视这个开关，
+    // 由 Intent extra "webHomeSniffer" 单独识别，无条件全屏。
+    // 默认关：不改变既有习惯。
+    public static boolean isPlaybackAutoFullscreen() {
+        return Prefers.getBoolean("playback_auto_fullscreen", false);
+    }
+
+    public static void putPlaybackAutoFullscreen(boolean autoFullscreen) {
+        Prefers.put("playback_auto_fullscreen", autoFullscreen);
     }
 
     public static boolean isCspWarmup() {
@@ -1438,7 +1569,7 @@ public class Setting {
 
     public static int getHomeMenuKey() {
         int menuKey = Prefers.getInt("home_menu_key", 0);
-        return menuKey < 0 || menuKey > 11 ? 0 : menuKey;
+        return menuKey < 0 || menuKey > 12 ? 0 : menuKey;
     }
 
     public static void putHomeMenuKey(int menuKey) {
@@ -1651,5 +1782,54 @@ public class Setting {
 
     public static void putSearchSimilarity(int percent) {
         Prefers.put("search_similarity", Math.max(0, Math.min(100, percent)));
+    }
+    public static int getSourceBlockMask() {
+        return Prefers.getInt("source_block_mask", 0);
+    }
+
+    public static void putSourceBlockMask(int mask) {
+        Prefers.put("source_block_mask", mask);
+    }
+
+    public static boolean isSourceBlocked(int source) {
+        return (getSourceBlockMask() & source) != 0;
+    }
+
+    public static boolean isSourceAllowed(int source) {
+        return !isSourceBlocked(source);
+    }
+
+    public static void setSourceBlocked(int source, boolean blocked) {
+        int mask = getSourceBlockMask();
+        if (blocked) mask |= source;
+        else mask &= ~source;
+        putSourceBlockMask(mask);
+    }
+
+    public static int getSourceBlockedCount() {
+        int mask = getSourceBlockMask();
+        int count = 0;
+        for (int source : SOURCE_ALL) if ((mask & source) != 0) count++;
+        return count;
+    }
+
+    // ===== 下载目录配置 =====
+    /** 默认下载子目录名：tvbox/Download/ */
+    public static final String DOWNLOAD_DIR_DEFAULT = "tvbox/Download";
+
+    /** 获取当前下载目录绝对路径。未设置时返回默认路径（tvbox/Download）。 */
+    public static String getDownloadDir() {
+        String custom = Prefers.getString("download_dir", "");
+        if (custom != null && !custom.trim().isEmpty()) return custom;
+        return Path.root() + File.separator + DOWNLOAD_DIR_DEFAULT;
+    }
+
+    /** 设置自定义下载目录（绝对路径）。传 null/空串重置为默认。 */
+    public static void setDownloadDir(String absPath) {
+        if (absPath == null || absPath.trim().isEmpty()) {
+            Prefers.remove("download_dir");
+        } else {
+            Prefers.put("download_dir", absPath.trim());
+        }
     }
 }

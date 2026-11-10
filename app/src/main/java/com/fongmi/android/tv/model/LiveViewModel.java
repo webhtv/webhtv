@@ -32,6 +32,7 @@ public class LiveViewModel extends ViewModel {
     private final MutableLiveData<Result> url;
     private final MutableLiveData<Live> live;
     private final MutableLiveData<Epg> epg;
+    private final MutableLiveData<Epg> day;
 
     private final Map<TaskType, ListenableFuture<?>> futures;
     private final Map<TaskType, AtomicInteger> taskIds;
@@ -39,6 +40,7 @@ public class LiveViewModel extends ViewModel {
 
     public LiveViewModel() {
         this.epg = new MutableLiveData<>();
+        this.day = new MutableLiveData<>();
         this.xml = new MutableLiveData<>();
         this.url = new MutableLiveData<>();
         this.live = new MutableLiveData<>();
@@ -58,6 +60,10 @@ public class LiveViewModel extends ViewModel {
 
     public LiveData<Epg> epg() {
         return epg;
+    }
+
+    public LiveData<Epg> day() {
+        return day;
     }
 
     public LiveData<Live> live() {
@@ -85,6 +91,14 @@ public class LiveViewModel extends ViewModel {
 
     public void getEpg(Channel item) {
         execute(TaskType.EPG, () -> LiveApi.getEpg(item, zoneId), epg::postValue, error -> epg.postValue(new Epg()));
+    }
+
+    /**
+     * [NEW] 按天取节目单，offset 相对今天：负数往日、正数明日。
+     * 结果通过 day() 回调，epg.getDate() 即这一天的日期。
+     */
+    public void getEpgDay(Channel item, int offset) {
+        execute(TaskType.EPG_DAY, () -> LiveApi.getEpgDay(item, zoneId, offset), day::postValue, error -> day.postValue(new Epg()));
     }
 
     public void getUrl(Channel item) {
@@ -136,6 +150,7 @@ public class LiveViewModel extends ViewModel {
 
         LIVE(Constant.TIMEOUT_LIVE),
         EPG(Constant.TIMEOUT_EPG),
+        EPG_DAY(Constant.TIMEOUT_EPG),
         XML(Constant.TIMEOUT_XML),
         URL(Constant.TIMEOUT_PARSE_LIVE);
 

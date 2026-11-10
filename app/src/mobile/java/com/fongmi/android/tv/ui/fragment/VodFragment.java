@@ -54,6 +54,7 @@ import com.fongmi.android.tv.ui.dialog.ApkPushUrlDialog;
 import com.fongmi.android.tv.ui.dialog.FilterDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LinkDialog;
+import com.fongmi.android.tv.ui.dialog.MultiRepoDialog;
 import com.fongmi.android.tv.ui.dialog.OneKeySyncDialog;
 import com.fongmi.android.tv.ui.dialog.PushPlayDialog;
 import com.fongmi.android.tv.ui.dialog.PushPlayUrlDialog;
@@ -286,7 +287,9 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
     }
 
     private boolean onMenuItemClick(MenuItem item) {
-        if (item.getItemId() == R.id.refresh) {
+        if (item.getItemId() == R.id.multi_repo) {
+            MultiRepoDialog.show(requireActivity());
+        } else if (item.getItemId() == R.id.refresh) {
             if (mWeb != null && mWeb.isVisible()) mWeb.reload();
             else homeContent();
         } else if (item.getItemId() == R.id.keep) KeepActivity.start(requireActivity());

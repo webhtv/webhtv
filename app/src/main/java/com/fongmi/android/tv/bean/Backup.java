@@ -77,7 +77,7 @@ public class Backup {
         backup.setSite(AppDatabase.get().getSiteDao().findAll());
         backup.setLive(AppDatabase.get().getLiveDao().findAll());
         backup.setKeep(AppDatabase.get().getKeepDao().findAll());
-        backup.setConfig(AppDatabase.get().getConfigDao().findAll());
+        backup.setConfig(AppDatabase.get().getConfigDao().findAll().stream().filter(c -> !c.isEmpty()).collect(java.util.stream.Collectors.toList()));
         backup.setHistory(AppDatabase.get().getHistoryDao().findAll());
         backup.setTmdbSeasonProgress(AppDatabase.get().getTmdbSeasonProgressDao().findAll());
         FollowingBackupCodec.Payload payload = FollowingBackupCodec.capture();
@@ -94,7 +94,7 @@ public class Backup {
         if (options.isConfig()) {
             backup.setSite(AppDatabase.get().getSiteDao().findAll());
             backup.setLive(AppDatabase.get().getLiveDao().findAll());
-            backup.setConfig(AppDatabase.get().getConfigDao().findAll());
+            backup.setConfig(AppDatabase.get().getConfigDao().findAll().stream().filter(c -> !c.isEmpty()).collect(java.util.stream.Collectors.toList()));
         }
         if (options.isKeep()) backup.setKeep(AppDatabase.get().getKeepDao().findAll());
         if (options.isHistory()) {
@@ -189,6 +189,7 @@ public class Backup {
     private Map<Integer, Integer> restoreConfig() {
         Map<Integer, Integer> cids = new HashMap<>();
         for (Config item : getConfig()) {
+            if (item.isEmpty()) continue;
             int source = item.getId();
             Config current = TextUtils.isEmpty(item.getInterfaceKey()) ? null
                     : AppDatabase.get().getConfigDao().findByInterfaceKey(item.getInterfaceKey(), item.getType());

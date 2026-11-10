@@ -134,4 +134,5 @@
         保持一致。
     -->
     <color name="tmdb_douban_rating_green">#78E08F</color>
+    <color name="epg_date">#8AB4F8</color>
 </resources>

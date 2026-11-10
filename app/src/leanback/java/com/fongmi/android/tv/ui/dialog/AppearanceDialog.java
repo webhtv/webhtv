@@ -33,12 +33,14 @@ public final class AppearanceDialog extends DialogFragment {
     private String[] uiScales;
     private String[] languages;
     private String[] imageSizes;
+    private String[] titleLines;
     private final List<Row> rows = new ArrayList<>();
     private MaterialTextView uiScaleValue;
     private MaterialTextView themeModeValue;
     private MaterialTextView themeValue;
     private MaterialTextView imageSizeValue;
     private MaterialTextView languageValue;
+    private MaterialTextView titleLinesValue;
 
     /** One dialog row, kept so a theme change can re-colour it without a rebuild. */
     private record Row(LinearLayout root, MaterialTextView title, MaterialTextView summary) {
@@ -58,6 +60,7 @@ public final class AppearanceDialog extends DialogFragment {
         uiScales = ResUtil.getStringArray(R.array.select_ui_scale);
         languages = ResUtil.getStringArray(R.array.select_language);
         imageSizes = ResUtil.getStringArray(R.array.select_size);
+        titleLines = ResUtil.getStringArray(R.array.select_title_lines);
         return LightDialog.create(requireContext(), getString(R.string.setting_appearance), createContent(), getString(R.string.dialog_close), null, null, null);
     }
 
@@ -65,6 +68,7 @@ public final class AppearanceDialog extends DialogFragment {
         LinearLayout content = new LinearLayout(requireContext());
         content.setOrientation(LinearLayout.VERTICAL);
         uiScaleValue = addRow(content, R.string.setting_ui_scale, uiScales[Setting.getUiScaleIndex()], this::chooseUiScale);
+        titleLinesValue = addRow(content, R.string.setting_title_lines, titleLines[Setting.getTitleLinesIndex()], this::chooseTitleLines);
         themeModeValue = addRow(content, R.string.setting_theme_mode, getThemeModeText(), this::chooseThemeMode);
         themeValue = addRow(content, R.string.setting_theme_color, getThemeText(), view -> ThemeDialog.show(this));
         imageSizeValue = addRow(content, R.string.setting_size, imageSizes[PlayerSetting.getSize()], this::chooseImageSize);
@@ -144,6 +148,14 @@ public final class AppearanceDialog extends DialogFragment {
             ThemeController.applyNightModeToApp();
             dismissAllowingStateLoss();
             RefreshEvent.theme();
+        });
+    }
+
+    private void chooseTitleLines(View view) {
+        ChoiceDialog.showSingle(this, R.string.setting_title_lines, titleLines, Setting.getTitleLinesIndex(), which -> {
+            titleLinesValue.setText(titleLines[which]);
+            Setting.putTitleLinesIndex(which);
+            RefreshEvent.size();
         });
     }
 

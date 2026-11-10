@@ -14,6 +14,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.AdapterSearchBinding;
 import com.fongmi.android.tv.databinding.AdapterSearchListBinding;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
@@ -178,6 +179,7 @@ public class SearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
         private void initView(Vod item) {
             binding.name.setText(item.getName());
+            Setting.applyTitleMaxLines(binding.name);
             binding.site.setText(item.getSiteName());
             binding.remark.setText(item.getRemarks());
             binding.site.setVisibility(item.getSiteVisible());
@@ -210,6 +212,7 @@ public class SearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
         private void initView(Vod item) {
             binding.name.setText(item.getName());
+            Setting.applyTitleMaxLines(binding.name);
             binding.site.setText(item.getSiteName());
             binding.remark.setText(item.getRemarks());
             binding.site.setVisibility(item.getSiteVisible());

@@ -605,6 +605,27 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         else startPush(activity, push);
     }
 
+    public static void push(FragmentActivity activity, String text, String name) {
+        PushParser.Parsed push = PushParser.fromText(text);
+        Uri uri = Uri.parse(push.getUrl());
+        String title = TextUtils.isEmpty(name) ? push.getTitle() : name;
+        if (FileChooser.isValid(activity, uri)) file(activity, FileChooser.getPathFromUri(uri), title);
+        else if (!dispatchToContentHandler(activity, push.getUrl(), title)) start(activity, SiteApi.PUSH, push.getId(), TextUtils.isEmpty(name) ? push.getName() : name);
+    }
+
+    private static boolean sPendingFullscreen;
+
+    public static void startFullscreen(Activity activity, History history) {
+        sPendingFullscreen = true;
+        start(activity, history.getSiteKey(), history.getVodId(), history.getVodName(), history.getVodPic(), null, history.getWallPic());
+    }
+
+    private static boolean consumePendingFullscreen() {
+        boolean pending = sPendingFullscreen;
+        sPendingFullscreen = false;
+        return pending;
+    }
+
     @Override
     protected Vod getReaderVod() {
         // 把当前正在播放的 Vod（含章节列表）交给阅读器路由，支持小说/漫画章节导航
@@ -2427,7 +2448,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void checkLand() {
-        if (isPort() && ResUtil.isLand(this)) enterFullscreen();
+        if (consumePendingFullscreen() || (isPort() && ResUtil.isLand(this))) enterFullscreen();
     }
 
     private void getDetail() {

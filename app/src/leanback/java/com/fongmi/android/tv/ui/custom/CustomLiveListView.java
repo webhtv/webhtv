@@ -14,6 +14,7 @@ import com.fongmi.android.tv.utils.KeyUtil;
 public class CustomLiveListView extends VerticalGridView {
 
     private Callback listener;
+    private EdgeListener edgeListener;
 
     public CustomLiveListView(@NonNull Context context) {
         super(context);
@@ -31,15 +32,36 @@ public class CustomLiveListView extends VerticalGridView {
         this.listener = listener;
     }
 
+    /**
+     * [NEW] 设置了边缘监听后，列表不再在头尾之间循环回绕，
+     * 而是把「已经在最上面还往上」「已经在最下面还往下」交给外部处理（例如节目单跨天续接）。
+     */
+    public void setEdgeListener(EdgeListener edgeListener) {
+        this.edgeListener = edgeListener;
+    }
+
+    private int getCount() {
+        return getAdapter() == null ? 0 : getAdapter().getItemCount();
+    }
+
     private boolean onKeyDown() {
-        if (getSelectedPosition() != getAdapter().getItemCount() - 1) return false;
+        if (edgeListener != null) {
+            if (getCount() == 0) return true;
+            if (getSelectedPosition() < getCount() - 1) return false;
+            return edgeListener.onEdgeDown();
+        }
+        if (getSelectedPosition() != getCount() - 1) return false;
         setSelectedPosition(0);
         return true;
     }
 
     private boolean onKeyUp() {
+        if (edgeListener != null) {
+            if (getSelectedPosition() > 0) return false;
+            return edgeListener.onEdgeUp();
+        }
         if (getSelectedPosition() != 0) return false;
-        setSelectedPosition(getAdapter().getItemCount() - 1);
+        setSelectedPosition(getCount() - 1);
         return true;
     }
 
@@ -55,5 +77,15 @@ public class CustomLiveListView extends VerticalGridView {
     public interface Callback {
 
         void setUITimer();
+    }
+
+    /**
+     * [NEW] 头尾边界按键回调，返回 true 表示事件已消费（焦点保持不动或由外部重新定位）。
+     */
+    public interface EdgeListener {
+
+        boolean onEdgeUp();
+
+        boolean onEdgeDown();
     }
 }

@@ -35,8 +35,12 @@ import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.ui.helper.SiteDialogTheme;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
+import com.github.catvod.utils.Path;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
+import android.widget.Toast;
+
+import java.io.File;
 import java.util.List;
 
 public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickListener {
@@ -310,6 +314,56 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         adapter.getItems().forEach(site -> site.setChangeable(result).save());
         adapter.notifyItemRangeChanged(0, adapter.getItemCount());
         return true;
+    }
+
+    @Override
+    public void onDeleteClick(int position, Site item) {
+        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
+                .setTitle(R.string.setting_site_delete_title)
+                .setMessage(getString(R.string.setting_site_delete_message, item.getName()))
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> deleteFileSite(position, item))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void deleteFileSite(int position, Site item) {
+        String type = item.getFileType();
+        String fileName = item.getFileName();
+        if (fileName.isEmpty()) return;
+        String subDir = switch (type) {
+            case "XBPQ" -> "sites-json";
+            case "JS" -> "sites-js/api";
+            case "PY" -> "sites-py";
+            case "RAW" -> "sites";
+            default -> "";
+        };
+        if (subDir.isEmpty()) return;
+        File file = new File(Path.root() + "/tvbox/" + subDir, fileName);
+        boolean deleted = file.exists() && file.delete();
+        if (!deleted && file.exists()) {
+            Toast.makeText(requireActivity(), R.string.setting_site_delete_failed, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Site currentHome = VodConfig.get().getHome();
+        List<Site> siteList = VodConfig.get().getSites();
+        if (currentHome != null && currentHome.getKey().equals(item.getKey())) {
+            int delIndex = -1;
+            for (int i = 0; i < siteList.size(); i++) {
+                if (siteList.get(i).getKey().equals(item.getKey())) {
+                    delIndex = i;
+                    break;
+                }
+            }
+            Site fallbackHome = new Site();
+            if (delIndex != -1 && siteList.size() > 1) {
+                if (delIndex + 1 < siteList.size()) fallbackHome = siteList.get(delIndex + 1);
+                else fallbackHome = siteList.get(delIndex - 1);
+            }
+            VodConfig.get().setHome(fallbackHome);
+        }
+        if (!siteList.isEmpty()) siteList.remove(item);
+        Toast.makeText(requireActivity(), getString(R.string.setting_site_delete_done, item.getName()), Toast.LENGTH_SHORT).show();
+        if (adapter != null) adapter.removeSite(item);
     }
 
     @Override

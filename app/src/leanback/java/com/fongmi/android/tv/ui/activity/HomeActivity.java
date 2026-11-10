@@ -72,6 +72,7 @@ import com.fongmi.android.tv.ui.dialog.CustomCspDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.dialog.HomeMenuDialog;
+import com.fongmi.android.tv.ui.dialog.MultiRepoDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.ui.fragment.FolderFragment;
 import com.fongmi.android.tv.ui.presenter.FuncPresenter;
@@ -1350,22 +1351,23 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     /**
-     * 执行 select_home_menu_key 中某一项对应的动作，下标 1..11（0 是「选项弹窗」自身，不会走到这里）。
+     * 执行 select_home_menu_key 中某一项对应的动作，下标 1..12（0 是「选项弹窗」自身，不会走到这里）。
      */
     @Override
     public void onHomeMenuItem(int index) {
         switch (index) {
-            case 1 -> SiteDialog.create().action().show(this);
-            case 2 -> HistoryDialog.create().vod().show(this);
-            case 3 -> LiveActivity.start(this);
-            case 4 -> HistoryActivity.start(this);
-            case 5 -> SearchActivity.start(this);
-            case 6 -> PushActivity.start(this);
-            case 7 -> PushActivity.start(this, 3);
-            case 8 -> KeepActivity.start(this);
-            case 9 -> SettingActivity.start(this);
-            case 10 -> FollowingActivity.start(this, null);
-            case 11 -> openCustomCsp();
+            case 1 -> MultiRepoDialog.show(this);
+            case 2 -> SiteDialog.create().action().show(this);
+            case 3 -> HistoryDialog.create().vod().show(this);
+            case 4 -> LiveActivity.start(this);
+            case 5 -> HistoryActivity.start(this);
+            case 6 -> SearchActivity.start(this);
+            case 7 -> PushActivity.start(this);
+            case 8 -> PushActivity.start(this, 3);
+            case 9 -> KeepActivity.start(this);
+            case 10 -> SettingActivity.start(this);
+            case 11 -> FollowingActivity.start(this, null);
+            case 12 -> openCustomCsp();
         }
     }
 

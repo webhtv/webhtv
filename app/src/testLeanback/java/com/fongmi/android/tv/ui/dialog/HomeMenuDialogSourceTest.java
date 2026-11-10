@@ -43,8 +43,8 @@ public class HomeMenuDialogSourceTest {
         String java = read("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/HomeMenuDialog.java");
         assertTrue(java.contains("items.remove(0)"));
         int options = countItems(read("app/src/main/res/values-zh-rCN/strings.xml"));
-        // 数组共 12 项，去掉第 0 项后 position 0..10 对应 onHomeMenuItem 的 case 1..11
-        assertEquals(12, options);
+        // 数组共 13 项，去掉第 0 项后 position 0..11 对应 onHomeMenuItem 的 case 1..12
+        assertEquals(13, options);
         String activity = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
         for (int index = 1; index <= options - 1; index++) {
             assertTrue("缺少 case " + index, activity.contains("case " + index + " ->"));
@@ -58,16 +58,16 @@ public class HomeMenuDialogSourceTest {
         assertTrue(strings.contains("<item>追更页面</item>"));
         assertTrue(strings.contains("<item>站点注入</item>"));
         for (String locale : new String[]{"values", "values-zh-rCN", "values-zh-rTW"}) {
-            assertEquals(locale, 12, countItems(read("app/src/main/res/" + locale + "/strings.xml")));
+            assertEquals(locale, 13, countItems(read("app/src/main/res/" + locale + "/strings.xml")));
         }
 
         String setting = read("app/src/main/java/com/fongmi/android/tv/setting/Setting.java");
         assertTrue(setting.contains("Prefers.getInt(\"home_menu_key\", 0)"));
-        assertTrue(setting.contains("menuKey > 11"));
+        assertTrue(setting.contains("menuKey > 12"));
 
         String activity = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
-        assertTrue(activity.contains("case 10 -> FollowingActivity.start(this, null);"));
-        assertTrue(activity.contains("case 11 -> openCustomCsp();"));
+        assertTrue(activity.contains("case 11 -> FollowingActivity.start(this, null);"));
+        assertTrue(activity.contains("case 12 -> openCustomCsp();"));
     }
 
     @Test

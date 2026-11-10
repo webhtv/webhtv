@@ -2,6 +2,7 @@
 
     <!-- Home -->
     <string name="home">首页</string>
+    <string name="home_refresh">刷新</string>
     <string name="home_vod">点播</string>
     <string name="home_live">直播</string>
     <string name="home_search">搜索</string>
@@ -26,13 +27,13 @@
     <string name="home_buttons_reset">重置</string>
     <string name="home_buttons_selected">已启用 %1$d/%2$d</string>
     <string name="detail_tmdb_rematch">TMDB</string>
+    <string name="home_switch">选站</string>
 
     <!-- Collect -->
-    <string name="collect_result">“<xliff:g name="name">%s</xliff:g>”的搜索结果</string>
+    <string name="collect_result">"<xliff:g name="name">%s</xliff:g>"的搜索结果</string>
 
     <!-- Push -->
     <string name="push_clip">推送剪贴板内容</string>
-    <string name="push_info">使用手机扫描二维码，或于浏览器访问地址\n<xliff:g name="name">%s</xliff:g></string>
 
     <string name="device_select">选择设备</string>
     <string name="device_offline">设备已离线</string>
@@ -48,4 +49,7 @@
     <string name="dialog_delete_record">删除全部记录？</string>
     <string name="dialog_delete_history">观看记录将会全部删除。</string>
     <string name="filter_reset">已重置筛选</string>
+
+    <!-- Live Program -->
+    <string name="live_program_vertical">节\n目\n单</string>
 </resources>

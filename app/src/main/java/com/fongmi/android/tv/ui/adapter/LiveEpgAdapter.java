@@ -28,7 +28,6 @@ public class LiveEpgAdapter extends RecyclerView.Adapter<LiveEpgAdapter.ViewHold
 
     public void reload() {
         items.clear();
-        items.add("");
         for (String item : LiveEpgSetting.getHistory()) add(item);
         notifyDataSetChanged();
     }
@@ -61,8 +60,9 @@ public class LiveEpgAdapter extends RecyclerView.Adapter<LiveEpgAdapter.ViewHold
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         String item = items.get(position);
         boolean editable = !item.isEmpty();
+        boolean selected = LiveEpgSetting.isSelected(item);
         holder.binding.text.setText(item.isEmpty() ? ResUtil.getString(R.string.live_epg_default) : item);
-        holder.binding.getRoot().setSelected(item.equals(LiveEpgSetting.getUrl()));
+        holder.binding.check.setChecked(selected);
         holder.binding.edit.setVisibility(editable ? View.VISIBLE : View.GONE);
         holder.binding.delete.setVisibility(editable ? View.VISIBLE : View.GONE);
         holder.binding.getRoot().setOnClickListener(v -> listener.onEpgClick(item));

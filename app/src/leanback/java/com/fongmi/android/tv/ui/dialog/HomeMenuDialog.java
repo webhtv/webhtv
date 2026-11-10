@@ -35,7 +35,7 @@ public class HomeMenuDialog extends BaseAlertDialog {
     public interface Listener {
 
         /**
-         * @param index select_home_menu_key 中的下标，取值 1..11
+         * @param index select_home_menu_key 中的下标，取值 1..12
          */
         void onHomeMenuItem(int index);
     }

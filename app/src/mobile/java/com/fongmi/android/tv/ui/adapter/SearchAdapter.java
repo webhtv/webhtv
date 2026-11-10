@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.AdapterSearchBinding;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.databinding.AdapterVodRectBinding;
 import com.fongmi.android.tv.utils.ImgUtil;
 
@@ -86,6 +87,7 @@ public class SearchAdapter extends BaseDiffAdapter<Vod, RecyclerView.ViewHolder>
 
         private void initView(Vod item) {
             binding.name.setText(item.getName());
+            Setting.applyTitleMaxLines(binding.name);
             setMarquee(binding.getRoot().hasFocus());
             binding.site.setText(item.getSiteName());
             binding.remark.setText(item.getRemarks());
@@ -123,6 +125,7 @@ public class SearchAdapter extends BaseDiffAdapter<Vod, RecyclerView.ViewHolder>
         private void initView(Vod item) {
             applySize();
             binding.name.setText(item.getName());
+            Setting.applyTitleMaxLines(binding.name);
             setMarquee(binding.getRoot().hasFocus());
             binding.site.setText(item.getSiteName());
             binding.remark.setText(item.getRemarks());

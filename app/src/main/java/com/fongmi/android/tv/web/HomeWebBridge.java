@@ -166,6 +166,7 @@ public class HomeWebBridge {
                 case "device.info" -> device();
                 case "site.info" -> site();
                 case "config.info" -> config();
+                case "adblock.config" -> adblockConfig(payload);
                 case "ext.info" -> extInfo();
                 case "ext.log" -> extLog(payload);
                 case "ext.toast" -> extToast(payload);
@@ -177,6 +178,37 @@ public class HomeWebBridge {
                 case "navigation.reload" -> reload();
                 default -> throw new IllegalArgumentException("Unknown method: " + method);
             };
+    }
+
+    /**
+     * 接收 JS 广告过滤脚本同步的配置。
+     * payload: {"siteHost":"a6.com","blockAllCrossNav":true,"allowCrossNav":false,
+     *           "blacklist":["ec766.com","ucloudqn.unipus.cn"]}
+     */
+    private String adblockConfig(JsonObject payload) {
+        try {
+            boolean enabled = payload.has("enabled") ? payload.get("enabled").getAsBoolean() : true;
+            String host = Json.safeString(payload, "siteHost");
+            boolean blockAll = payload.has("blockAllCrossNav") ? payload.get("blockAllCrossNav").getAsBoolean() : true;
+            boolean allowCross = payload.has("allowCrossNav") ? payload.get("allowCrossNav").getAsBoolean() : false;
+            boolean blockNavJump = payload.has("blockNavJump") ? payload.get("blockNavJump").getAsBoolean() : true;
+            java.util.List<String> white = asList(payload, "whitelist");
+            java.util.List<String> black = asList(payload, "blacklist");
+            String scope = payload.has("scope") ? payload.get("scope").getAsString() : "global";
+            WebHomeAdBlocker.get().applyJsConfig(enabled, host, blockAll, allowCross, blockNavJump, white, black, scope);
+        } catch (Throwable ignored) { }
+        return quote("ok");
+    }
+
+    private static java.util.List<String> asList(JsonObject obj, String key) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        try {
+            com.google.gson.JsonArray arr = obj.getAsJsonArray(key);
+            if (arr != null) {
+                for (int i = 0; i < arr.size(); i++) out.add(arr.get(i).getAsString());
+            }
+        } catch (Throwable ignored) { }
+        return out;
     }
 
     private String vodHome(JsonObject payload) throws Exception {
@@ -351,7 +383,7 @@ public class HomeWebBridge {
         return content;
     }
 
-    private JsonObject resolveInlineEpisode(JsonObject payload) throws Exception {
+    JsonObject resolveInlineEpisode(JsonObject payload) throws Exception {
         String id = "inline_" + UUID.randomUUID().toString().replace("-", "");
         CompletableFuture<String> future = new CompletableFuture<>();
         inlineResults.put(id, future);

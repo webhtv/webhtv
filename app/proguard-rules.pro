@@ -25,6 +25,10 @@
 -keepattributes *Annotation*
 -keep class com.google.gson.** { *; }
 
+# SAX
+-keep class org.xml.sax.** { *; }
+-keep class javax.xml.parsers.** { *; }
+
 # App code: keep everything, no obfuscation.
 # R8 fullMode strips generic Signature from obfuscated classes, so any persisted
 # class holding an object/numeric generic collection field (Map<String,Integer>,
