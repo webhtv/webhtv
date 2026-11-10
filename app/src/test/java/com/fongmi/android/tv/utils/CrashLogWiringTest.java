@@ -13,13 +13,16 @@ import java.nio.file.Path;
 public class CrashLogWiringTest {
 
     @Test
-    public void crashWriterIsInstalledRightAfterTheCrashHandlerConfiguration() throws Exception {
+    public void crashWriterIsInstalledBeforeStartupProviders() throws Exception {
+        String app = read("app/src/main/java/com/fongmi/android/tv/App.java");
         String startup = read("app/src/main/java/com/fongmi/android/tv/Startup.java");
-        int config = startup.indexOf("CaocConfig.Builder.create()");
-        int install = startup.indexOf("CrashReport.install(context)");
-
-        assertTrue("Startup must install the crash report writer", install >= 0);
-        assertTrue("the writer must wrap the handler installed by CustomActivityOnCrash", config >= 0 && install > config);
+        int attach = app.indexOf("protected void attachBaseContext");
+        int install = app.indexOf("CrashReport.install(base)", attach);
+        int initialize = app.indexOf("PreviousProcessCrashRecovery.initialize(base)", attach);
+        int mainOnly = app.indexOf("CrashReport.isMainProcess(base)", install);
+        assertTrue("fatal routing must cover provider/Application startup", install > attach && initialize > install);
+        assertTrue("recovery state must be published only by the default process", mainOnly > install && mainOnly < initialize);
+        assertFalse("Startup must not install over the early handler", startup.contains("CrashReport.install(context)"));
     }
 
     @Test

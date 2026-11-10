@@ -33,9 +33,11 @@ import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.provider.SubtitleProviderRegistry;
 import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.utils.CrashReport;
 import com.fongmi.android.tv.utils.DanmakuSearchListFocusFixer;
 import com.fongmi.android.tv.utils.NsdDeviceDiscovery;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.PreviousProcessCrashRecovery;
 import com.fongmi.android.tv.utils.PreviousProcessExitLogger;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.WebViewDataDirectoryGuard;
@@ -58,6 +60,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     private volatile Activity activity;
     private volatile int foregroundActivities;
     private Hook hook;
+    private volatile boolean lightweightProcess = true;
 
     /** 同一语言上语言更新连续失败的次数上限，超过后放弃该语言，避免热路径无限重试。 */
     private static final int MAX_RESOURCES_APPLY_ATTEMPTS = 3;
@@ -120,7 +123,15 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
-        if (PlaybackRecoveryMonitor.isRecoveryProcess(base)) return;
+        boolean errorProcess = CrashReport.isErrorProcess(base);
+        lightweightProcess = errorProcess || PlaybackRecoveryMonitor.isRecoveryProcess(base);
+        if (lightweightProcess) {
+            if (errorProcess) Init.set(base);
+            return;
+        }
+        CrashReport.install(base);
+        // Helper processes must not publish recovery state on behalf of the default process.
+        if (CrashReport.isMainProcess(base)) PreviousProcessCrashRecovery.initialize(base);
         WebViewDataDirectoryGuard.clearStaleLock(base);
         Init.set(base);
     }
@@ -128,7 +139,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     public void onCreate() {
         super.onCreate();
-        if (PlaybackRecoveryMonitor.isRecoveryProcess(this)) return;
+        if (lightweightProcess) return;
         PlaybackMemoryMonitor.process().initialize(this);
         PlaybackSystemConditionMonitor.process().initialize(this);
         Setting.applyLanguage();
@@ -203,13 +214,13 @@ public class App extends Application implements Application.ActivityLifecycleCal
 
     @Override
     public void onTrimMemory(int level) {
-        if (!PlaybackRecoveryMonitor.isRecoveryProcess(this)) PlaybackMemoryMonitor.process().onTrimMemory(level);
+        if (!lightweightProcess) PlaybackMemoryMonitor.process().onTrimMemory(level);
         super.onTrimMemory(level);
     }
 
     @Override
     public void onLowMemory() {
-        if (!PlaybackRecoveryMonitor.isRecoveryProcess(this)) PlaybackMemoryMonitor.process().onLowMemory();
+        if (!lightweightProcess) PlaybackMemoryMonitor.process().onLowMemory();
         super.onLowMemory();
     }
 
@@ -286,6 +297,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     @SuppressWarnings("deprecation")
     public Resources getResources() {
+        if (lightweightProcess) return super.getResources();
         int language = Setting.getLanguage();
         Resources cached = resources;
         if (cached != null && resourcesLanguage == language) return cached;

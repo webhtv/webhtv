@@ -1,6 +1,8 @@
 package com.fongmi.android.tv.utils;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 
 import com.github.catvod.crawler.DebugLogStore;
 
@@ -33,9 +35,16 @@ public final class CrashLogSession {
         prepared = true;
         try {
             boolean temporary = DebugLogStore.beginCrashSession();
+            String history = PreviousProcessCrashRecovery.getRecoveryDetails(intentOf(context));
             String report = CrashReport.readRecent(context);
-            List<String> logcat = logcatTail(CrashLogText.reportPid(report));
-            String body = CrashLogText.composeSession(report, logcat, logcat != null && !logcat.isEmpty(), report != null, !temporary);
+            int reportPid = CrashLogText.reportPid(report);
+            int deadPid = reportPid;
+            int historyPid = historyPid(history);
+            // A report left by a different death must never be presented as this entry's evidence.
+            if (historyPid > 0) report = null;
+            if (historyPid > 0) deadPid = historyPid;
+            List<String> logcat = logcatTail(deadPid);
+            String body = withHistory(CrashLogText.composeSession(report, logcat, logcat != null && !logcat.isEmpty(), report != null, !temporary), history);
             for (String line : body.split("\n", -1)) {
                 if (!line.isEmpty()) DebugLogStore.appendCrashContext(line);
             }
@@ -46,6 +55,35 @@ public final class CrashLogSession {
                 // The debug service still starts; the page then reports the original state.
             }
         }
+    }
+
+    /** The crash screen passes itself; its intent carries the recovery history of this entry. */
+    private static Intent intentOf(Context context) {
+        return context instanceof Activity ? ((Activity) context).getIntent() : null;
+    }
+
+    private static int historyPid(String history) {
+        if (history == null) return -1;
+        for (String line : history.split("\n")) {
+            if (!line.startsWith("pid=")) continue;
+            try {
+                return Integer.parseInt(line.substring(4).trim());
+            } catch (NumberFormatException ignored) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    private static String withHistory(String body, String history) {
+        if (history == null || history.isEmpty()) return body;
+        List<String> lines = new ArrayList<>();
+        String[] existing = body.split("\n", -1);
+        lines.add(existing.length > 0 ? existing[0] : "");
+        lines.add("# === previous process recovery ===");
+        for (String line : history.split("\n")) if (!line.isEmpty()) lines.add(line);
+        for (int i = 1; i < existing.length; i++) lines.add(existing[i]);
+        return String.join("\n", lines);
     }
 
     private static List<String> logcatTail(int pid) {
