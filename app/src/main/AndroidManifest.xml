@@ -118,12 +118,6 @@
             android:theme="@style/Theme.App.Lab" />
 
         <activity
-            android:name=".ui.activity.OriginPlaybackActivity"
-            android:exported="false"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
-            android:launchMode="singleTop" />
-
-        <activity
             android:name=".lab.LabOutputActivity"
             android:exported="false"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"

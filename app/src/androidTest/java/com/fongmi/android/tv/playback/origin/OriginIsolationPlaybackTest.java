@@ -35,7 +35,6 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.node.NodeRuntime;
-import com.fongmi.android.tv.ui.activity.OriginPlaybackActivity;
 import com.github.catvod.Proxy;
 import com.github.catvod.utils.Prefers;
 
@@ -358,8 +357,8 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
 
     private void exerciseActivity(History h, MainState baseline, String runtime) throws Exception {
         upstream.failSegments = false;
-        Intent intent = new Intent(context, OriginPlaybackActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(OriginPlaybackActivity.EXTRA_CID, h.getCid()).putExtra(OriginPlaybackActivity.EXTRA_KEY, h.getKey());
+        // 正常播放页入口：跨配置历史与当前源历史共用同一个外壳，只有数据来源是原配置 worker。
+        Intent intent = com.fongmi.android.tv.ui.activity.VideoActivity.originHistoryIntent(context, h).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         activity = getInstrumentation().startActivitySync(intent);
         AtomicReference<Player> player = new AtomicReference<>(); AtomicInteger frames = new AtomicInteger();
         waitUntil(() -> { main(() -> { PlayerView view = activity.findViewById(R.id.exo); if(view != null) player.set(view.getPlayer()); }); return player.get()!=null; }, 60000, "the actual playback page must attach its player");
@@ -370,13 +369,14 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
         if (frame.get() != null) frame.get().recycle();
         AtomicLong position = new AtomicLong(); main(() -> position.set(player.get().getCurrentPosition()));
         assertTrue("resume seek must be near original progress", Math.abs(position.get()-h.getPosition())<3500);
-        TextView message = activity.findViewById(R.id.message);
-        assertTrue("the page must show bob and the selected second episode", message.getText().toString().contains("bob") && message.getText().toString().contains("2"));
-        int pauseButton = context.getResources().getIdentifier("pause", "id", context.getPackageName());
-        assertTrue("the real playback page has a pause control", pauseButton != 0);
-        main(() -> activity.findViewById(pauseButton).performClick());
-        AtomicBoolean paused = new AtomicBoolean(); main(() -> paused.set(!player.get().isPlaying())); assertTrue(paused.get());
+        // 正常播放页外壳显示原配置站点与那一集：证明详情／选集来自原源 worker，而不是当前配置 SiteApi。
+        AtomicReference<String> shell = new AtomicReference<>("");
+        main(() -> shell.set(allText(activity)));
+        assertTrue("the normal playback shell must show the original site, got: " + shell.get(), shell.get().contains("bob"));
+        assertTrue("the shell must show the resumed second episode, got: " + shell.get(), shell.get().contains("第2集"));
         int pid = processId(context.getPackageName()+":origin"); assertTrue(pid>0);
+        main(() -> player.get().pause());
+        AtomicBoolean paused = new AtomicBoolean(); main(() -> paused.set(!player.get().isPlaying())); assertTrue("pause must not release the origin lease", paused.get());
         getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_HOME);
         getInstrumentation().waitForIdleSync();
         assertEquals("background/page departure must retain the playing media lease", pid, processId(context.getPackageName()+":origin"));
@@ -399,6 +399,21 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
         System.out.println("ORIGIN_FIRST_FRAME " + runtime + " position=" + position.get() + " frameCallbacks=" + frames.get());
     }
 
+
+    /** 收集当前窗口内所有文本：正常播放页外壳用它证明展示的是原配置站点与那一集。 */
+    private static String allText(Activity activity) {
+        StringBuilder text = new StringBuilder();
+        collectText(activity.getWindow().getDecorView(), text);
+        return text.toString();
+    }
+
+    private static void collectText(android.view.View view, StringBuilder text) {
+        if (view instanceof TextView) text.append(((TextView) view).getText()).append('|');
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) collectText(group.getChildAt(i), text);
+        }
+    }
     private void assertHlsThroughRelay(String masterUrl) throws Exception {
         HttpData master=fetch(masterUrl, Map.of()); assertEquals(200,master.status);
         String variant=firstMediaLine(master.text()); assertTrue("master must map its variant", variant.startsWith("http://127.0.0.1:"));
@@ -488,10 +503,12 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
     private static Map<String,Object> copyPreferences(SharedPreferences preferences){Map<String,Object> result=new TreeMap<>();for(Map.Entry<String,?> entry:preferences.getAll().entrySet())result.put(entry.getKey(),entry.getValue() instanceof Set?new TreeSet<>((Set<String>)entry.getValue()):entry.getValue());return result;}
     /** 只排除主进程自己随播放写的广告统计；账号、配置、运行时偏好仍逐字比对。 */
     /**
-     * 主进程自己随任何一次播放都会写的运行时统计/学习缓存；只有这两个键允许变化，
-     * 其它任何偏好（账号、配置、解析器、插件）都必须逐字不变。
+     * 主进程自己随任何一次正常播放页播放都会写的运行时统计：广告统计、解码器学习缓存、
+     * 原站协议健康度（SiteHealthStore.recordParse/recordPlay，按 site key 记）与音频歌单激活项
+     * （AudioPlaylistStore.setActive）。这几个键与"切不切配置"无关，正常当前源播放同样会写，
+     * 因此只允许它们变化；账号、配置、解析器、插件等其它偏好必须逐字不变。
      */
-    private static final Set<String> PLAYBACK_OWNED_KEYS = new TreeSet<>(Arrays.asList("ad_block_stats", "perf_exo_decoder_runtime_v1"));
+    private static final Set<String> PLAYBACK_OWNED_KEYS = new TreeSet<>(Arrays.asList("ad_block_stats", "perf_exo_decoder_runtime_v1", "site_health", "audio_playlist_active"));
     private static Map<String,Object> stablePreferences(android.content.SharedPreferences preferences){Map<String,Object> result=copyPreferences(preferences);result.keySet().removeAll(PLAYBACK_OWNED_KEYS);return result;}
     /** 偏好摘要：断言失败只暴露键名，绝不把账号/密钥值写进日志。 */
     private static String digest(Map<String,Object> values){try{java.security.MessageDigest md=java.security.MessageDigest.getInstance("SHA-256");StringBuilder text=new StringBuilder();for(Map.Entry<String,Object> entry:new TreeMap<>(values).entrySet())text.append(entry.getKey()).append('=').append(entry.getValue()).append('\n');return Base64.getEncoder().encodeToString(md.digest(text.toString().getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new AssertionError("digest unavailable");}}

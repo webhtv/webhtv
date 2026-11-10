@@ -400,3 +400,33 @@ SiteApi、ParseJob、BaseLoader、JS/Py/Jar、Chaquo/QuickJS/nodejs 原生模块
 1. 需要 WebView 嗅探的原源在 API < 28 明确不支持（BLOCKED），这是平台限制而非本次疏漏。
 2. WebHome 与二期三端融合仍未做（用户允许先忽略 WebHome）。
 3. Node 租约真实双 bundle 并存仍未验证（缺 libnode，不隐式下载）。
+## 13. 阶段 2 第一步：跨源历史改走正常播放页入口（删除临时页面）
+
+### 13.1 改动
+
+* 删除 `app/src/main/java/.../ui/activity/OriginPlaybackActivity.java` 与 `app/src/main/res/layout/activity_origin_playback.xml`，并从 `AndroidManifest.xml` 移除该 activity 声明（自带的播放/暂停/下一集/线路/退出按钮与"正在匹配…"文案一并消失）。
+* 新增 `app/src/main/java/com/fongmi/android/tv/playback/origin/OriginHistoryPlayback.java`：原源会话内核（intent extras `origin_history_cid`/`origin_history_key`/`origin_history_payload`、按需 `open`、PlayReady 缓存 `Vod`/`Result`、进度写回、释放租约）。intent 只带原 cid／historyKey／`HistoryResumePayload.encode(history)`，不塞大 JSON。
+* 两个 flavor 的 `VideoActivity` 新增静态入口：`public static Intent originHistoryIntent(Context context, History origin)` 与 `public static void startFromOriginHistory(Activity activity, History origin)`；`originHistoryIntent` 复用既有 `putIntentPlaybackSelection(...)`（原 flag／stableFlagKey／集名／集 URL）与既有 `EXTRA_RESUME_*`，不引入新播放控件。
+* 原源模式下逐点复用既有 UI 与既有 `startPlayer`：`getDetail(boolean)` 改为 `mOrigin.requestDetail()`（详情来自 worker 的 `PlayReady.vod`，不调用当前 `VodConfig` 的 SiteApi）；`getPlayer(Flag, Episode)` 只把 `mViewModel.playerContent(...)` 换成 `mOrigin.requestPlay(flag, episode)`，其后的标题/海报/歌词/历史更新/进度条等全部照旧；`setPlayer(Result)`、`startPlayer(...)`、选集器、手势、字幕、倍速、弹幕全部原样复用。
+* 身份与站点：`getHistoryKey()` 在原源模式返回 `mOrigin.historyKey()`（原 cid 的组合键），`getSite()` 返回原源 `Site`（原 key + 原站名），因此 `History.findPlayback`／`Keep`／内核偏好都按原源身份走，不落当前配置；`getPlaybackKey()` 返回 `client.playbackKey()`，`startPlayer` 的 key 参数改用它（普通路径下二者等值，逐字不变）。
+* 进度与租约：`saveHistory(boolean)`/`syncHistory()` 在原源模式改走 `OriginProgressWriter.write(mHistory, position, duration)` + `client.progressCommitted()`，并复用 `PlaybackService.holdOriginLease(client, history)`（服务侧 5s ticker 同类写回）与 `releaseOriginLease()`；暂停/seek 不释放，只有真正退出（`saveHistory(true)` 且 `isFinishing() && !isChangingConfigurations()`）或服务停播/替换媒体才释放。
+* fallback 判定位置：`OriginSessionClient.dispatch` 已用 `OriginSessionContract.shouldFallback(reason)` 且要求 `!playbackStarted`，只有 5 个业务 reason 会进 `onUnavailable`；`OriginHistoryPlayback` 的 `onUnavailable` 回调 → `VideoActivity` 监听器 → `HistoryResumeCoordinator.fallbackToCurrent(...)`。`onBlocked`（BLOCKED／worker 死亡／解析失败）只提示错误（`Notify` + `onError` + 空态），不回落。
+* `HistoryResumeCoordinator.open` 跨源分支改为 `VideoActivity.startFromOriginHistory(activity, history)`，保留"原配置不存在 → fallbackToCurrent"，无任何版本号判断。既有当前源历史分支（`startFromHistory` 前的 `NovelRouter`/`shouldOpenLegacyTmdbDetail`/`startDirect`）与 `forPlaybackKey(getHistoryKey(), VodConfig.getCid())` 字面均未改动。
+* 设备用例：`OriginIsolationPlaybackTest.exerciseActivity` 改由 `VideoActivity.originHistoryIntent(...)` 启动正常入口，删除 `R.id.message`/`pause` 临时控件断言，改为收集窗口文本断言外壳显示原站（"bob"）与原第 2 集，暂停改用播放器本身并断言租约不释放；其余断言（真实 AVC 首帧、续播位置、主配置/DB/偏好不变、原 cid 进度写回、worker 退出后回环不可达、注入段 404 不触发当前源匹配）保留。
+
+### 13.2 验证（本轮实际输出）
+
+* 编译：`:app:assembleMobileArm64_v8aDebug :app:assembleLeanbackArm64_v8aDebug :app:assembleMobileArm64_v8aDebugAndroidTest` → `BUILD SUCCESSFUL in 8m 55s`（`app/build/origin-isolation/build-1.log`）。
+* 定向单测：`OriginFallbackPolicyTest` 4、`OriginSessionContractTest` 4、`OriginRelayTargetTest` 6、`HistoryResumeCoordinatorTest` 4、`GlobalHistoryResumeSourceTest` 32 = 50 项 0 失败（`unit-1.log` + `app/build/test-results/...`）。其中 `GlobalHistoryResumeSourceTest` 的 `OriginPlaybackActivity.start(activity, history)` 断言属于"被本轮删除的入口"，经父协调者批准只改该 1 行为 `VideoActivity.startFromOriginHistory(activity, history)`，断言语义（原源尝试先于 fallback、launch 后 return）未放宽。
+* 设备（emulator-5554 / SDK 28，`am instrument -e originRuntime jar`）：首次 7/8 通过，唯一失败为 `main default preferences changed outside the playback-owned keys, keys=[audio_playlist_active, perf_exo_decoder_runtime_v1, site_health]`——失败点在"外壳已真实播放之后"的偏好摘要，属断言口径过窄：`site_health`（`SiteHealthStore.recordParse/recordPlay`，按 site key 记原站协议健康度）与 `audio_playlist_active`（`AudioPlaylistStore.setActive`）是**任何正常播放页**都会写的运行时统计，与"切不切配置"无关。因此只把这两个键加入 `PLAYBACK_OWNED_KEYS`（注释写明调用点依据），账号/配置/解析器/插件等其它偏好仍逐字比对，未放宽其它断言。
+* 复跑：`OK (8 tests)`（`device-2.log`）。logcat 实例证据：`ORIGIN_FIRST_FRAME jar position=2494 frameCallbacks=3`；`OriginProgress: cid=156 key=origin_fixture@@@origin-vod@@@156 season=0 episode=0 position=2778 duration=32268`（原 cid 写回）。
+* 普通当前源历史未回归：`GlobalHistoryResumeSourceTest` 32 项全绿，其中 `bothPlayersAcceptExplicitCrossConfigResumeHistory`、`resolvedPlaybackRebindsHistoryToTargetMetadata`、`explicitResumeDoesNotDeleteSourceHistoryInIncognitoMode` 直接约束既有当前源路径字面与行为。
+
+### 13.3 仍未覆盖／风险
+
+1. Node 运行时租约仍缺 `libnode`，未验证（不隐式下载）。
+2. API 24–27 未验证（本机只有 API 28）。
+3. TMDB 刮削在跨源历史下仍走全局 TMDB 配置（与当前源历史一致）；未做"原配置专属 TMDB"语义。
+4. 原源模式下旋转/重建依赖 `PlaybackService.originLease()` + `matchesHistory` 复用同一租约；若期间进度被别处改写导致 `matchesHistory` 为 false，会新开租约并得到 `ISOLATION_ERROR`（BLOCKED 明确报错），未做自动重试。
+5. 电视端（leanback）只做编译与源级断言验证，**未跑 TV 设备用例**（本轮设备仅手机 APK）。
+6. 本次文档未提交、未建 tag（守卫生成由父处理）。

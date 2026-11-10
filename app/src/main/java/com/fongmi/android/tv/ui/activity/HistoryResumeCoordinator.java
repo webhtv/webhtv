@@ -48,7 +48,7 @@ public final class HistoryResumeCoordinator {
         // 跨配置历史：原源在先，走租约单入口；只有五个业务 reason 才回到当前配置匹配。
         // 系统版本不是门槛：低版本同样尝试原源，只有“需要 WebView 嗅探”的那次解析才会明确报隔离不足。
         if (com.fongmi.android.tv.bean.Config.find(history.getCid()) != null) {
-            OriginPlaybackActivity.start(activity, history);
+            VideoActivity.startFromOriginHistory(activity, history);
             return;
         }
         fallbackToCurrent(activity, history);
