@@ -1541,14 +1541,6 @@ public class Setting {
         Prefers.put("home_vod_auto_load", autoLoad);
     }
 
-    public static boolean isHomeSiteLock() {
-        return Prefers.getBoolean("home_site_lock", false);
-    }
-
-    public static void putHomeSiteLock(boolean homeSiteLock) {
-        Prefers.put("home_site_lock", homeSiteLock);
-    }
-
     public static boolean isAutoBackup() {
         return Prefers.getBoolean("auto_backup", false);
     }

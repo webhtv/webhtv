@@ -90,6 +90,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private int render = -1;
     private int videoRotation;
     private boolean rotationEngaged;
+    private boolean applyingRotation;
     private View.OnLayoutChangeListener rotationLayoutListener;
     private int requestedAspectMode = VideoAspectMode.ORIGINAL;
     private boolean resizeApplied;
@@ -526,12 +527,18 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         videoRotation = ((rotation % 360) + 360) % 360;
         if (mService != null && player().isExo() && videoRotation != 0) rotationEngaged = true;
         if (mService != null && player().isExo() && render != getRender()) {
+            // 切渲染后 surface 异步重建，此时立即 applyVideoRotation 会落在旧 surface 上
+            //（首次旋转看似没反应、随后闪烁）。与 fish 一致：由 onSurfaceAttached/onSizeChanged
+            // 重新应用旋转与缩放，仅在 SDK<=27 时补一次重播。
             setRender();
-            getExoView().post(this::applyVideoRotation);
+            if (android.os.Build.VERSION.SDK_INT <= 27) getExoView().post(this::onReset);
         } else {
             applyVideoRotation();
         }
         applyResizeMode(requestedAspectMode);
+    }
+
+    protected void onReset() {
     }
 
     protected int getVideoRotation() {
@@ -539,6 +546,16 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     protected void applyVideoRotation() {
+        if (applyingRotation) return;
+        applyingRotation = true;
+        try {
+            applyVideoRotationInternal();
+        } finally {
+            applyingRotation = false;
+        }
+    }
+
+    private void applyVideoRotationInternal() {
         PlayerView view = getExoView();
         if (view == null) return;
         View surface = view.getVideoSurfaceView();

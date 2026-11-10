@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.SearchManager;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Process;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
@@ -31,6 +32,7 @@ import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Cache;
 import com.fongmi.android.tv.bean.Class;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.bean.Func;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
@@ -49,7 +51,6 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.DLNARendererService;
-import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.Setting;
@@ -64,7 +65,6 @@ import com.fongmi.android.tv.ui.custom.CustomTitleView;
 import com.fongmi.android.tv.ui.dialog.HomeMenuDialog;
 import com.fongmi.android.tv.ui.dialog.MultiRepoDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
-import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.presenter.FuncPresenter;
 import com.fongmi.android.tv.ui.presenter.HeaderPresenter;
 import com.fongmi.android.tv.ui.presenter.ProgressPresenter;
@@ -96,7 +96,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-public class HomeActivity extends BaseActivity implements ExitConfirmDialog.Listener, CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, FuncPresenter.OnBoundaryListener, TypeAdapter.OnClickListener, HomeWebController.Listener, HomeMenuDialog.Listener {
+public class HomeActivity extends BaseActivity implements CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, FuncPresenter.OnBoundaryListener, TypeAdapter.OnClickListener, HomeWebController.Listener, HomeMenuDialog.Listener {
 
     private static final String TV_NORMAL = "tv-normal";
     private static final String TV_TOOLBAR_HIDDEN = "tv-toolbar-hidden";
@@ -315,7 +315,6 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void setTitle() {
         mBinding.title.setText(AppBranding.getDisplayName(this, getHome().getDisplayName(), getConfig().getName()));
-        mBinding.title.setSiteLocked(Setting.isHomeSiteLock());
     }
 
     private void initConfig() {
@@ -760,6 +759,16 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     @Override
+    public void onTitleLeft() {
+        focusLastFunc();
+    }
+
+    @Override
+    public void onTitleRight() {
+        focusFirstFunc();
+    }
+
+    @Override
     public boolean onLeftBoundary() {
         mBinding.title.setFocusable(true);
         mBinding.title.post(() -> mBinding.title.requestFocus());
@@ -771,6 +780,22 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         mBinding.title.setFocusable(true);
         mBinding.title.post(() -> mBinding.title.requestFocus());
         return true;
+    }
+
+    private void focusFirstFunc() {
+        mBinding.funcRecycler.post(() -> {
+            RecyclerView.ViewHolder holder = mBinding.funcRecycler.findViewHolderForAdapterPosition(0);
+            if (holder != null) holder.itemView.requestFocus();
+        });
+    }
+
+    private void focusLastFunc() {
+        int count = mFuncAdapter.size();
+        if (count <= 0) return;
+        mBinding.funcRecycler.post(() -> {
+            RecyclerView.ViewHolder holder = mBinding.funcRecycler.findViewHolderForAdapterPosition(count - 1);
+            if (holder != null) holder.itemView.requestFocus();
+        });
     }
 
     @Override
@@ -937,20 +962,17 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     /**
-     * 返回键退出确认：沿用与原首页一致的退出面板，可选择后台播放或彻底退出。
+     * 返回键直接退出（与 fish 一致，不弹确认框）：后台线程同步完成退出备份，
+     * 退出前按设置自动清理缓存，然后彻底结束进程，避免进程残留（外挂 jar 悬浮窗、播放服务等仍存活）。
+     * 想进后台请用 Home 键，返回键即真正退出。
      */
     private void confirmExitHome() {
-        ExitConfirmDialog.create(PlaybackService.canContinueInBackground()).show(this);
-    }
-
-    @Override
-    public void onBackgroundPlayback() {
-        moveTaskToBack(true);
-    }
-
-    @Override
-    public void onFullExit() {
-        AppExitCoordinator.exit(this);
+        Task.execute(() -> {
+            AppDatabase.backupOnExitSync();
+            CacheScheduler.get().runExitCleanup();
+            Process.killProcess(Process.myPid());
+            System.exit(0);
+        });
     }
 
     @Override

@@ -5448,7 +5448,8 @@ private boolean runtimeSourceOnly;
         mHistory.setUserSpeed(player().getSpeed());
     }
 
-    private void onReset() {
+    @Override
+    public void onReset() {
         if (isReplay()) onReplay();
         else onRefresh();
     }
@@ -6894,13 +6895,17 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onSizeChanged(VideoSize size) {
+        if (isFinishing() || isDestroyed()) return;
         applyResizeMode(getScale());
+        applyVideoRotation();
         mBinding.widget.size.setText(player().getSizeText());
     }
 
     @Override
     protected void onSurfaceAttached() {
+        if (isFinishing() || isDestroyed()) return;
         applyResizeMode(getScale());
+        applyVideoRotation();
     }
 
     /**

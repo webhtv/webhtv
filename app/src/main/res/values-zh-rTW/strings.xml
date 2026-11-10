@@ -50,11 +50,6 @@
     <string name="history_empty_title">還沒有觀看記錄</string>
     <string name="history_empty_description">播放過的內容會自動出現在這裡，方便繼續觀看。</string>
     <string name="history_empty_action">去點播</string>
-    <string name="exit_confirm_title">退出應用</string>
-    <string name="exit_confirm_message">應用將關閉，播放和後台服務也會停止。</string>
-    <string name="exit_confirm_playing_message">目前正在播放；後台播放會繼續播放，完全退出會停止播放和後台服務。</string>
-    <string name="exit_confirm_background">後台播放</string>
-    <string name="exit_confirm_positive">完全退出</string>
 
     <!-- Play -->
     <string name="play">播放</string>
@@ -1815,22 +1810,11 @@
     <string name="update_download_source_unavailable">此版本沒有可用的更新來源。</string>
 
     <!-- Crash -->
-    <string name="crash_info">發生意外錯誤\n即將自動重新啟動，本次不重新載入介面</string>
+    <string name="crash_info">發生意外錯誤\n抱歉給您帶來不便</string>
     <string name="crash_restart">重新啟動</string>
-    <string name="crash_silent_restart">靜默重新啟動</string>
     <string name="crash_details">錯誤訊息</string>
     <string name="crash_details_title">錯誤訊息</string>
-    <string name="crash_details_message">應用版本：%1$s\n\n%2$s</string>
     <string name="crash_details_close">關閉</string>
-    <string name="crash_log_title">日誌下載位址</string>
-    <string name="crash_log_hint">用同一區域網路內的手機或電腦瀏覽器開啟上面的位址，即可檢視並下載本次崩潰日誌。</string>
-    <string name="crash_log_preparing">正在準備日誌服務…</string>
-    <string name="crash_log_unavailable">日誌服務未啟動，可點按「錯誤訊息」查看堆疊。</string>
-    <string name="crash_log_no_lan">目前沒有區域網路位址（未連線網路？），只能在本機開啟：\n%1$s</string>
-    <string name="crash_log_service_failed">日誌服務未啟動</string>
-    <string name="crash_log_copy">複製位址</string>
-    <string name="crash_log_copied">位址已複製</string>
-    <string name="crash_log_open">在瀏覽器開啟</string>
 
     <!-- Hint -->
     <string name="copied">已複製</string>
@@ -2722,7 +2706,6 @@
     <!-- Auto-generated missing translations -->
     <string name="live_no_epg">00:00 - 23:59 暫無節目信息</string>
     <string name="setting_home_vod_auto_load">默認加載點播</string>
-    <string name="setting_home_site_lock">首頁源鎖定</string>
     <string name="setting_auto_backup">自動備份</string>
     <string name="setting_fullscreen_menu_key">全屏菜單鍵</string>
     <string name="setting_home_menu_key">首頁菜單鍵</string>

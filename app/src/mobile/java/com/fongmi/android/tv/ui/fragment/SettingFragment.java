@@ -44,6 +44,7 @@ import com.fongmi.android.tv.ui.dialog.CacheManagementDialog;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.net.OkHttp;
 
@@ -57,6 +58,7 @@ import java.util.List;
 public class SettingFragment extends BaseFragment implements ConfigListener, SiteListener, LiveListener {
 
     private FragmentSettingBinding mBinding;
+    private String[] defaultLaunch;
 
     public static SettingFragment newInstance() {
         return new SettingFragment();
@@ -99,6 +101,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     private void setOtherText() {
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
+        mBinding.defaultLaunchText.setText((defaultLaunch = ResUtil.getStringArray(R.array.select_default_launch))[Setting.getDefaultLaunch()]);
     }
 
     private void setCacheText() {
@@ -130,6 +133,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.appearance.setOnClickListener(this::onAppearance);
+        mBinding.defaultLaunch.setOnClickListener(this::setDefaultLaunch);
         mBinding.cache.setOnClickListener(this::onCacheClear);
         // The plain click restores the pre-split one-key clear; the panel moved to the long press.
         // The row stays single-line by user request, so §15.2's "not long-press only" intent is a
@@ -302,6 +306,13 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     private boolean onWallHistory(View view) {
         HistoryDialog.create().wall().show(this);
         return true;
+    }
+
+    private void setDefaultLaunch(View view) {
+        ChoiceDialog.showSingle(this, R.string.setting_default_launch, defaultLaunch, Setting.getDefaultLaunch(), which -> {
+            Setting.putDefaultLaunch(which);
+            mBinding.defaultLaunchText.setText(defaultLaunch[which]);
+        });
     }
 
     private void setIncognito(View view) {

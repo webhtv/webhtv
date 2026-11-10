@@ -1537,6 +1537,9 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     private void startWebView(String url) {
         if (isFinishing() || isDestroyed()) return;
+        // WebView 频道不经过播放器，缓冲超时看门狗必须撤销，
+        // 否则 15 秒后 onBufferingTimeout 误报"播放地址加载失败"。
+        App.removeCallbacks(mBufferingTimeout);
         if (service() != null) {
             player().stop();
             player().clear();

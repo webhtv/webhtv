@@ -87,6 +87,24 @@ public final class CacheScheduler {
         return trigger(periodic ? "periodic" : "low-space", finished);
     }
 
+    /**
+     * 退出前自动清理：开关开启时在调用线程上同步跑完一轮自动清理（模式与周期任务一致，
+     * 未在播放、非低空间时为 LIGHT），供"返回键彻底退出"流程在结束进程前调用；
+     * 已有清理在执行则跳过，避免与在跑的任务互相踩踏。
+     */
+    public void runExitCleanup() {
+        if (!CachePolicyStore.isAutoCleanupEnabled()) return;
+        if (CacheCleanupManager.isRunning()) return;
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        CacheCleanupManager.execute(automaticPlan(CacheAutoCleanupPolicy.cleanupMode(false, false)),
+                "exit", result -> done.countDown());
+        try {
+            done.await(60, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private void startupCheck() {
         // The scheduled tasks are queued once for the whole process, while cancelPersistent() only
         // cancels the platform job. Every tick must therefore re-read the switch, otherwise turning

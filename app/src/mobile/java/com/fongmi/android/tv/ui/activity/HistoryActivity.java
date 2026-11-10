@@ -176,6 +176,12 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         return true;
     }
 
+    private void onClear() {
+        if (mAdapter.getItemCount() > 0) {
+            new WebHtvAlertDialogBuilder(this).setTitle(R.string.dialog_clear_history).setMessage(R.string.dialog_clear_history_message).setNegativeButton(R.string.dialog_negative, null).setPositiveButton(R.string.dialog_positive, (dialog, which) -> mAdapter.clear()).show();
+        }
+    }
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.menu_history, menu);
@@ -186,6 +192,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         if (item.getItemId() == android.R.id.home) onBackInvoked();
         else if (item.getItemId() == R.id.delete) onDelete();
+        else if (item.getItemId() == R.id.clear) onClear();
         else if (item.getItemId() == R.id.sync) onSync();
         else if (item.getItemId() == R.id.report) onReport();
         return super.onOptionsItemSelected(item);

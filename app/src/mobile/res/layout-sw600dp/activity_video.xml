@@ -574,6 +574,13 @@
                             android:layout_marginEnd="8dp"
                             android:text="@string/play_cast"
                             app:drawableTopCompat="@drawable/ic_control_cast_shadow" />
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/downloadAction"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="8dp"
+                            android:text="@string/play_download"
+                            app:drawableTopCompat="@drawable/ic_control_download_shadow" />
+
 
                         <com.google.android.material.textview.MaterialTextView
                             android:id="@+id/settingAction"

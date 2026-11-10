@@ -15,6 +15,12 @@
         app:showAsAction="always" />
 
     <item
+        android:id="@+id/clear"
+        android:icon="@drawable/ic_action_clear"
+        android:title="@string/menu_clear"
+        app:showAsAction="always" />
+
+    <item
         android:id="@+id/report"
         android:icon="@drawable/ic_action_report"
         android:title="@string/menu_viewing_report"

@@ -105,14 +105,18 @@ public class JarLoader {
             SpiderDebug.log("jar-loader", "load skip readonly failed key=%s file=%s size=%s", key, file.getAbsolutePath(), file.length());
             return;
         }
-        String cachePath = Path.jar().getAbsolutePath();
-        SpiderDebug.log("jar-loader", "load start key=%s file=%s size=%s cache=%s", key, file.getAbsolutePath(), file.length(), cachePath);
-        DexClassLoader loader = new CspDexClassLoader(file.getAbsolutePath(), cachePath, cachePath, App.get().getClassLoader());
-        invokeInit(key, loader);
-        invokeNetworkCompat(key, loader);
-        invokeProxy(key, loader);
-        loaders.put(key, loader);
-        SpiderDebug.log("jar-loader", "load done key=%s cost=%sms", key, System.currentTimeMillis() - start);
+        try {
+            String cachePath = Path.jar().getAbsolutePath();
+            SpiderDebug.log("jar-loader", "load start key=%s file=%s size=%s cache=%s", key, file.getAbsolutePath(), file.length(), cachePath);
+            DexClassLoader loader = new CspDexClassLoader(file.getAbsolutePath(), cachePath, cachePath, App.get().getClassLoader());
+            invokeInit(key, loader);
+            invokeNetworkCompat(key, loader);
+            invokeProxy(key, loader);
+            loaders.put(key, loader);
+            SpiderDebug.log("jar-loader", "load done key=%s cost=%sms", key, System.currentTimeMillis() - start);
+        } catch (Throwable e) {
+            SpiderDebug.log("jar-loader", "load failed key=%s error=%s", key, error(e));
+        }
     }
 
     private void invokeNetworkCompat(String key, DexClassLoader loader) {
@@ -193,12 +197,21 @@ public class JarLoader {
             if (md5.startsWith("http")) md5 = OkHttp.string(md5).trim();
             jar = texts[0];
             SpiderDebug.log("jar-loader", "parse start key=%s source=%s md5=%s", key, source(jar), !md5.isEmpty());
-            if (!md5.isEmpty() && Util.equals(jar, md5)) {
-                load(key, Path.jar(jar));
-            } else if (jar.startsWith("http")) {
-                load(key, Download.create(jar, Path.jar(jar)).get());
-            } else if (jar.startsWith("file")) {
-                load(key, Path.local(jar));
+            try {
+                if (!md5.isEmpty() && Util.equals(jar, md5)) {
+                    load(key, Path.jar(jar));
+                } else if (jar.startsWith("http")) {
+                    load(key, Download.create(jar, Path.jar(jar)).get());
+                } else if (jar.startsWith("file")) {
+                    load(key, Path.local(jar));
+                } else {
+                    // 配置里 jar 写的是原始 clan:// 或绝对路径（loadXbpqSites 会原样透传 globalSpider），
+                    // 与 fish 一致：兜底按本地文件解析，否则 PQ 类文件源静默加载不出来。
+                    File local = UrlUtil.toLocalFile(jar);
+                    if (local != null && local.exists()) load(key, local);
+                }
+            } catch (Throwable e) {
+                SpiderDebug.log("jar-loader", "parse error key=%s jar=%s error=%s", key, jar, e.getMessage());
             }
         }
     }
@@ -290,8 +303,11 @@ public class JarLoader {
     }
 
     private String source(String jar) {
+        if (jar == null) return null;
+        jar = jar.replace("clan://", "file://tvbox/");
         if (jar.startsWith("http")) return "http:" + Util.md5(jar);
         if (jar.startsWith("file")) return "file:" + jar.length();
+        if (jar.startsWith("/")) return "local:" + jar;
         return jar;
     }
 

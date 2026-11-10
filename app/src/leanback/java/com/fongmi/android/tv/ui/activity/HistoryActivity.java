@@ -47,7 +47,26 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
        setRecyclerView();
        getHistory();
         mBinding.deleteButton.setOnClickListener(v -> onDelete());
+        mBinding.clearButton.setOnClickListener(v -> onClear());
        mBinding.reportButton.setOnClickListener(v -> onReport());
+   }
+
+    private void onClear() {
+        if (mAdapter.getItemCount() > 0) {
+            new WebHtvAlertDialogBuilder(this)
+                .setTitle(R.string.dialog_clear_history)
+                .setMessage(R.string.dialog_clear_history_message)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> mAdapter.clear())
+                .show();
+        }
+    }
+
+   @Override
+   public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+       // 与 fish 一致：列表非空时遥控器菜单键直接唤起清空确认。
+       if (com.fongmi.android.tv.utils.KeyUtil.isMenuKey(event) && mAdapter != null && mAdapter.getItemCount() > 0) onClear();
+       return super.dispatchKeyEvent(event);
    }
 
    /**

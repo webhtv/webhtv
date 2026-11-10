@@ -20,7 +20,7 @@
     <string name="control_episode_column_double">雙列</string>
     <string name="control_compact_episode_title">精簡標題</string>
     <string name="control_track">軌道</string>
-    <string name="home_history">最近觀看</string>
+    <string name="home_history">歷史</string>
     <string name="home_history_button">歷史</string>
     <string name="home_recommend">更新推薦</string>
     <string name="setting_home_buttons">首頁按鈕</string>

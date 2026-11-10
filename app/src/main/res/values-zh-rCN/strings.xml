@@ -50,11 +50,6 @@
     <string name="history_empty_title">还没有观看记录</string>
     <string name="history_empty_description">播放过的内容会自动出现在这里，方便继续观看。</string>
     <string name="history_empty_action">去点播</string>
-    <string name="exit_confirm_title">退出应用</string>
-    <string name="exit_confirm_message">应用将关闭，播放和后台服务也会停止。</string>
-    <string name="exit_confirm_playing_message">当前正在播放；后台播放会继续播放，完全退出会停止播放和后台服务。</string>
-    <string name="exit_confirm_background">后台播放</string>
-    <string name="exit_confirm_positive">完全退出</string>
 
     <!-- Play -->
     <string name="play">播放</string>
@@ -275,7 +270,6 @@
     <string name="group_rule_ai_current_interface">当前点播接口</string>
 
     <string name="setting_home_vod_auto_load">默认加载点播</string>
-    <string name="setting_home_site_lock">首页源锁定</string>
     <string name="setting_auto_backup">自动备份</string>
     <string name="setting_fullscreen_menu_key">全屏菜单键</string>
     <string name="setting_home_menu_key">首页菜单键</string>
@@ -1864,22 +1858,11 @@
     <string name="update_download_source_unavailable">此版本没有可用的更新来源。</string>
 
     <!-- Crash -->
-    <string name="crash_info">发生意外错误\n即将自动重启，本次不重新加载接口</string>
+    <string name="crash_info">发生意外错误\n抱歉给您带来不便</string>
     <string name="crash_restart">重新启动</string>
-    <string name="crash_silent_restart">静默重启</string>
     <string name="crash_details">错误信息</string>
     <string name="crash_details_title">错误信息</string>
-    <string name="crash_details_message">应用版本：%1$s\n\n%2$s</string>
     <string name="crash_details_close">关闭</string>
-    <string name="crash_log_title">日志下载地址</string>
-    <string name="crash_log_hint">用同一局域网内的手机或电脑浏览器打开上面的地址，即可查看并下载本次崩溃日志。</string>
-    <string name="crash_log_preparing">正在准备日志服务…</string>
-    <string name="crash_log_unavailable">日志服务未启动，可点按「错误信息」查看堆栈。</string>
-    <string name="crash_log_no_lan">当前没有局域网地址（未连接网络？），只能在本机打开：\n%1$s</string>
-    <string name="crash_log_service_failed">日志服务未启动</string>
-    <string name="crash_log_copy">复制地址</string>
-    <string name="crash_log_copied">地址已复制</string>
-    <string name="crash_log_open">在浏览器打开</string>
 
     <!-- Hint -->
     <string name="copied">已复制</string>

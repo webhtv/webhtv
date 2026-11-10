@@ -226,9 +226,23 @@ public class Path {
     }
 
     public static void clear(File dir) {
-        if (dir == null) return;
-        if (dir.isDirectory()) for (File file : list(dir)) clear(file);
-        if (dir.delete()) Logger.t(TAG).d("Deleted:" + dir);
+        clear(dir, null);
+    }
+
+    public static void clear(File dir, List<String> skipDirNames) {
+        if (dir == null || !dir.exists()) return;
+        if (dir.isDirectory()) {
+            for (File file : list(dir)) {
+                if (file.isDirectory() && skipDirNames != null && skipDirNames.contains(file.getName())) {
+                    Logger.t(TAG).d("Skip dir:" + file);
+                    continue;
+                }
+                clear(file, skipDirNames);
+            }
+        }
+        if (!dir.isDirectory() || !dir.equals(cache())) {
+            if (dir.delete()) Logger.t(TAG).d("Deleted:" + dir);
+        }
     }
 
     public static File create(File file) {

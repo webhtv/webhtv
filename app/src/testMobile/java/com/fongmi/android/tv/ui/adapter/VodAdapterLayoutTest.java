@@ -25,10 +25,10 @@ public class VodAdapterLayoutTest {
     private static final float MIN_ALPHA = 0.535f;
 
     @Test
-    public void mobileCategoryTitlesMarqueeOnlyWhenOverflowing() throws Exception {
-        assertTitleMarquee("list", "adapter_vod_list.xml", "VodListHolder.java");
-        assertTitleMarquee("rect", "adapter_vod_rect.xml", "VodRectHolder.java");
-        assertTitleMarquee("oval", "adapter_vod_oval.xml", "VodOvalHolder.java");
+    public void mobileCategoryTitlesWrapBySetting() throws Exception {
+        assertTitleWraps("list", "adapter_vod_list.xml", "VodListHolder.java");
+        assertTitleWraps("rect", "adapter_vod_rect.xml", "VodRectHolder.java");
+        assertTitleWraps("oval", "adapter_vod_oval.xml", "VodOvalHolder.java");
     }
 
     @Test
@@ -93,17 +93,20 @@ public class VodAdapterLayoutTest {
                 alphaAtGlyphTops >= MIN_ALPHA);
     }
 
-    private static void assertTitleMarquee(String style, String layoutName, String holderName) throws Exception {
+    /**
+     * 标题换行走设置项：布局不得再声明 marquee（singleLine+marquee 会让 setMaxLines 失效），
+     * 行数由 holder 在运行时按 Setting.resolveTitleMaxLines() 应用。
+     */
+    private static void assertTitleWraps(String style, String layoutName, String holderName) throws Exception {
         Element name = findById(parseLayout(read(findMobileResPath().resolve(Path.of("layout", layoutName)))), "@+id/name");
         String holder = read(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "holder", holderName)));
 
-        assertTrue(style + " category title must marquee only when its text overflows",
-                "marquee".equals(androidAttribute(name, "ellipsize"))
-                        && "marquee_forever".equals(androidAttribute(name, "marqueeRepeatLimit"))
-                        && "true".equals(androidAttribute(name, "scrollHorizontally"))
-                        && "true".equals(androidAttribute(name, "singleLine")));
-        assertTrue(style + " category holder must activate the title marquee",
-                holder.contains("binding.name.setSelected(true);"));
+        assertTrue(style + " category title must not marquee, marquee defeats the max-lines setting",
+                !"marquee".equals(androidAttribute(name, "ellipsize"))
+                        && androidAttribute(name, "marqueeRepeatLimit").isEmpty()
+                        && androidAttribute(name, "scrollHorizontally").isEmpty());
+        assertTrue(style + " category holder must apply the title max-lines setting",
+                holder.contains("binding.name.setMaxLines(Setting.resolveTitleMaxLines());"));
     }
 
     private static Element parseLayout(String layout) throws Exception {

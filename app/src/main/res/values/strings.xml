@@ -51,11 +51,6 @@
     <string name="history_empty_title">No watch history yet</string>
     <string name="history_empty_description">Titles you play show up here so you can pick up where you left off.</string>
     <string name="history_empty_action">Browse Vod</string>
-    <string name="exit_confirm_title">Exit app</string>
-    <string name="exit_confirm_message">The app, playback, and background services will stop.</string>
-    <string name="exit_confirm_playing_message">Playback is active. Background playback keeps it playing; Exit completely stops playback and background services.</string>
-    <string name="exit_confirm_background">Background playback</string>
-    <string name="exit_confirm_positive">Exit completely</string>
 
     <!-- Play -->
     <string name="play">Play</string>
@@ -278,7 +273,6 @@
     <string name="group_rule_ai_current_interface">Current VOD configuration</string>
 
     <string name="setting_home_vod_auto_load">Auto-load VOD</string>
-    <string name="setting_home_site_lock">Home source lock</string>
     <string name="setting_auto_backup">Automatic backup</string>
     <string name="setting_fullscreen_menu_key">Fullscreen menu key</string>
     <string name="setting_home_menu_key">Home menu key</string>
@@ -1910,22 +1904,11 @@
     <string name="update_download_source_unavailable">The selected update source is not available for this release.</string>
 
     <!-- Crash -->
-    <string name="crash_info">An unexpected error occurred.\nRestarting automatically without reloading the interface.</string>
+    <string name="crash_info">An unexpected error occurred.\nSorry for the inconvenience.</string>
     <string name="crash_restart">Restart app</string>
-    <string name="crash_silent_restart">Silent restart</string>
     <string name="crash_details">Error details</string>
     <string name="crash_details_title">Error details</string>
-    <string name="crash_details_message">App version: %1$s\n\n%2$s</string>
     <string name="crash_details_close">Close</string>
-    <string name="crash_log_title">Log download address</string>
-    <string name="crash_log_hint">Open this address in a browser on a phone or computer on the same network to view and download this crash log.</string>
-    <string name="crash_log_preparing">Preparing the log service…</string>
-    <string name="crash_log_unavailable">Log service unavailable. Use Error details to read the stack trace.</string>
-    <string name="crash_log_no_lan">No LAN address found. Open locally:\n%1$s</string>
-    <string name="crash_log_service_failed">Log service unavailable</string>
-    <string name="crash_log_copy">Copy address</string>
-    <string name="crash_log_copied">Address copied</string>
-    <string name="crash_log_open">Open in browser</string>
 
     <!-- Hint -->
     <string name="copied">Copied</string>

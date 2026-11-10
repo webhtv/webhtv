@@ -7,7 +7,6 @@ import com.github.catvod.crawler.diagnostics.DiagnosticEvent;
 import com.github.catvod.crawler.diagnostics.DiagnosticLogBuffer;
 import com.github.catvod.crawler.diagnostics.RollingDiagnosticFile;
 import com.github.catvod.crawler.diagnostics.JournaledDiagnosticFile;
-import com.github.catvod.crawler.diagnostics.InMemoryDiagnosticFile;
 import com.github.catvod.crawler.diagnostics.DiagnosticCategories;
 import com.github.catvod.crawler.diagnostics.DiagnosticText;
 import com.github.catvod.utils.Prefers;
@@ -23,8 +22,6 @@ public class DebugLogStore {
     private static final String PREF_CATEGORIES = "debug_log_categories";
     private static volatile int categories = DiagnosticCategories.ALL;
     private static boolean crashHandlerInstalled;
-    private static volatile boolean crashSession;
-    private static volatile boolean crashSessionTemporary;
 
     public static boolean isEnabled() { return enabled; }
     public static int categories() { return categories; }
@@ -107,43 +104,6 @@ public class DebugLogStore {
         if (!enabled) return;
         create().start(true);
         beginCollection("restore");
-    }
-
-    public static boolean isCrashSession() { return crashSession; }
-
-    public static boolean isCrashSessionTemporary() { return crashSessionTemporary; }
-
-    /**
-     * Serves crash evidence through the existing debug log page. When the user never enabled the
-     * debug log, the session is memory-only and the preference is left untouched, so the crash
-     * screen can auto-enable logs without changing the user's setting.
-     *
-     * @return true when this session had to enable logging temporarily
-     */
-    public static synchronized boolean beginCrashSession() {
-        crashSession = true;
-        categories = Prefers.getInt(PREF_CATEGORIES, DiagnosticCategories.ALL) & DiagnosticCategories.ALL;
-        boolean temporary = !Prefers.getBoolean(PREF_ENABLED);
-        crashSessionTemporary = temporary;
-        if (!enabled) {
-            if (buffer == null) {
-                if (temporary) {
-                    buffer = new DiagnosticLogBuffer(DiagnosticLogBuffer.Limits.standard(), new InMemoryDiagnosticFile(), clock());
-                    installCrashHandler();
-                } else {
-                    create();
-                }
-            }
-            buffer.start(!temporary);
-            enabled = true;
-        }
-        return temporary;
-    }
-
-    /** Crash evidence bypasses category filters; it must be present whenever the session is served. */
-    public static void appendCrashContext(String text) {
-        DiagnosticLogBuffer current = buffer;
-        if (enabled && current != null && text != null && !text.isEmpty()) current.add("crash", text, true);
     }
 
     private static void beginCollection(String reason) {

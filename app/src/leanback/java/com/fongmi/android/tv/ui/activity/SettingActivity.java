@@ -42,6 +42,7 @@ import com.fongmi.android.tv.ui.dialog.CacheManagementDialog;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.net.OkHttp;
 
@@ -54,6 +55,7 @@ import java.util.List;
 public class SettingActivity extends BaseActivity implements ConfigListener, SiteListener, LiveListener, DohDialog.Listener {
 
     private ActivitySettingBinding mBinding;
+    private String[] defaultLaunch;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingActivity.class));
@@ -92,6 +94,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setOtherText() {
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
+        mBinding.defaultLaunchText.setText((defaultLaunch = ResUtil.getStringArray(R.array.select_default_launch))[Setting.getDefaultLaunch()]);
     }
 
     private void setCacheText() {
@@ -142,6 +145,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.vodHome.setOnClickListener(this::onVodHome);
         mBinding.liveHome.setOnClickListener(this::onLiveHome);
         mBinding.incognito.setOnClickListener(this::setIncognito);
+        mBinding.defaultLaunch.setOnClickListener(this::setDefaultLaunch);
         mBinding.vodHistory.setOnClickListener(this::onVodHistory);
         mBinding.liveHistory.setOnClickListener(this::onLiveHistory);
         mBinding.wallDefault.setOnClickListener(this::setWallDefault);
@@ -299,6 +303,12 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setIncognito(View view) {
         Setting.putIncognito(!Setting.isIncognito());
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
+    }
+
+    private void setDefaultLaunch(View view) {
+        int index = (Setting.getDefaultLaunch() + 1) % defaultLaunch.length;
+        Setting.putDefaultLaunch(index);
+        mBinding.defaultLaunchText.setText(defaultLaunch[index]);
     }
 
     private void setDoh(View view) {

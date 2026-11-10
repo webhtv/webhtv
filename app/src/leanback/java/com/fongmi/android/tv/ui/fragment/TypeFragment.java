@@ -33,6 +33,7 @@ import com.fongmi.android.tv.databinding.FragmentTypeBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.ui.activity.CollectActivity;
 import com.fongmi.android.tv.ui.activity.HistoryResumeCoordinator;
+import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
@@ -190,6 +191,12 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         mLast = null;
         checkFilter();
         mScroller.reset();
+        if ("home".equals(getTypeId())) {
+            Result result = new Result();
+            result.setList(HomeActivity.sRecommendCache);
+            setAdapter(result);
+            return;
+        }
         getVideo(getTypeId(), "1");
     }
 
@@ -207,6 +214,11 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         if (size > 0) {
             addVideo(result);
             applyPendingContentFocus();
+        }
+        if ("home".equals(getTypeId()) && HomeActivity.sPendingVideo != null) {
+            Vod pending = HomeActivity.sPendingVideo;
+            HomeActivity.sPendingVideo = null;
+            mBinding.recycler.post(() -> onItemClick(pending));
         }
     }
 

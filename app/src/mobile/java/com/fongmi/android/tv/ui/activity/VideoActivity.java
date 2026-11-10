@@ -92,6 +92,7 @@ import com.fongmi.android.tv.bean.TmdbSourcePayload;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.download.DownloadService;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -200,6 +201,7 @@ import com.fongmi.android.tv.utils.EpisodeHistoryTitleResolver;
 import com.fongmi.android.tv.utils.EpisodeTitleFormatter;
 import com.fongmi.android.tv.utils.Formatters;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.PiP;
 import com.fongmi.android.tv.utils.PushParser;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -1724,6 +1726,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (mBinding.following != null) mBinding.following.setOnClickListener(view -> onFollowing());
         mBinding.search.setOnClickListener(view -> onSearch());
         mBinding.castAction.setOnClickListener(guarded(this::onCast));
+        if (mBinding.downloadAction != null) mBinding.downloadAction.setOnClickListener(guarded(this::onDownload));
         mBinding.settingAction.setOnClickListener(view -> onSetting());
         mBinding.actor.setOnClickListener(view -> onActor());
         mBinding.content.setOnClickListener(view -> onContent());
@@ -3979,6 +3982,25 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         finishPlayback();
     }
 
+    private void onDownload() {
+        if (mHistory == null || TextUtils.isEmpty(mHistory.getVodId()) || player() == null || player().isEmpty() || TextUtils.isEmpty(player().getUrl())) {
+            Notify.show(R.string.cast_not_ready);
+            return;
+        }
+        String title = mBinding.name.getText().toString();
+        String name = title + "_" + (mHistory.getVodRemarks() != null ? mHistory.getVodRemarks() : "");
+        // 写入下载目录需要文件访问权限（与项目其它落盘入口一致），无权限时先申请
+        PermissionUtil.requestFile(this, granted -> {
+            if (!granted) {
+                Notify.show(R.string.download_need_file_permission);
+                return;
+            }
+            PermissionUtil.requestNotify(this);
+            DownloadService.start(this, name, player().getUrl(), player().getHeaders());
+            Notify.show(getString(R.string.download_started));
+        });
+    }
+
     private void onCast() {
         if (mHistory == null || TextUtils.isEmpty(mHistory.getVodId()) || service() == null || player().isEmpty() || TextUtils.isEmpty(player().getUrl())) {
             Notify.show(R.string.cast_not_ready);
@@ -5276,7 +5298,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mHistory.setUserSpeed(player().getSpeed());
     }
 
-    private void onReset() {
+    @Override
+    public void onReset() {
         if (isReplay()) onReplay();
         else onRefresh();
     }

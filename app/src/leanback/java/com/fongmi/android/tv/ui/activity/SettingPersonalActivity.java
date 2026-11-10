@@ -67,7 +67,6 @@ public class SettingPersonalActivity extends BaseActivity {
     protected void initEvent() {
         mBinding.homeVodAutoLoad.setOnClickListener(this::setHomeVodAutoLoad);
         mBinding.following.setOnClickListener(this::setFollowing);
-        mBinding.homeSiteLock.setOnClickListener(this::setHomeSiteLock);
         mBinding.autoBackup.setOnClickListener(this::setAutoBackup);
         mBinding.homeButtons.setOnClickListener(this::onHomeButtons);
         mBinding.fullscreenMenuKey.setOnClickListener(this::setFullscreenMenuKey);
@@ -98,7 +97,6 @@ public class SettingPersonalActivity extends BaseActivity {
     private void setText() {
         mBinding.homeVodAutoLoadText.setText(getSwitch(Setting.isHomeVodAutoLoad()));
         mBinding.followingText.setText(getSwitch(FollowingSettings.isEnabled()));
-        mBinding.homeSiteLockText.setText(getSwitch(Setting.isHomeSiteLock()));
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
         mBinding.homeButtonsText.setText(getString(R.string.home_buttons_selected, HomeButton.getButtons().size(), HomeButton.all().size()));
         mBinding.fullscreenMenuKeyText.setText((fullscreenMenuKey = getResources().getStringArray(R.array.select_fullscreen_menu_key))[Setting.getFullscreenMenuKey()]);
@@ -148,11 +146,6 @@ public class SettingPersonalActivity extends BaseActivity {
         }
         ConfigEvent.common();
         RefreshEvent.home();
-        setText();
-    }
-
-    private void setHomeSiteLock(View view) {
-        Setting.putHomeSiteLock(!Setting.isHomeSiteLock());
         setText();
     }
 

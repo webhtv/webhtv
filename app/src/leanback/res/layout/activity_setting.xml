@@ -373,7 +373,7 @@
                 android:nextFocusLeft="@id/tmdb"
                 android:nextFocusRight="@id/ai"
                 android:nextFocusUp="@id/subtitle"
-                android:nextFocusDown="@id/appearance"
+                android:nextFocusDown="@id/defaultLaunch"
                 android:orientation="horizontal">
 
                 <com.google.android.material.textview.MaterialTextView
@@ -397,7 +397,7 @@
                 android:nextFocusLeft="@id/tmdb"
                 android:nextFocusRight="@id/ai"
                 android:nextFocusUp="@id/subtitle"
-                android:nextFocusDown="@id/personal"
+                android:nextFocusDown="@id/defaultLaunch"
                 android:orientation="horizontal">
 
                 <com.google.android.material.textview.MaterialTextView
@@ -445,6 +445,42 @@
         </androidx.appcompat.widget.LinearLayoutCompat>
 
         <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/defaultLaunch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/selector_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusLeft="@id/defaultLaunch"
+            android:nextFocusRight="@id/defaultLaunch"
+            android:nextFocusUp="@id/tmdb"
+            android:nextFocusDown="@id/appearance"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:text="@string/setting_default_launch"
+                android:textColor="?attr/webhtvColorOnWallpaper"
+                android:textSize="18sp" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/defaultLaunchText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:gravity="end"
+                android:singleLine="true"
+                android:textColor="?attr/webhtvColorOnWallpaper"
+                android:textSize="18sp"
+                tools:text="首页" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
@@ -461,7 +497,7 @@
                 android:focusableInTouchMode="true"
                 android:nextFocusLeft="@id/appearance"
                 android:nextFocusRight="@id/personal"
-                android:nextFocusUp="@id/tmdb"
+                android:nextFocusUp="@id/defaultLaunch"
                 android:nextFocusDown="@id/incognito"
                 android:orientation="horizontal">
 
@@ -484,7 +520,7 @@
                 android:focusableInTouchMode="true"
                 android:nextFocusLeft="@id/appearance"
                 android:nextFocusRight="@id/personal"
-                android:nextFocusUp="@id/ai"
+                android:nextFocusUp="@id/defaultLaunch"
                 android:nextFocusDown="@id/doh"
                 android:orientation="horizontal">
 

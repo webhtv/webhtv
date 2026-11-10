@@ -43,6 +43,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
+import com.fongmi.android.tv.ui.activity.DownloadManagerActivity;
 import com.fongmi.android.tv.ui.activity.HistoryActivity;
 import com.fongmi.android.tv.ui.activity.KeepActivity;
 import com.fongmi.android.tv.ui.activity.SearchActivity;
@@ -51,6 +52,7 @@ import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.ApkPushDialog;
 import com.fongmi.android.tv.ui.dialog.ApkPushMethodDialog;
 import com.fongmi.android.tv.ui.dialog.ApkPushUrlDialog;
+import com.fongmi.android.tv.ui.dialog.BackupProgressDialog;
 import com.fongmi.android.tv.ui.dialog.FilterDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LinkDialog;
@@ -63,6 +65,7 @@ import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.ui.dialog.TypeDialog;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.ConfigDownload;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.web.HomeWebController;
 import com.fongmi.android.tv.web.WebHomeChrome;
@@ -298,7 +301,9 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         else if (item.getItemId() == R.id.sync) OneKeySyncDialog.create().show(requireActivity());
         else if (item.getItemId() == R.id.push_apk) ApkPushDialog.create().listener(this::onApkDeviceSelected).show(requireActivity());
         else if (item.getItemId() == R.id.push_play) PushPlayDialog.create().listener(this::onPushPlayDeviceSelected).show(requireActivity());
+        else if (item.getItemId() == R.id.download_config) downloadConfig();
         else if (item.getItemId() == R.id.enhance && homeActivity() != null) homeActivity().openEnhanceFromVod();
+        else if (item.getItemId() == R.id.download_manager) DownloadManagerActivity.start(requireActivity());
         else if (item.getItemId() == R.id.web_home_fullscreen) onWebHomeFullscreen();
         else return false;
         return true;
@@ -352,6 +357,34 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         Menu menu = mBinding.toolbar.getMenu();
         MenuItem fullscreen = menu.findItem(R.id.web_home_fullscreen);
         if (fullscreen != null) fullscreen.setVisible(Setting.isWebHomeFullscreen() && mWeb != null && mWeb.isVisible());
+        MenuItem download = menu.findItem(R.id.download_config);
+        if (download != null) download.setVisible(ConfigDownload.shouldShow(VodConfig.getUrl()));
+    }
+
+    private void downloadConfig() {
+        String url = VodConfig.getUrl();
+        if (!ConfigDownload.shouldShow(url)) return;
+        String title = getString(R.string.menu_download_config);
+        BackupProgressDialog dialog = BackupProgressDialog.open(getChildFragmentManager(), title);
+        ConfigDownload.start(url, new ConfigDownload.Listener() {
+            @Override
+            public void onProgress(String stage, int current, int total) {
+                int percent = total <= 0 ? 0 : Math.min(100, current * 100 / total);
+                dialog.update(stage, percent, current, total);
+            }
+            @Override
+            public void onSuccess(String dirName) {
+                dialog.finish();
+                if (!isAdded()) return;
+                Notify.show(getString(R.string.config_download_success, dirName));
+            }
+            @Override
+            public void onError(String msg) {
+                dialog.finish();
+                if (!isAdded()) return;
+                Notify.show(getString(R.string.config_download_failed, msg));
+            }
+        });
     }
 
     private void setSearchLongClick() {

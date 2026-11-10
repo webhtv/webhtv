@@ -214,7 +214,8 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         return true;
     }
 
-    private void onReset() {
+    @Override
+    protected void onReset() {
         if (player().isEmpty()) return;
         position = player().getPosition();
         start();

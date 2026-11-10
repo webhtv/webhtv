@@ -51,6 +51,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final int VERSION = 48;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
+    public static final String AUTO_PREFIX = "bak-auto-";
     private static final int BACKUP_KEEP_COUNT = 7;
     private static final int PARTIAL_BACKUP_KEEP_COUNT = 1;
     private static final String BACKUP_TEMP_FILE = ".backup.tmp";
@@ -78,6 +79,32 @@ public abstract class AppDatabase extends RoomDatabase {
         } catch (RuntimeException e) {
             finishAutoBackup();
             throw e;
+        }
+    }
+
+    /**
+     * 退出前同步备份（调用线程阻塞直到备份完成），供"返回键彻底退出"流程使用，
+     * 避免结束进程前异步备份未跑完导致备份丢失。自动备份只保留最近一份。
+     */
+    public static void backupOnExitSync() {
+        synchronized (BACKUP_LOCK) {
+            try {
+                cleanAutoOnly();
+                String timePart = AppBackup.fileName().substring(AppBackup.PREFIX.length());
+                File file = new File(Path.tv(), AUTO_PREFIX + timePart);
+                AppBackup.create(file, null);
+                SpiderDebug.log("backup", "auto exit backup complete file=%s", file.getAbsolutePath());
+            } catch (Exception e) {
+                SpiderDebug.log("backup", "auto exit backup failed error=%s", e.getMessage());
+            }
+        }
+    }
+
+    private static void cleanAutoOnly() {
+        File[] files = Path.tv().listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isFile() && file.getName().startsWith(AUTO_PREFIX)) Path.clear(file);
         }
     }
 

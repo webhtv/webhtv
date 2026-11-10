@@ -5,6 +5,7 @@ import android.app.SearchManager;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.Process;
 import android.text.TextUtils;
 import android.view.MenuItem;
 import android.view.View;
@@ -22,6 +23,8 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.cache.CacheScheduler;
+import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
 import com.fongmi.android.tv.db.AppDatabase;
@@ -38,7 +41,6 @@ import com.fongmi.android.tv.lab.LabConfig;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.receiver.ShortcutReceiver;
 import com.fongmi.android.tv.server.Server;
-import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -53,11 +55,11 @@ import com.fongmi.android.tv.ui.fragment.SettingPersonalFragment;
 import com.fongmi.android.tv.ui.fragment.SettingPlayerFragment;
 import com.fongmi.android.tv.ui.fragment.SettingSubtitleFragment;
 import com.fongmi.android.tv.ui.fragment.VodFragment;
-import com.fongmi.android.tv.utils.CrashRestartMode;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.MobileWindow;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
+import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.fongmi.android.tv.web.WebHomeChromeStartup;
@@ -66,6 +68,7 @@ import com.github.catvod.net.OkHttp;
 import com.google.android.material.navigation.NavigationBarView;
 import com.google.gson.JsonObject;
 
+import java.util.List;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
@@ -79,6 +82,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     private ActivityHomeBinding mBinding;
     private WebHomeChromeController mChrome;
     private Config mStartupConfig;
+    private boolean mStartupActionDone;
     private boolean wideWindow;
     private int currentPosition;
     private boolean returnVodFromEnhance;
@@ -187,11 +191,6 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     }
 
     private void initConfig() {
-        if (CrashRestartMode.consume()) {
-            checkAction(getIntent());
-            StateEvent.empty();
-            return;
-        }
         VodConfig.get().config(mStartupConfig == null ? Config.vod() : mStartupConfig).load(getCallback());
         LiveConfig.get().init().load();
         WallConfig.get().init();
@@ -215,6 +214,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
             @Override
             public void success() {
                 checkAction(getIntent());
+                runStartupAction();
             }
 
             /**
@@ -237,12 +237,37 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
             public void error(String msg) {
                 resetVodChrome();
                 checkAction(getIntent());
+                runStartupAction();
                 // 失败要发 ERROR（带原因），不能发 EMPTY：消费方对 EMPTY 的处理只是
                 // "隐藏转圈"，于是加载失败后首页是一片空白，用户只看到一个会消失的吐司。
                 StateEvent.error(msg);
                 Notify.show(msg);
             }
         };
+    }
+
+    private void runStartupAction() {
+        if (mStartupActionDone) return;
+        mStartupActionDone = true;
+        switch (Setting.getDefaultLaunch()) {
+            case Setting.DEFAULT_LAUNCH_LIVE:
+                openLive();
+                break;
+            case Setting.DEFAULT_LAUNCH_RECENT:
+                List<History> history = History.get();
+                if (!history.isEmpty()) {
+                    History first = history.get(0);
+                    String siteKey = first.getSiteKey();
+                    Task.execute(() -> {
+                        Site site = VodConfig.get().getSite(siteKey);
+                        if (!site.isEmpty()) site.spider();
+                        App.post(() -> VideoActivity.startFullscreen(this, first));
+                    });
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     private void loadLive(String url) {
@@ -523,8 +548,14 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         } else if (mManager.isVisible(1)) {
             change(0);
         } else if (mManager.canBack(0)) {
-            if (PlaybackService.isRunning()) Util.moveToBackground(this);
-            else super.onBackInvoked();
+            // 根页面返回 = 真正退出（与 fish 一致）：后台线程同步备份后结束进程，退出前按设置自动清理缓存。
+            // 想进后台请用 Home 键，返回键即真正退出。
+            Task.execute(() -> {
+                AppDatabase.backupOnExitSync();
+                CacheScheduler.get().runExitCleanup();
+                Process.killProcess(Process.myPid());
+                System.exit(0);
+            });
         }
     }
 
