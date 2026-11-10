@@ -2,13 +2,13 @@ package com.fongmi.quickjs.crawler;
 
 import android.content.Context;
 
-import com.fongmi.quickjs.bean.Res;
 import com.fongmi.quickjs.method.Console;
 import com.fongmi.quickjs.method.Global;
 import com.fongmi.quickjs.method.Local;
 import com.fongmi.quickjs.utils.Async;
 import com.fongmi.quickjs.utils.JSUtil;
 import com.fongmi.quickjs.utils.Module;
+import com.fongmi.quickjs.utils.ProxyResponse;
 import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.UriUtil;
@@ -126,10 +126,13 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     @Override
     public void destroy() {
-        try {
-            call("destroy");
-        } catch (Throwable e) {
-            e.printStackTrace();
+        if (jsObject != null) {
+            // init 早期失败时 jsObject 为空，跳过 destroy 以免 Async 的 NPE 噪声盖住真正的初始化错误
+            try {
+                call("destroy");
+            } catch (Throwable e) {
+                e.printStackTrace();
+            }
         }
         try {
             releaseJS();
@@ -221,17 +224,15 @@ public class Spider extends com.github.catvod.crawler.Spider {
     }
 
     private Object[] proxy2(Map<String, String> params) throws Exception {
+        return ProxyResponse.fromJson(callProxy2(params));
+    }
+
+    protected String callProxy2(Map<String, String> params) throws Exception {
         String url = params.get("url");
         String header = params.get("header");
         JSArray array = submit(() -> JSUtil.toArray(ctx, Arrays.asList(url.split("/")))).get();
         Object object = submit(() -> ctx.parse(header)).get();
-        String proxy = (String) call("proxy", array, object);
-        Res res = Res.objectFrom(proxy);
-        Object[] result = new Object[3];
-        result[0] = res.getCode();
-        result[1] = res.getContentType();
-        result[2] = res.getStream();
-        return result;
+        return (String) call("proxy", array, object);
     }
 
     private ByteArrayInputStream getStream(Object o, boolean base64) {

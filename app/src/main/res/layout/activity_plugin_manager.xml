@@ -26,14 +26,22 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/importPlugin"
-            style="@style/Widget.Material3.Button.TonalButton"
+            android:minWidth="160dp"
+            android:minHeight="48dp"
+            app:strokeColor="@color/focus_ring_secondary"
+            app:strokeWidth="2dp"
+            style="@style/Widget.WebHTV.Button.Tonal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/plugin_manager_import" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/remoteImportPlugin"
-            style="@style/Widget.Material3.Button.TonalButton"
+            android:minWidth="160dp"
+            android:minHeight="48dp"
+            app:strokeColor="@color/focus_ring_secondary"
+            app:strokeWidth="2dp"
+            style="@style/Widget.WebHTV.Button.Tonal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
@@ -41,12 +49,24 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/reloadPlugins"
-            style="@style/Widget.Material3.Button.TextButton"
+            android:minWidth="160dp"
+            android:minHeight="48dp"
+            app:strokeColor="@color/focus_ring_secondary"
+            app:strokeWidth="2dp"
+            style="@style/Widget.WebHTV.Button.Tonal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
             android:text="@string/plugin_manager_reload" />
     </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:indeterminate="true"
+        android:tag="pluginManagerProgress"
+        android:visibility="gone" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -83,7 +103,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/emptyImport"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.WebHTV.Button.Tonal"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"

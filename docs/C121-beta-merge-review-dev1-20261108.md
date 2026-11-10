@@ -156,3 +156,54 @@ public String sampleSpeedTextNow() {
 | 推送 | `origin/dev1`：`ec56e4a598..d10b111296` |
 | PR | #537 → `beta` |
 | 拉取远端最新 | `git pull --ff-only origin beta` → `Already up to date`（`origin/beta` 仍为 `7c64c9f5f11`） |
+
+## 10. 第三轮：dev1 详情页主题切换与默认主题（2026-11-08 14:00）
+
+### 10.1 合并坐标
+
+| 项 | 值 |
+| --- | --- |
+| 本地 HEAD | `e8e2d7729d`（Merge pull request #538 from Silent1566/dev3） |
+| `origin/beta` | `e8e2d7729d`，`git rev-list --count origin/beta..HEAD` = **0** |
+| 合并动作 | 无需合并：`dev1` 已等于远端 `beta`，无 `MERGE_HEAD`、无未解决冲突 |
+| 已提交未推送 | `origin/dev1..HEAD` 5 个提交，内容已全部随 PR #537/#538 进入 `origin/beta`，且被本文档第 1–9 节与 `C121-beta-merge-review-dev3-20261108.md` 覆盖 → 按用户条件跳过 |
+
+### 10.2 本轮评审对象（此前无任何评审覆盖）
+
+3 个未提交改动，`git diff` 共 `13 insertions(+), 3 deletions(-)`：
+
+| 文件 | 改动 | 判定 |
+| --- | --- | --- |
+| `Setting.java:1293` | 默认详情主题 `2`（浅色）→ `1`（暗色） | 用户确认的产品默认值变更，保留 |
+| `VideoActivity.java:8860` | `cycleFusionTheme()`：`isFusionLightTheme() ? 2 : 1` → `? 1 : 2` | **真实缺陷修复**（见 10.3） |
+| `VideoActivityLayoutTest.java` | 同步切换断言 + 新增默认值锚定用例 | 随修复补齐 |
+
+### 10.3 缺陷判定（P2，已修）
+
+主题取值语义由 `clampTmdbDetailTheme`（`theme == 1 ? 1 : 2`）与
+`resolveTmdbDetailLightTheme`（`value != 1` 即浅色）共同确定：**1 = 暗色，2 = 浅色**。
+
+原式 `int theme = isFusionLightTheme() ? 2 : 1;` 在该语义下是双向恒等：
+
+- 当前浅色 → 写 2 → 仍是浅色；
+- 当前暗色 → 写 1 → 仍是暗色。
+
+即按钮点击后主题不变，`applyFusionThemeSurface()` 重放同一套配色，用户观感为「点了没反应」。
+改为 `isFusionLightTheme() ? 1 : 2` 后与既有 `Setting.nextTmdbDetailTheme()` 语义一致
+（浅→暗、暗→浅），也与测试名 *must switch light to dark and dark to light* 相符。
+
+### 10.4 验证
+
+| 项 | 结果 |
+| --- | --- |
+| 单测 | `.\gradlew.bat :app:testMobileArm64_v8aDebugUnitTest --tests '*VideoActivityLayoutTest*' --tests '*SettingDetailModeTest*' --offline` → **BUILD SUCCESSFUL in 13m 28s** |
+| `VideoActivityLayoutTest` | 159 项 / 0 失败（较上轮 158 项 +1，新增 `tmdbDetailThemeDefaultsToDarkWhenPreferenceIsAbsent` 已执行） |
+| `SettingDetailModeTest` | 7 项 / 0 失败 |
+| 全量结果扫描 | `TEST-*.xml` 中 `<failure|<error` 计数 **0** |
+| 空白/格式 | `git diff --check` 无输出 |
+
+### 10.5 已知未做项（用户已确认不处理）
+
+| 编号 | 内容 | 不做的理由 |
+| --- | --- | --- |
+| 三轮 P3-1 | `clampTmdbDetailTheme(0)` 把旧「自动」值迁移为 2（浅色），与「新装默认 1（暗色）」形成差异 | 该迁移契约来自既有提交 `ef1e9273ad8`，改动它需同时重写 `SettingDetailModeTest` 四条断言，属独立迁移策略调整，超出本次「默认值 + 切换缺陷」边界 |

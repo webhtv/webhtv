@@ -11,7 +11,7 @@
 - 每次覆盖不保存全局设置、不扩大线程池、不启用播放器自动代理开关。
 - 无Range、HEAD沿用单连接；不支持安全Range分段时沿用现有回退。客户端断开取消，不拼接失效资源。
 - 公开入口拒绝本机/私网/保留目标以及危险重定向，来源校验不能只靠CORS；为内部播放器预留会话和处理资源。
-- 不引入依赖、native重建、Go代理；不推送远端。
+- 不引入依赖、native重建、Go代理；原实施阶段不推送远端。本次beta合并交付已获用户允许dev4 push、中文PR到beta及最终pull，阶段状态见下方当前记录。
 
 ## 基线、范围与验证
 - 基线 dev4@567391cc17667050cccdcdcd6823b15ae6f20283；首次 git status 为空，0用户已有dirty文件。
@@ -77,7 +77,7 @@
 - [x] 三个工具实现与红绿结果独立审查。
 - [x] 接线初审S1取消与S2域规则已回派，第三轮稳定修复；安全复评通过，协调者独立验证S2/import/死代码。
 - [x] 第三轮实际两次proxy包160/0/0/0；mobile编译成功，协调者leanback编译成功退出0，并读取最终XML。
-- [x] 本文件、评估索引及原需求状态已回填；本地提交与annotated recovery标签由此次guard finish原子闭环，不push。
+- [x] 原实施阶段的本文件、评估索引及原需求状态已回填；本地提交与annotated recovery标签已闭环，坐标见当前记录；该阶段不push。
 
 ## 实施与审查记录
 - Objective：本机免Token /proxy，自动可用但播放器默认不变，thread/shards/chunkSize请求级覆盖，安全资源边界同批。
@@ -98,11 +98,22 @@
 - 事实：docs索引尾随空格由tidy修复，git diff --check已无输出。
 - 已知阻塞：Gradle --tests编译全部unit测试，缺类会误挡单类红；已改用隔离JVM或先取缺本类编译红。
 - 风险路由：null Origin/DNS重绑定/共享资源争抢为必修；现有OkHttp.player为trust-all，公共入口必须独立客户端（已写入接线brief）。
-- 回滚：尚未提交，保留任务文件；验收后单提交+恢复标签。
+- 原实施阶段回滚记录（提交前）：尚未提交，保留任务文件；验收后单提交+恢复标签。当前已提交坐标见下方记录。
 - 最终实现（2026-11-10 09:12）：run3只改Server/Engine/PublicRouteTest，真实1MiB分片+body开始闩锁后显式关闭流验证Call.cancel；cancel注册竞态修复。公共流关闭直接取消Call，不承诺单纯RST立刻唤醒等待管道；上游完全停滞依现有readTimeout。
 - 最终验证：两次实际proxy包执行160/0/0/0（31suite，PublicRoute21）；禁Call.cancel变异测试真红，恢复绿。09:15协调者读取最新XML确认160/0/0/0，取消例0.137s、域规则0.078s、生产client测试0.015s；mobile Java编译8s成功，协调者leanback编译4m29s成功退出0。
 - 安全复评e764 run2：S1已解决，安全/质量通过，无新必修。规格复评cf2ed首次执行失败无业务结果，已原会话续接。
-- 当前下一动作：收集规格复评终报，回填收口记录并执行guard finish原子提交与recovery tag，不再重复构建或扩展研究。
+- 原实施阶段下一动作（09:15记录，现已闭环）：收集规格复评终报，回填收口记录并执行guard finish原子提交与recovery tag，不再重复构建或扩展研究。
+
+## 当前交付与beta合并评审记录（2026-11-10）
+- 原公共接口任务已提交：dev4 `b60a3952d26df2b2786c026a1df1c469dd17cdd6`；annotated标签 `recovery/C123-public-proxy-api/20261110012924-b60a3952d26d`。原guard `C123-public-proxy-api`已闭环，不重开旧finish。
+- 此次合并：HEAD仍为上述提交；MERGE_HEAD为 `bf0f23c9326de676812334ad4b96d9b5e52c0335`；guard `C123-beta-review-dev4-20261110` / standard活跃，70个逐路径scope。beta入站54个staged路径，文档唯一冲突已保留双方章节；当前合并尚未提交，处于文档收口。
+- 冻结验证tree：`5c9217207b75d142835ef2e0e4b0eae40b2e0304`。Standards报告 `aba02041` 硬违规0；低优先级possible配置复制按AGENTS/YAGNI不重构。Spec报告 `89ce3099` 必修0。主审独立读取公共入口/Call取消关键diff及C122/C124 blob等价证据，确认没有业务问题需要改代码；本次仅修标准评审指出的过期当前摘要/Recovery anchor。
+- 验证者 `8ffa3265` 实际运行并由主审独立读取XML：leanback 57 suites / 353 tests / 0 failures / 0 errors / 0 skipped（proxy160、subtitle98、PlayerManager39、VideoDanmakuOwnership36、旧ProxyResponseConsumer6、QuickJS兼容14）；mobile 54 suites / 297 tests / 0 failures / 0 errors / 0 skipped（proxy160、subtitle98、PlayerManager39）。双端arm64 Debug Java编译与两端测试真实执行。
+- 证据目录：`.git/C123-beta-review-dev4-20261110-evidence/`；日志 `build-01-leanback-compile-mobile-compile.log`、`build-02-mobile-unit.log`；XML `xml-01-leanback/`、`xml-02-mobile/`。QuickJS main编译FROM-CACHE、依赖UP-TO-DATE是缓存边界，兼容单测真实绿；主审接受该边界，不为缓存重跑。源码相对冻结tree的 `git diff --quiet <tree> -- app quickjs` 于10:49:52 CST退出0。
+- 验证范围：未运行native/assemble/设备/真实TLS与吞吐；不把单测或缓存编译等同真机与性能验证。最终PR范围17文件（公共API9生产、5测试、3文档），不同于beta入站54路径。
+- 阶段授权：原实施阶段“不push”作为历史保留；用户本次已允许dev4 push、中文PR到beta及最终pull。当前没有新合并commit/tag，也未push或创建PR；新交付坐标以协调者实际工具结果为准。
+- 任务区分：本公共接口任务以 `C123-public-proxy-api.md` 为唯一记录；dev1上游同步同编号任务以 `C123-upstream-sync-silent1566.md` 为唯一记录，保留其历史事实。
+- 当前下一动作：等待协调者独立文档复审；通过后由协调者执行当前guard finish、dev4 push、中文PR到beta及最终pull，不重复已成功构建或测试。
 
 ## 用户调用
 应用后台服务运行时无需开启控制栏自动代理；仅本机17575（端口若修改请使用实际值）。
@@ -119,10 +130,11 @@ proxy_url = f"http://127.0.0.1:17575/proxy?url={quote(url, safe='')}&thread=10&c
 - 显式关闭响应流直接取消上游Call并回收许可。单纯TCP断连不保证立即唤醒等待管道；上游完全停止发送由已有readTimeout收敛，不承诺滴流总时限。
 - 应用后台服务停止或被系统回收时端口关闭；自动端口发现、APK打包/安装、真机播放和真实TLS/系统DNS网络验证本轮未执行。
 
-## Recovery anchor
-- Objective：公共本机免Token /proxy，自动监听但播放器默认不变，thread/shards/chunkSize请求级覆盖。
-- Baseline：dev4@567391cc17667050cccdcdcd6823b15ae6f20283，0用户初始dirty；guard C123-public-proxy-api活跃，所有修改均任务所有。
-- Evidence：第三轮两次160 tests/0 failures/0 errors；最终XML独立读取；mobile成功；协调者leanback成功（4m29s）；S1安全复评通过，S2及标准独立复核通过。
-- Routed risks：null Origin/DNS rebinding/IPv6旁路、会话/worker预留、Call取消竞态与默认disabled域规则已修并有回归；OS断连与readTimeout边界已明确，不宣称真机/吞吐验证。
-- State：源码与验证已完成。规格复评代理两次执行异常无业务结果，协调者已独立读取S2/旧resolve/Controller/import/factory及真实回归证据完成复核，无剩余必修。提交/tag以此次guard finish工具输出为准，不push。
-- Next action：执行guard finish并向用户交付commit/tag及调用示例；不追加构建/研究。
+## Recovery anchor（当前beta合并文档收口）
+- Objective：公共本机免Token /proxy，自动监听但播放器默认不变，thread/shards/chunkSize请求级覆盖；本轮只收口文档。
+- Baseline：原dev4@567391cc17667050cccdcdcd6823b15ae6f20283、0用户初始dirty；原任务现已提交为 `b60a3952d26df2b2786c026a1df1c469dd17cdd6`，annotated标签 `recovery/C123-public-proxy-api/20261110012924-b60a3952d26d`，原guard已闭环。
+- Merge：HEAD仍为上述原任务提交；MERGE_HEAD `bf0f23c9326de676812334ad4b96d9b5e52c0335`；当前guard `C123-beta-review-dev4-20261110`活跃，合并未提交。冻结验证tree `5c9217207b75d142835ef2e0e4b0eae40b2e0304`；本轮仅修获准文档。
+- Evidence：当前双轴硬违规/必修均0；leanback 353、mobile 297 tests均0失败/错误/跳过，双端arm64 Debug Java编译与测试真实执行；证据及QuickJS缓存边界见当前交付记录。
+- Routed risks：null Origin/DNS rebinding/IPv6旁路、会话/worker预留、Call取消竞态与默认disabled域规则已修并有回归；possible配置复制不重构；OS断连/readTimeout和native/assemble/设备/真实TLS/吞吐未验边界保留。
+- State：业务评审与已执行验证通过，等待协调者文档复审；用户已授权本次dev4 push、中文PR到beta及最终pull，尚未执行；不推断新commit/tag/PR坐标。
+- Next action：仅等待协调者独立文档复审；通过后由协调者执行当前guard finish、dev4 push、中文PR到beta及最终pull，不重开旧finish或重复构建/测试。
