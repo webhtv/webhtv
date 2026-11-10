@@ -728,14 +728,9 @@ public class VodConfig extends BaseConfig {
         if (!dir.exists() || !dir.isDirectory()) return result;
         List<File> files = listSorted(dir);
         if (files.isEmpty()) return result;
-        String jar = XBPQ_JAR;
-        File localJar = Path.local(XBPQ_JAR);
-        if ((localJar == null || !localJar.exists())
-                && !TextUtils.isEmpty(globalSpider)
-                && globalSpider.toLowerCase().contains("xbpq")) {
-            // 本地 ./jars/XBPQ.jar 不存在时才回退到全局 spider（可为 http，由 parseJar 下载）
-            jar = globalSpider;
-        }
+        // 本地 ./jars/XBPQ.jar 不存在时回退全局 spider（可为 http，由 parseJar 下载加载）；
+        // 注意 XBPQ_JAR 已被 convert 成 http 地址，本地是否存在必须看真实文件路径。
+        String jar = !new File(CLAN_ROOT + "jars/XBPQ.jar").exists() && !TextUtils.isEmpty(globalSpider) ? globalSpider : XBPQ_JAR;
         BaseLoader.get().parseJar(jar, true);
         for (File file : files) {
             FileMeta meta = parseFileMeta(file.getName());

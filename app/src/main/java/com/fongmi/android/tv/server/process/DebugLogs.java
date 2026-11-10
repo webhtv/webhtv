@@ -411,7 +411,7 @@ public class DebugLogs implements Process {
             function hideSearch(){searchExpanded=false;layoutSearch();searchToggle.focus({preventScroll:true})}
             searchToggle.onclick=()=>{searchExpanded=!searchExpanded;layoutSearch();if(searchExpanded)filter.focus()};document.getElementById('search-hide').onclick=hideSearch;
             filter.addEventListener('keydown',event=>{if(event.key==='Escape'&&!wideSearch.matches){event.preventDefault();hideSearch()}});
-            function scrollToTop(){stick=false;try{scrollTo({top:0,behavior:'smooth'})}catch(e){scrollTo(0,0);document.documentElement.scrollTop=0;document.body.scrollTop=0}resetX()}
+            function scrollToTop(){stick=false;try{scrollTo(0,0)}catch(e){}document.documentElement.scrollTop=0;document.body.scrollTop=0;resetX()}
             topBtn.onclick=scrollToTop;
             if(wideSearch.addEventListener)wideSearch.addEventListener('change',layoutSearch);else wideSearch.addListener(layoutSearch);
             function updateFilterState(){const count=['trace','attempt','domain','priority'].filter(id=>diagEl(id).value).length+(filter.value.trim()?1:0),badge=document.getElementById('filter-count');badge.textContent=count;badge.hidden=!count;toolsButton.classList.toggle('filtered',count>0);toolsButton.setAttribute('aria-label',count?'日志工具，'+count+'项筛选生效':'日志工具');searchToggle.classList.toggle('on',!!filter.value.trim());searchToggle.title=filter.value.trim()?'搜索：'+filter.value.trim():'搜索日志'}

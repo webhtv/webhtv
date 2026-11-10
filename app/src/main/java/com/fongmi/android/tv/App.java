@@ -132,6 +132,9 @@ public class App extends Application implements Application.ActivityLifecycleCal
     public void onCreate() {
         super.onCreate();
         if (PlaybackRecoveryMonitor.isRecoveryProcess(this)) return;
+        // 与 fish 一致：第一时间启动本地代理服务。./ 与 clan:// 链接经 UrlUtil.convert 转成
+        // http://127.0.0.1:<port>/...，服务未起时端口是 -1，PQ 源 jar/ext 会拿到坏地址加载失败。
+        Server.get().start();
         PlaybackMemoryMonitor.process().initialize(this);
         PlaybackSystemConditionMonitor.process().initialize(this);
         Setting.applyLanguage();

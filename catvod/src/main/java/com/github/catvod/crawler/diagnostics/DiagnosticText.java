@@ -12,13 +12,7 @@ import java.util.regex.Pattern;
 /** The common boundary for untrusted legacy/native text. Structured fields also use it. */
 public final class DiagnosticText {
     public static final int MAX_CHARS = 12_000;
-    private static final String REDACTED = "[redacted]";
     private static final Pattern URI_TEXT = Pattern.compile("(?i)(?:[a-z][a-z0-9+.-]{1,24}:)?//[^\\s<>\"'\\\\]+|(?:file|content|magnet):[^\\s<>\"']+");
-    private static final Pattern HEADER = Pattern.compile("(?im)(?:[\"']?)(?:authorization|proxy-authorization|cookie|set-cookie|referer)(?:[\"']?)\\s*[:=]\\s*[^\\r\\n]*");
-    private static final Pattern SECRET = Pattern.compile("(?i)(?<![a-z0-9_.-])([\"']?(?:[a-z0-9_.-]{0,48}(?:token|password|passwd|secret|credential|cookie|authorization|license|sessionkey|api[_-]?key|access[_-]?key|share[_-]?key|username|account|email|phone|serial|url|uri|payload|body)[a-z0-9_.-]{0,48})[\"']?\\s*[:=]\\s*)(?:\"[^\"]*\"|'[^']*'|[^\\s,;&}\\]]+)");
-    private static final Pattern BEARER = Pattern.compile("(?i)\\b(?:bearer|basic)\\s+[a-z0-9+/_.=~-]+");
-    private static final Pattern LOCAL_PATH = Pattern.compile("/(?:storage|sdcard|data/user|data/data|mnt/media_rw)/[^\\s\"'<>]*");
-    private static final Pattern ADDRESS = Pattern.compile("(?i)\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b|\\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\\b");
 
     private DiagnosticText() {}
 
@@ -28,25 +22,15 @@ public final class DiagnosticText {
         if (input == null) return new Clean("", false);
         boolean truncated = input.length() > MAX_CHARS;
         String value = input.substring(0, Math.min(MAX_CHARS, input.length())).replace("\\/", "/");
-        // Each pattern needs at least one of these characters to match, so plain text skips the
-        // regex engine entirely. This runs on the calling (often UI) thread for every log line.
-        if (value.indexOf(':') >= 0 || value.indexOf('=') >= 0) {
-            value = HEADER.matcher(value).replaceAll("sensitive-header=" + REDACTED);
-            value = SECRET.matcher(value).replaceAll("$1" + REDACTED);
-        }
-        if (value.indexOf('b') >= 0 || value.indexOf('B') >= 0) value = BEARER.matcher(value).replaceAll(REDACTED);
-        if (value.indexOf('/') >= 0 || value.indexOf(':') >= 0) value = URI_TEXT.matcher(value).replaceAll("uri:" + REDACTED);
-        if (value.indexOf('/') >= 0) value = LOCAL_PATH.matcher(value).replaceAll("path:" + REDACTED);
-        if (value.indexOf('.') >= 0 || value.indexOf(':') >= 0) value = ADDRESS.matcher(value).replaceAll("address:" + REDACTED);
+        // 与 fish 一致：调试日志只给自己看，不打码，保留完整路径、链接与参数，否则无法排查问题。
         String escaped = escape(value);
         truncated |= escaped.length() >= MAX_CHARS;
         return new Clean(truncated ? escaped + " [truncated]" : escaped, truncated);
     }
 
     /**
-     * Short label text: escaped, and redacted through {@link #clean} only when it could carry a URI
-     * or a credential. A label with none of these characters cannot match any redaction pattern
-     * except {@code bearer}/{@code basic}, which needs whitespace after the keyword.
+     * Short label text: escaped, and capped at {@link #MAX_CHARS} like {@link #clean}.
+     * Plain labels without special characters skip the escape scan fast path.
      */
     public static String sanitizeTag(String tag) {
         if (tag == null) return "";

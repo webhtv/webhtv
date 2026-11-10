@@ -5,20 +5,21 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class DiagnosticTextTest {
-    @Test public void redactsCredentialsUrisAndControlCharactersBeforeStorage() {
+    @Test public void keepsFullTextAndEscapesControlCharactersBeforeStorage() {
         String input = "request=https://user:pass@example.test/path/secret?token=URL_SECRET#fragment\n"
                 + "Cookie: sid=COOKIE_SECRET; more=value with spaces\r\nAuthorization: Bearer AUTH_SECRET\n"
                 + "{\"access_token\":\"JSON_SECRET\",\"password\":\"PASS_SECRET\"}\n"
                 + "at /storage/emulated/0/private/movie.mkv 192.168.1.42\nFORGED [thread] av-diag: {}\u0000";
         String safe = DiagnosticText.clean(input).text();
-        for (String secret : new String[]{"URL_SECRET", "COOKIE_SECRET", "AUTH_SECRET", "JSON_SECRET", "PASS_SECRET", "movie.mkv", "192.168.1.42", "example.test"}) assertFalse(secret, safe.contains(secret));
+        // 与 fish 一致：不打码，完整保留路径/链接/参数，便于自查问题。
+        for (String kept : new String[]{"URL_SECRET", "COOKIE_SECRET", "AUTH_SECRET", "JSON_SECRET", "PASS_SECRET", "movie.mkv", "192.168.1.42", "example.test"}) assertTrue(kept, safe.contains(kept));
         assertFalse(safe.contains("\n")); assertFalse(safe.contains("\r")); assertFalse(safe.contains("\u0000"));
         assertTrue(safe.contains("\\n"));
     }
 
     @Test public void localSuggestionsRetainOnlyOrigins() {
         assertEquals(java.util.List.of("https://example.test:8443"), DiagnosticText.origins("https://user:pass@example.test:8443/private?token=SECRET"));
-        assertFalse(DiagnosticText.clean("https://example.test/private").text().contains("example.test"));
+        assertTrue(DiagnosticText.clean("https://example.test/private").text().contains("example.test"));
     }
 
     @Test public void exceptionsKeepTypesAndCausesWithBoundedText() {
@@ -28,7 +29,7 @@ public class DiagnosticTextTest {
         String text = DiagnosticText.throwable(outer);
         assertTrue(text.contains("IllegalStateException")); assertTrue(text.contains("Caused by"));
         assertTrue(text.contains("truncated exception chain/cycle"));
-        assertFalse(text.contains("INNER_SECRET")); assertFalse(text.contains("OUTER_SECRET"));
+        assertTrue(text.contains("INNER_SECRET")); assertTrue(text.contains("OUTER_SECRET"));
         assertTrue(text.length() < 13000);
     }
 
