@@ -18,8 +18,8 @@ public class GithubTest {
         assertEquals(URI.create(stable).getHost(), URI.create(beta).getHost());
         assertTrue(stable.contains("/releases/download/update-channel/"));
         assertTrue(beta.contains("/releases/download/update-channel/"));
-        assertEquals("https://github.com/Silent1566/webhtv/releases/download/update-channel/mobile-arm64_v8a.json", stable);
-        assertEquals("https://github.com/Silent1566/webhtv/releases/download/update-channel/mobile-arm64_v8a-beta.json", beta);
+        assertEquals("https://github.com/llb0/webhtv/releases/download/update-channel/mobile-arm64_v8a.json", stable);
+        assertEquals("https://github.com/llb0/webhtv/releases/download/update-channel/mobile-arm64_v8a-beta.json", beta);
     }
 
 

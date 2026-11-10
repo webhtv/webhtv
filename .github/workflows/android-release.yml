@@ -33,7 +33,7 @@ on:
       publish_oci:
         description: "Publish APKs as OCI artifacts when Registry variables and secrets are configured"
         required: false
-        default: true
+        default: false
 
 permissions:
   contents: write

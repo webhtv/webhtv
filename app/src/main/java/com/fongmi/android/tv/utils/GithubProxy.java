@@ -120,7 +120,7 @@ public final class GithubProxy {
 
     public static String probeUrl(String source) {
         String proxy = normalize(isEmpty(source) ? first(Setting.getGithubProxy()) : source);
-        return proxy + "https://github.com/Silent1566/webhtv/releases/download/update-channel/update.json";
+        return proxy + "https://github.com/llb0/webhtv/releases/download/update-channel/update.json";
     }
 
     public static final class Config {

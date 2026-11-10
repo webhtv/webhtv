@@ -59,7 +59,7 @@ import com.google.gson.JsonObject;
 
 public class SettingEnhanceFragment extends BaseFragment {
 
-    private static final String URL_GITHUB = "https://github.com/Silent1566/webhtv";
+    private static final String URL_GITHUB = "https://github.com/llb0/webhtv";
     private static final String URL_CNB = "https://cnb.cool/fish2018/ext";
 
     private FragmentSettingEnhanceBinding mBinding;
