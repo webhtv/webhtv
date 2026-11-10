@@ -52,6 +52,31 @@ public final class CachePolicyEngine {
         return new CacheCleanupPlan(CacheCleanupMode.MODULE, id == null ? List.of() : List.of(id));
     }
 
+    /**
+     * The plan that brings the whole cache directory under the configured total limit.
+     *
+     * <p>Read from the registry instead of a hand-written list: every module a user may clean by
+     * hand participates, which is what makes the total limit reach the playback caches - the
+     * largest single consumer - once nothing plays. What stays out is exactly what the registry
+     * forbids: plugin scripts that no site can re-download mid-use and the unclassified cache whose
+     * owner is unknown. The limit therefore converges to the sum of those two when they alone
+     * exceed it, and the panel reports that instead of claiming success.</p>
+     *
+     * <p>Module order follows the enum so a run is deterministic and the progress line stays
+     * stable across attempts.</p>
+     */
+    public static CacheCleanupPlan convergencePlan(java.io.File cache) {
+        if (cache == null) return new CacheCleanupPlan(CacheCleanupMode.CONVERGE, List.of());
+        ArrayList<CacheModuleId> ids = new ArrayList<>();
+        for (CacheModule module : CacheModuleRegistry.modules(cache)) {
+            if (module == null || !module.protection().allowManualCleanup()) continue;
+            ids.add(module.id());
+        }
+        ArrayList<CacheModuleId> ordered = new ArrayList<>();
+        for (CacheModuleId id : CacheModuleId.values()) if (ids.contains(id)) ordered.add(id);
+        return new CacheCleanupPlan(CacheCleanupMode.CONVERGE, List.copyOf(ordered));
+    }
+
     public static boolean allowsAutomatic(CacheModuleId id) {
         return id != null && switch (id) {
             case LYRICS, KARAOKE, WEBHOME_EXT, EPG, TEMP_FILES, LEGACY_FILES -> true;
@@ -98,7 +123,9 @@ public final class CachePolicyEngine {
             // split, so it must cover every cache the panel can name - including the report-only
             // leftovers a tiered run deliberately protects.
             case FULL -> EnumSet.allOf(CacheModuleId.class);
-            case MODULE -> Set.of();
+            // Both modes take their module list from the caller: MODULE names one row, CONVERGE
+            // names whatever the registry lets a user clean.
+            case MODULE, CONVERGE -> Set.of();
         };
         ArrayList<CacheModuleId> ordered = new ArrayList<>();
         for (CacheModuleId id : CacheModuleId.values()) if (selected.contains(id)) ordered.add(id);

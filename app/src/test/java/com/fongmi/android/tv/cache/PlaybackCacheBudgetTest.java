@@ -11,7 +11,7 @@ public class PlaybackCacheBudgetTest {
     @Test
     public void playbackKeepsThePreloadCeilingAndIgnoresTheTotalLimit() {
         assertEquals(2048 * MB, PlaybackCacheBudget.capacityBytes(true, 128 * MB, 2048 * MB, 900 * MB));
-        assertEquals(64 * MB, PlaybackCacheBudget.capacityBytes(false, 128 * MB, 2048 * MB, 900 * MB));
+        assertEquals(0, PlaybackCacheBudget.capacityBytes(false, 128 * MB, 2048 * MB, 900 * MB));
     }
 
     @Test
@@ -35,10 +35,34 @@ public class PlaybackCacheBudgetTest {
         assertEquals(116 * MB, PlaybackCacheBudget.capacityBytes(128 * MB, 2048 * MB, 12 * MB));
     }
 
+    /**
+     * The reported defect: a 64 MB total with 69.9 MB in other modules kept a 64 MB playback cache,
+     * so the panel promised a 64 MB total while the directory held 133.7 MB. The total is one
+     * budget for every module, so this module gets what is left over and nothing more.
+     */
     @Test
-    public void floorAppliesWhenOtherModulesExceedTheLimit() {
-        assertEquals(PlaybackCacheBudget.MIN_BUDGET_BYTES,
-                PlaybackCacheBudget.capacityBytes(128 * MB, 2048 * MB, 210 * MB));
+    public void otherModulesAboveTheLimitLeaveNoShareForPlayback() {
+        assertEquals(0, PlaybackCacheBudget.capacityBytes(64 * MB, 2048 * MB, 69 * MB));
+        assertEquals(0, PlaybackCacheBudget.capacityBytes(128 * MB, 2048 * MB, 210 * MB));
+    }
+
+    @Test
+    public void playbackShareNeverPushesTheDirectoryPastTheTotal() {
+        long total = 128 * MB;
+        for (long others = 0; others <= total + 256 * MB; others += 8 * MB) {
+            long share = PlaybackCacheBudget.capacityBytes(total, 2048 * MB, others);
+            if (others <= total) {
+                assertEquals("others=" + others, total, others + share);
+            } else {
+                // Other modules alone already fill the limit: playback may add nothing at all.
+                assertEquals("others=" + others, 0, share);
+            }
+        }
+    }
+
+    @Test
+    public void remainingShareIsUsedWhenItIsSmallerThanThePreloadSetting() {
+        assertEquals(8 * MB, PlaybackCacheBudget.capacityBytes(128 * MB, 2048 * MB, 120 * MB));
     }
 
     @Test
@@ -47,8 +71,8 @@ public class PlaybackCacheBudgetTest {
     }
 
     @Test
-    public void floorNeverExceedsThePreloadSetting() {
-        assertEquals(32 * MB, PlaybackCacheBudget.capacityBytes(128 * MB, 32 * MB, 400 * MB));
+    public void preloadSettingRemainsTheCeilingWhenTheShareIsLarger() {
+        assertEquals(32 * MB, PlaybackCacheBudget.capacityBytes(128 * MB, 32 * MB, 80 * MB));
     }
 
     @Test

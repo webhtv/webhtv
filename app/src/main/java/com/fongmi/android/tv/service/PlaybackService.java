@@ -27,6 +27,7 @@ import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.browse.BrowseTree;
+import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
@@ -211,6 +212,9 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         releaseSession();
         player.stop();
         player.release();
+        // The playback caches are only reclaimable once no player holds them, so the configured
+        // total limit converges here. Nothing else marks "playback ended" for both engines.
+        CacheScheduler.get().onPlaybackEnded();
         removeForeground();
         Server.get().setService(null);
         EventBus.getDefault().unregister(this);
