@@ -44,6 +44,8 @@ public class UrlUtil {
     }
 
     public static String convert(String url) {
+        if (url == null) return null;
+        url = url.replace("../", "file://").replace("./", "file://tvbox/").replace("clan://", "file://tvbox/");
         String scheme = scheme(url);
         String path = null;
         if ("assets".equals(scheme)) path = "/";

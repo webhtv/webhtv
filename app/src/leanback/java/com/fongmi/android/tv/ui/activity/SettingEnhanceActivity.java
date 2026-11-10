@@ -29,6 +29,7 @@ import com.fongmi.android.tv.ui.activity.PluginManagerActivity;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.AudioSourceDialog;
 import com.fongmi.android.tv.ui.dialog.ShortDramaSourceDialog;
+import com.fongmi.android.tv.ui.dialog.SourceBlockDialog;
 import com.fongmi.android.tv.ui.dialog.CspWarmupDialog;
 import com.fongmi.android.tv.ui.dialog.CustomCspDialog;
 import com.fongmi.android.tv.ui.dialog.DebugLogDialog;
@@ -86,6 +87,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.audioSource.setOnClickListener(this::setAudioSource);
         mBinding.shortDramaSource.setOnClickListener(this::setShortDramaSource);
         mBinding.debugLog.setOnClickListener(this::setDebugLog);
+        mBinding.fileSites.setOnClickListener(view -> SourceBlockDialog.show(this, this::setText));
         mBinding.siteHealthSort.setOnClickListener(view -> SiteHealthDialog.show(this, this::setText));
         mBinding.siteHealthSort.setOnLongClickListener(this::clearSiteHealth);
         mBinding.webHomeExtension.setOnClickListener(view -> WebHomeExtensionDialog.show(this, this::setText));
@@ -134,6 +136,7 @@ public class SettingEnhanceActivity extends BaseActivity {
                 mBinding.shortDramaSource,
                 mBinding.siteHealthSort,
                 mBinding.debugLog,
+                mBinding.fileSites,
                 mBinding.playbackWebhook,
                 mBinding.pluginManager
         };
@@ -148,6 +151,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         safeSet("audioSource", mBinding.audioSourceText, () -> getSwitch(!AudioConfig.objectFrom(Setting.getAudioConfig()).getDisplayRules().isEmpty()));
         safeSet("shortDramaSource", mBinding.shortDramaSourceText, () -> getSwitch(!ShortDramaConfig.objectFrom(Setting.getShortDramaConfig()).getDisplayRules().isEmpty()));
         safeSet("debugLog", mBinding.debugLogText, () -> getSwitch(Setting.isDebugLog()));
+        safeSet("fileSites", mBinding.fileSitesText, () -> getString(R.string.setting_source_block_count, Setting.getSourceBlockedCount(), Setting.SOURCE_ALL.length));
         safeSet("siteHealthSort", mBinding.siteHealthSortText, this::getSiteHealthText);
         safeSet("webHomeExtension", mBinding.webHomeExtensionText, () -> {
             WebHomeExtensionRegistry.Snapshot webHomeExtension = WebHomeExtensionRegistry.get().snapshot();

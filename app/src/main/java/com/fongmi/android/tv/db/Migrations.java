@@ -102,6 +102,14 @@ public class Migrations {
     public static final Migration MIGRATION_39_40 = new Migration(39, 40) {
         @Override
         public void migrate(@NonNull SupportSQLiteDatabase database) {
+            // 旧 llb0/fish 分支的 v39 与本分支同号但结构不同：它的 37→39 给 History 加了
+            // playerType / player(TEXT) / subHead / subTail，缺少 speedOverride / tmdbId /
+            // mediaType / legacyKey，而本分支 43→44 要求 player 为 INTEGER NOT NULL DEFAULT -1。
+            // 直接按 v40 结构重建 History，只保留共有列，避免 ADD COLUMN 冲突和缺列校验失败。
+            if (hasColumn(database, "History", "playerType") || hasColumn(database, "History", "subHead")) {
+                rebuildHistory(database);
+                return;
+            }
             database.execSQL("ALTER TABLE History ADD COLUMN tmdbSeasonNumber INTEGER NOT NULL DEFAULT 0");
             database.execSQL("ALTER TABLE History ADD COLUMN tmdbEpisodeNumber INTEGER NOT NULL DEFAULT 0");
         }
@@ -254,5 +262,38 @@ public class Migrations {
             }
         }
         database.execSQL(statement);
+    }
+
+    private static boolean hasColumn(SupportSQLiteDatabase database, String table, String column) {
+        return columnNames(database, table).contains(column);
+    }
+
+    private static Set<String> columnNames(SupportSQLiteDatabase database, String table) {
+        Set<String> names = new LinkedHashSet<>();
+        try (Cursor cursor = database.query("PRAGMA table_info(`" + table + "`)")) {
+            int nameIndex = cursor.getColumnIndex("name");
+            while (cursor.moveToNext()) {
+                if (nameIndex >= 0) names.add(cursor.getString(nameIndex));
+            }
+        }
+        return names;
+    }
+
+    /** 按 v40 的 History 结构重建表，只迁移旧表与新表共有的列。 */
+    private static void rebuildHistory(SupportSQLiteDatabase database) {
+        Set<String> legacyColumns = columnNames(database, "History");
+        database.execSQL("ALTER TABLE History RENAME TO History_Legacy");
+        database.execSQL("CREATE TABLE IF NOT EXISTS History (`key` TEXT NOT NULL, `vodPic` TEXT, `wallPic` TEXT, `vodName` TEXT, `vodFlag` TEXT, `vodRemarks` TEXT, `episodeUrl` TEXT, `revSort` INTEGER NOT NULL, `revPlay` INTEGER NOT NULL, `createTime` INTEGER NOT NULL, `opening` INTEGER NOT NULL, `ending` INTEGER NOT NULL, `position` INTEGER NOT NULL, `duration` INTEGER NOT NULL, `speed` REAL NOT NULL, `speedOverride` INTEGER NOT NULL DEFAULT 0, `scale` INTEGER NOT NULL, `cid` INTEGER NOT NULL, `typeName` TEXT, `area` TEXT, `actor` TEXT, `director` TEXT, `year` TEXT, `tmdbId` INTEGER NOT NULL DEFAULT 0, `mediaType` TEXT DEFAULT '', `legacyKey` TEXT DEFAULT '', `tmdbSeasonNumber` INTEGER NOT NULL DEFAULT 0, `tmdbEpisodeNumber` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`key`))");
+        legacyColumns.retainAll(columnNames(database, "History"));
+        if (!legacyColumns.isEmpty()) {
+            StringBuilder columns = new StringBuilder();
+            for (String name : legacyColumns) {
+                if (columns.length() > 0) columns.append(", ");
+                columns.append('`').append(name).append('`');
+            }
+            database.execSQL("INSERT INTO History (" + columns + ") SELECT " + columns + " FROM History_Legacy");
+            database.execSQL("UPDATE History SET speedOverride = 1 WHERE speed > 0 AND ABS(speed - 1.0) > 0.001");
+        }
+        database.execSQL("DROP TABLE History_Legacy");
     }
 }
