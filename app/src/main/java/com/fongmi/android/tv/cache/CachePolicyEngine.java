@@ -59,8 +59,9 @@ public final class CachePolicyEngine {
      * hand participates, which is what makes the total limit reach the playback caches - the
      * largest single consumer - once nothing plays. What stays out is exactly what the registry
      * forbids: plugin scripts that no site can re-download mid-use and the unclassified cache whose
-     * owner is unknown. The limit therefore converges to the sum of those two when they alone
-     * exceed it, and the panel reports that instead of claiming success.</p>
+     * owner is unknown. When those two alone exceed the limit the pass stops there: it does not
+     * delete the modules it could have cleaned, and the panel reports the protected remainder
+     * instead of claiming success.</p>
      *
      * <p>Module order follows the enum so a run is deterministic and the progress line stays
      * stable across attempts.</p>
