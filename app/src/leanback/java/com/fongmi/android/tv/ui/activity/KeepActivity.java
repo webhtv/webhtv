@@ -3,6 +3,9 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.Window;
 
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.viewbinding.ViewBinding;
@@ -18,7 +21,10 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.ui.adapter.KeepAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.ui.dialog.BaseGlassDialog;
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -41,27 +47,17 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     protected void initView(Bundle savedInstanceState) {
         setEmptyContent();
         setRecyclerView();
+        setTitleBar();
         getKeep();
     }
 
-    /**
-     * 空态内容：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。
-     *
-     * <p>收藏页是最典型的空态——用户第一次进来时列表必为空，此前的实现只有一句
-     * {@code error_empty}（「这里什麽都没有」），既不解释为什么空，也不给出下一步。
-     */
-    private void setEmptyContent() {
-        mBinding.progressLayout.setEmptyContent(
-                R.string.keep_empty_title,
-                R.string.keep_empty_description,
-                R.string.keep_empty_action,
-                view -> goHome());
-    }
-
-    /** 空态主按钮：回点播首页去挑一部。与 LiveActivity/VideoActivity 的回首页写法一致。 */
-    private void goHome() {
-        startActivity(new Intent(this, HomeActivity.class).addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+    private void setTitleBar() {
+        mBinding.btnDelete.setOnClickListener(v -> {
+            if (mAdapter.getItemCount() > 0) mAdapter.setDelete(true);
+        });
+        mBinding.btnClear.setOnClickListener(v -> {
+            if (mAdapter.getItemCount() > 0) showClearDialog();
+        });
     }
 
     private void setRecyclerView() {
@@ -76,7 +72,19 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     }
 
     private void getKeep() {
-        mAdapter.setItems(Keep.getVod());
+        mAdapter.setItems(Keep.getVod(), () -> {
+            mBinding.progressLayout.showContent(true, mAdapter.getItemCount());
+            focusFirstItem();
+        });
+    }
+
+    private void focusFirstItem() {
+        if (mAdapter.getItemCount() <= 0) return;
+        mBinding.recycler.post(() -> {
+            View view = mBinding.recycler.getLayoutManager().findViewByPosition(0);
+            if (view != null) view.requestFocus();
+            else mBinding.recycler.requestFocus();
+        });
     }
 
     private void loadConfig(Config config, Keep item) {
@@ -131,6 +139,33 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
     public boolean onLongClick() {
         mAdapter.setDelete(true);
         return true;
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (KeyUtil.isMenuKey(event) && mAdapter.getItemCount() > 0) showClearDialog();
+        return super.dispatchKeyEvent(event);
+    }
+
+    private void showClearDialog() {
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setTitle("清空收藏视频")
+                .setMessage("是否清空收藏视频，删除后无法恢复！")
+                .setPositiveButton(android.R.string.ok, (d, which) -> clearKeep())
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(BaseGlassDialog.glassBackground());
+            View content = w.getDecorView().findViewById(android.R.id.content);
+            if (content != null) content.setBackground(null);
+        }
+        dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).requestFocus();
+    }
+
+    private void clearKeep() {
+        Keep.deleteAll();
+        RefreshEvent.keep();
     }
 
     @Override

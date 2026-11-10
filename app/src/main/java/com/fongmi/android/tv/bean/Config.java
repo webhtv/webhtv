@@ -20,10 +20,17 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
+import java.util.Locale;
 
 @Entity(indices = {@Index(value = {"url", "type"}), @Index(value = {"interfaceKey", "type"}, unique = true)})
 public class Config {
+
+    public static final String DEFAULT_URL_ZH = "文件源放 /tvbox/ 的 sites、sites-json、sites-js、sites-py 中";
+    public static final String DEFAULT_URL_ZH_TW = "檔案源放 /tvbox/ 的 sites、sites-json、sites-js、sites-py 中";
+    public static final String DEFAULT_URL_EN = "File sources in /tvbox/ sites, sites-json, sites-js, sites-py";
+    public static final String DEFAULT_LIVE_URL_ZH = "文件源放 /tvbox/lives/";
+    public static final String DEFAULT_LIVE_URL_ZH_TW = "檔案源放 /tvbox/lives/";
+    public static final String DEFAULT_LIVE_URL_EN = "File sources in /tvbox/lives/";
 
     @PrimaryKey(autoGenerate = true)
     @SerializedName("id")
@@ -122,14 +129,33 @@ public class Config {
         return AppDatabase.get().getConfigDao().findOne(type);
     }
 
+    public static String defaultUrl() {
+        return defaultUrl(false);
+    }
+
+    public static String defaultUrl(boolean live) {
+        String lang = Locale.getDefault().getLanguage();
+        if ("zh".equals(lang)) {
+            String country = Locale.getDefault().getCountry();
+            boolean tw = "TW".equals(country) || "HK".equals(country) || "MO".equals(country);
+            return live ? (tw ? DEFAULT_LIVE_URL_ZH_TW : DEFAULT_LIVE_URL_ZH) : (tw ? DEFAULT_URL_ZH_TW : DEFAULT_URL_ZH);
+        }
+        return live ? DEFAULT_LIVE_URL_EN : DEFAULT_URL_EN;
+    }
+
+    public static boolean isDefaultUrl(String url) {
+        return DEFAULT_URL_ZH.equals(url) || DEFAULT_URL_ZH_TW.equals(url) || DEFAULT_URL_EN.equals(url)
+                || DEFAULT_LIVE_URL_ZH.equals(url) || DEFAULT_LIVE_URL_ZH_TW.equals(url) || DEFAULT_LIVE_URL_EN.equals(url);
+    }
+
     public static Config vod() {
-        Config item = lastActive(0);
-        return item == null ? create(0) : item;
+        Config item = AppDatabase.get().getConfigDao().findOne(0);
+        return item == null ? create(0, defaultUrl(false)) : item;
     }
 
     public static Config live() {
-        Config item = lastActive(1);
-        return item == null ? create(1) : item;
+        Config item = AppDatabase.get().getConfigDao().findOne(1);
+        return item == null ? create(1, defaultUrl(true)) : item;
     }
 
     public static Config wall() {
@@ -449,10 +475,6 @@ public class Config {
     }
 
     public Config insert() {
-        if (isEmpty()) return this;
-        ensureInterfaceKey();
-        rememberAddressAliases(getUrls());
-        if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
         PlaybackConfigIdentity.invalidateAll();
         invalidateCatalog();
@@ -460,20 +482,25 @@ public class Config {
     }
 
     public Config save() {
-        if (isEmpty()) return this;
-        ensureInterfaceKey();
-        rememberAddressAliases(getUrls());
-        if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
-        AppDatabase.get().getConfigDao().insertOrUpdate(this);
-        PlaybackConfigIdentity.invalidateAll();
-        invalidateCatalog();
+        setTime(System.currentTimeMillis());
+        if (TextUtils.isEmpty(getUrl())) {
+            Prefers.put("config_" + getType(), getUrl());
+            return this;
+        }
+        if (id == 0) {
+            setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
+        } else {
+            AppDatabase.get().getConfigDao().update(this);
+        }
+        Prefers.put("config_" + getType(), getUrl());
         return this;
     }
 
+    public static void deleteEmpty() {
+        AppDatabase.get().getConfigDao().deleteEmpty();
+    }
+
     public Config update() {
-        if (isEmpty()) return this;
-        setTime(System.currentTimeMillis());
-        Prefers.put("config_" + getType(), getUrl());
         return save();
     }
 

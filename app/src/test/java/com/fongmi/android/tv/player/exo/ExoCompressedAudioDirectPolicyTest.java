@@ -643,30 +643,6 @@ public class ExoCompressedAudioDirectPolicyTest {
     }
 
     @Test
-    public void vendorDirectInitializationFailure_notifiesForImmediatePcmFallback() throws Exception {
-        AtomicInteger notifications = new AtomicInteger();
-        ExoCompressedAudioDirectPolicy policy = new ExoCompressedAudioDirectPolicy(
-                (format, attributes) -> AudioOffloadSupport.DEFAULT_UNSUPPORTED,
-                (format, attributes) -> true,
-                Clock.DEFAULT,
-                config -> {
-                    throw new AudioOutputProvider.InitializationException();
-                });
-        policy.setInitializationFailureListener(notifications::incrementAndGet);
-        AudioOutputProvider provider = wrapped(policy);
-        AudioOutputProvider.FormatConfig formatConfig = formatConfig(aacStereo());
-        provider.getFormatSupport(formatConfig);
-        AudioOutputProvider.OutputConfig outputConfig = provider.getOutputConfig(formatConfig);
-
-        assertThrows(AudioOutputProvider.InitializationException.class,
-                () -> provider.getAudioOutput(outputConfig));
-
-        assertEquals(1, notifications.get());
-        assertTrue(policy.consumePcmFallbackRequest());
-        assertFalse(policy.getAudioOutputSnapshot().initialized());
-    }
-
-    @Test
     public void missingDirectSupport_keepsPcmFallback() {
         ExoCompressedAudioDirectPolicy policy = new ExoCompressedAudioDirectPolicy(
                 (format, attributes) -> AudioOffloadSupport.DEFAULT_UNSUPPORTED,

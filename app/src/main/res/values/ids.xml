@@ -1,6 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <item name="tmdb_episode_still_request_key" type="id" />
-    <item name="update_fullscreen_inset" type="id" />
-    <item name="loadHost" type="id" />
+    <item name="root" type="id" />
+    <item name="handle" type="id" />
 </resources>

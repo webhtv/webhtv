@@ -121,6 +121,16 @@
             android:text="@string/play_ed" />
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/sub_head"
+            style="@style/Control"
+            android:text="@string/play_sub_head" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/sub_tail"
+            style="@style/Control"
+            android:text="@string/play_sub_tail" />
+
+        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/danmaku"
             style="@style/Control"
             android:text="@string/danmaku"
@@ -162,6 +172,16 @@
             android:id="@+id/episodes"
             style="@style/Control"
             android:text="@string/detail_episode" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/change2"
+            style="@style/Control"
+            android:text="@string/play_change" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/setting"
+            style="@style/Control"
+            android:text="@string/play_setting" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 </HorizontalScrollView>

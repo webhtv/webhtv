@@ -62,7 +62,6 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.MpvPerformanceSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
-import com.fongmi.android.tv.utils.AudioUtil;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.github.catvod.crawler.SpiderDebug;
 import com.google.common.collect.ImmutableList;
@@ -1605,6 +1604,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             String lower = line.toLowerCase(Locale.US);
             if (shouldDebugLogMpvLine(line)) PlaybackTrace.log("mpv", playbackTraceId, "%s", line);
             if (lower.contains("sub") || lower.contains("font") || lower.contains("track switched") || lower.contains("mkv: select track")) appendSubtitleDiagnostic("native " + line);
+            // All subscribed messages already entered the structured diagnostic sink above.
         });
     }
 
@@ -1979,8 +1979,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
     }
 
     private void observeProperties() {
-        observedPropertyNames.clear();
-        propertyCache.clear();
         for (String property : new String[]{"mpv-version", "ffmpeg-version", "options/msg-level", "hwdec", "hwdec-interop",
                 "video-codec", "audio-codec", "current-tracks/video/decoder", "current-tracks/video/codec-profile",
                 "audio-params/channels", "audio-out-params/channels", "video-dec-params/pixelformat", "video-params/pixelformat",
@@ -2390,7 +2388,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             case "mistimed-frame-count" -> cachedMistimedFrames = Math.max(0, longValue(value, cachedMistimedFrames));
             case "vo-delayed-frame-count" -> cachedDelayedFrames = Math.max(0, longValue(value, cachedDelayedFrames));
             case "display-sync-active" -> cachedDisplaySyncActive = Boolean.TRUE.equals(value);
-            case "track-list/count" -> observeTrackProperties((int) Math.max(0, longValue(value, 0)));
             case "track-list" -> {
                 int previousWidth = videoSize.width;
                 int previousHeight = videoSize.height;
@@ -2412,10 +2409,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
                 PlaybackTrace.log("mpv", playbackTraceId, "disc menu active=%s available=%s",
                         discMenuActive, discMenuAvailable);
                 if (discMenuActive) requestIsoOsdSurface();
-            }
-            case "chapter-list/count" -> {
-                observeChapterProperties((int) Math.max(0, longValue(value, 0)));
-                if (!shouldDeferStartupMetadataRefresh()) scheduleChapterRefresh();
             }
             default -> {
                 if (property.startsWith("track-list/")) scheduleTrackRefresh(property);
@@ -3896,8 +3889,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             mainHandler.removeCallbacks(mediaReplacementStopTimeoutRunnable);
             mediaReplacementCoordinator.reset();
             initialized = false;
-            observedPropertyNames.clear();
-            propertyCache.clear();
             setCustomButtonStates("");
             autoHlsBitrateState.onNativeContextReleased();
             surfaceAttached = false;
@@ -4365,7 +4356,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         if (released || stopping || fileLoaded || eofReached || playerError != null || playbackState != Player.STATE_BUFFERING) return;
         // An idle native player is expected until the visible Surface is bound.
         if (pendingSurfaceLoadGeneration != C.INDEX_UNSET) return;
-        if (idleActive) {
+        if (booleanProperty("idle-active", idleActive)) {
             fail(classifyLoadError(null, "idle-active=true"), PlaybackException.ERROR_CODE_IO_UNSPECIFIED);
         } else {
             startStateRefresh();
@@ -5175,10 +5166,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
     private void handleChapterListProperty(@Nullable Object value) {
         if (shouldDeferStartupMetadataRefresh()) return;
         List<MediaEdition> chapters = value instanceof String string ? parseChapters(string) : List.of();
-        if (chapters.isEmpty()) {
-            scheduleChapterRefresh();
-            return;
-        }
         updateCurrentChapters(chapters);
     }
 
@@ -6227,7 +6214,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
 
     private void observe(String property, int format) {
         propertySnapshot.register(property);
-        if (!observedPropertyNames.add(property)) return;
         try {
             mpvObserveProperty(property, format);
         } catch (Throwable ignored) {

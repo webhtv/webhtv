@@ -8,9 +8,9 @@
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/shape_site_dialog"
     android:orientation="vertical"
     android:paddingStart="20dp"
     android:paddingTop="16dp"
@@ -47,6 +47,13 @@
             tools:text="共 42 个站点" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <View
+        android:id="@+id/handle"
+        android:layout_width="38dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="14dp" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/searchBar"
@@ -130,7 +137,11 @@
             android:overScrollMode="never"
             android:paddingStart="2dp"
             android:paddingEnd="8dp"
-            tools:itemCount="6"
+            android:paddingBottom="4dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            app:maxHeight="344dp"
+            tools:itemCount="5"
             tools:listitem="@layout/adapter_site" />
 
         <androidx.appcompat.widget.LinearLayoutCompat
@@ -149,7 +160,6 @@
                 android:layout_height="40dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
-                android:focusableInTouchMode="true"
                 android:nextFocusUp="@id/config"
                 android:nextFocusDown="@id/search"
                 android:padding="8dp"
@@ -163,7 +173,6 @@
                 android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
-                android:focusableInTouchMode="true"
                 android:nextFocusUp="@id/config"
                 android:nextFocusDown="@id/change"
                 android:padding="8dp"
@@ -177,7 +186,6 @@
                 android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
-                android:focusableInTouchMode="true"
                 android:nextFocusUp="@id/search"
                 android:nextFocusDown="@id/select"
                 android:padding="8dp"
@@ -191,7 +199,6 @@
                 android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
-                android:focusableInTouchMode="true"
                 android:nextFocusUp="@id/change"
                 android:nextFocusDown="@id/cancel"
                 android:padding="8dp"
@@ -205,7 +212,6 @@
                 android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
-                android:focusableInTouchMode="true"
                 android:nextFocusUp="@id/select"
                 android:nextFocusDown="@id/mode"
                 android:padding="8dp"
@@ -219,7 +225,6 @@
                 android:layout_marginTop="10dp"
                 android:background="@drawable/selector_site_action"
                 android:focusable="true"
-                android:focusableInTouchMode="true"
                 android:nextFocusUp="@id/cancel"
                 android:nextFocusDown="@id/mode"
                 android:padding="8dp"

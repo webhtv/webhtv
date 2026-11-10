@@ -97,6 +97,11 @@ public class Epg {
         return new EpgData();
     }
 
+    public EpgData getCurrent() {
+        for (EpgData item : getList()) if (item.isInRange()) return item;
+        return new EpgData();
+    }
+ 
     public Epg selected() {
         for (EpgData item : getList()) item.setSelected(item.isInRange());
         return this;

@@ -44,21 +44,7 @@ public class Func implements Diffable<Func> {
         else if (resId == R.string.home_push) this.drawable = R.drawable.ic_home_push;
         else if (resId == R.string.home_search) this.drawable = R.drawable.ic_home_search;
         else if (resId == R.string.home_setting) this.drawable = R.drawable.ic_home_setting;
-        else if (resId == R.string.home_cast) this.drawable = R.drawable.ic_home_push;
-        else if (resId == R.string.home_history_button) this.drawable = R.drawable.ic_setting_history;
-        else if (resId == R.string.home_custom_csp) this.drawable = R.drawable.ic_site_config;
-    }
-
-    private static String resolveText(int resId) {
-        if (resId == R.string.home_following) {
-            int unread = FollowingPlaybackBridge.cachedUnreadCount();
-            String text = ResUtil.getString(resId);
-            return unread > 0 ? text + " · " + unread : text;
-        }
-        if (resId != R.string.home_custom_csp) return ResUtil.getString(resId);
-        CustomCspSetting.Status status = CustomCspSetting.status();
-        if (!status.available()) return ResUtil.getString(resId);
-        return ResUtil.getString(status.enabled() ? R.string.home_custom_csp_on : R.string.home_custom_csp_off);
+        else if (resId == R.string.home_history) this.drawable = R.drawable.ic_setting_history;
     }
 
     @Override

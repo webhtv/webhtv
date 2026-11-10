@@ -79,10 +79,18 @@ public class History implements Diffable<History> {
     private long opening;
     @SerializedName("ending")
     private long ending;
+    @SerializedName("subHead")
+    private long subHead;
+    @SerializedName("subTail")
+    private long subTail;
     @SerializedName("position")
     private long position;
     @SerializedName("duration")
     private long duration;
+    @SerializedName("playerType")
+    private Integer playerType;
+    @SerializedName("player")
+    private String player;
     @SerializedName("speed")
     private float speed;
     @SerializedName("speedOverride")
@@ -143,6 +151,8 @@ public class History implements Diffable<History> {
         this.scale = -1;
         this.ending = C.TIME_UNSET;
         this.opening = C.TIME_UNSET;
+        this.subHead = C.TIME_UNSET;
+        this.subTail = C.TIME_UNSET;
         this.position = C.TIME_UNSET;
         this.duration = C.TIME_UNSET;
     }
@@ -161,8 +171,12 @@ public class History implements Diffable<History> {
         item.createTime = createTime;
         item.opening = opening;
         item.ending = ending;
+        item.subHead = subHead;
+        item.subTail = subTail;
         item.position = position;
         item.duration = duration;
+        item.playerType = playerType;
+        item.player = player;
         item.speed = speed;
         item.speedOverride = speedOverride;
         item.scale = scale;
@@ -756,6 +770,22 @@ public class History implements Diffable<History> {
         this.ending = ending;
     }
 
+    public long getSubHead() {
+        return subHead;
+    }
+
+    public void setSubHead(long subHead) {
+        this.subHead = subHead;
+    }
+
+    public long getSubTail() {
+        return subTail;
+    }
+
+    public void setSubTail(long subTail) {
+        this.subTail = subTail;
+    }
+
     public long getPosition() {
         return position;
     }
@@ -770,6 +800,22 @@ public class History implements Diffable<History> {
 
     public void setDuration(long duration) {
         this.duration = duration;
+    }
+
+    public Integer getPlayerType() {
+        return playerType;
+    }
+
+    public void setPlayerType(Integer playerType) {
+        this.playerType = playerType;
+    }
+
+    public String getPlayer() {
+        return player;
+    }
+
+    public void setPlayer(String player) {
+        this.player = player;
     }
 
     public float getSpeed() {
@@ -1084,7 +1130,9 @@ public class History implements Diffable<History> {
     private History copyTo(History item) {
         if (getOpening() > 0) item.setOpening(getOpening());
         if (getEnding() > 0) item.setEnding(getEnding());
-        if (hasUserSpeed()) item.setUserSpeed(getSpeed());
+        if (getSubHead() > 0) item.setSubHead(getSubHead());
+        if (getSubTail() > 0) item.setSubTail(getSubTail());
+        if (getSpeed() != 1) item.setSpeed(getSpeed());
         return this;
     }
 
@@ -1405,15 +1453,8 @@ public class History implements Diffable<History> {
 
     @Override
     public boolean isSameContent(History other) {
-        return other != null
-                && Objects.equals(getVodName(), other.getVodName())
-                && Objects.equals(getVodPic(), other.getVodPic())
-                && Objects.equals(getWallPic(), other.getWallPic())
-                && Objects.equals(getVodFlag(), other.getVodFlag())
-                && Objects.equals(getVodRemarks(), other.getVodRemarks())
-                && Objects.equals(getEpisodeUrl(), other.getEpisodeUrl())
-                && getPosition() == other.getPosition()
-                && getDuration() == other.getDuration()
-                && getCreateTime() == other.getCreateTime();
+        return getVodName().equals(other.getVodName()) && getVodPic().equals(other.getVodPic()) && getWallPic().equals(other.getWallPic())
+                && getCreateTime() == other.getCreateTime() && getPosition() == other.getPosition()
+                && getDuration() == other.getDuration() && getVodRemarks().equals(other.getVodRemarks());
     }
 }

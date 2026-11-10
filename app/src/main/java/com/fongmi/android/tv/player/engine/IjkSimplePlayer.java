@@ -891,40 +891,6 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         startStateRefresh();
     }
 
-    private void startSubtitleLoad(MediaItem item) {
-        clearSubtitles();
-        if (item.localConfiguration == null || item.localConfiguration.subtitleConfigurations.isEmpty()) return;
-        int serial = ++subtitleSerial;
-        List<MediaItem.SubtitleConfiguration> configs = item.localConfiguration.subtitleConfigurations;
-        Map<String, String> headers = ExoUtil.extractHeaders(item);
-        subtitleLoad = Task.submit(() -> {
-            IjkSubtitleTrack loaded = IjkSubtitleTrack.load(configs, headers);
-            App.post(() -> {
-                if (serial != subtitleSerial || mediaItem != item) return;
-                subtitleLoad = null;
-                subtitleTrack = loaded;
-                updateCurrentCues(position());
-                invalidateState();
-                if (playbackState != Player.STATE_IDLE && playbackState != Player.STATE_ENDED) startStateRefresh();
-            });
-        });
-    }
-
-    private void clearSubtitles() {
-        subtitleSerial++;
-        if (subtitleLoad != null) subtitleLoad.cancel(true);
-        subtitleLoad = null;
-        subtitleTrack = IjkSubtitleTrack.EMPTY;
-        currentCues = CueGroup.EMPTY_TIME_ZERO;
-    }
-
-    private boolean updateCurrentCues(long positionMs) {
-        CueGroup next = subtitleTrack.getCueGroup(positionMs);
-        if (currentCues.cues.equals(next.cues)) return false;
-        currentCues = next;
-        return true;
-    }
-
     private void diagnosticSnapshot() {
         if (!com.fongmi.android.tv.player.PlaybackDiagnosticCollector.enabled()) return;
         long now = SystemClock.elapsedRealtime();

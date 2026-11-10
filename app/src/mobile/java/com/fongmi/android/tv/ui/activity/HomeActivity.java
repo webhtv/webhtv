@@ -5,6 +5,7 @@ import android.app.SearchManager;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.Process;
 import android.text.TextUtils;
 import android.view.MenuItem;
 import android.view.View;
@@ -22,6 +23,7 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
 import com.fongmi.android.tv.db.AppDatabase;
@@ -41,6 +43,7 @@ import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.FragmentStateManager;
 import com.fongmi.android.tv.ui.fragment.SettingEnhanceFragment;
@@ -63,13 +66,16 @@ import com.fongmi.android.tv.utils.Util;
 import com.fongmi.android.tv.web.WebHomeChromeStartup;
 import com.fongmi.android.tv.web.WebHomeViewport;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.utils.Path;
 import com.google.android.material.navigation.NavigationBarView;
 import com.google.gson.JsonObject;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
-public class HomeActivity extends BaseActivity implements NavigationBarView.OnItemSelectedListener, WebHomeChromeController.Host, VodFragment.ConfigRetry {
+import java.util.List;
+
+public class HomeActivity extends BaseActivity implements NavigationBarView.OnItemSelectedListener, WebHomeChromeController.Host {
 
     public static final String EXTRA_NAV_POSITION = "nav_position";
     private static final String STATE_RETURN_VOD_FROM_ENHANCE = "returnVodFromEnhance";
@@ -82,6 +88,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     private boolean wideWindow;
     private int currentPosition;
     private boolean returnVodFromEnhance;
+    private boolean mStartupActionDone;
 
     @Override
     protected ViewBinding getBinding() {
@@ -92,6 +99,10 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (intent.hasExtra(EXTRA_NAV_POSITION)) {
+            change(intent.getIntExtra(EXTRA_NAV_POSITION, 0));
+            intent.removeExtra(EXTRA_NAV_POSITION);
+        }
         checkAction(intent);
     }
 
@@ -110,10 +121,10 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         mChrome = new WebHomeChromeController(this, mBinding, this, savedInstanceState, WebHomeChromeStartup.restore(mStartupConfig));
         mBinding.getRoot().addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> checkWindowShape(right - left, bottom - top));
         mBinding.navigation.setOnItemSelectedListener(this);
-        setNavigation();
-        PermissionUtil.requestFile(this, allGranted -> PermissionUtil.requestNotify(this));
-        FollowingScheduler.ensurePeriodic(this);
-        FollowingScheduler.enqueueDueNow(this);
+        PermissionUtil.requestFile(this, allGranted -> {
+            PermissionUtil.requestNotify(this);
+            if (allGranted) initConfig();
+        });
         initFragment(savedInstanceState);
         if (savedInstanceState == null && getIntent().hasExtra(EXTRA_NAV_POSITION)) checkAction(getIntent());
         initConfig();
@@ -186,13 +197,8 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         changeFragment(position <= 0 ? 0 : position);
     }
 
-    private void initConfig() {
-        if (CrashRestartMode.consume()) {
-            checkAction(getIntent());
-            StateEvent.empty();
-            return;
-        }
-        VodConfig.get().config(mStartupConfig == null ? Config.vod() : mStartupConfig).load(getCallback());
+    public void initConfig() {
+        VodConfig.get().init().load(getCallback());
         LiveConfig.get().init().load();
         WallConfig.get().init();
     }
@@ -215,6 +221,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
             @Override
             public void success() {
                 checkAction(getIntent());
+                runStartupAction();
             }
 
             /**
@@ -237,12 +244,35 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
             public void error(String msg) {
                 resetVodChrome();
                 checkAction(getIntent());
-                // 失败要发 ERROR（带原因），不能发 EMPTY：消费方对 EMPTY 的处理只是
-                // "隐藏转圈"，于是加载失败后首页是一片空白，用户只看到一个会消失的吐司。
-                StateEvent.error(msg);
+                runStartupAction();
+                StateEvent.empty();
                 Notify.show(msg);
             }
         };
+    }
+
+    private void runStartupAction() {
+        if (mStartupActionDone) return;
+        mStartupActionDone = true;
+        switch (Setting.getDefaultLaunch()) {
+            case Setting.DEFAULT_LAUNCH_LIVE:
+                openLive();
+                break;
+            case Setting.DEFAULT_LAUNCH_RECENT:
+                List<History> history = History.get();
+                if (!history.isEmpty()) {
+                    History first = history.get(0);
+                    String siteKey = first.getSiteKey();
+                    Task.execute(() -> {
+                        Site site = VodConfig.get().getSite(siteKey);
+                        if (!site.isEmpty()) site.spider();
+                        App.post(() -> VideoActivity.startFullscreen(this, first));
+                    });
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     private void loadLive(String url) {
@@ -257,10 +287,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     private void setNavigation() {
         mBinding.navigation.getMenu().findItem(R.id.vod).setVisible(true);
         mBinding.navigation.getMenu().findItem(R.id.setting).setVisible(true);
-        mBinding.navigation.getMenu().findItem(R.id.lab).setVisible(LabConfig.get().getNavEntry());
-        mBinding.navigation.getMenu().findItem(R.id.live).setVisible(LiveConfig.hasUrl());
-        mBinding.navigation.getMenu().findItem(R.id.following).setVisible(FollowingSettings.isEnabled());
-        updateFollowingBadge();
+        mBinding.navigation.getMenu().findItem(R.id.live).setVisible(LiveConfig.hasLoadedLives());
         syncNavigationSelection();
     }
 
@@ -314,7 +341,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onServerEvent(ServerEvent event) {
-        if (event.type() == ServerEvent.Type.PUSH) VideoActivity.push(this, event.text());
+        if (event.type() == ServerEvent.Type.PUSH) VideoActivity.push(this, event.text(), event.name());
         if (event.type() == ServerEvent.Type.SEARCH) SearchActivity.start(this, event.text());
     }
 
@@ -523,8 +550,13 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         } else if (mManager.isVisible(1)) {
             change(0);
         } else if (mManager.canBack(0)) {
-            if (PlaybackService.isRunning()) Util.moveToBackground(this);
-            else super.onBackInvoked();
+            // 根页面返回 = 真正退出：后台线程同步备份后结束进程，避免进程残留（外挂 jar 悬浮窗、播放服务等仍存活）。想进后台请用 Home 键。
+            Task.execute(() -> {
+                AppDatabase.backupOnExitSync();
+                if (Setting.isAutoClearCache()) Path.clear(Path.cache());
+                Process.killProcess(Process.myPid());
+                System.exit(0);
+            });
         }
     }
 
@@ -532,14 +564,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     protected void onDestroy() {
         if (mChrome != null) mChrome.destroy();
         LiveConfig.get().clear();
-        VodConfig.get().clear("mobile-home-destroy");
-        if (AutoBackupPolicy.shouldRun(
-                Setting.isAutoBackup(),
-                Setting.hasFileAccess(),
-                isFinishing(),
-                isChangingConfigurations())) {
-            AppDatabase.autoBackup();
-        }
+        VodConfig.get().clear();
         OkHttp.get().clear();
         Source.get().exit();
         Server.get().stop();

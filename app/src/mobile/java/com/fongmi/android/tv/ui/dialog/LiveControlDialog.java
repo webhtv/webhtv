@@ -81,8 +81,6 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
         binding.sheetWall.setVisibility(View.GONE);
         binding.player.setText(parent.control.action.player.getText());
         binding.decode.setText(parent.control.action.decode.getText());
-        binding.source.setText(parent.control.action.source.getText());
-        binding.source.setContentDescription(parent.control.action.source.getContentDescription());
         binding.playParams.setSelected(parent.control.action.playParams.isSelected());
         binding.invert.setSelected(parent.control.action.invert.isSelected());
         binding.across.setSelected(parent.control.action.across.isSelected());
@@ -185,11 +183,7 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
         if (binding == null || parent == null) return;
         binding.player.setText(parent.control.action.player.getText());
         binding.decode.setText(parent.control.action.decode.getText());
-        // 换源时宿主 control.action.source 已更新，弹窗保持打开也必须跟着改名与读屏语义。
-        binding.source.setText(parent.control.action.source.getText());
-        binding.source.setContentDescription(parent.control.action.source.getContentDescription());
         binding.playParams.setSelected(parent.control.action.playParams.isSelected());
-        syncConfiguredButtonVisibility();
         setTrackVisible();
     }
 

@@ -1,7 +1,7 @@
 package com.fongmi.android.tv.web;
 
 import android.app.Activity;
-import android.content.res.Configuration;
+import android.content.Intent;
 import android.text.TextUtils;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
@@ -47,7 +47,10 @@ public class HomeWebBridge {
 
     private static final int INLINE_LIMIT = 12000;
     private static final int CHUNK_SIZE = 60000;
-    private static final long INLINE_RESOLVE_TIMEOUT_SECONDS = 20;
+    // A+A2（HTML 正则抠）预算：只够抓页面 HTML，超了就交给真实加载
+    private static final long INLINE_RESOLVE_TIMEOUT_SECONDS = 4;
+    // 真实加载预算：让当前 WebView 真正加载播放页，等扩展脚本/原生嗅探拿到首个媒体地址
+    private static final long REAL_LOAD_TIMEOUT_SECONDS = 20;
 
     private final HomeWebController controller;
     private final Activity activity;
@@ -55,6 +58,12 @@ public class HomeWebBridge {
     private final WebHomeThemeBridge themeBridge;
     private final Map<String, String> results;
     private final Map<String, CompletableFuture<String>> inlineResults;
+    // 真实加载嗅探模式：A+A2 失败后让当前 WebView 直接跳转播放页，拦截首个媒体 URL。
+    private volatile CompletableFuture<String> realLoadFuture;
+    private volatile String realLoadId;
+    private volatile boolean realLoading;
+    private volatile String pendingRealUrl;
+    private volatile Map<String, String> pendingRealHeaders;
 
     public HomeWebBridge(HomeWebController controller, Activity activity, WebView webView,
             WebHomeThemeBridge themeBridge) {
@@ -115,7 +124,50 @@ public class HomeWebBridge {
     @JavascriptInterface
     public void inlineResult(String id, String payload) {
         CompletableFuture<String> future = inlineResults.remove(id);
-        if (future != null) future.complete(payload);
+        if (future != null) {
+            future.complete(payload);
+            return;
+        }
+        if (realLoadId != null && realLoadId.equals(id)) {
+            CompletableFuture<String> real = realLoadFuture;
+            if (real != null) real.complete(payload);
+        }
+    }
+
+    /**
+     * v3.42：接收 JS 广告过滤脚本同步的配置。
+     * payload: {"siteHost":"a6.com","blockAllCrossNav":true,"allowCrossNav":false,
+     *           "blacklist":["ec766.com","ucloudqn.unipus.cn"]}
+     */
+    private String adblockConfig(JsonObject payload) {
+        try {
+            // v3.44：完整接收开关 + 白名单 + 黑名单。
+            // 之前只取 siteHost / blacklist，开关值没传给 Java ——
+            // shouldBlockNavigation 只能读 Setting 默认值，
+            // 面板里改开关不生效。
+            boolean enabled = payload.has("enabled") ? payload.get("enabled").getAsBoolean() : true;
+            String host = Json.safeString(payload, "siteHost");
+            boolean blockAll = payload.has("blockAllCrossNav") ? payload.get("blockAllCrossNav").getAsBoolean() : true;
+            boolean allowCross = payload.has("allowCrossNav") ? payload.get("allowCrossNav").getAsBoolean() : false;
+            // v3.48：302/跳板重定向（原生兜底）开关，默认开
+            boolean blockNavJump = payload.has("blockNavJump") ? payload.get("blockNavJump").getAsBoolean() : true;
+            java.util.List<String> white = asList(payload, "whitelist");
+            java.util.List<String> black = asList(payload, "blacklist");
+            String scope = payload.has("scope") ? payload.get("scope").getAsString() : "global";
+            WebHomeAdBlocker.get().applyJsConfig(enabled, host, blockAll, allowCross, blockNavJump, white, black, scope);
+        } catch (Throwable ignored) { }
+        return quote("ok");
+    }
+
+    private static java.util.List<String> asList(JsonObject obj, String key) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        try {
+            com.google.gson.JsonArray arr = obj.getAsJsonArray(key);
+            if (arr != null) {
+                for (int i = 0; i < arr.size(); i++) out.add(arr.get(i).getAsString());
+            }
+        } catch (Throwable ignored) { }
+        return out;
     }
 
     private void handle(String requestId, String method, JsonObject payload, boolean v2Theme, int themeGeneration) {
@@ -166,6 +218,9 @@ public class HomeWebBridge {
                 case "device.info" -> device();
                 case "site.info" -> site();
                 case "config.info" -> config();
+                // v3.42：JS 广告过滤脚本同步站点主域与黑名单到原生层，
+                // 让 shouldOverrideUrlLoading 能据此拦跨域导航
+                case "adblock.config" -> adblockConfig(payload);
                 case "ext.info" -> extInfo();
                 case "ext.log" -> extLog(payload);
                 case "ext.toast" -> extToast(payload);
@@ -263,9 +318,26 @@ public class HomeWebBridge {
         final String playPic = pic;
         final String playWall = wall;
         final String playContent = content;
-        SpiderDebug.log("webhome", "player.playUrl title=%s url=%s", playTitle,
-                HomeWebController.safeLogUrl(playUrl));
-        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent)));
+        // 网关路径同样要带 webHomeSniffer 标记（JS 侧"自动播"勾选时 fullscreen=true）。
+        // 自己组 Intent 而不是调 VideoActivity.start(...)，理由同 playVodInline：
+        // 两端 start 签名不同，main 目录直接引用会让另一个 flavor 编译失败。
+        final boolean wantFullscreen = payload.has("fullscreen") && payload.get("fullscreen").getAsBoolean();
+        SpiderDebug.log("webhome", "player.playUrl title=%s url=%s fullscreen=%s", playTitle, playUrl, wantFullscreen);
+        pausePageMedia();
+        App.post(() -> {
+            ImgUtil.preload(activity, playPic);
+            if (Setting.isPlaybackArtworkWall() && !TextUtils.isEmpty(playWall) && !TextUtils.equals(playWall, playPic)) ImgUtil.preload(activity, playWall);
+            Intent intent = new Intent(activity, VideoActivity.class);
+            intent.putExtra("key", SiteApi.PUSH);
+            intent.putExtra("id", playUrl);
+            intent.putExtra("name", playTitle);
+            intent.putExtra("pic", playPic);
+            intent.putExtra("wallPic", playWall);
+            intent.putExtra("content", playContent);
+            intent.putExtra("collect", false);
+            intent.putExtra("webHomeSniffer", wantFullscreen);
+            activity.startActivity(intent);
+        });
         return "{}";
     }
 
@@ -321,8 +393,34 @@ public class HomeWebBridge {
         final String playMark = mark;
         final String playWall = wall;
         final String playContent = content;
-        SpiderDebug.log("webhome", "player.playVodInline title=%s id=%s mark=%s", playTitle, vodId, playMark);
-        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, WebHomeInlineVodStore.KEY, vodId, playTitle, playPic, playMark, playWall, playContent)));
+        // 网页嗅探(JS) 侧发起的播放：JS 没有全屏接口，只能把 fullscreen 塞进 payload。
+        // 这里转成 Intent extra "webHomeSniffer" 交给 VideoActivity：
+        //   true  -> JS 明确要求全屏（面板"自动播"勾选时），无视"播放自动全屏"开关
+        //   false -> 手动点的，交给"播放自动全屏"开关决定
+        // 为什么不调 VideoActivity.start(..., fullscreen)：
+        //   mobile 是 10 参，leanback 是 11 参（多一个 boolean cast），
+        //   HomeWebBridge 在 main 目录，编译期只能看见当前 flavor 的签名，
+        //   直接引用必然让另一个 flavor 编译失败。自己组 Intent 就没这个问题。
+        // 也不再写 "startFullscreen"：那个 extra 在 onServiceConnected 里只判一次，
+        // 播放器还没就绪时会被 enterFullscreen() 开头的 service()==null 直接丢弃。
+        final boolean wantFullscreen = payload.has("fullscreen") && payload.get("fullscreen").getAsBoolean();
+        SpiderDebug.log("webhome", "player.playVodInline title=%s id=%s mark=%s fullscreen=%s", playTitle, vodId, playMark, wantFullscreen);
+        pausePageMedia();
+        App.post(() -> {
+            ImgUtil.preload(activity, playPic);
+            if (Setting.isPlaybackArtworkWall() && !TextUtils.isEmpty(playWall) && !TextUtils.equals(playWall, playPic)) ImgUtil.preload(activity, playWall);
+            Intent intent = new Intent(activity, VideoActivity.class);
+            intent.putExtra("key", WebHomeInlineVodStore.KEY);
+            intent.putExtra("id", vodId);
+            intent.putExtra("name", playTitle);
+            intent.putExtra("pic", playPic);
+            intent.putExtra("mark", playMark);
+            intent.putExtra("wallPic", playWall);
+            intent.putExtra("content", playContent);
+            intent.putExtra("collect", false);
+            intent.putExtra("webHomeSniffer", wantFullscreen);
+            activity.startActivity(intent);
+        });
         JsonObject result = new JsonObject();
         result.addProperty("siteKey", WebHomeInlineVodStore.KEY);
         result.addProperty("vodId", vodId);
@@ -343,6 +441,28 @@ public class HomeWebBridge {
         return Json.safeString(payload, "wallPic");
     }
 
+    /**
+     * 起播前把页面里的 video/audio 全部暂停并静音。
+     * 网页播放器还在出声时切换播放器，ExoPlayer 会因音频焦点被抢走而「加载了第一帧就暂停」。
+     * 播放器通常在跨域 iframe 里，父页面拿不到它的 DOM，所以额外 postMessage 通知子框架自己停；
+     * 子框架侧由 HomeWebController.registerSilenceScript 注册的接收器处理。
+     */
+    private void pausePageMedia() {
+        String script = "(function(){var t=function(){"
+                + "try{var m=document.querySelectorAll('video,audio');"
+                + "for(var i=0;i<m.length;i++){try{m[i].pause();m[i].muted=true;m[i].volume=0;}catch(e){}}}catch(e){}"
+                + "try{var fr=document.querySelectorAll('iframe,frame');"
+                + "for(var j=0;j<fr.length;j++){try{if(fr[j].contentWindow)fr[j].contentWindow.postMessage({fmSilence:1},'*');}catch(e){}}}catch(e){}"
+                + "};t();setTimeout(t,300);setTimeout(t,1200);setTimeout(t,2500);})();";
+        App.post(() -> {
+            if (webView == null) return;
+            try {
+                webView.evaluateJavascript(script, null);
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
     private String content(JsonObject payload) {
         String content = Json.safeString(payload, "content");
         if (TextUtils.isEmpty(content)) content = Json.safeString(payload, "vod_content");
@@ -351,7 +471,47 @@ public class HomeWebBridge {
         return content;
     }
 
-    private JsonObject resolveInlineEpisode(JsonObject payload) throws Exception {
+    // 包内可见：隐藏实例（WebHomeHiddenResolver）也复用这条链路
+    JsonObject resolveInlineEpisode(JsonObject payload) throws Exception {
+        long start = System.currentTimeMillis();
+        long inlineDeadline = start + INLINE_RESOLVE_TIMEOUT_SECONDS * 1000;
+        boolean lease = controller.beginInlineEvaluation();
+        try {
+            // 1) 先走 A+A2（HTML 正则抠），对简单页面秒出结果
+            JsonObject object = null;
+            try {
+                object = resolveByInlineResolver(payload, inlineDeadline);
+            } catch (Throwable e) {
+                // A+A2 失败（取不到直链 / 超时）不算致命，继续走真实加载
+                SpiderDebug.log("webhome-inline", "inline resolver miss error=%s", e.getMessage());
+            }
+            String url = object == null ? "" : Json.safeString(object, "url");
+            if (!TextUtils.isEmpty(url)) {
+                SpiderDebug.log("webhome-inline", "resolve ok by inline resolver cost=%sms url=%s", System.currentTimeMillis() - start, url);
+                return object;
+            }
+            // 2) A+A2 没结果：让当前 WebView 真实加载播放页，扩展脚本自己嗅探
+            //    首个媒体 URL 被 shouldInterceptRequest 拦截后直接完成 future。
+            object = resolveByRealLoad(payload, start + REAL_LOAD_TIMEOUT_SECONDS * 1000 + INLINE_RESOLVE_TIMEOUT_SECONDS * 1000);
+            url = object == null ? "" : Json.safeString(object, "url");
+            if (!TextUtils.isEmpty(url)) {
+                SpiderDebug.log("webhome-inline", "resolve ok by real load cost=%sms url=%s", System.currentTimeMillis() - start, url);
+                return object;
+            }
+            throw new IllegalStateException("real load miss");
+        } catch (Throwable e) {
+            SpiderDebug.log("webhome-inline", "resolve failed cost=%sms error=%s", System.currentTimeMillis() - start, e.getMessage());
+            // 失败时页面可能还在出声：先静音，交给 App 原生 WebView 去解析
+            pausePageMedia();
+            if (e instanceof Exception) throw (Exception) e;
+            if (e instanceof Error) throw (Error) e;
+            throw new RuntimeException(e);
+        } finally {
+            controller.endInlineEvaluation(lease);
+        }
+    }
+
+    private JsonObject resolveByInlineResolver(JsonObject payload, long deadline) throws Exception {
         String id = "inline_" + UUID.randomUUID().toString().replace("-", "");
         CompletableFuture<String> future = new CompletableFuture<>();
         inlineResults.put(id, future);
@@ -376,29 +536,112 @@ public class HomeWebBridge {
                 })();
                 """;
         script = String.format(Locale.ROOT, script, quote(id), payload == null ? "{}" : payload.toString());
-        long start = System.currentTimeMillis();
-        boolean lease = controller.beginInlineEvaluation();
+        SpiderDebug.log("webhome-inline", "resolve inline resolver start id=%s page=%s", id, Json.safeString(payload, "pageUrl"));
+        eval(script);
         try {
-            SpiderDebug.log("webhome-inline", "resolve start id=%s page=%s lease=%s", id,
-                    HomeWebController.safeLogUrl(Json.safeString(payload, "pageUrl")), lease);
-            eval(script);
-            String result = future.get(INLINE_RESOLVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            long remain = Math.max(1, deadline - System.currentTimeMillis());
+            String result = future.get(remain, TimeUnit.MILLISECONDS);
             JsonObject object = WebCall.object(result);
             String error = Json.safeString(object, "error");
             if (!TextUtils.isEmpty(error)) throw new IllegalStateException(error);
-            SpiderDebug.log("webhome-inline", "resolve ok id=%s cost=%sms url=%s", id,
-                    System.currentTimeMillis() - start,
-                    HomeWebController.safeLogUrl(Json.safeString(object, "url")));
             return object;
-        } catch (Throwable e) {
-            SpiderDebug.log("webhome-inline", "resolve failed id=%s cost=%sms error=%s", id, System.currentTimeMillis() - start, e.getMessage());
-            if (e instanceof Exception) throw (Exception) e;
-            if (e instanceof Error) throw (Error) e;
-            throw new RuntimeException(e);
         } finally {
             inlineResults.remove(id);
-            controller.endInlineEvaluation(lease);
         }
+    }
+
+    private JsonObject resolveByRealLoad(JsonObject payload, long deadline) throws Exception {
+        String pageUrl = Json.safeString(payload, "pageUrl");
+        if (TextUtils.isEmpty(pageUrl)) throw new IllegalStateException("no pageUrl for real load");
+        String id = "inline_real_" + UUID.randomUUID().toString().replace("-", "");
+        CompletableFuture<String> future = new CompletableFuture<>();
+        realLoadFuture = future;
+        realLoadId = id;
+        pendingRealUrl = null;
+        pendingRealHeaders = null;
+        realLoading = true;
+        try {
+            SpiderDebug.log("webhome-inline", "resolve real load start id=%s url=%s", id, pageUrl);
+            App.post(() -> {
+                if (webView == null) return;
+                try {
+                    webView.loadUrl(pageUrl);
+                } catch (Throwable ignored) {
+                }
+            });
+            long remain = Math.max(1, deadline - System.currentTimeMillis());
+            String result = future.get(remain, TimeUnit.MILLISECONDS);
+            JsonObject object = WebCall.object(result);
+            String error = Json.safeString(object, "error");
+            if (!TextUtils.isEmpty(error)) throw new IllegalStateException(error);
+            // 解析成功：把刚才真实加载页面的声音停掉，避免抢走播放器音频焦点
+            pausePageMedia();
+            return object;
+        } finally {
+            realLoading = false;
+            realLoadId = null;
+            realLoadFuture = null;
+            pendingRealUrl = null;
+            pendingRealHeaders = null;
+        }
+    }
+
+    public boolean isRealLoading() {
+        return realLoading;
+    }
+
+    /** 真实加载期间，把上报钩子注入页面，让扩展脚本嗅到 blob 等原生拦不到的地址也能回传。 */
+    public void injectRealLoadHook() {
+        if (!realLoading) return;
+        String id = realLoadId;
+        if (TextUtils.isEmpty(id)) return;
+        String script = "(function(){window.__fmInlineRealLoadCallback=function(u,h){try{fongmiBridge.inlineResult("
+                + quote(id) + ",JSON.stringify({url:u,headers:h||{}}));}catch(e){}};})();";
+        App.post(() -> {
+            if (webView == null) return;
+            try {
+                webView.evaluateJavascript(script, null);
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    public void onRealLoadResult(String url, Map<String, String> headers) {
+        if (!realLoading || TextUtils.isEmpty(url)) return;
+        // m3u8 直接收口；其它格式（mp4/音频）先挂起等一小会，避免被前置广告抢走
+        if (isManifest(url)) {
+            completeRealLoad(url, headers);
+            return;
+        }
+        if (pendingRealUrl != null) return;
+        pendingRealUrl = url;
+        pendingRealHeaders = headers;
+        App.post(() -> {
+            String pending = pendingRealUrl;
+            Map<String, String> pendingHeaders = pendingRealHeaders;
+            pendingRealUrl = null;
+            pendingRealHeaders = null;
+            if (pending != null) completeRealLoad(pending, pendingHeaders);
+        }, 800);
+    }
+
+    private boolean isManifest(String url) {
+        return url.contains(".m3u8") || url.contains(".mpd");
+    }
+
+    private void completeRealLoad(String url, Map<String, String> headers) {
+        if (!realLoading || TextUtils.isEmpty(url)) return;
+        CompletableFuture<String> future = realLoadFuture;
+        if (future == null || future.isDone()) return;
+        SpiderDebug.log("webhome-inline", "real load hit url=%s", url);
+        JsonObject result = new JsonObject();
+        result.addProperty("url", url);
+        if (headers != null && !headers.isEmpty()) {
+            JsonObject h = new JsonObject();
+            for (Map.Entry<String, String> e : headers.entrySet()) h.addProperty(e.getKey(), e.getValue());
+            result.add("headers", h);
+        }
+        future.complete(result.toString());
     }
 
     private String control(JsonObject payload) {

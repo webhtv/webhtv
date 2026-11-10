@@ -1,6 +1,8 @@
 package com.fongmi.android.tv;
 
 import android.content.Context;
+import android.os.Build;
+import android.provider.Settings;
 
 import androidx.annotation.NonNull;
 import androidx.startup.Initializer;
@@ -32,22 +34,18 @@ public class Startup implements Initializer<Void> {
     @Override
     public Void create(@NonNull Context context) {
         if (PlaybackRecoveryMonitor.isRecoveryProcess(context)) return null;
-        CaocConfig.Builder.create().trackActivities(true).backgroundMode(CaocConfig.BACKGROUND_MODE_SHOW_CUSTOM).errorActivity(CrashActivity.class).apply();
-        CrashReport.install(context);
+        CaocConfig.Builder.create().trackActivities(true).backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT).errorActivity(CrashActivity.class).apply();
         Logger.addLogAdapter(new AndroidLogAdapter(PrettyFormatStrategy.newBuilder().methodCount(0).showThreadInfo(false).tag("TV").build()));
         installEventBus();
         OkHttp.dns().setDoh(() -> Doh.objectFrom(Setting.getDoh()));
+        pinOverlayPermission(context);
         return null;
     }
 
-    private void installEventBus() {
-        EventBusBuilder builder = EventBus.builder();
-        try {
-            Object index = Class.forName(EVENT_INDEX).getDeclaredConstructor().newInstance();
-            if (index instanceof SubscriberInfoIndex) builder.addIndex((SubscriberInfoIndex) index);
-        } catch (Exception ignored) {
+    private void pinOverlayPermission(@NonNull Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(context);
         }
-        builder.installDefaultEventBus();
     }
 
     @NonNull

@@ -162,17 +162,10 @@ public final class DiagnosticLogBuffer implements AutoCloseable {
         long captured = clock.monotonicNanos();
         long epoch = generation();
         long sourceSeq = sourceSequence.incrementAndGet();
-        String safeTag = safeTag(tag);
-        List<String> foundOrigins = raw == null ? List.of() : DiagnosticText.origins(raw);
-        offer(safeTag, clean.text(), null, critical, false, captured, sourceSeq, clean.truncated(), foundOrigins, epoch);
-    }
-
-    private String safeTag(String tag) {
-        // sanitizeTag skips the regex engine unless the text can carry a URI or a credential, and
-        // escapes control characters either way, so it is both faster and equivalence-preserving.
-        String safe = DiagnosticText.sanitizeTag(tag == null ? "Debug" : tag);
-        safe = safe.replace(':', '_').replace('[', '_').replace(']', '_');
-        if (safe.length() > 64) safe = safe.substring(0, 64);
+        DiagnosticText.Clean clean = DiagnosticText.clean(message);
+        String safeTag = DiagnosticText.clean(tag == null ? "Debug" : tag).text().replace(':', '_').replace('[', '_').replace(']', '_');
+        if (safeTag.length() > 64) safeTag = safeTag.substring(0, 64);
+        if (safeTag.startsWith("env.native") || safeTag.startsWith("diag.session.begin")) return;
         // Reserve the structured tag; arbitrary Spider/native text cannot impersonate events.
         if ("av-diag".equals(safe)) safe = "legacy-av-diag";
         return safe;
@@ -184,6 +177,8 @@ public final class DiagnosticLogBuffer implements AutoCloseable {
         long epoch = generation();
         long sourceSeq = sourceSequence.incrementAndGet();
         try {
+            String name = event.name();
+            if ("env.native".equals(name) || "env.device".equals(name) || "diag.session.begin".equals(name)) return;
             offer("av-diag", event.json(), event.pinKey(), event.critical(), true, captured, sourceSeq, event.truncated(), List.of(), epoch);
         } catch (RuntimeException error) {
             collectorFailure(); // Diagnostics cannot throw into a player callback.
@@ -243,7 +238,6 @@ public final class DiagnosticLogBuffer implements AutoCloseable {
                         + ",\"pid\":" + (pid < 0 ? "null" : pid) + ",\"pidStatus\":\"" + (pid < 0 ? "not-collected" : "known")
                         + "\",\"captureGeneration\":" + generation + "}";
             }
-            else text += " [logSeq=" + seq + "]";
             String line = prefix + text;
             Entry entry = new Entry(seq, generation, line, line.getBytes(StandardCharsets.UTF_8).length + 192, critical);
             if (wasTruncated || text.contains("[truncated")) truncated++;

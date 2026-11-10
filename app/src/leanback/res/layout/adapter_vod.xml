@@ -64,10 +64,10 @@
         tools:text="瓜子[优](DS)"
         tools:visibility="visible" />
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/playback"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_above="@+id/name"
         android:layout_alignStart="@+id/image"
         android:layout_alignBottom="@+id/image"
         android:background="@drawable/shape_vod_remark"
@@ -78,9 +78,36 @@
         android:textSize="14sp"
         tools:text="00:32 / 13:08" />
 
-    <com.google.android.material.progressindicator.LinearProgressIndicator
-        android:id="@+id/progress"
-        android:layout_width="wrap_content"
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/historyProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="2dp"
+            android:background="@drawable/shape_vod_remark"
+            android:ellipsize="start"
+            android:singleLine="true"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:visibility="gone"
+            tools:text="已看 12:34"
+            tools:visibility="visible" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/remark"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/shape_vod_remark"
+            android:ellipsize="marquee"
+            android:singleLine="true"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            tools:text="第3集" />
+
+    </LinearLayout>
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/name"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_below="@+id/image"
         android:layout_alignStart="@+id/image"

@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.util.TypedValue;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -39,10 +39,11 @@ import com.fongmi.android.tv.ui.dialog.OneKeySyncDialog;
 import com.fongmi.android.tv.ui.dialog.RemoteTrustDialog;
 import com.fongmi.android.tv.ui.dialog.ShellProxyDialog;
 import com.fongmi.android.tv.ui.dialog.SiteHealthDialog;
-import com.fongmi.android.tv.ui.dialog.SiteNameDialog;
+import com.fongmi.android.tv.ui.dialog.SourceBlockDialog;
 import com.fongmi.android.tv.ui.dialog.ViewingRecordSyncDialog;
 import com.fongmi.android.tv.ui.dialog.WebHomeExtensionDialog;
-import com.fongmi.android.tv.ui.dialog.WebHomeThemeDialog;
+import com.fongmi.android.tv.utils.FocusLoop;
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.LoginStateSync;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
@@ -51,8 +52,7 @@ import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 
 public class SettingEnhanceActivity extends BaseActivity {
 
-    private static final String URL_GITHUB = "https://github.com/Silent1566/webhtv";
-    private static final String URL_CNB = "https://cnb.cool/fish2018/ext";
+    private static final String URL_GITHUB = "https://github.com/llb0/webhtv";
 
     private ActivitySettingEnhanceBinding mBinding;
 
@@ -72,15 +72,14 @@ public class SettingEnhanceActivity extends BaseActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         reorderItems();
-        mBinding.customCsp.requestFocus();
+        mBinding.fileSites.requestFocus();
         setText();
     }
 
     @Override
     protected void initEvent() {
         mBinding.githubRepo.setOnClickListener(view -> openRepo(URL_GITHUB));
-        mBinding.cnbRepo.setOnClickListener(view -> openRepo(URL_CNB));
-        mBinding.lab.setOnClickListener(view -> LabActivity.start(this));
+        mBinding.fileSites.setOnClickListener(this::setFileSites);
         mBinding.driveCheck.setOnClickListener(this::setDriveCheck);
         mBinding.siteName.setOnClickListener(this::setSiteName);
         mBinding.audioSource.setOnClickListener(this::setAudioSource);
@@ -111,10 +110,16 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.pluginManager.setOnClickListener(view -> PluginManagerActivity.start(this));
     }
 
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (FocusLoop.handleChildGrid(mBinding.content, 1, FocusLoop.Mode.VERTICAL, event)) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
     private void reorderItems() {
         ViewGroup parent = (ViewGroup) mBinding.customCsp.getParent();
         View[] order = {
-                mBinding.lab,
+                mBinding.fileSites,
                 mBinding.customCsp,
                 mBinding.webHomeExtension,
                 mBinding.gitCloud,
@@ -143,6 +148,7 @@ public class SettingEnhanceActivity extends BaseActivity {
 
     private void setText() {
         if (!canSetText()) return;
+        safeSet("fileSites", mBinding.fileSitesText, () -> getString(R.string.setting_source_block_count, Setting.getSourceBlockedCount(), Setting.SOURCE_ALL.length));
         safeSet("driveCheck", mBinding.driveCheckText, () -> getSwitch(Setting.isDriveCheck()));
         safeSet("siteName", mBinding.siteNameText, () -> getString(R.string.setting_site_name_summary, SiteNameStore.count()));
         safeSet("audioSource", mBinding.audioSourceText, () -> getSwitch(!AudioConfig.objectFrom(Setting.getAudioConfig()).getDisplayRules().isEmpty()));
@@ -260,6 +266,10 @@ public class SettingEnhanceActivity extends BaseActivity {
 
     private interface TextSupplier {
         CharSequence get();
+    }
+
+    private void setFileSites(View view) {
+        SourceBlockDialog.create(this::setText).show(this);
     }
 
     private void setDriveCheck(View view) {

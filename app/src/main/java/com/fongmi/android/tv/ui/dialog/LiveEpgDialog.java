@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.dialog;
 import android.app.Dialog;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -17,13 +18,21 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.databinding.DialogLiveEpgBinding;
+import com.fongmi.android.tv.event.ServerEvent;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.LiveEpgSetting;
 import com.fongmi.android.tv.ui.adapter.LiveEpgAdapter;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.QRCode;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-
+ 
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
+ 
 public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapter.OnClickListener {
 
     private DialogLiveEpgBinding binding;
@@ -52,8 +61,23 @@ public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapt
     public void onStart() {
         super.onStart();
         configureWindow(getDialog());
+        if (Util.isLeanback()) EventBus.getDefault().register(this);
     }
-
+ 
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (Util.isLeanback()) EventBus.getDefault().unregister(this);
+    }
+ 
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onServerEvent(ServerEvent event) {
+        if (event.type() != ServerEvent.Type.SETTING) return;
+        binding.input.setText(event.text());
+        binding.input.setSelection(binding.input.length());
+        addInput();
+    }
+ 
     @Override
     protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
         return binding = DialogLiveEpgBinding.inflate(inflater, container, false);
@@ -61,15 +85,20 @@ public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapt
 
     @Override
     protected void initView() {
-        binding.input.setText(LiveEpgSetting.getUrl());
         binding.recycler.setHasFixedSize(false);
         binding.recycler.setItemAnimator(null);
         binding.recycler.setAdapter(adapter = new LiveEpgAdapter(this));
+        if (Util.isLeanback()) {
+            binding.qrSection.setVisibility(View.VISIBLE);
+            binding.code.setImageBitmap(QRCode.getBitmap(Server.get().getAddress(4), 200, 0));
+            binding.info.setText(ResUtil.getString(com.fongmi.android.tv.R.string.push_info, Server.get().getAddress()).replace("\uff0c", "\n"));
+        }
+        binding.input.requestFocus();
     }
 
     @Override
     protected void initEvent() {
-        binding.clear.setOnClickListener(v -> select(""));
+        binding.clear.setOnClickListener(v -> onFollowSource());
         binding.add.setOnClickListener(v -> addInput());
         binding.input.setOnEditorActionListener((textView, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
@@ -80,26 +109,41 @@ public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapt
         });
     }
 
+    /** 随源：清空所有勾选，使用直播源自带 EPG */
+    private void onFollowSource() {
+        LiveEpgSetting.clearSelected();
+        adapter.reload();
+        notifyChanged();
+    }
+ 
     private void addInput() {
         String url = binding.input.getText() == null ? "" : binding.input.getText().toString().trim();
         if (url.isEmpty()) {
             Notify.show(com.fongmi.android.tv.R.string.live_epg_empty);
             return;
         }
-        if (editingUrl != null) LiveEpgSetting.replaceHistory(editingUrl, url);
-        select(url);
+        if (editingUrl != null) {
+            LiveEpgSetting.replaceHistory(editingUrl, url);
+            editingUrl = null;
+            binding.add.setText(com.fongmi.android.tv.R.string.live_epg_apply);
+        } else {
+            LiveEpgSetting.addHistory(url);
+        }
+        LiveEpgSetting.addSelected(url);
         adapter.reload();
+        binding.input.setText("");
+        notifyChanged();
     }
 
-    private void select(String url) {
-        if (editingUrl == null) LiveEpgSetting.putUrl(url);
-        ((Listener) requireActivity()).onLiveEpgSelected(url);
-        dismiss();
+    private void notifyChanged() {
+        ((Listener) requireActivity()).onLiveEpgSelected();
     }
 
     @Override
     public void onEpgClick(String url) {
-        select(url);
+        LiveEpgSetting.toggleSelected(url);
+        adapter.reload();
+        notifyChanged();
     }
 
     @Override
@@ -113,7 +157,6 @@ public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapt
 
     @Override
     public void onEpgDelete(String url) {
-        boolean current = url.equals(LiveEpgSetting.getUrl());
         if (url.equals(editingUrl)) {
             editingUrl = null;
             binding.input.setText("");
@@ -121,7 +164,7 @@ public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapt
         }
         LiveEpgSetting.removeHistory(url);
         adapter.reload();
-        if (current) ((Listener) requireActivity()).onLiveEpgSelected("");
+        notifyChanged();
     }
 
     private void configureWindow(Dialog dialog) {
@@ -167,6 +210,6 @@ public class LiveEpgDialog extends BaseBottomSheetDialog implements LiveEpgAdapt
 
     public interface Listener {
 
-        void onLiveEpgSelected(String url);
+        void onLiveEpgSelected();
     }
 }

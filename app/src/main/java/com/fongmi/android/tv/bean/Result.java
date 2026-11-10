@@ -98,6 +98,10 @@ public class Result implements Parcelable {
     private Integer jx;
     @SerializedName("drm")
     private Drm drm;
+    @SerializedName("playerType")
+    private Integer playerType;
+    @SerializedName("player")
+    private String player;
 
     public Result() {
     }
@@ -371,6 +375,22 @@ public class Result implements Parcelable {
 
     public void setDrm(Drm drm) {
         this.drm = drm;
+    }
+
+    public Integer getPlayerType() {
+        return playerType;
+    }
+
+    public void setPlayerType(Integer playerType) {
+        this.playerType = playerType;
+    }
+
+    public String getPlayer() {
+        return player;
+    }
+
+    public void setPlayer(String player) {
+        this.player = player;
     }
 
     public boolean hasMsg() {

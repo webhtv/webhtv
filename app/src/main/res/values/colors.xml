@@ -26,22 +26,7 @@
     <color name="white_70">#B3FFFFFF</color>
     <color name="white_80">#CCFFFFFF</color>
     <color name="white_90">#E6FFFFFF</color>
-    <color name="display_option_selected">@android:color/black</color>
-    <color name="display_option_focused">@color/webhtv_color_player_control</color>
-    <color name="display_option_default">@color/webhtv_color_player_control_muted</color>
-    <color name="display_option_bg_selected">@color/webhtv_color_player_control_active</color>
-    <color name="display_option_bg_focused">@color/webhtv_color_player_control_muted</color>
-    <color name="display_option_bg_default">@color/webhtv_color_player_control_muted</color>
-    <color name="display_option_stroke_selected">@color/webhtv_color_player_control</color>
-    <color name="display_option_stroke_default">@color/webhtv_color_player_control_muted</color>
-    <color name="display_dialog_panel_bg">@color/webhtv_color_player_scrim</color>
-    <!--
-        原生增强播放页统一焦点/选中语义色。详情页(TmdbDetailActivity)、TV 播放页(leanback
-        VideoActivity) 和集数卡片此前各自用白、黄、无描边三套规则；这三项是唯一的取值来源，
-        新增可选控件必须引用它们，不要再写死十六进制。
-        - focus   获得焦点：3dp 圆环
-        - current 当前播放/当前生效：2dp 圆环
-        - stroke  常态描边：1dp
+    <color name="epg_date">#8AB4F8</color>
 
         focus 环色必须可被主题设置覆写：它直连色板的 FOCUS 用户槽(webhtv_color_focus)，
         于是 ?attr/tvFocusRing 的全部消费者（选集卡、演员卡、播放页控件、快捷栏…）都跟随

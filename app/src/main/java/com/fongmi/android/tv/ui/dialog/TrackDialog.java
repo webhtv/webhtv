@@ -106,6 +106,55 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         return !secondarySubtitle && type == C.TRACK_TYPE_TEXT && player.isVod();
     }
 
+    private boolean hasShooter() {
+        // 射手走文件特征哈希，三类 URL 都能跑：
+        //   1) file:// 本地路径
+        //   2) http(s)://127.0.0.1 / localhost / 局域网 IP 代理（含远程推送过来的 9978/file）
+        //   3) http(s)://CDN 直链视频（排除 m3u8/mpd/txt/html 等索引/清单/接口文件）
+        if (!hasChoose()) return false;
+        String url = player.getUrl();
+        if (url == null || url.isEmpty()) return false;
+        String lower = url.toLowerCase();
+        if (lower.startsWith("file://")) return true;
+        if (lower.startsWith("http://127.0.0.1")
+                || lower.startsWith("http://localhost")
+                || lower.matches("^https?://\\d{1,3}(\\.\\d{1,3}){3}(:\\d+)?/.*")) return true;
+        // 在线 CDN 直链：URL path 以视频容器扩展名结尾，且不是 HLS/DASH/API
+        if (lower.startsWith("http://") || lower.startsWith("https://")) {
+            String path = stripQuery(lower);
+            if (path == null) return false;
+            int slash = path.lastIndexOf('/');
+            String fileName = slash >= 0 ? path.substring(slash + 1) : path;
+            String ext = extension(fileName);
+            if (ext.isEmpty()) return false;
+            switch (ext) {
+                case "mp4": case "mkv": case "avi": case "mov": case "flv":
+                case "webm": case "wmv": case "mpg": case "mpeg": case "m4v":
+                case "m2ts": case "mts": case "3gp": case "rmvb": case "ts":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        return false;
+    }
+ 
+    private static String stripQuery(String url) {
+        int q = url.indexOf('?');
+        int h = url.indexOf('#');
+        int cut = url.length();
+        if (q >= 0) cut = Math.min(cut, q);
+        if (h >= 0) cut = Math.min(cut, h);
+        return url.substring(0, cut);
+    }
+ 
+    private static String extension(String fileName) {
+        if (fileName == null) return "";
+        int dot = fileName.lastIndexOf('.');
+        if (dot < 0 || dot == fileName.length() - 1) return "";
+        return fileName.substring(dot + 1);
+    }
+ 
     private boolean hasText() {
         return !secondarySubtitle && type == C.TRACK_TYPE_TEXT &&
                (player.haveTrack(type) || player.getSelectedSubtitleSub() != null);
@@ -161,6 +210,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         binding.realtimeLanguage.setOnClickListener(this::onRealtimeLanguage);
         binding.aiRegenerate.setOnClickListener(this::onAiRegenerate);
         binding.subtitle.setOnClickListener(this::onSubtitle);
+        binding.shooter.setOnClickListener(this::onShooter);
     }
 
     private void refreshTrackList() {
@@ -182,10 +232,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         binding.aiRegenerate.setVisibility(hasAiRegenerate() ? View.VISIBLE : View.GONE);
         binding.aiStatus.setVisibility(View.GONE);
         binding.subtitle.setVisibility(hasText() ? View.VISIBLE : View.GONE);
-        if (type == C.TRACK_TYPE_TEXT) {
-            activeAiDialog = new WeakReference<>(this);
-            restoreAiState();
-        }
+        binding.shooter.setVisibility(hasShooter() ? View.VISIBLE : View.GONE);
     }
 
     private String getTitle() {
@@ -216,358 +263,12 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         player.pause();
     }
 
-    private void onSearch(View view) {
-        if (searchAction == null) return;
-        stopRealtimeAi();
-        App.post(searchAction::run, 100);
+    private void onShooter(View view) {
+        Listener listener = (Listener) requireActivity();
+        App.post(listener::onShooterClick, 100);
         dismiss();
     }
-
-    private void stopRealtimeAi() {
-        RealtimeSubtitleController controller = RealtimeSubtitleController.get();
-        if (!controller.isEnabled() && !controller.isPreparing()) return;
-        controller.disable();
-    }
-
-    private void onRealtimeAi(View view) {
-        RealtimeSubtitleController controller = RealtimeSubtitleController.get();
-        if (controller.isEnabled() || controller.isPreparing()) {
-            stopRealtimeAi();
-            showAiMessage(R.string.subtitle_realtime_off);
-            return;
-        }
-        if (!controller.isModelReady()) {
-            showRealtimeModelSelection(true);
-            return;
-        }
-        enableRealtimeAi();
-    }
-
-    private void showRealtimeModelSelection() {
-        showRealtimeModelSelection(true);
-    }
-
-    private void onRealtimeLanguage(View view) {
-        showRealtimeModelSelection(false);
-    }
-
-    private void showRealtimeModelSelection(boolean startAfterSelection) {
-        String[] labels = ResUtil.getStringArray(R.array.select_realtime_subtitle_model);
-        String[] values = ResUtil.getStringArray(R.array.select_realtime_subtitle_model_value);
-        String currentValue = Setting.getRealtimeSubtitleModel();
-        int checked = 0;
-        for (int i = 0; i < values.length; i++) {
-            if (TextUtils.equals(values[i], currentValue)) {
-                checked = i;
-                break;
-            }
-        }
-        SubtitleSettingsDialog.showRealtimeModel(requireActivity(), labels, checked, false, index -> {
-            if (index < 0 || index >= values.length) return;
-            boolean changed = !TextUtils.equals(currentValue, values[index]);
-            Setting.putRealtimeSubtitleModel(values[index]);
-            updateRealtimeLanguage();
-            RealtimeSubtitleController controller = RealtimeSubtitleController.get();
-            if (controller.isEnabled() || controller.isPreparing()) {
-                if (changed) controller.switchModel(player);
-                return;
-            }
-            if (startAfterSelection) enableRealtimeAi();
-        }, null);
-    }
-
-    private void updateRealtimeLanguage() {
-        if (!isUiAlive()) return;
-        String[] labels = ResUtil.getStringArray(R.array.select_realtime_subtitle_language);
-        String[] values = ResUtil.getStringArray(R.array.select_realtime_subtitle_model_value);
-        String selected = Setting.getRealtimeSubtitleModel();
-        int index = 0;
-        for (int i = 0; i < values.length; i++) {
-            if (TextUtils.equals(values[i], selected)) {
-                index = i;
-                break;
-            }
-        }
-        binding.realtimeLanguageText.setText(labels != null && index < labels.length ? labels[index] : selected);
-    }
-
-    private void enableRealtimeAi() {
-        if (PlayerSetting.isAudioPassThrough(player.getPlayerType()) || PlayerSetting.isTunnelingEnabled()) {
-            SubtitleSettingsDialog.showRealtimeCompatibility(requireActivity(), this::disableIncompatibleAudioModes);
-            return;
-        }
-        if (Math.abs(player.getSpeed() - 1f) > 0.001f) {
-            SubtitleSettingsDialog.showRealtimeSpeedCompatibility(requireActivity(), () -> {
-                player.setSpeed(1f);
-                if (Math.abs(player.getSpeed() - 1f) <= 0.001f) startRealtimeAi();
-            });
-            return;
-        }
-        startRealtimeAi();
-    }
-
-    private void startRealtimeAi() {
-        RealtimeSubtitleController controller = RealtimeSubtitleController.get();
-        if (controller.requestAudioPipeline(player)) player.rebuildAudioPipeline();
-        controller.enable(player);
-    }
-
-    private void disableIncompatibleAudioModes() {
-        if (!isUiAlive() || player == null || player.isReleased()) return;
-        int playerType = player.getPlayerType();
-        boolean changed = PlayerSetting.isAudioPassThrough(playerType) || PlayerSetting.isTunnelingEnabled();
-        PlayerSetting.putAudioPassThrough(playerType, false);
-        PlayerSetting.putTunnel(false);
-        PlaybackPerformanceSetting.markCustom();
-        RealtimeSubtitleController controller = RealtimeSubtitleController.get();
-        boolean pipelineMissing = controller.requestAudioPipeline(player);
-        if (changed || pipelineMissing) player.rebuildAudioPipeline();
-        enableRealtimeAi();
-    }
-
-    @Override
-    public void onStateChanged(RealtimeSubtitleController.State state, String message) {
-        realtimeState = state;
-        updateRealtimeLanguage();
-        updateRealtimeButton();
-        if (!isUiAlive()) return;
-        switch (state) {
-            case PREPARING -> {
-                int progress = parseProgress(message);
-                if (progress > 0) showAiStatus(getString(R.string.subtitle_realtime_preparing_progress, progress));
-                else showAiStatus(R.string.subtitle_realtime_preparing);
-            }
-            case ON -> {
-                if (TextUtils.isEmpty(message)) showAiStatus(R.string.subtitle_realtime_on);
-                else showAiMessage(getString(R.string.subtitle_realtime_failed, message));
-            }
-            case ERROR -> showAiMessage(getString(R.string.subtitle_realtime_failed, message));
-            case OFF -> {
-                if (!aiTranslating) showAiStatus("");
-            }
-        }
-    }
-
-    private int parseProgress(String value) {
-        try {
-            return Integer.parseInt(value);
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    private void updateRealtimeButton() {
-        if (binding == null) return;
-        boolean active = realtimeState == RealtimeSubtitleController.State.ON || realtimeState == RealtimeSubtitleController.State.PREPARING;
-        binding.realtimeAi.setActivated(active);
-        binding.realtimeAi.setAlpha(active ? 1f : 0.7f);
-    }
-
-    private void onAiTranslate(View view) {
-        startAiTranslation(true);
-    }
-
-    private void onAiRegenerate(View view) {
-        startAiTranslation(false);
-    }
-
-    private void startAiTranslation(boolean useCache) {
-        stopRealtimeAi();
-        String playbackKey = player.getKey();
-        AiTaskState state = AiTaskState.get(playbackKey);
-        if (aiTranslating || state != null && state.isTranslating()) {
-            applyAiState(state);
-            return;
-        }
-        AiConfig config = AiConfig.objectFrom(Setting.getAiConfig());
-        if (!config.isReady()) {
-            showAiMessage(R.string.subtitle_ai_config_required);
-            return;
-        }
-        Sub sub = sourceSubtitleForAi(useCache);
-        if (sub == null) {
-            showAiMessage(R.string.subtitle_ai_no_selected_subtitle);
-            return;
-        }
-        SubtitleAsset sourceAsset = subtitleAssetFrom(sub);
-        if (sourceAsset == null) {
-            showAiMessage(R.string.subtitle_ai_local_srt_required);
-            return;
-        }
-        if (!isLocalSrt(sourceAsset)) {
-            showAiMessage(R.string.subtitle_ai_unsupported_format);
-            return;
-        }
-        SubtitleTranslationRequest request = SubtitleTranslationRequest.builder()
-                .playbackKey(playbackKey)
-                .sourceAsset(sourceAsset)
-                .sourceLanguage(sub.getLang())
-                .targetLanguage("zh-Hans")
-                .mode(SubtitleTranslationRequest.MODE_TRANSLATED)
-                .trigger(SubtitleTranslationRequest.TRIGGER_CURRENT_SUBTITLE)
-                .useCache(useCache)
-                .build();
-        aiStartedAt = System.currentTimeMillis();
-        AiTaskState.start(playbackKey, ResUtil.getString(useCache ? R.string.subtitle_ai_preparing : R.string.subtitle_ai_regenerating), aiStartedAt);
-        applyAiState(AiTaskState.get(playbackKey));
-        Task.execute(() -> {
-            SubtitleTranslationResult result = new AiSubtitleTranslationService(config).translate(request, progressListener(playbackKey));
-            App.post(() -> onAiTranslated(playbackKey, result));
-        });
-    }
-
-    private AiSubtitleTranslationService.ProgressListener progressListener(String playbackKey) {
-        return new AiSubtitleTranslationService.ProgressListener() {
-            @Override
-            public void onStarted(int cueCount, int chunkCount) {
-                App.post(() -> showAiProgress(playbackKey, 0, chunkCount));
-            }
-
-            @Override
-            public void onChunkTranslated(int completedChunks, int totalChunks) {
-                App.post(() -> showAiProgress(playbackKey, completedChunks, totalChunks));
-            }
-
-            @Override
-            public void onCacheHit(int cueCount) {
-                App.post(() -> updateAiState(playbackKey, ResUtil.getString(R.string.subtitle_ai_cache_hit)));
-            }
-        };
-    }
-
-    private void onAiTranslated(String playbackKey, SubtitleTranslationResult result) {
-        if (player == null || player.isReleased()) {
-            finishAiState(playbackKey, ResUtil.getString(R.string.subtitle_ai_apply_failed), false);
-            return;
-        }
-        if (!TextUtils.equals(playbackKey, player.getKey())) {
-            finishAiState(playbackKey, ResUtil.getString(R.string.subtitle_ai_stale_result), false);
-            return;
-        }
-        if (result != null && isAiSuccess(result) && applyTranslatedAsset(result.getTranslatedAsset())) {
-            String message = ResUtil.getString(R.string.subtitle_ai_applied, result.getTranslatedAsset().getDisplayName());
-            finishAiState(playbackKey, message, true);
-            return;
-        }
-        if (result != null && isAiSuccess(result)) {
-            finishAiState(playbackKey, ResUtil.getString(R.string.subtitle_ai_apply_failed), true);
-            return;
-        }
-        String reason = result == null ? "" : result.getReason();
-        if ("ai_config_required".equals(reason)) finishAiState(playbackKey, ResUtil.getString(R.string.subtitle_ai_config_required), true);
-        else if ("unsupported_format".equals(reason)) finishAiState(playbackKey, ResUtil.getString(R.string.subtitle_ai_unsupported_format), true);
-        else finishAiState(playbackKey, ResUtil.getString(R.string.subtitle_ai_failed, readableAiReason(reason)), true);
-    }
-
-    private boolean applyTranslatedAsset(SubtitleAsset asset) {
-        if (asset == null) return false;
-        String path = TextUtils.isEmpty(asset.getLocalPath()) ? asset.getUri() : asset.getLocalPath();
-        if (TextUtils.isEmpty(path)) return false;
-        String name = TextUtils.isEmpty(asset.getDisplayName()) ? new File(path).getName() : asset.getDisplayName();
-        Sub sub = Sub.create(name, path, asset.getLanguage(), asset.getMimeType());
-        player.setSub(sub);
-        showAppliedSubtitleTrack(sub);
-        return true;
-    }
-
-    private void showAppliedSubtitleTrack(Sub sub) {
-        if (!isUiAlive() || type != C.TRACK_TYPE_TEXT) return;
-        Track item = selectedSubtitleFallbackTrack(sub, type);
-        if (item == null) return;
-        adapter.prependSelected(item);
-        binding.recycler.setVisibility(View.VISIBLE);
-        binding.recycler.scrollToPosition(0);
-        binding.aiRegenerate.setVisibility(View.VISIBLE);
-    }
-
-    private void showAiProgress(String playbackKey, int completedChunks, int totalChunks) {
-        String message;
-        if (totalChunks <= 0) {
-            message = ResUtil.getString(R.string.subtitle_ai_translating);
-            updateAiState(playbackKey, message);
-            return;
-        }
-        if (completedChunks > 0 && completedChunks < totalChunks) {
-            long elapsed = Math.max(0L, System.currentTimeMillis() - AiTaskState.startedAt(playbackKey, aiStartedAt));
-            long remaining = elapsed * (totalChunks - completedChunks) / Math.max(1, completedChunks);
-            message = ResUtil.getString(R.string.subtitle_ai_progress_eta, completedChunks, totalChunks, formatDuration(remaining));
-        } else {
-            message = ResUtil.getString(R.string.subtitle_ai_progress, completedChunks, totalChunks);
-        }
-        updateAiState(playbackKey, message);
-    }
-
-    private void showAiMessage(@StringRes int resId) {
-        showAiMessage(ResUtil.getString(resId));
-    }
-
-    private void showAiMessage(String message) {
-        showAiStatus(message);
-        Notify.show(message);
-    }
-
-    private void showAiStatus(@StringRes int resId) {
-        showAiStatus(ResUtil.getString(resId));
-    }
-
-    private void showAiStatus(String message) {
-        if (!isUiAlive()) return;
-        binding.aiStatus.setText(message);
-        binding.aiStatus.setVisibility(TextUtils.isEmpty(message) ? View.GONE : View.VISIBLE);
-    }
-
-    private void restoreAiState() {
-        if (player == null) return;
-        applyAiState(AiTaskState.get(player.getKey()));
-    }
-
-    private void applyAiState(AiTaskState state) {
-        if (state == null) {
-            setAiTranslating(false);
-            showAiStatus("");
-            return;
-        }
-        aiStartedAt = state.getStartedAt();
-        setAiTranslating(state.isTranslating());
-        showAiStatus(state.getMessage());
-    }
-
-    private void updateAiState(String playbackKey, String message) {
-        AiTaskState.update(playbackKey, message);
-        notifyAiStateChanged(playbackKey);
-    }
-
-    private void finishAiState(String playbackKey, String message, boolean notify) {
-        AiTaskState.finish(playbackKey, message);
-        notifyAiStateChanged(playbackKey);
-        if (notify) Notify.show(message);
-    }
-
-    private void onAiStateChanged(String playbackKey) {
-        if (type != C.TRACK_TYPE_TEXT) return;
-        if (player == null || !TextUtils.equals(playbackKey, player.getKey())) return;
-        applyAiState(AiTaskState.get(playbackKey));
-    }
-
-    private static void notifyAiStateChanged(String playbackKey) {
-        TrackDialog dialog = activeAiDialog.get();
-        if (dialog != null) dialog.onAiStateChanged(playbackKey);
-    }
-
-    private void setAiTranslating(boolean translating) {
-        aiTranslating = translating;
-        if (!isUiAlive()) return;
-        binding.ai.setEnabled(!translating);
-        binding.ai.setAlpha(translating ? 0.5f : 1f);
-        binding.aiRegenerate.setEnabled(!translating);
-        binding.aiRegenerate.setAlpha(translating ? 0.5f : 1f);
-    }
-
-    private boolean isUiAlive() {
-        FragmentActivity activity = getActivity();
-        return binding != null && activity != null && !activity.isFinishing() && !activity.isDestroyed();
-    }
-
+ 
     private void onSubtitle(View view) {
         Listener listener = (Listener) requireActivity();
         App.post(listener::onSubtitleClick, 100);
@@ -600,7 +301,9 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
                 // switching must target this stable id directly; the formatted description
                 // is only persisted for restoring a preference on the next playback.
                 Track item = new Track(type, name, PlayerHelper.describeFormat(format)).playerId(format.id);
-                item.setSelected(isSelected(trackGroup, j, format, active));
+                item.setSelected(type == C.TRACK_TYPE_TEXT
+                        ? secondarySubtitle ? player.isSecondarySubtitleSelected(format) : player.isPrimarySubtitleSelected(format)
+                        : trackGroup.isTrackSelected(j));
                 items.add(item);
             }
         }
@@ -837,5 +540,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     public interface Listener {
 
         void onSubtitleClick();
+ 
+        default void onShooterClick() {}
     }
 }

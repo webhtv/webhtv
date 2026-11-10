@@ -16,21 +16,60 @@ import java.util.Set;
 
 public class LiveEpgSetting {
 
-    private static final String KEY_URL = "live_epg_url";
+    private static final String KEY_SELECTED = "live_epg_selected";
     private static final String KEY_HISTORY = "live_epg_history";
     private static final int MAX_HISTORY = 20;
     private static final Type TYPE = new TypeToken<List<String>>() {}.getType();
 
-    public static String getUrl() {
-        return Prefers.getString(KEY_URL, "");
+    public static Set<String> getSelected() {
+        try {
+            List<String> items = App.gson().fromJson(Prefers.getString(KEY_SELECTED, "[]"), TYPE);
+            return items == null ? new LinkedHashSet<>() : new LinkedHashSet<>(items);
+        } catch (Exception e) {
+            return new LinkedHashSet<>();
+        }
     }
 
-    public static void putUrl(String url) {
+    public static void setSelected(Set<String> urls) {
+        Prefers.put(KEY_SELECTED, App.gson().toJson(new ArrayList<>(urls)));
+    }
+ 
+    public static boolean isSelected(String url) {
+        return getSelected().contains(normalize(url));
+    }
+ 
+    public static void toggleSelected(String url) {
         url = normalize(url);
-        Prefers.put(KEY_URL, url);
-        addHistory(url);
+        Set<String> selected = getSelected();
+        if (selected.contains(url)) selected.remove(url);
+        else selected.add(url);
+        setSelected(selected);
     }
-
+ 
+    public static void addSelected(String url) {
+        url = normalize(url);
+        if (url.isEmpty()) return;
+        Set<String> selected = getSelected();
+        selected.add(url);
+        setSelected(selected);
+    }
+ 
+    public static void removeSelected(String url) {
+        url = normalize(url);
+        Set<String> selected = getSelected();
+        if (selected.remove(url)) setSelected(selected);
+    }
+ 
+    public static void clearSelected() {
+        Prefers.put(KEY_SELECTED, App.gson().toJson(Collections.emptyList()));
+    }
+ 
+    /** 兼容旧逻辑：取第一个选中的 URL，无则返回空 */
+    public static String getUrl() {
+        for (String url : getSelected()) return url;
+        return "";
+    }
+ 
     public static List<String> getHistory() {
         try {
             List<String> items = App.gson().fromJson(Prefers.getString(KEY_HISTORY, "[]"), TYPE);
@@ -55,14 +94,23 @@ public class LiveEpgSetting {
         if (url.isEmpty()) return;
         List<String> items = getHistory();
         if (items.remove(url)) Prefers.put(KEY_HISTORY, App.gson().toJson(items));
-        if (getUrl().equals(url)) Prefers.put(KEY_URL, "");
+        removeSelected(url);
     }
 
     public static void replaceHistory(String oldUrl, String newUrl) {
         oldUrl = normalize(oldUrl);
         newUrl = normalize(newUrl);
-        if (!oldUrl.isEmpty() && !oldUrl.equals(newUrl)) removeHistory(oldUrl);
-        putUrl(newUrl);
+        Set<String> selected = getSelected();
+        if (!oldUrl.isEmpty() && selected.contains(oldUrl)) {
+            selected.remove(oldUrl);
+            selected.add(newUrl);
+            setSelected(selected);
+        }
+        if (!oldUrl.isEmpty() && !oldUrl.equals(newUrl)) {
+            List<String> items = getHistory();
+            if (items.remove(oldUrl)) Prefers.put(KEY_HISTORY, App.gson().toJson(items));
+        }
+        addHistory(newUrl);
     }
 
     public static void clearHistory() {
@@ -90,14 +138,15 @@ public class LiveEpgSetting {
     }
 
     public static String getEffectiveUrl(Live live) {
+        for (String url : getSelected()) if (!url.contains("{")) return url;
         String custom = getUrl();
-        return custom.isEmpty() && live != null ? live.getEpgApi() : custom;
+        if (!custom.isEmpty()) return custom;
+        return live != null ? live.getEpgApi() : "";
     }
 
     public static List<String> getXmlUrls(Live live) {
         Set<String> items = new LinkedHashSet<>();
-        String custom = getUrl();
-        if (isGlobalXmlUrl(custom)) items.add(custom);
+        for (String url : getSelected()) if (isGlobalXmlUrl(url)) items.add(url);
         if (live != null) items.addAll(live.getEpgXml());
         return new ArrayList<>(items);
     }
@@ -107,6 +156,10 @@ public class LiveEpgSetting {
         return !url.isEmpty() && !url.contains("{");
     }
 
+    public static boolean hasSelected() {
+        return !getSelected().isEmpty();
+    }
+ 
     private static String normalize(String url) {
         return url == null ? "" : url.trim();
     }

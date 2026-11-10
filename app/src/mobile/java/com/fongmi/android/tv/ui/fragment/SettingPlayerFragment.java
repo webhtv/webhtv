@@ -83,6 +83,8 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         setPerformanceText();
         setPadLiveModeText();
         setPlayerButtonsText();
+        mBinding.adblockText.setText(getSwitch(Setting.isAdblock()));
+        mBinding.autoFullscreenText.setText(getSwitch(Setting.isPlaybackAutoFullscreen()));
         mBinding.speedText.setText(format.format(PlayerSetting.getSpeed()));
         mBinding.bufferText.setText(String.valueOf(PlayerSetting.getBuffer()));
         mBinding.bufferBytesText.setText((bufferBytes = ResUtil.getStringArray(R.array.select_buffer_bytes))[PlayerSetting.getBufferBytesOption()]);
@@ -123,7 +125,6 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         mBinding.scale.setOnClickListener(this::onScale);
         mBinding.lut.setOnClickListener(this::onLut);
         mBinding.mpvConfig.setOnClickListener(view -> MpvConfigDialog.show(this, () -> mBinding.mpvConfigText.setText(MpvConfigStore.summary())));
-        mBinding.mpvRender.setOnClickListener(this::onMpvRender);
         mBinding.blurayMenu.setOnClickListener(view -> {
             PlayerSetting.putBlurayMenu(!PlayerSetting.isBlurayMenu());
             mBinding.blurayMenuText.setText(getSwitch(PlayerSetting.isBlurayMenu()));
@@ -156,6 +157,8 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         mBinding.tunnel.setOnClickListener(this::setTunnel);
         mBinding.exo4kCompat.setOnClickListener(this::onPerformance);
         mBinding.caption.setOnClickListener(this::setCaption);
+        mBinding.adblock.setOnClickListener(this::setAdblock);
+        mBinding.autoFullscreen.setOnClickListener(this::setAutoFullscreen);
         mBinding.caption.setOnLongClickListener(this::onCaption);
         mBinding.background.setOnClickListener(this::onBackground);
         mBinding.musicNotification.setOnClickListener(this::setMusicNotification);
@@ -221,7 +224,6 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
     private void setMpvRows() {
         boolean visible = PlayerSetting.getPlayer() == PlayerSetting.MPV;
         mBinding.mpvConfig.setVisibility(visible ? View.VISIBLE : View.GONE);
-        mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.blurayMenu.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.mpvConfigText.setText(MpvConfigStore.summary());
         mBinding.mpvRenderText.setText(getMpvRenderText());
@@ -229,8 +231,9 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
     }
 
     private void onOsd(View view) {
-        PlayerOsdDialog.show(this, osd, getOsdChecked(), checked -> {
-            setOsdChecked(checked);
+        PlayerOsdDialog.show(this, osd, getOsdVodChecked(), getOsdLiveChecked(), (vodChecked, liveChecked) -> {
+            setOsdVodChecked(vodChecked);
+            setOsdLiveChecked(liveChecked);
             mBinding.osdText.setText(getOsdText(osd));
         });
     }
@@ -250,28 +253,36 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         mBinding.padLiveText.setText(padLiveMode[index]);
     }
 
-    private void onBadgePosition(View view) {
-        ChoiceDialog.showSingle(this, R.string.osd_media_badge_position, badgePosition, PlayerSetting.getMediaBadgeChoice(), which -> {
-            PlayerSetting.putMediaBadgeChoice(which);
-            updateBadgePositionText();
-        });
+    private boolean[] getOsdVodChecked() {
+        return new boolean[]{PlayerSetting.isOsdVodTitle(), PlayerSetting.isOsdVodResolution(), PlayerSetting.isOsdVodTime(), PlayerSetting.isOsdVodProgress(), PlayerSetting.isOsdVodTraffic(), PlayerSetting.isOsdVodMini(), PlayerSetting.isOsdVodDiagnostics()};
     }
 
-    private void updateBadgePositionText() {
-        int which = PlayerSetting.getMediaBadgeChoice();
-        mBinding.osdMediaBadgePositionText.setText(badgePosition != null && badgePosition.length > which ? badgePosition[which] : getString(R.string.setting_off));
+    private boolean[] getOsdLiveChecked() {
+        return new boolean[]{PlayerSetting.isOsdLiveTitle(), PlayerSetting.isOsdLiveResolution(), PlayerSetting.isOsdLiveTime(), PlayerSetting.isOsdLiveProgress(), PlayerSetting.isOsdLiveTraffic(), PlayerSetting.isOsdLiveMini(), PlayerSetting.isOsdLiveDiagnostics()};
     }
 
-    private boolean[] getOsdChecked() {
-        return PlayerSetting.getDisplayChecked();
+    private void setOsdVodChecked(boolean[] checked) {
+        PlayerSetting.putOsdVodTitle(checked[0]);
+        PlayerSetting.putOsdVodResolution(checked[1]);
+        PlayerSetting.putOsdVodTime(checked[2]);
+        PlayerSetting.putOsdVodProgress(checked[3]);
+        PlayerSetting.putOsdVodTraffic(checked[4]);
+        PlayerSetting.putOsdVodMini(checked[5]);
+        PlayerSetting.putOsdVodDiagnostics(checked[6]);
     }
 
-    private void setOsdChecked(boolean[] checked) {
-        PlayerSetting.putDisplayChecked(checked);
+    private void setOsdLiveChecked(boolean[] checked) {
+        PlayerSetting.putOsdLiveTitle(checked[0]);
+        PlayerSetting.putOsdLiveResolution(checked[1]);
+        PlayerSetting.putOsdLiveTime(checked[2]);
+        PlayerSetting.putOsdLiveProgress(checked[3]);
+        PlayerSetting.putOsdLiveTraffic(checked[4]);
+        PlayerSetting.putOsdLiveMini(checked[5]);
+        PlayerSetting.putOsdLiveDiagnostics(checked[6]);
     }
 
     private String getOsdText(String[] items) {
-        boolean[] checked = getOsdChecked();
+        boolean[] checked = getOsdVodChecked();
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < checked.length; i++) {
             if (!checked[i]) continue;
@@ -541,6 +552,16 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
     private boolean onCaption(View view) {
         if (PlayerSetting.isCaption()) startActivity(new Intent(Settings.ACTION_CAPTIONING_SETTINGS));
         return PlayerSetting.isCaption();
+    }
+
+    private void setAdblock(View view) {
+        Setting.putAdblock(!Setting.isAdblock());
+        mBinding.adblockText.setText(getSwitch(Setting.isAdblock()));
+    }
+
+    private void setAutoFullscreen(View view) {
+        Setting.putPlaybackAutoFullscreen(!Setting.isPlaybackAutoFullscreen());
+        mBinding.autoFullscreenText.setText(getSwitch(Setting.isPlaybackAutoFullscreen()));
     }
 
     private void onBackground(View view) {

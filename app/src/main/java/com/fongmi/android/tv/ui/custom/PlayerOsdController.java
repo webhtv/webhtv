@@ -113,6 +113,7 @@ public class PlayerOsdController {
     private final DecimalFormat frameDropRateFormat;
     private final PlaybackSpeedMeter speedMeter = new PlaybackSpeedMeter();
     private long lastSpeedKBps;
+    private long endingMs;
     private String lastSpeedText;
     private boolean controlsVisible;
     private boolean diagnosticsVisible;
@@ -150,13 +151,7 @@ public class PlayerOsdController {
 
     public void start() {
         started = true;
-        if (suppressed) {
-            root.setVisibility(View.GONE);
-            return;
-        }
-        // 即使用户关闭所有 OSD，控制栏显示时也需要强制显示标题/分辨率/时间
-        // 所以不能在 !isOsdEnabled() 时直接 return
-        if (!PlayerSetting.isOsdEnabled() && !controlsVisible) {
+        if (!osdEnabled()) {
             root.setVisibility(View.GONE);
             return;
         }
@@ -205,6 +200,20 @@ public class PlayerOsdController {
         if (started) render();
     }
 
+    /**
+     * 设置片尾时长（毫秒），屏显左下角进度中的总时长显示为 视频总长 - 片尾，即时刷新。
+     */
+    public void setEnding(long endingMs) {
+        long value = Math.max(0, endingMs);
+        if (this.endingMs == value) return;
+        this.endingMs = value;
+        if (started) render();
+    }
+
+    private long effectiveDuration(long duration) {
+        return Math.max(0, duration - endingMs);
+    }
+
     public boolean isDiagnosticsVisible() {
         return diagnosticsVisible;
     }
@@ -214,7 +223,7 @@ public class PlayerOsdController {
     }
 
     public void setDiagnosticsVisible(boolean visible) {
-        boolean next = visible && PlayerSetting.isOsdDiagnostics();
+        boolean next = visible && osdDiagnostics();
         if (diagnosticsVisible == next) return;
         diagnosticsVisible = next;
         if (!next) stopDiagnosticsSampling();
@@ -222,7 +231,7 @@ public class PlayerOsdController {
     }
 
     public void toggleDiagnostics() {
-        if (!PlayerSetting.isOsdDiagnostics()) return;
+        if (!osdDiagnostics()) return;
         diagnosticsVisible = !diagnosticsVisible;
         if (!diagnosticsVisible) stopDiagnosticsSampling();
         if (started) render();
@@ -233,38 +242,7 @@ public class PlayerOsdController {
     }
 
     private boolean render() {
-        if (suppressed) {
-            // mobile 播放器在控制栏出现时会抑制整个 OSD 根（控制栏自带标题与分辨率）。
-            // 媒体信息徽标是唯一的例外：它只在「屏显设置 → 媒体信息」开启时才放行。
-            if (controlsVisible && renderMediaBadgesOnly()) return true;
-            root.setVisibility(View.GONE);
-            return false;
-        }
-        setTextSize(miniSp);
-        PlayerManager player = source.getPlayer();
-        updateSpeed(player);
-
-        // 控制栏显示时的处理：
-        // - leanback: suppressed=false，强制显示 OSD 的标题/分辨率/时间（因为控制栏没有自己的 title/size）
-        // - mobile: suppressed=true，已在上面 return，不会执行此分支（mobile 控制栏有自己的 title/size）
-        if (controlsVisible) {
-            stopDiagnosticsSampling();
-            setTopLeftForControls(player);
-            setTopRightForControls();
-            bottomLeft.setVisibility(View.GONE);
-            bottomRight.setVisibility(View.GONE);
-            diagnosticsPanel.setVisibility(View.GONE);
-            setMediaBadges(player);
-            if (miniProgress != null) miniProgress.setVisibility(View.GONE);
-            // 标题、时间、媒体信息徽标，至少一个可见就显示 root
-            boolean hasVisible = topLeft.getVisibility() == View.VISIBLE || topRight.getVisibility() == View.VISIBLE
-                    || (mediaBadges != null && mediaBadges.getVisibility() == View.VISIBLE);
-            root.setVisibility(hasVisible ? View.VISIBLE : View.GONE);
-            return true;
-        }
-
-        // 控制栏隐藏时，若用户关闭所有 OSD 屏显，停止刷新并隐藏
-        boolean enabled = PlayerSetting.isOsdEnabled();
+        boolean enabled = osdEnabled();
         if (!enabled) {
             stopDiagnosticsSampling();
             root.setVisibility(View.GONE);
@@ -333,29 +311,19 @@ public class PlayerOsdController {
     }
 
     private void setTopLeft(PlayerManager player) {
-        boolean showTitle = PlayerSetting.isOsdTitle();
-        boolean showResolution = PlayerSetting.isOsdResolution();
-        if ((!showTitle && !showResolution) || diagnosticsVisible) {
+        if ((!osdTitle() && !osdResolution()) || diagnosticsVisible) {
             topLeft.setVisibility(View.GONE);
             return;
         }
-        String title = showTitle ? source.getTitle() : "";
-        String size = showResolution && player != null ? player.getSizeText() : "";
-        topLeft.setText(join("\n", title, size));
-        topLeft.setVisibility(TextUtils.isEmpty(topLeft.getText()) ? View.GONE : View.VISIBLE);
-    }
-
-    private void setTopLeftForControls(PlayerManager player) {
-        // 控制栏显示时，强制显示标题和分辨率
-        String title = source.getTitle();
-        String size = player != null ? player.getSizeText() : "";
+        String title = osdTitle() ? source.getTitle() : "";
+        String size = osdResolution() && player != null ? player.getSizeText() : "";
         topLeft.setText(join("\n", title, size));
         topLeft.setVisibility(TextUtils.isEmpty(topLeft.getText()) ? View.GONE : View.VISIBLE);
     }
 
     private void setTopRight() {
-        topRight.setVisibility(PlayerSetting.isOsdTime() ? View.VISIBLE : View.GONE);
-        if (PlayerSetting.isOsdTime()) topRight.setText(timeFormat.format(new Date()));
+        topRight.setVisibility(osdTime() ? View.VISIBLE : View.GONE);
+        if (osdTime()) topRight.setText(timeFormat.format(new Date()));
     }
 
     private void setTopRightForControls() {
@@ -365,7 +333,7 @@ public class PlayerOsdController {
     }
 
     private void setBottomLeft(PlayerManager player) {
-        if (controlsVisible || !PlayerSetting.isOsdProgress() || player == null || player.isLive()) {
+        if (controlsVisible || !osdProgress() || player == null || player.isLive()) {
             bottomLeft.setVisibility(View.GONE);
             return;
         }
@@ -375,19 +343,19 @@ public class PlayerOsdController {
             bottomLeft.setVisibility(View.GONE);
             return;
         }
-        bottomLeft.setText(Util.timeMs(position) + " / " + Util.timeMs(duration));
+        bottomLeft.setText(Util.timeMs(position) + " / " + Util.timeMs(effectiveDuration(duration)));
         bottomLeft.setVisibility(View.VISIBLE);
     }
 
     private void setBottomRight() {
-        bottomRight.setVisibility(PlayerSetting.isOsdTraffic() ? View.VISIBLE : View.GONE);
-        if (!PlayerSetting.isOsdTraffic()) return;
+        bottomRight.setVisibility(osdTraffic() ? View.VISIBLE : View.GONE);
+        if (!osdTraffic()) return;
         bottomRight.setText(lastSpeedText);
         bottomRight.setVisibility(TextUtils.isEmpty(lastSpeedText) ? View.GONE : View.VISIBLE);
     }
 
     private void setDiagnosticsPanel(PlayerManager player) {
-        if (controlsVisible || !PlayerSetting.isOsdDiagnostics() || !diagnosticsVisible || player == null) {
+        if (controlsVisible || !osdDiagnostics() || !diagnosticsVisible || player == null) {
             stopDiagnosticsSampling();
             diagnosticsPanel.setVisibility(View.GONE);
             return;
@@ -440,8 +408,46 @@ public class PlayerOsdController {
         return rootWidth >= rootHeight;
     }
 
+    private boolean isLive() {
+        PlayerManager player = source.getPlayer();
+        return player != null && player.isLive();
+    }
+
+    private boolean osdEnabled() {
+        return isLive() ? (PlayerSetting.isOsdLiveTitle() || PlayerSetting.isOsdLiveResolution() || PlayerSetting.isOsdLiveTime() || PlayerSetting.isOsdLiveProgress() || PlayerSetting.isOsdLiveTraffic() || PlayerSetting.isOsdLiveMini() || PlayerSetting.isOsdLiveDiagnostics())
+                : (PlayerSetting.isOsdVodTitle() || PlayerSetting.isOsdVodResolution() || PlayerSetting.isOsdVodTime() || PlayerSetting.isOsdVodProgress() || PlayerSetting.isOsdVodTraffic() || PlayerSetting.isOsdVodMini() || PlayerSetting.isOsdVodDiagnostics());
+    }
+
+    private boolean osdTitle() {
+        return isLive() ? PlayerSetting.isOsdLiveTitle() : PlayerSetting.isOsdVodTitle();
+    }
+
+    private boolean osdResolution() {
+        return isLive() ? PlayerSetting.isOsdLiveResolution() : PlayerSetting.isOsdVodResolution();
+    }
+
+    private boolean osdTime() {
+        return isLive() ? PlayerSetting.isOsdLiveTime() : PlayerSetting.isOsdVodTime();
+    }
+
+    private boolean osdProgress() {
+        return isLive() ? PlayerSetting.isOsdLiveProgress() : PlayerSetting.isOsdVodProgress();
+    }
+
+    private boolean osdTraffic() {
+        return isLive() ? PlayerSetting.isOsdLiveTraffic() : PlayerSetting.isOsdVodTraffic();
+    }
+
+    private boolean osdMini() {
+        return isLive() ? PlayerSetting.isOsdLiveMini() : PlayerSetting.isOsdVodMini();
+    }
+
+    private boolean osdDiagnostics() {
+        return isLive() ? PlayerSetting.isOsdLiveDiagnostics() : PlayerSetting.isOsdVodDiagnostics();
+    }
+
     private void setMiniProgress(PlayerManager player) {
-        if (controlsVisible || !PlayerSetting.isOsdMini() || player == null || player.isLive()) {
+        if (controlsVisible || !osdMini() || player == null || player.isLive()) {
             miniProgress.setVisibility(View.GONE);
             return;
         }
@@ -961,10 +967,9 @@ public class PlayerOsdController {
         Format audio = snapshot.audioFormat();
         String state = stateText(player.getPlaybackState()) + (player.isLoading() ? " / 正在加载" : "");
         String buffer = join(" / ", formatDuration(player.getBufferedDuration()), player.getBufferedPercentage() > 0 ? player.getBufferedPercentage() + "%" : "");
-        // 只有 Exo 有 analytics 快照；IJK/MPV 走的是 PlayerManager 的引擎无关缓冲追踪器。
-        // 原先只对 MPV 分支，IJK 因此落到 Exo 分支读到 Snapshot.empty()，重缓冲计数恒为 0。
-        int rebufferCount = player.isExo() ? snapshot.rebufferCount() : player.getRebufferCount();
-        long rebufferTotalMs = player.isExo() ? snapshot.rebufferTotalMs() : player.getRebufferTotalMs();
+        // MPV has no Exo analytics snapshot; its buffering tracker belongs to PlayerManager.
+        int rebufferCount = player.isMpv() ? player.getRebufferCount() : snapshot.rebufferCount();
+        long rebufferTotalMs = player.isMpv() ? player.getRebufferTotalMs() : snapshot.rebufferTotalMs();
         String rebuffer = rebufferCount <= 0 ? "0 次" : rebufferCount + " 次 / " + formatDuration(rebufferTotalMs);
         long stableThroughput = player.getNetworkProtectionStableThroughput();
         long consumption = player.getNetworkProtectionConsumption();
@@ -1028,8 +1033,7 @@ public class PlayerOsdController {
                 TextUtils.isEmpty(frameTiming) ? "" : row("帧调度", frameTiming),
                 row("播放", playback),
                 row("配置", playerText),
-                TextUtils.isEmpty(startup) ? "" : row("起播", startup),
-                row("结论", getDiagnosis(player, snapshot, video, videoTrack, audioTrack, audioDetails, localSource)));
+                row("结论", getDiagnosis(player, snapshot, video, audioTrack, audioDetails, localSource)));
         String extra = join("\n",
                 row("设备", getDeviceText()),
                 row("系统", getSystemText()),
@@ -1040,57 +1044,12 @@ public class PlayerOsdController {
         return new DiagnosticsText(main, extra);
     }
 
-    /**
-     * Startup timeline plus the stage that consumed the most time, so a slow start can
-     * be attributed on-device instead of requiring a debug log export.
-     */
-    private String getStartupText(PlayerManager player) {
-        String summary = player.getStartupSummary();
-        if (TextUtils.isEmpty(summary)) return "";
-        String slowest = player.getSlowestStartupStage();
-        return TextUtils.isEmpty(slowest) ? summary : summary + "  最慢 " + slowest;
-    }
-
-    /**
-     * "掉帧 12（1.4/秒）" for EXO. The rate is what the number should be read against: media3
-     * settles a renderer's dropped-frame accumulator from onStopped(), so a pause adds
-     * whatever tail accumulated while playing and a bare total looks like pause damage.
-     * MPV and the other engines keep reporting their own raw counter unchanged.
-     */
-    private String droppedFrameText(PlayerManager player) {
-        long dropped = player.getDroppedFrames();
-        if (!player.isExo()) return "掉帧 " + dropped;
-        double rate = PlaybackAnalyticsListener.droppedFramesPerSecond();
-        return "掉帧 " + dropped + "（" + frameDropRateFormat.format(rate) + "/秒）";
-    }
-
-    /**
-     * Whether the drop count is worth a verdict. The raw total is only comparable to a fixed
-     * budget while there is no measured play time to divide by; after that the rate decides,
-     * so a pause that settles the accumulator no longer reads as decoder pressure.
-     */
-    private boolean excessiveDroppedFrames(PlayerManager player) {
-        if (!player.isExo()) return player.getDroppedFrames() >= DROPPED_FRAMES_RAW_COUNT_DIAGNOSIS;
-        long playTimeMs = PlaybackAnalyticsListener.playTimeMs();
-        if (playTimeMs < DROPPED_FRAMES_RATE_MIN_PLAY_TIME_MS) {
-            return player.getDroppedFrames() >= DROPPED_FRAMES_RAW_COUNT_DIAGNOSIS;
-        }
-        return PlaybackAnalyticsListener.droppedFramesPerSecond() >= DROPPED_FRAMES_PER_SECOND_DIAGNOSIS;
-    }
-
-    private String getDiagnosis(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot, Format video, VideoTrackState videoTrack, AudioTrackState audioTrack, AudioPlaybackDiagnostics.Snapshot audioDetails, boolean localSource) {
+    private String getDiagnosis(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot, Format video, AudioTrackState audioTrack, AudioPlaybackDiagnostics.Snapshot audioDetails, boolean localSource) {
         if (audioDetails.runtimeState() == AudioPlaybackDiagnostics.RuntimeState.FAILED) return "音频链路失败，先看音频和错误行";
         if (isDecodeError(snapshot) && player.isHardDecode()) return "硬件解码失败：设备可能不支持该视频编码、分辨率、帧率或规格";
         if (!TextUtils.isEmpty(snapshot.errorCode())) return "播放器报错，先看错误行";
         if (audioTrack.hasTracks() && audioTrack.isUnsupported()) return "音频轨不支持：" + summarizeAudioFormat(audioTrack.format()) + " / " + supportText(audioTrack.support());
         if (player.isExo() && audioTrack.hasTracks() && !audioTrack.selected() && snapshot.audioFormat() == null && player.getPlaybackState() == androidx.media3.common.Player.STATE_READY) return "已发现音轨但未选中，可能无声";
-        // A video track without any usable decoder is dropped silently: playback
-        // keeps advancing with audio and subtitles only, so nothing else in this
-        // panel would flag it and the verdict would read as healthy. "Handled" is
-        // the test rather than the unsupported codes alone: EXCEEDS_CAPABILITIES
-        // drops the track the same way, and it is one of the two states
-        // PlayerManager.needsSoftDecode reacts to.
-        if (videoTrack.hasTracks() && !videoTrack.selected() && !videoTrack.isHandled()) return videoDiagnosis(player, videoTrack);
         if (!localSource) {
             long mediaBitrate = getMediaBitrate(video, snapshot.audioFormat() != null ? snapshot.audioFormat() : audioTrack.format());
             long availableBitrate = snapshot.bandwidthEstimate() > 0 ? snapshot.bandwidthEstimate() : lastSpeedKBps * 1024 * 8;

@@ -613,27 +613,25 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
 
     private boolean signaturesMatch(PackageInfo installed, PackageInfo archive, boolean checksumVerified) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            // Some OEM ROMs do not populate signingInfo for getPackageArchiveInfo().
-            // Keep the installed signature authoritative, but let an unreadable
-            // candidate reach the OS installer, which remains the compatibility gate.
-            if (installed.signingInfo == null) return false;
-            if (archive.signingInfo == null) return canAcceptUnreadableArchiveSignature(checksumVerified);
-            if (installed.signingInfo.hasMultipleSigners() || archive.signingInfo.hasMultipleSigners()) {
-                Set<String> installedPrints = fingerprints(installed.signingInfo.getApkContentsSigners());
-                Set<String> archivePrints = fingerprints(archive.signingInfo.getApkContentsSigners());
-                if (installedPrints.isEmpty()) return false;
-                if (archivePrints.isEmpty()) return canAcceptUnreadableArchiveSignature(checksumVerified);
-                return installedPrints.equals(archivePrints);
-            }
-            Set<String> current = fingerprints(installed.signingInfo.getApkContentsSigners());
-            Set<String> candidateHistory = fingerprints(archive.signingInfo.getSigningCertificateHistory());
-            if (current.isEmpty()) return false;
-            if (candidateHistory.isEmpty()) return canAcceptUnreadableArchiveSignature(checksumVerified);
-            return candidateHistory.containsAll(current);
+            if (archive.signingInfo == null || installed.signingInfo == null) return true;   
+            Signature[] installedCurrent = installed.signingInfo.getApkContentsSigners();
+            if (installedCurrent == null || installedCurrent.length == 0) return true;
+            Signature[] archiveCurrent = archive.signingInfo.getApkContentsSigners();
+            if (archiveCurrent == null || archiveCurrent.length == 0) return true;
+
+            Set<String> installedCurrentSet = fingerprints(installedCurrent);
+            Set<String> archiveCurrentSet = fingerprints(archiveCurrent);
+            Signature[] installedHistoryArr = installed.signingInfo.getSigningCertificateHistory();
+            Signature[] archiveHistoryArr = archive.signingInfo.getSigningCertificateHistory();
+            Set<String> installedHistorySet = installedHistoryArr != null ? fingerprints(installedHistoryArr) : new HashSet<>();
+            Set<String> archiveHistorySet = archiveHistoryArr != null ? fingerprints(archiveHistoryArr) : new HashSet<>();
+            if (!installedHistorySet.isEmpty() && installedHistorySet.containsAll(archiveCurrentSet)) return true;
+            if (!archiveHistorySet.isEmpty() && archiveHistorySet.containsAll(installedCurrentSet)) return true;
+            return installedCurrentSet.equals(archiveCurrentSet);
+        } else {
+            if (archive.signatures == null || archive.signatures.length == 0 || installed.signatures == null || installed.signatures.length ==0) return true;
+            return fingerprints(installed.signatures).equals(fingerprints(archive.signatures));
         }
-        if (fingerprints(installed.signatures).isEmpty()) return false;
-        if (fingerprints(archive.signatures).isEmpty()) return canAcceptUnreadableArchiveSignature(checksumVerified);
-        return fingerprints(installed.signatures).equals(fingerprints(archive.signatures));
     }
 
     private Set<String> fingerprints(Signature[] signatures) {

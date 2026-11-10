@@ -10,6 +10,7 @@ import androidx.leanback.widget.ListRowPresenter;
 import androidx.leanback.widget.RowPresenter;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
 public class CustomRowPresenter extends ListRowPresenter {
@@ -68,27 +69,5 @@ public class CustomRowPresenter extends ListRowPresenter {
         HorizontalGridView grid = vh.getGridView();
         grid.setFocusScrollStrategy(strategy);
         grid.setHorizontalSpacing(ResUtil.dp2px(spacing));
-        if (keepFocusInRow) grid.setOnKeyInterceptListener(event -> onKeyIntercept(grid, event));
-    }
-
-    private boolean onKeyIntercept(HorizontalGridView grid, KeyEvent event) {
-        if (!isHorizontalEdge(grid, event)) return false;
-        boolean towardEnd = isTowardEnd(grid, event);
-        if (event.getAction() == KeyEvent.ACTION_DOWN && edgeListener != null) edgeListener.onHorizontalEdge(towardEnd);
-        return true;
-    }
-
-    private boolean isHorizontalEdge(HorizontalGridView grid, KeyEvent event) {
-        int keyCode = event.getKeyCode();
-        if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
-        RecyclerView.Adapter<?> adapter = grid.getAdapter();
-        int position = grid.getSelectedPosition();
-        if (adapter == null || position == RecyclerView.NO_POSITION || adapter.getItemCount() == 0) return false;
-        return isTowardEnd(grid, event) ? position == adapter.getItemCount() - 1 : position == 0;
-    }
-
-    private boolean isTowardEnd(HorizontalGridView grid, KeyEvent event) {
-        boolean rtl = grid.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        return event.getKeyCode() == (rtl ? KeyEvent.KEYCODE_DPAD_LEFT : KeyEvent.KEYCODE_DPAD_RIGHT);
     }
 }

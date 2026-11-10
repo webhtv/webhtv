@@ -9,11 +9,13 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Class;
+import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
-import com.fongmi.android.tv.event.CatWebEvent;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.utils.PushParser;
@@ -28,9 +30,13 @@ import com.github.catvod.utils.Prefers;
 import com.github.catvod.utils.Util;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -150,31 +156,16 @@ public class SiteApi {
         SpiderDebug.log("detail", "key=%s,id=%s,refresh=%s", key, id, refresh);
         if (WebHomeInlineVodStore.KEY.equals(key)) return WebHomeInlineVodStore.detail(id);
         Site site = VodConfig.get().getSite(key);
-        PushParser.Parsed push = PUSH.equals(key) ? PushParser.fromId(id) : null;
-        String requestId = push == null ? id : push.getUrl();
-        if (push != null && (site.isEmpty() || isLocalFileUrl(requestId))) return pushDetail(id, push);
-
-        String sourceKey = detailCacheSourceKey(key, site);
-        if (refresh) VodDetailCache.invalidateContent(sourceKey, id);
-        String cached = refresh ? null : VodDetailCache.getContent(sourceKey, id);
-        if (!TextUtils.isEmpty(cached)) {
-            Result result = Result.fromJson(cached);
-            if (!result.getList().isEmpty()) {
-                SpiderDebug.log("detail-cache", "hit key=%s,id=%s,size=%d", key, id, cached.length());
-                return result;
-            }
-            VodDetailCache.invalidateContent(sourceKey, id);
-        }
-
-        Result result;
-        // 取一次时刻，隔着 spider 调用；调用后若最近一次开页请求落在这之后，就是这次调用开的页。
-        // 那是个副作用，缓存会吞掉它，见 cacheDetail 的说明。
-        long beforeSpider = System.currentTimeMillis();
-        if (isSpider(site)) {
-            String detailContent = site.recent().spider().detailContent(Arrays.asList(requestId));
-            TmdbSourceCredentialIngress.Ingress ingress = TmdbSourceCredentialIngress.extractRootAndStrip(detailContent);
-            SpiderDebug.log("detail", ingress.getSanitizedJson());
-            result = Result.fromJson(ingress.getSanitizedJson());
+        if (site.isEmpty() && PUSH.equals(key)) {
+            Vod vod = buildPushVod(id);
+            Source.get().parse(vod.setFlags());
+            return Result.vod(vod);
+        } else if (isSpider(site)) {
+            String detailContent = site.recent().spider().detailContent(Arrays.asList(id));
+            SpiderDebug.log("detail", detailContent);
+            Result result = Result.fromJson(detailContent);
+            Source.get().parse(result.getVod().setFlags());
+            return result;
         } else {
             ArrayMap<String, String> params = new ArrayMap<>();
             params.put("ac", ac(site.getType()));
@@ -317,27 +308,21 @@ public class SiteApi {
             }
             return fallbackPushPlayer(flag, requestId, playerType, fallbackReason, source);
         } else if (site.getType() == 4) {
-            String fallbackReason;
-            try {
-                ArrayMap<String, String> params = new ArrayMap<>();
-                params.put("play", requestId);
-                params.put("flag", flag);
-                String playerContent = call(site, params);
-                SpiderDebug.log("player", playerContent);
-                Result result = Result.fromJson(playerContent);
-                if (shouldFallbackPushSiteResult(key, result)) {
-                    fallbackReason = result == null ? "" : result.getMsg();
-                } else {
-                    if (result.getFlag().isEmpty()) result.setFlag(flag);
-                    result.setUrl(source.fetch(result, playerType));
-                    result.setHeader(site.getHeader());
-                    return result;
-                }
-            } catch (Exception e) {
-                if (PUSH.equals(key)) fallbackReason = e.getMessage();
-                else throw e;
-            }
-            return fallbackPushPlayer(flag, requestId, playerType, fallbackReason, source);
+            ArrayMap<String, String> params = new ArrayMap<>();
+            params.put("play", id);
+            params.put("flag", flag);
+            String playerContent = call(site, params);
+            SpiderDebug.log("player", playerContent);
+            Result result = Result.fromJson(playerContent);
+            if (result.getFlag().isEmpty()) result.setFlag(flag);
+            result.setUrl(Source.get().fetch(result, playerType));
+            result.setHeader(site.getHeader());
+            return result;
+        } else if (site.isEmpty() && PUSH.equals(key)) {
+            Result result = buildPushPlayer(flag, id);
+            result.setUrl(Source.get().fetch(result, playerType));
+            SpiderDebug.log("player", result.toString());
+            return result;
         } else {
             Result result = new Result();
             result.setUrl(requestId);
@@ -449,6 +434,128 @@ public class SiteApi {
         }
     }
 
+    private static Vod buildPushVod(String id) {
+        // 推送串可能带请求头：url@Headers=<json>。真实地址与请求头在这里拆开，
+        // 请求头缓存起来（详情先于播放执行），播放时由 buildPushPlayer 注入 Result.header。
+        String base = Sniffer.pushUrl(id);
+        Map<String, String> headers = Sniffer.pushHeaders(id);
+        if (!headers.isEmpty()) rememberPushHeaders(base, headers);
+        Vod vod = new Vod();
+        vod.setId(id);
+        vod.setPic(ResUtil.getString(R.string.push_image));
+        vod.setName(base.startsWith("file://") ? new java.io.File(base).getName() : "");
+        String url = base.startsWith("file://") ? toLanHttpUrl(base) : (base.contains("://") && base.contains("#") && !base.contains("$") ? base.replace("#", "***") : base);
+        if (isThunderUrl(url)) {
+            vod.setPlayUrl(url);
+            vod.setPlayFrom("迅雷");
+        } else if (url.contains("youtube.com")) {
+            vod.setPlayUrl(url);
+            vod.setPlayFrom("YouTube");
+        } else if (url.contains("$")) {
+            // 剧集包：集名$地址，多集用 # 或换行分隔。
+            // 地址往往是大纲页/播放页而不是直链，线路名必须给"嗅探"，
+            // 否则 buildPushPlayer 走 default 强制 parse=0，远端会把 HTML 当视频播。
+            String playUrl = url.contains("\n") ? TextUtils.join("#", url.split("\n")) : url;
+            vod.setPlayFrom(Sniffer.isVideoFormat(firstEpisodeUrl(playUrl)) ? "直链" : "嗅探");
+            vod.setPlayUrl(playUrl);
+        } else {
+            vod.setPlayUrl(TextUtils.join("$$$", Arrays.asList(url, url, url)));
+            if (Sniffer.isVideoFormat(url)) vod.setPlayFrom(TextUtils.join("$$$", Arrays.asList("直链", "嗅探", "解析")));
+            else vod.setPlayFrom(TextUtils.join("$$$", Arrays.asList("嗅探", "直链", "解析")));
+        }
+        return vod;
+    }
+ 
+    /** 取剧集包推送串里第一集的地址：集名$地址#集名$地址 -> 地址。 */
+    private static String firstEpisodeUrl(String playUrl) {
+        if (TextUtils.isEmpty(playUrl)) return "";
+        String first = playUrl.split("#")[0];
+        int index = first.indexOf('$');
+        return index >= 0 ? first.substring(index + 1).trim() : first.trim();
+    }
+ 
+    private static String toLanHttpUrl(String url) {
+        if (TextUtils.isEmpty(url) || !url.startsWith("file://")) return url;
+        String filePath = url.substring(7);
+        String relative = stripStorageRoot(filePath);
+        StringBuilder encodedPath = new StringBuilder();
+        for (String segment : relative.split("/")) {
+            if (segment.isEmpty()) {
+                encodedPath.append("/");
+            } else {
+                encodedPath.append("/").append(URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20"));
+            }
+        }
+        String lan = Server.get().getAddress(false);
+        if (lan.contains("http://:")) lan = Server.get().getAddress(true);
+        return lan + "/file" + encodedPath;
+    }
+
+    private static String stripStorageRoot(String path) {
+        String extRoot = com.github.catvod.utils.Path.rootPath();
+        if (path.startsWith(extRoot + "/")) return path.substring(extRoot.length() + 1);
+        if (path.startsWith("/sdcard/")) return path.substring(8);
+        if (path.startsWith(extRoot)) return path.substring(extRoot.length());
+        if (path.startsWith("/sdcard")) return path.substring(7);
+        return path;
+    }
+ 
+    private static Result buildPushPlayer(String flag, String id) {
+        Result result = new Result();
+        if (id.contains("://") && id.contains("***")) id = id.replace("***", "#");
+        result.setFlag(flag);
+        result.setUrl(id);
+        Map<String, String> headers = recallPushHeaders(id);
+        if (!headers.isEmpty()) result.setHeader(headers);
+        switch (flag) {
+            case "直链" -> result.setParse(0);
+            case "解析" -> result.setParse(1);
+            case "嗅探" -> result.setParse(1);
+            default -> result.setParse(0);
+        }
+        return result;
+    }
+ 
+    /**
+     * 投屏（/action?do=cast）只会把 History 发给远端，而 webhome_inline 的 VOD
+     * 存在发送端进程内，远端必然 "WebHome inline VOD not found"。
+     * 这里把本机直连的历史改写成自包含的 push_agent 推送串（真实地址 + 请求头），
+     * 远端用同一套 PUSH 链路即可直接播放。
+     */
+    public static History castHistory(History history, String url, Map<String, String> headers) {
+        if (history == null || !WebHomeInlineVodStore.KEY.equals(history.getSiteKey())) return history;
+        String base = Sniffer.gatewayTarget(url);
+        if (TextUtils.isEmpty(base)) base = url;
+        if (TextUtils.isEmpty(base)) return history;
+        History copy = History.objectFrom(history.toString());
+        if (copy == null) return history;
+        copy.setKey(PUSH + AppDatabase.SYMBOL + Sniffer.pushPayload(base, headers) + AppDatabase.SYMBOL + history.getCid());
+        return copy;
+    }
+ 
+    private static final Map<String, Map<String, String>> PUSH_HEADERS = Collections.synchronizedMap(new LinkedHashMap<>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Map<String, String>> eldest) {
+            return size() > 64;
+        }
+    });
+ 
+    private static void rememberPushHeaders(String url, Map<String, String> headers) {
+        if (TextUtils.isEmpty(url) || headers == null || headers.isEmpty()) return;
+        PUSH_HEADERS.put(url, new LinkedHashMap<>(headers));
+    }
+ 
+    private static Map<String, String> recallPushHeaders(String url) {
+        Map<String, String> headers = PUSH_HEADERS.get(url);
+        return headers == null ? Collections.emptyMap() : headers;
+    }
+ 
+    private static boolean isThunderUrl(String url) {
+        if (TextUtils.isEmpty(url)) return false;
+        return url.startsWith("magnet") || url.startsWith("thunder") || url.startsWith("ed2k")
+                || (!url.startsWith("magnet") && url.split(";")[0].endsWith(".torrent"));
+    }
+ 
     private static void setTypes(@NonNull Site site, @NonNull Result result) {
         result.getTypes().stream().filter(type -> result.getFilters().containsKey(type.getTypeId())).forEach(type -> type.setFilters(result.getFilters().get(type.getTypeId())));
         if (site.getCategories().isEmpty()) return;

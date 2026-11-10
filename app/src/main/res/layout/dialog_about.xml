@@ -88,45 +88,28 @@
         android:gravity="center_vertical"
         android:orientation="vertical">
 
-        <androidx.appcompat.widget.LinearLayoutCompat
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/checkUpdate"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_marginEnd="10dp"
-                android:layout_weight="1"
-                android:minHeight="44dp"
-                android:text="@string/about_check_update"
-                android:textColor="@color/dialog_primary_button_text"
-                android:textSize="14sp"
-                app:backgroundTint="@color/dialog_primary_button_bg"
-                app:cornerRadius="8dp"
-                app:strokeColor="@color/focus_ring_primary_container"
-                app:strokeWidth="@dimen/webhtv_focus_ring_width" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/githubProxy"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:minHeight="44dp"
-                android:nextFocusUp="@id/checkUpdate"
-                android:text="@string/setting_github_proxy_short"
-                android:textColor="@color/dialog_primary_button_text"
-                android:textSize="14sp"
-                app:backgroundTint="@color/dialog_primary_button_bg"
-                app:cornerRadius="8dp"
-                app:strokeColor="@color/focus_ring_primary_container"
-                app:strokeWidth="@dimen/webhtv_focus_ring_width" />
-
-        </androidx.appcompat.widget.LinearLayoutCompat>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/checkUpdate"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginEnd="10dp"
+            android:layout_weight="1"
+            android:minHeight="44dp"
+            android:nextFocusRight="@id/confirm"
+            android:padding="0dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="@string/about_check_update"
+            android:textColor="@color/dialog_tonal_button_text"
+            android:textSize="14sp"
+            android:gravity="center"
+            app:autoSizeTextType="uniform"
+            app:autoSizeMinTextSize="10sp"
+            app:autoSizeMaxTextSize="14sp"
+            app:autoSizeStepGranularity="1sp"
+            app:backgroundTint="@color/dialog_tonal_button_bg"
+            app:cornerRadius="8dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/confirm"
@@ -135,10 +118,19 @@
             android:layout_height="44dp"
             android:layout_marginTop="10dp"
             android:minHeight="44dp"
-            android:nextFocusUp="@id/checkUpdate"
+            android:nextFocusLeft="@id/checkUpdate"
+            android:nextFocusRight="@id/updateSettings"
+            android:padding="0dp"
+            android:maxLines="1"
+            android:ellipsize="end"
             android:text="@string/about_acknowledge"
             android:textColor="@color/dialog_primary_button_text"
             android:textSize="14sp"
+            android:gravity="center"
+            app:autoSizeTextType="uniform"
+            app:autoSizeMinTextSize="10sp"
+            app:autoSizeMaxTextSize="14sp"
+            app:autoSizeStepGranularity="1sp"
             app:backgroundTint="@color/dialog_primary_button_bg"
             app:cornerRadius="8dp"
             app:strokeColor="@color/focus_ring_primary_container"

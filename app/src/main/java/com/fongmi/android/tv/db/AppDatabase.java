@@ -47,18 +47,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Database(entities = {Keep.class, Site.class, Live.class, Track.class, Config.class, Device.class, History.class, PlaybackDeleteTombstone.class, TmdbSeasonProgress.class}, version = AppDatabase.VERSION, exportSchema = true)
 public abstract class AppDatabase extends RoomDatabase {
 
-    // VERSION = 47 was the pre-identity-alias schema; 48 adds migration clues.
-    public static final int VERSION = 48;
+    public static final int VERSION = 39;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
-    private static final int BACKUP_KEEP_COUNT = 7;
-    private static final int PARTIAL_BACKUP_KEEP_COUNT = 1;
-    private static final String BACKUP_TEMP_FILE = ".backup.tmp";
-    private static final String QUARANTINE_SUFFIX = ".incompatible-";
-    private static final int QUARANTINE_KEEP_COUNT = 2;
-    private static final String[] DATABASE_SUFFIXES = {"", "-wal", "-shm", "-journal"};
-    private static final Object BACKUP_LOCK = new Object();
-    private static final AtomicBoolean AUTO_BACKUP_PENDING = new AtomicBoolean();
+    public static final String AUTO_PREFIX = "bak-auto-";
 
     private static volatile AppDatabase instance;
 
@@ -92,43 +84,47 @@ public abstract class AppDatabase extends RoomDatabase {
     private static void backup(com.fongmi.android.tv.impl.Callback callback, AppBackup.Progress progress, boolean automatic) {
         Task.execute(() -> {
             try {
-                synchronized (BACKUP_LOCK) {
-                    File temporary = new File(Path.tv(), BACKUP_TEMP_FILE);
-                    try {
-                        AppBackup.CreateResult result = AppBackup.create(temporary, progress);
-                        File target = new File(Path.tv(), AppBackup.fileName(result.hasWarning()));
-                        publishBackup(temporary, target);
-                        App.post(() -> {
-                            callback.success();
-                            if (result.hasWarning()) Notify.show(result.warning);
-                        });
-                        cleanOld();
-                    } catch (Exception e) {
-                        SpiderDebug.log("backup", "local create failed error=%s", e.getMessage());
-                        SpiderDebug.log("backup", e);
-                        App.post(callback::error);
-                    } finally {
-                        Path.clear(temporary);
-                    }
-                }
-            } finally {
-                if (automatic) finishAutoBackup();
+                AppBackup.CreateResult result = AppBackup.create(file, progress);
+                App.post(() -> {
+                    callback.success();
+                    if (result.hasWarning()) Notify.show(result.warning);
+                });
+            } catch (Exception e) {
+                SpiderDebug.log("backup", "local create failed error=%s", e.getMessage());
+                App.post(callback::error);
             }
         });
     }
 
-    static boolean beginAutoBackup() {
-        return AUTO_BACKUP_PENDING.compareAndSet(false, true);
+    private static void cleanAutoOnly() {
+        File[] files = Path.tv().listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isFile() && file.getName().startsWith(AUTO_PREFIX)) {
+                Path.clear(file);
+            }
+        }
+    }
+    
+    public static void autoBackupOnExit() {
+        Task.execute(AppDatabase::backupOnExitSync);
     }
 
-    static void finishAutoBackup() {
-        AUTO_BACKUP_PENDING.set(false);
-    }
-
-    static void publishBackup(File temporary, File target) throws IOException {
-        if (temporary.renameTo(target)) return;
-        if (target.exists() && !target.delete()) throw new IOException("Unable to replace backup: " + target.getAbsolutePath());
-        if (!temporary.renameTo(target)) throw new IOException("Unable to publish backup: " + target.getAbsolutePath());
+    /**
+     * 退出前同步备份（调用线程阻塞直到备份完成），供"返回键彻底退出"流程使用，
+     * 避免结束进程前异步备份未跑完导致备份丢失。
+     */
+    public static void backupOnExitSync() {
+        try {
+            cleanAutoOnly();
+            String timePart = AppBackup.fileName().substring(AppBackup.PREFIX.length());
+            String fileName = AUTO_PREFIX + timePart;
+            File file = new File(Path.tv(), fileName);
+            AppBackup.CreateResult result = AppBackup.create(file, null);
+            SpiderDebug.log("backup", "auto exit backup complete file=%s", file.getAbsolutePath());
+        } catch (Exception e) {
+            SpiderDebug.log("backup", "auto exit backup failed error=%s", e.getMessage());
+        }
     }
 
     public static void restore(File file, com.fongmi.android.tv.impl.Callback callback) {
@@ -150,29 +146,6 @@ public abstract class AppDatabase extends RoomDatabase {
         });
     }
 
-    private static void cleanOld() {
-        cleanOld(Path.tv());
-    }
-
-    static void cleanOld(File directory) {
-        List<File> complete = new ArrayList<>();
-        List<File> partial = new ArrayList<>();
-        File[] files = directory == null ? null : directory.listFiles();
-        if (files == null) return;
-        for (File file : files) {
-            if (!AppBackup.isBackup(file)) continue;
-            if (AppBackup.isPartialBackupName(file.getName())) partial.add(file);
-            else complete.add(file);
-        }
-        trimBackups(complete, BACKUP_KEEP_COUNT);
-        trimBackups(partial, PARTIAL_BACKUP_KEEP_COUNT);
-    }
-
-    private static void trimBackups(List<File> items, int keepCount) {
-        items.sort((f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
-        for (int i = keepCount; i < items.size(); i++) Path.clear(items.get(i));
-    }
-
     private static AppDatabase create(Context context) {
         return Room.databaseBuilder(context, AppDatabase.class, NAME)
                 .addMigrations(Migrations.MIGRATION_30_31)
@@ -184,16 +157,6 @@ public abstract class AppDatabase extends RoomDatabase {
                 .addMigrations(Migrations.MIGRATION_36_37)
                 .addMigrations(Migrations.MIGRATION_37_38)
                 .addMigrations(Migrations.MIGRATION_38_39)
-                .addMigrations(Migrations.MIGRATION_39_40)
-                .addMigrations(Migrations.MIGRATION_40_41)
-                .addMigrations(Migrations.MIGRATION_41_42)
-                .addMigrations(Migrations.MIGRATION_42_43)
-                .addMigrations(Migrations.MIGRATION_43_44)
-                .addMigrations(Migrations.MIGRATION_44_45)
-                .addMigrations(Migrations.MIGRATION_45_46)
-                .addMigrations(Migrations.MIGRATION_46_47)
-                .addMigrations(Migrations.MIGRATION_47_48)
-                .openHelperFactory(new IntegrityRecoveringOpenHelperFactory(new FrameworkSQLiteOpenHelperFactory()))
                 .fallbackToDestructiveMigration(true)
                 .allowMainThreadQueries().build();
     }

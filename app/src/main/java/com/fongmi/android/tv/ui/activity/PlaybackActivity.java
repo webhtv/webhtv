@@ -5,7 +5,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Color;
-import android.os.Build;
+import android.graphics.Matrix;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
@@ -60,8 +60,6 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.subtitle.RealtimeSubtitleController;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.DiscMenuDialog;
-import com.fongmi.android.tv.ui.dialog.VideoAspectModeDialog;
-import com.fongmi.android.tv.ui.novel.NovelRouter;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.crawler.SpiderDebug;
@@ -87,13 +85,11 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private boolean stop;
     private boolean lock;
     private int render = -1;
-    private int requestedAspectMode = VideoAspectMode.ORIGINAL;
-    private boolean resizeApplied;
-    private int resizeAppliedMode;
-    private int resizeAppliedEffectiveMode;
-    private int resizeAppliedTargetAspect;
-    private int resizeAppliedContentAspect;
-    private boolean resizeAppliedStretch;
+    private int requestedResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
+    private int videoRotation = 0;
+    private boolean rotationEngaged = false;
+    private boolean applyingRotation = false;
+    private View.OnLayoutChangeListener rotationLayoutListener;
     private ExoOutputModeManager exoOutputModeManager;
     private ExoAssSession attachedAssSession;
     private ExoSubtitleSession attachedSubtitleSession;
@@ -484,9 +480,14 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     protected void applyResizeMode(int resizeMode) {
-        int mode = VideoAspectMode.sanitize(resizeMode);
-        requestedAspectMode = mode;
-        applyResizeModeNow(mode);
+        requestedResizeMode = resizeMode;
+        int effectiveResizeMode;
+        if (videoRotation != 0 && rotationEngaged && mService != null && player().isExo()) {
+            effectiveResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL;
+        } else {
+            effectiveResizeMode = effectiveResizeMode(resizeMode);
+        }
+        logSurfaceState("applyResizeMode before mode=" + resizeMode + " effective=" + effectiveResizeMode);
         PlayerView view = getExoView();
         view.post(() -> {
             if (requestedAspectMode == mode && !isFinishing() && !isDestroyed()) applyResizeModeNow(mode);
@@ -565,6 +566,108 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         return resizeMode;
     }
 
+    protected void setVideoRotation(int rotation) {
+        videoRotation = ((rotation % 360) + 360) % 360;
+        if (mService != null && player().isExo() && videoRotation != 0) {
+            rotationEngaged = true;
+        }
+        if (mService != null && player().isExo() && render != getRender()) {
+            setRender();
+            if (android.os.Build.VERSION.SDK_INT <= 27) getExoView().post(this::onReset);
+        } else {
+            applyVideoRotation();
+        }
+    }
+
+    protected void onReset(){}
+ 
+    protected int getVideoRotation() {
+        return videoRotation;
+    }
+ 
+    protected void applyVideoRotation() {
+        if (applyingRotation) return;
+        applyingRotation = true;
+        try {
+            applyVideoRotationInternal();
+        } finally {
+            applyingRotation = false;
+        }
+    }
+ 
+    private void applyVideoRotationInternal() {
+        PlayerView view = getExoView();
+        if (view == null) return;
+        View surface = view.getVideoSurfaceView();
+        if (surface == null) return;
+
+        View contentFrame = view.findViewById(androidx.media3.ui.R.id.exo_content_frame);
+        AspectRatioFrameLayout arFrame = contentFrame instanceof AspectRatioFrameLayout ? (AspectRatioFrameLayout) contentFrame : null;
+ 
+        if (videoRotation == 0) {
+            surface.setRotation(0);
+            if (surface instanceof TextureView textureView) {
+                textureView.setTransform(new Matrix());
+            }
+            if (arFrame != null) {
+                arFrame.setResizeMode(effectiveResizeMode(requestedResizeMode));
+                if (mService != null && player() != null) {
+                    int vw = player().getVideoWidth();
+                    int vh = player().getVideoHeight();
+                    if (vw > 0 && vh > 0) arFrame.setAspectRatio((float) vw / vh);
+                }
+            }
+            removeRotationLayoutListener(surface);
+            return;
+        }
+ 
+        if (!(surface instanceof TextureView textureView)) return;
+        if (mService == null || player() == null) return;
+        int vw = player().getVideoWidth();
+        int vh = player().getVideoHeight();
+        if (vw <= 0 || vh <= 0) return;
+ 
+        if (arFrame != null) arFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
+        surface.setRotation(0);
+ 
+        int viewW = textureView.getWidth();
+        int viewH = textureView.getHeight();
+        if (viewW <= 0 || viewH <= 0) {
+            ensureRotationLayoutListener(textureView);
+            return;
+        }
+ 
+        float rotatedW = (videoRotation == 90 || videoRotation == 270) ? vh : vw;
+        float rotatedH = (videoRotation == 90 || videoRotation == 270) ? vw : vh;
+        float fitScale = Math.min((float) viewW / rotatedW, (float) viewH / rotatedH);
+        float scaleX = (vw / (float) viewW) * fitScale;
+        float scaleY = (vh / (float) viewH) * fitScale;
+ 
+        Matrix matrix = new Matrix();
+        matrix.setScale(scaleX, scaleY);
+        matrix.postRotate(videoRotation, viewW * scaleX / 2f, viewH * scaleY / 2f);
+        matrix.postTranslate((viewW - viewW * scaleX) / 2f, (viewH - viewH * scaleY) / 2f);
+        textureView.setTransform(matrix);
+ 
+        ensureRotationLayoutListener(textureView);
+    }
+ 
+    private void ensureRotationLayoutListener(View surface) {
+        if (rotationLayoutListener == null) {
+            rotationLayoutListener = (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                if (videoRotation != 0) applyVideoRotation();
+            };
+        }
+        surface.removeOnLayoutChangeListener(rotationLayoutListener);
+        surface.addOnLayoutChangeListener(rotationLayoutListener);
+    }
+ 
+    private void removeRotationLayoutListener(View surface) {
+        if (rotationLayoutListener != null) {
+            surface.removeOnLayoutChangeListener(rotationLayoutListener);
+        }
+    }
+ 
     protected void onReclaim() {
     }
 
@@ -627,7 +730,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             preparedPlaybackKey = null;
             pinnedPlaybackKey = key;
             attachSurface();
-            player().start(PlaySpec.from(result, key, metadata), timeout, shouldAutoPlay(), startPositionMs);
+            player().start(PlaySpec.from(result, key, metadata, PlayerSetting.getPlayer()), timeout, PlayerSetting.isAutoPlay(), startPositionMs);
         }
         syncKeepScreenOn();
     }
@@ -785,22 +888,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             logSurfaceState("attach after setRender target=" + targetRender);
         }
         surfaceDiagnostics.bind(getExoView(), player().getPlaybackTraceId());
-        // 切集换新媒体前 PlayerManager.clear() 会把 spec 置空，preparePlayer() 再重建引擎。
-        // 此时 render 值通常不变，旧的 attachSurface 只按“PlayerView 是否为空”判断，
-        // 会把已释放的旧引擎继续留在 PlayerView 上，新引擎从未绑定 Surface。
-        // 以引擎实例身份而不是“是否为空”判断，自动下一集的黑屏路径才能强制重绑。
-        //
-        // 判定本身交给 VideoSurfaceBinding：口径是「PlayerView 上挂着的引擎实例是否就是当前引擎」，
-        // 与 Activity 是否自认归属无关。设备日志里的那次「有声音没画面」正因归属判假而漏绑。
-        Player currentPlayer = getExoView().getPlayer();
-        Player nextPlayer = player().getPlayer();
-        VideoSurfaceBinding.Result<Player> binding = VideoSurfaceBinding.resolve(currentPlayer, nextPlayer);
-        if (binding.applied()) {
-            if (binding.detachedFirst()) getExoView().setPlayer(null);
-            getExoView().setPlayer(binding.player());
-            // 换了引擎实例，PlayerView 内部状态与视频尺寸都可能变，比例必须重算一次。
-            invalidateAppliedResizeMode();
-            surfaceDiagnostics.rebind("attach", binding.detachedFirst(), getExoView().getVideoSurfaceView());
+        if (getExoView().getPlayer() == null) {
+            getExoView().setPlayer(player().getPlayer());
             logSurfaceState("attach after setPlayer");
             syncVideoSurfaceSize(null);
             if (restoreExoShutter) syncShutter();
@@ -923,12 +1012,6 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         surfaceDiagnostics.snapshot("shutter-policy");
     }
 
-    private void hideVideoShutter() {
-        View shutter = getExoView().findViewById(androidx.media3.ui.R.id.exo_shutter);
-        getExoView().setShutterBackgroundColor(Color.TRANSPARENT);
-        if (shutter != null) shutter.setVisibility(View.GONE);
-    }
-
     private void detachSurface() {
         surfaceDiagnostics.unbind();
         detachAssSurface();
@@ -978,6 +1061,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private int getRender() {
         if (mService != null && player().isNativePlayer()) return 0;
         if (mService != null && player().requiresTextureRenderForLut()) return PlayerSetting.RENDER_TEXTURE;
+        if (rotationEngaged && mService != null && player().isExo()) return PlayerSetting.RENDER_TEXTURE;
         return PlayerSetting.getRender();
     }
 
@@ -1210,14 +1294,6 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
 
     @Override
     public void onPlaybackStateChanged(int state) {
-        // 同样放在 isOwner() 早退之前：Surface 绑定那段注释已经证明状态回调对非 owner 也照常到达，
-        // 而状态机是播放器的客观事实，不随本页是否有所有权而改变。
-        PluginHostEvents.playbackState(this, state);
-        // 绑定视频 Surface 是所有权无关的必经动作：服务侧「浏览下一集」（VE: 选集键）起播时
-        // isOwner() 为假，旧实现让下面的早退把 Surface 重绑一起吞掉，新引擎于是永远拿不到
-        // Surface —— 解码器/音频正常、画面全黑，只有重开 App 才好。每次 BUFFERING/READY 都是
-        // 新媒体起播的必经点，在这里补一次「当前引擎是否已挂在视图上」的校验。
-        if (state == Player.STATE_BUFFERING || state == Player.STATE_READY) ensureVideoSurfaceBound("state=" + state);
         if (mService != null && isOwner()) surfaceDiagnostics.bind(getExoView(), player().getPlaybackTraceId());
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "state changed state=%d %s", state, lifecycleState());
         syncKeepScreenOn();

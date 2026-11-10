@@ -170,30 +170,19 @@ public final class ExoCompressedAudioDirectPolicy
     /** Configure before exposing the renderer's output provider to the playback thread. */
     void setAudioPassthroughEnabled(boolean enabled) {
         audioPassthroughEnabled = enabled;
-        if (!enabled) {
-            vendorDirectConfigs.clear();
-            failedOffloadConfigs.clear();
-        }
+        if (!enabled) vendorDirectConfigs.clear();
     }
 
     @Override
     public AudioOffloadSupport getAudioOffloadSupport(
             Format format, AudioAttributes audioAttributes) {
         if (!audioPassthroughEnabled) return AudioOffloadSupport.DEFAULT_UNSUPPORTED;
-        OutputKey key = OutputKey.from(format);
-        DirectKey directKey = key == null ? null
-                : new DirectKey(key, effectiveAttributes(audioAttributes));
-        // This exact configuration already accepted payload without ever being consumed.
-        // Withdrawing offload support is the only way to make track selection fall back to the
-        // decoder plus PCM path instead of repeating a configuration that provably does not play.
-        if (directKey != null && failedOffloadConfigs.contains(directKey)) {
-            logDecision(format, key, "offload-startup-stall-force-pcm");
-            return AudioOffloadSupport.DEFAULT_UNSUPPORTED;
-        }
         AudioOffloadSupport standard = standardProvider.getAudioOffloadSupport(
                 format, audioAttributes);
         if (standard.isFormatSupported) {
-            if (directKey != null) vendorDirectConfigs.remove(directKey);
+            OutputKey key = OutputKey.from(format);
+            if (key != null) vendorDirectConfigs.remove(new DirectKey(key,
+                    effectiveAttributes(audioAttributes)));
             logDecision(format, key, "standard-offload");
         }
         return standard;
@@ -367,7 +356,6 @@ public final class ExoCompressedAudioDirectPolicy
                             if (outputAttempt.get() != attempt) throw error;
                             disableVendorDirect(config, "initialization");
                         }
-                        notifyInitializationFailure();
                     }
                     throw error;
                 }
@@ -442,14 +430,6 @@ public final class ExoCompressedAudioDirectPolicy
 
     public boolean consumePcmFallbackRequest() {
         return pendingPcmFallback.getAndSet(null) != null;
-    }
-
-    /**
-     * Registers a listener that can begin the PCM fallback without waiting for Media3's
-     * delayed audio initialization error.
-     */
-    public void setInitializationFailureListener(Runnable listener) {
-        initializationFailureListener.set(listener);
     }
 
     /** Forget retired output evidence without retrying a failed configuration. */

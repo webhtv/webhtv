@@ -8,6 +8,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.TextView;
@@ -55,13 +56,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     private DialogInterface.OnDismissListener dismissListener;
     private List<Flag> flags;
     private int panelWidth;
-    private boolean tmdbCard;
-    private String fallbackStillUrl = "";
-    private List<Integer> tmdbSeasons = List.of();
-    private Map<Integer, Integer> tmdbSeasonCounts = Map.of();
-    private List<EpisodeSeasonSegments.Segment> seasonSegments = List.of();
-    private int selectedSeason = Integer.MIN_VALUE;
-    private int selectedSegment;
+    private boolean arrayUserActive;
 
     public EpisodeListDialog() {
         segmentStarts = new ArrayList<>();
@@ -177,13 +172,8 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         binding.array.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                if (child != null) selectSegment(position, true);
-            }
-        });
-        binding.episode.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
-            @Override
-            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                if (child != null) alignEpisodeScroll(position);
+                if (!arrayUserActive) return;
+                if (child != null && position >= 0 && position < segmentStarts.size()) scrollToEpisode(segmentStarts.get(position), false);
             }
         });
     }
@@ -421,6 +411,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
 
     private boolean onSeasonKey(KeyEvent event) {
         if (!KeyUtil.isActionDown(event)) return false;
+        arrayUserActive = true;
         if (KeyUtil.isUpKey(event)) {
             focusFlag();
             return true;
@@ -545,9 +536,18 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     }
 
     private void scrollToSelectedEpisode() {
-        int position = getSelectedEpisodePosition(allEpisodes);
+        arrayUserActive = false;
+        int position = episodeAdapter.getPosition();
         scrollToSegment(position);
-        scrollToEpisode(position - getSegmentStart(selectedSegment), true);
+        scrollToEpisode(position, true);
+        binding.episode.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                ViewTreeObserver observer = binding.episode.getViewTreeObserver();
+                if (observer.isAlive()) observer.removeOnGlobalLayoutListener(this);
+                scrollToEpisode(position, true);
+            }
+        });
     }
 
     private void scrollToSegment(int episodePosition) {

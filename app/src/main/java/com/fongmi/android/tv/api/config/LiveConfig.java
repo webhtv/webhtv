@@ -19,14 +19,17 @@ import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.LiveSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
 import com.github.catvod.utils.Json;
-import com.github.catvod.utils.Trans;
+import com.github.catvod.utils.Path;
 import com.google.gson.JsonObject;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -78,7 +81,12 @@ public class LiveConfig extends BaseConfig {
     }
 
     public static boolean hasLoadedLives() {
-        return !get().getLives().isEmpty();
+        if (!get().getLives().isEmpty()) return true;
+        if (!Setting.isSourceAllowed(Setting.SOURCE_LIVES_FILE)) return false;
+        File dir = new File(Path.root() + "/tvbox/lives/");
+        if (!dir.exists() || !dir.isDirectory()) return false;
+        File[] files = dir.listFiles(f -> f.isFile() && !f.getName().startsWith("."));
+        return files != null && files.length > 0;
     }
 
     public static boolean hasUrl() {
@@ -95,7 +103,7 @@ public class LiveConfig extends BaseConfig {
 
     public LiveConfig config(Config config) {
         this.config = config;
-        if (config.isEmpty()) return this;
+        if (config.isEmpty() || Config.isDefaultUrl(config.getUrl())) return this;
         this.sync = config.getUrl().equals(VodConfig.getUrl());
         return this;
     }
@@ -129,13 +137,20 @@ public class LiveConfig extends BaseConfig {
 
     @Override
     protected void load(Config config) throws Throwable {
-        if (config.isEmpty()) {
-            initLive(config, new JsonObject());
+        if (config.isEmpty() || Config.isDefaultUrl(config.getUrl())) {
+            parseConfig(config, new JsonObject());
             return;
         }
-        String json = Decoder.getJson(UrlUtil.convert(config.getUrl()), TAG);
-        if (Json.isObj(json)) checkJson(config, Json.parse(json).getAsJsonObject());
-        else parseText(config, json);
+        try {
+            String json = Decoder.getJson(config.getUrl(), TAG);
+            if (Json.isObj(json)) {
+                checkJson(config, Json.parse(json).getAsJsonObject());
+            } else {
+                parseText(config, json);
+            }
+            return;
+        } catch (Throwable ignored) {}
+        parseConfig(config, new JsonObject());
     }
 
     @Override
@@ -166,8 +181,18 @@ public class LiveConfig extends BaseConfig {
     }
 
     private void parseText(Config config, String text) {
-        Live live = new Live(UrlUtil.getName(config.getUrl()), config.getUrl()).sync();
-        lives = new ArrayList<>(List.of(live));
+        initList(new JsonObject());
+        List<Live> lives = new ArrayList<>();
+        if (Setting.isSourceAllowed(Setting.SOURCE_LIVE_URL)) {
+            Live live = new Live(UrlUtil.getName(config.getUrl()), config.getUrl()).sync();
+            lives.add(live);
+        }
+        if (Setting.isSourceAllowed(Setting.SOURCE_LIVES_FILE)) {
+            lives.addAll(loadFileLives());
+        }
+        setLives(lives);
+        Live live = lives.isEmpty() ? new Live() : lives.get(0);
+        if (live.isEmpty()) return;
         LiveParser.text(live, text);
         finishLive(config, "");
     }
@@ -213,34 +238,56 @@ public class LiveConfig extends BaseConfig {
     private void initLive(Config config, JsonObject object) {
         String spider = Json.safeString(object, "spider");
         BaseLoader.get().parseJar(spider, false);
-        setLives(Json.safeListElement(object, "lives").stream().map(e -> Live.objectFrom(e, spider)).distinct().collect(Collectors.toCollection(ArrayList::new)));
+        List<Live> lives = new ArrayList<>();
+        if (Setting.isSourceAllowed(Setting.SOURCE_LIVE_URL)) {
+            lives.addAll(Json.safeListElement(object, "lives").stream().map(e -> Live.objectFrom(e, spider)).distinct().collect(Collectors.toCollection(ArrayList::new)));
+        }
+        if (Setting.isSourceAllowed(Setting.SOURCE_LIVES_FILE)) {
+            lives.addAll(0, loadFileLives());
+        }
+        setLives(lives);
         finishLive(config, spider);
+    }
+
+    // ==================== 文件直播源加载器 ====================
+
+    private static final String CLAN_LIVE_ROOT = Path.root() + "/tvbox/lives/";
+
+    private List<Live> loadFileLives() {
+        List<Live> result = new ArrayList<>();
+        if (!Setting.isSourceAllowed(Setting.SOURCE_LIVES_FILE)) return result;
+        File dir = new File(CLAN_LIVE_ROOT);
+        if (!dir.exists() || !dir.isDirectory()) return result;
+        File[] files = dir.listFiles(f -> f.isFile() && !f.getName().startsWith("."));
+        if (files == null || files.length == 0) return result;
+        Arrays.sort(files, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        for (File file : files) {
+            try {
+                String name = file.getName();
+                int dot = name.lastIndexOf('.');
+                if (dot > 0) name = name.substring(0, dot);
+                if (name.isEmpty()) continue;
+                Live live = new Live(name, UrlUtil.convert("clan://lives/" + file.getName()));
+                LiveParser.start(live);
+                if (!live.getGroups().isEmpty()) result.add(live);
+            } catch (Throwable ignored) {}
+        }
+        return result;
     }
 
     private void finishLive(Config config, String spider) {
         CustomCspSetting.inject(getLives(), spider);
         getLives().removeIf(Live::isEmpty);
-        // 旧版本曾把简繁转换后的名字写进主键，历史行因此按“译文名”落库；这里按归一后的名字兜一次，
-        // 让已经在繁体态保存过收藏/屏蔽/上次频道的用户在升级后仍能匹配上，而不是静默丢失。
-        // 归一化显式传 pass=false，与当前界面语言无关，否则同一份数据在两种语言下会得到不同键。
-        Map<String, Live> items = new HashMap<>();
-        for (Live item : Live.findAll()) items.putIfAbsent(Trans.s2t(false, item.getName()), item);
-        getLives().forEach(live -> live.sync(items.get(Trans.s2t(false, live.getName()))));
-        // 同理，Config.home 也可能是旧版本写入的译文名，两种写法都认。
-        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> matchesHome(item, config.getHome())).findFirst().orElse(getLives().get(0)), false);
-    }
-
-    /**
-     * 上次频道是否就是这一条直播源。
-     * <p>
-     * 旧版本把简繁转换后的名字写进 {@code Config.home}，所以除了当前语言的显示名，
-     * 还要把候选名与配置值都做一次双向简繁归一后再比，避免升级后静默退回第一个频道。
-     */
-    private boolean matchesHome(Live item, String home) {
-        if (TextUtils.isEmpty(home)) return false;
-        if (item.getName().equals(home) || item.getDisplayName().equals(home)) return true;
-        // 归一必须与当前界面语言无关，因此显式传 pass=false 强制转换，而不是用受语言状态影响的 s2t(String)。
-        return Trans.s2t(false, item.getName()).equals(Trans.s2t(false, home));
+        Map<String, Live> items = Live.findAll().stream().collect(Collectors.toMap(Live::getName, Function.identity()));
+        getLives().forEach(live -> live.sync(items.get(live.getName())));
+        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> item.getName().equals(config.getHome())).findFirst().orElse(getLives().get(0)), false);
+        if (getLives().isEmpty() && Setting.isSourceAllowed(Setting.SOURCE_LIVES_FILE)) {
+            List<Live> files = loadFileLives();
+            if (!files.isEmpty()) {
+                setLives(files);
+                setHome(config, files.stream().filter(item -> item.getName().equals(config.getHome())).findFirst().orElse(files.get(0)), false);
+            }
+        }
     }
 
     public void setKeep(Channel channel) {

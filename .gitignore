@@ -31,7 +31,4 @@ third_party/sources/
 app/signing/
 .gradle-user-home/
 plans/
-.tokensave
-.codebase-memory
-graphify-out/
 .codex/task-state/

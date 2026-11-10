@@ -47,9 +47,8 @@ public class SpiderDebug {
     public static void log(String msg) {
         if (TextUtils.isEmpty(msg)) return;
         if (!DebugLogStore.acceptsTag(TAG)) return;
-        DiagnosticText.Clean clean = DiagnosticText.clean(msg);
-        DebugLogStore.addCleaned(TAG, clean, msg, false);
-        Logger.t(TAG).d(clean.text());
+        DebugLogStore.add(TAG, msg);
+        Logger.t(TAG).d(DiagnosticText.clean(msg).text());
     }
 
     public static void log(String tag, String msg, Object... args) {
@@ -62,7 +61,7 @@ public class SpiderDebug {
     }
 
     private static String safeTag(String tag) {
-        return DiagnosticText.sanitizeTag(TextUtils.isEmpty(tag) ? TAG : tag);
+        return DiagnosticText.clean(TextUtils.isEmpty(tag) ? TAG : tag).text();
     }
 
     private static String format(String msg, Object... args) {

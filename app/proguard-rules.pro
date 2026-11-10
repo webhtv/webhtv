@@ -22,7 +22,6 @@
 
 # Gson
 -keepattributes Signature
--keepattributes *Annotation*
 -keep class com.google.gson.** { *; }
 
 # App code: keep everything, no obfuscation.
@@ -36,6 +35,10 @@
 # offending class one by one. The dex size cost is a few MB; total APK size is
 # dominated by native .so libraries, so this is negligible.
 -keep class com.fongmi.android.tv.** { *; }
+
+# SAX
+-keep class org.xml.sax.** { *; }
+-keep class javax.xml.parsers.** { *; }
 
 # SimpleXML
 -keep interface org.simpleframework.xml.core.Label { public *; }

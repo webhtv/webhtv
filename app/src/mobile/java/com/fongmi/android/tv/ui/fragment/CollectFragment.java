@@ -37,6 +37,7 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Collect;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.setting.SiteBlockSetting;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentCollectBinding;
 import com.fongmi.android.tv.model.SearchProgress;
@@ -45,6 +46,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.setting.SiteGroupOrderStore;
 import com.fongmi.android.tv.setting.SiteHealthStore;
+import com.fongmi.android.tv.setting.SiteOrderStore;
 import com.fongmi.android.tv.ui.activity.FolderActivity;
 import com.fongmi.android.tv.ui.activity.HistoryResumeCoordinator;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
@@ -54,10 +56,7 @@ import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.fongmi.android.tv.utils.SearchGridLayout;
-import com.fongmi.android.tv.utils.SearchPageState;
-import com.fongmi.android.tv.utils.SearchResultFilter;
-import com.fongmi.android.tv.utils.SearchSourceVisibility;
+import com.fongmi.android.tv.utils.SearchModeStore;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -237,20 +236,10 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private void setSites() {
-        String siteKey = getSiteKey();
-        String group = getSearchGroup();
-        mSites = new ArrayList<>();
-        for (Site site : VodConfig.get().getSites()) {
-            if (!site.isSearchable()) continue;
-            if (!TextUtils.isEmpty(siteKey) && !site.getKey().equals(siteKey)) continue;
-            if (!TextUtils.isEmpty(group) && !site.inGroup(group)) continue;
-            mSites.add(site);
-        }
-        // 固定模式严格按配置顺序,跳过健康度排序
-        if (Setting.getSearchResultSort() != 1) SiteHealthStore.sortSites(mSites);
-        mSiteOrder.clear();
-        for (int i = 0; i < mSites.size(); i++) mSiteOrder.put(mSites.get(i).getKey(), i);
-        mGroups = isSiteSearch() || isGroupSearch() ? new ArrayList<>() : SiteGroupOrderStore.sort(Site.getGroups(mSites));
+        mSites = new ArrayList<>(SearchModeStore.filterSites(VodConfig.get().getSites(), getSiteKey()));
+        mSites.removeIf(SiteBlockSetting::isBlocked);
+        if (Setting.isSiteHealthSort()) SiteHealthStore.sortSites(mSites);
+        else SiteOrderStore.sortSites(mSites);
     }
 
     private void setWidth() {
@@ -314,7 +303,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private boolean isGrid() {
-        return getCount() == 2;
+        return getCount() == 1;
     }
 
     private int getSpanCount() {
@@ -349,7 +338,8 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         setResultPadding();
         int span = getSpanCount();
         ((GridLayoutManager) (mBinding.recycler.getLayoutManager())).setSpanCount(span);
-        mSearchAdapter.setGrid(isGrid(), getGridSize());
+        setResultPadding();
+        mSearchAdapter.setMode(getCount(), getGridSize());
         if (scrollTop) mBinding.recycler.scrollToPosition(0);
     }
 
@@ -359,7 +349,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private void onColumnToggle() {
-        Setting.putSearchColumn(Setting.getSearchColumn() == 1 ? 2 : 1);
+        Setting.putSearchColumn(getCount() % 3 + 1);
         setResultLayout(true);
         requireActivity().invalidateOptionsMenu();
     }
@@ -457,6 +447,8 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     @Override
     public void onItemClick(int position, Collect item) {
+        mSearchAdapter.setAllMode("all".equals(item.getSite().getKey()));
+        mSearchAdapter.setItems(item.getList(), () -> mBinding.recycler.scrollToPosition(0));
         mCollectAdapter.setSelected(position);
         restoreScroller(item.getSite().getKey());
         mSearchAdapter.setItems(new ArrayList<>(item.getList()), () -> {
@@ -526,7 +518,13 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         if (similarity != null) similarity.setTitle(getSimilarityFilterTitle());
         MenuItem item = menu.findItem(R.id.action_column);
         if (item == null) return;
-        Drawable icon = ContextCompat.getDrawable(requireContext(), getCount() == 1 ? R.drawable.ic_site_double_column : R.drawable.ic_site_single_column);
+        int iconRes;
+        switch (getCount()) {
+            case 2: iconRes = R.drawable.ic_site_detail; break;
+            case 3: iconRes = R.drawable.ic_site_single_column; break;
+            default: iconRes = R.drawable.ic_site_double_column; break;
+        }
+        Drawable icon = ContextCompat.getDrawable(requireContext(), iconRes);
         if (icon == null) return;
         icon = icon.mutate();
         icon.setTint(Color.WHITE);

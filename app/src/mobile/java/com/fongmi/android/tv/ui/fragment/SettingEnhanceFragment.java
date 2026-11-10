@@ -46,7 +46,7 @@ import com.fongmi.android.tv.ui.dialog.OneKeySyncDialog;
 import com.fongmi.android.tv.ui.dialog.RemoteTrustDialog;
 import com.fongmi.android.tv.ui.dialog.ShellProxyDialog;
 import com.fongmi.android.tv.ui.dialog.SiteHealthDialog;
-import com.fongmi.android.tv.ui.dialog.SiteNameDialog;
+import com.fongmi.android.tv.ui.dialog.SourceBlockDialog;
 import com.fongmi.android.tv.ui.dialog.ViewingRecordSyncDialog;
 import com.fongmi.android.tv.ui.dialog.WebHomeExtensionDialog;
 import com.fongmi.android.tv.ui.dialog.WebHomeThemeDialog;
@@ -59,8 +59,7 @@ import com.google.gson.JsonObject;
 
 public class SettingEnhanceFragment extends BaseFragment {
 
-    private static final String URL_GITHUB = "https://github.com/Silent1566/webhtv";
-    private static final String URL_CNB = "https://cnb.cool/fish2018/ext";
+    private static final String URL_GITHUB = "https://github.com/llb0/webhtv";
 
     private FragmentSettingEnhanceBinding mBinding;
 
@@ -90,13 +89,9 @@ public class SettingEnhanceFragment extends BaseFragment {
                 openRepo(URL_GITHUB);
                 return true;
             }
-            if (item.getItemId() == R.id.cnbRepo) {
-                openRepo(URL_CNB);
-                return true;
-            }
             return false;
         });
-        mBinding.lab.setOnClickListener(view -> LabActivity.start(requireContext()));
+        mBinding.fileSites.setOnClickListener(this::setFileSites);
         mBinding.driveCheck.setOnClickListener(this::setDriveCheck);
         mBinding.siteName.setOnClickListener(this::setSiteName);
         mBinding.localReader.setOnClickListener(this::setLocalReader);
@@ -133,7 +128,7 @@ public class SettingEnhanceFragment extends BaseFragment {
     private void reorderItems() {
         ViewGroup parent = (ViewGroup) mBinding.customCsp.getParent();
         View[] order = {
-                mBinding.lab,
+                mBinding.fileSites,
                 mBinding.customCsp,
                 mBinding.webHomeExtension,
                 mBinding.gitCloud,
@@ -165,6 +160,7 @@ public class SettingEnhanceFragment extends BaseFragment {
 
     private void setText() {
         if (!canSetText()) return;
+        safeSet("fileSites", mBinding.fileSitesText, () -> getString(R.string.setting_source_block_count, Setting.getSourceBlockedCount(), Setting.SOURCE_ALL.length));
         safeSet("driveCheck", mBinding.driveCheckText, () -> getSwitch(Setting.isDriveCheck()));
         safeSet("siteName", mBinding.siteNameText, () -> getString(R.string.setting_site_name_summary, SiteNameStore.count()));
         safeSet("novelSource", mBinding.novelSourceText, () -> getSwitch(!NovelSourceConfig.get().getDisplayRules().isEmpty()));
@@ -279,6 +275,10 @@ public class SettingEnhanceFragment extends BaseFragment {
 
     private interface TextSupplier {
         CharSequence get();
+    }
+
+    private void setFileSites(View view) {
+        SourceBlockDialog.create(this::setText).show(this);
     }
 
     private void setDriveCheck(View view) {

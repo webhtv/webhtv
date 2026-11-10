@@ -27,7 +27,9 @@ public class Path {
     }
 
     public static boolean exists(String path) {
-        return new File(path.replace("file://", "")).exists();
+        if (path == null) return false;
+        File file = local(path);
+        return file != null && file.exists();
     }
 
     public static boolean exists(File file) {
@@ -127,7 +129,8 @@ public class Path {
     }
 
     public static File local(String path) {
-        path = path.replace("file:/", "");
+        if (path == null) return null;
+        path = path.replace("clan://", "file://tvbox/").replace("file:/", "");
         File file = new File(root(), path);
         return file.exists() ? file : new File(path);
     }
@@ -223,9 +226,23 @@ public class Path {
     }
 
     public static void clear(File dir) {
-        if (dir == null) return;
-        if (dir.isDirectory()) for (File file : list(dir)) clear(file);
-        if (dir.delete()) Logger.t(TAG).d("Deleted:" + dir);
+        clear(dir, null);
+    }
+
+    public static void clear(File dir, List<String> skipDirNames) {
+        if (dir == null || !dir.exists()) return;
+        if (dir.isDirectory()) {
+            for (File file : list(dir)) {
+                if(file.isDirectory() && skipDirNames != null && skipDirNames.contains(file.getName())){
+                    Logger.t(TAG).d("Skip dir:" + file);
+                    continue;
+                }
+                clear(file, skipDirNames);
+            }
+        }
+        if(!dir.isDirectory() || !dir.equals(cache())){
+            if (dir.delete()) Logger.t(TAG).d("Deleted:" + dir);
+        }
     }
 
     public static File create(File file) {

@@ -35,10 +35,12 @@ import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Trans;
+import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Prefers;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
+import java.io.File;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -105,15 +107,34 @@ public class Setting {
     public static final int CSP_WARMUP_CUSTOM = 2;
 
     public static final int UI_SCALE_FOLLOW_SYSTEM = 0;
+    public static final int UI_SCALE_MILD_RELAXED = 6;
+    public static final int UI_SCALE_WIDE_COMFORT = 7;
     public static final int UI_SCALE_STANDARD = 1;
     public static final int UI_SCALE_COMPACT = 2;
     public static final int UI_SCALE_SMALLER = 3;
     public static final int UI_SCALE_MILD_COMPACT = 4;
     public static final int UI_SCALE_MORE_COMPACT = 5;
-    public static final int UI_SCALE_LARGE = 6;
-    public static final int UI_SCALE_LARGER = 7;
-    public static final int UI_SCALE_LARGEST = 8;
-    private static final int[] UI_SCALE_OPTIONS = {UI_SCALE_FOLLOW_SYSTEM, UI_SCALE_SMALLER, UI_SCALE_MORE_COMPACT, UI_SCALE_COMPACT, UI_SCALE_MILD_COMPACT, UI_SCALE_STANDARD, UI_SCALE_LARGE, UI_SCALE_LARGER, UI_SCALE_LARGEST};
+    private static final int[] UI_SCALE_OPTIONS = {UI_SCALE_FOLLOW_SYSTEM, UI_SCALE_MILD_RELAXED, UI_SCALE_WIDE_COMFORT, UI_SCALE_STANDARD, UI_SCALE_MILD_COMPACT, UI_SCALE_COMPACT, UI_SCALE_MORE_COMPACT, UI_SCALE_SMALLER};
+
+
+    public static final int TITLE_LINES_OFF = 0;
+    public static final int TITLE_LINES_2 = 1;
+    public static final int TITLE_LINES_3 = 2;
+    public static final int TITLE_LINES_UNLIMITED = 3;
+    private static final int[] TITLE_LINES_OPTIONS = {TITLE_LINES_OFF, TITLE_LINES_2, TITLE_LINES_3, TITLE_LINES_UNLIMITED};
+
+    public static final int DEFAULT_LAUNCH_HOME = 0;
+    public static final int DEFAULT_LAUNCH_LIVE = 1;
+    public static final int DEFAULT_LAUNCH_RECENT = 2;
+
+        public static final int SOURCE_VOD_URL = 1 << 0;
+    public static final int SOURCE_LIVE_URL = 1 << 1;
+    public static final int SOURCE_SITES_JSON = 1 << 2;
+    public static final int SOURCE_SITES_JS = 1 << 3;
+    public static final int SOURCE_SITES_PY = 1 << 4;
+    public static final int SOURCE_SITES_RAW = 1 << 5;
+    public static final int SOURCE_LIVES_FILE = 1 << 6;
+    public static final int[] SOURCE_ALL = {SOURCE_VOD_URL, SOURCE_LIVE_URL, SOURCE_SITES_JSON, SOURCE_SITES_JS, SOURCE_SITES_PY, SOURCE_SITES_RAW, SOURCE_LIVES_FILE};
 
     public static final int WALL_CINEMA = 5;
     public static final int WALL_CINEMA_WARM = 6;
@@ -357,7 +378,7 @@ public class Setting {
     }
 
     public static String getSyncPaths() {
-        return Prefers.getString("sync_paths", "TV\nTVBox\nTVData");
+        return Prefers.getString("sync_paths", "");
     }
 
     public static void putSyncPaths(String paths) {
@@ -404,12 +425,12 @@ public class Setting {
         Prefers.put("incognito", incognito);
     }
 
-    public static boolean isTouchOptimized() {
-        return Util.isLeanback() && Prefers.getBoolean("touch_optimized");
+    public static boolean isFileSites() {
+        return Prefers.getBoolean("file_sites", true);
     }
 
-    public static void putTouchOptimized(boolean enabled) {
-        Prefers.put("touch_optimized", enabled);
+    public static void putFileSites(boolean fileSites) {
+        Prefers.put("file_sites", fileSites);
     }
 
     public static int getLanguage() {
@@ -494,11 +515,8 @@ public class Setting {
         float factor = getUiScaleFactor(scale);
         Configuration config = new Configuration(context.getResources().getConfiguration());
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-        // Scale from the density currently selected by the system. Using the device's
-        // stable density makes the same option behave differently on phones, head units
-        // and virtual machines whose default display size overrides the stable density.
-        int baseDensity = metrics.densityDpi;
-        int densityDpi = Math.max(DisplayMetrics.DENSITY_LOW, Math.round(baseDensity * factor));
+        int stableDensity = DisplayMetrics.DENSITY_DEVICE_STABLE > 0 ? DisplayMetrics.DENSITY_DEVICE_STABLE : metrics.densityDpi;
+        int densityDpi = Math.max(1, Math.round(stableDensity * factor));
         config.densityDpi = densityDpi;
         config.fontScale = 1.0f;
         config.screenWidthDp = pxToDp(metrics.widthPixels, densityDpi);
@@ -507,22 +525,79 @@ public class Setting {
         return context.createConfigurationContext(config);
     }
 
-    public static float getUiScaleFactor(int scale) {
+    public static float getUiScaleFactor() {
+        return getUiScaleFactor(getUiScale());
+    }
+
+    private static float getUiScaleFactor(int scale) {
         return switch (scale) {
-            case UI_SCALE_SMALLER -> 0.8f;
-            case UI_SCALE_MORE_COMPACT -> 0.85f;
-            case UI_SCALE_COMPACT -> 0.9f;
-            case UI_SCALE_MILD_COMPACT -> 0.95f;
+            case UI_SCALE_MILD_RELAXED -> 1.1f;
+            case UI_SCALE_WIDE_COMFORT -> 1.05f;
             case UI_SCALE_STANDARD -> 1.0f;
-            case UI_SCALE_LARGE -> 1.1f;
-            case UI_SCALE_LARGER -> 1.2f;
-            case UI_SCALE_LARGEST -> 1.3f;
+            case UI_SCALE_MILD_COMPACT -> 0.95f;
+            case UI_SCALE_COMPACT -> 0.9f;
+            case UI_SCALE_MORE_COMPACT -> 0.85f;
+            case UI_SCALE_SMALLER -> 0.8f;
             default -> 1.0f;
         };
     }
 
     private static int pxToDp(int px, int densityDpi) {
         return Math.max(1, Math.round(px * (float) DisplayMetrics.DENSITY_DEFAULT / densityDpi));
+    }
+
+    public static int getTitleLines() {
+        int lines = Prefers.getInt("title_lines", TITLE_LINES_UNLIMITED);
+        return isTitleLines(lines) ? lines : TITLE_LINES_OFF;
+    }
+
+    public static void putTitleLines(int lines) {
+        Prefers.put("title_lines", isTitleLines(lines) ? lines : TITLE_LINES_OFF);
+    }
+
+    public static int getTitleLinesIndex() {
+        int lines = getTitleLines();
+        for (int i = 0; i < TITLE_LINES_OPTIONS.length; i++) if (TITLE_LINES_OPTIONS[i] == lines) return i;
+        return 0;
+    }
+
+    public static void putTitleLinesIndex(int index) {
+        putTitleLines(index >= 0 && index < TITLE_LINES_OPTIONS.length ? TITLE_LINES_OPTIONS[index] : TITLE_LINES_OFF);
+    }
+
+    private static boolean isTitleLines(int lines) {
+        for (int option : TITLE_LINES_OPTIONS) if (option == lines) return true;
+        return false;
+    }
+
+    public static int getDefaultLaunch() {
+        return Prefers.getInt("default_launch", DEFAULT_LAUNCH_HOME);
+    }
+
+    public static void putDefaultLaunch(int launch) {
+        Prefers.put("default_launch", launch);
+    }
+
+    public static int resolveTitleMaxLines() {
+        return switch (getTitleLines()) {
+            case TITLE_LINES_2 -> 2;
+            case TITLE_LINES_3 -> 3;
+            case TITLE_LINES_UNLIMITED -> Integer.MAX_VALUE;
+            default -> 1;
+        };
+    }
+
+    public static void applyTitleMaxLines(android.widget.TextView textView) {
+        int maxLines = resolveTitleMaxLines();
+        if (maxLines <= 1) {
+            textView.setSingleLine(true);
+            textView.setEllipsize(android.text.TextUtils.TruncateAt.MARQUEE);
+            textView.setMarqueeRepeatLimit(-1);
+        } else {
+            textView.setSingleLine(false);
+            textView.setMaxLines(maxLines);
+            textView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        }
     }
 
     public static boolean isDriveCheck() {
@@ -577,33 +652,55 @@ public class Setting {
         Prefers.put("web_home_extension", extension);
     }
 
-    public static boolean isWebHomeThemeEnabled() {
-        return Prefers.getBoolean("web_home_theme_enabled");
+    public static boolean isWebHomeSniffer() {
+        return Prefers.getBoolean("web_home_sniffer", true);
     }
 
-    public static void putWebHomeThemeEnabled(boolean enabled) {
-        Prefers.put("web_home_theme_enabled", enabled);
+    public static void putWebHomeSniffer(boolean sniffer) {
+        Prefers.put("web_home_sniffer", sniffer);
     }
 
-    public static String getWebHomeThemeUrl() {
-        String legacy = "file:///android_asset/webhome/eclipse.html";
-        String current = Prefers.getString("web_home_theme_url", "file:///android_asset/webhome/theme.json");
-        if (!legacy.equals(current)) return current;
-        current = "file:///android_asset/webhome/theme.json";
-        Prefers.put("web_home_theme_url", current);
-        return current;
+    public static boolean isWebHomeAdblock() {
+        return Prefers.getBoolean("web_home_adblock", true);
     }
 
-    public static void putWebHomeThemeUrl(String url) {
-        Prefers.put("web_home_theme_url", url);
+    public static void putWebHomeAdblock(boolean adblock) {
+        Prefers.put("web_home_adblock", adblock);
     }
 
-    public static String getWebHomeThemeTrustedUrl() {
-        return Prefers.getString("web_home_theme_trusted_url");
+    /**
+     * v3.42：拦掉所有跨域导航。默认【开】。
+     *
+     * 依据：WebHome 不是浏览器，跨域导航没有合法用途 ——
+     * 看片、播视频、翻页全部在本站内完成，播放资源也是跨域「取」而非跨域「跳」。
+     * 所以默认拦掉一切跨域导航，比跟广告在 JS 层赛跑（锁时间窗 / 认热区 /
+     * 掐事件传播）既可靠又省性能。
+     *
+     * 不误伤的部分（WebHomeAdBlocker 已处理）：
+     *   · 媒体直链 .mp4/.m3u8/.jpg/... —— 是跨域「取资源」，放行
+     *   · 白名单（127.0.0.1 / localhost / 用户加白）—— 放行
+     *   · 同站跳转 —— 本来就不拦
+     *
+     * 若某个站确实需要跨域跳转（少见），在广告过滤面板里关掉此项即可。
+     */
+    public static boolean isWebHomeAdblockNav() {
+        return Prefers.getBoolean("web_home_adblock_nav", true);
     }
 
-    public static void putWebHomeThemeTrustedUrl(String url) {
-        Prefers.put("web_home_theme_trusted_url", url);
+    public static void putWebHomeAdblockNav(boolean nav) {
+        Prefers.put("web_home_adblock_nav", nav);
+    }
+
+    /**
+     * 严格弹窗拦截：连用户手势触发的弹窗也拦。
+     * 默认关——非手势的自动弹窗始终拦截，无需此开关。
+     */
+    public static boolean isWebHomeAdblockPopup() {
+        return Prefers.getBoolean("web_home_adblock_popup", false);
+    }
+
+    public static void putWebHomeAdblockPopup(boolean popup) {
+        Prefers.put("web_home_adblock_popup", popup);
     }
 
     public static boolean isWebHomeFullscreen() {
@@ -620,6 +717,18 @@ public class Setting {
 
     public static void putPlaybackArtworkWall(boolean artworkWall) {
         Prefers.put("playback_artwork_wall", artworkWall);
+    }
+
+    // 播放自动全屏（播放设置 → 播放自动全屏）。
+    // 只管 App(Java) 侧发起的播放；网页嗅探(JS) "自动播" 发起的播放无视这个开关，
+    // 由 Intent extra "webHomeSniffer" 单独识别，无条件全屏。
+    // 默认关：不改变既有习惯。
+    public static boolean isPlaybackAutoFullscreen() {
+        return Prefers.getBoolean("playback_auto_fullscreen", false);
+    }
+
+    public static void putPlaybackAutoFullscreen(boolean autoFullscreen) {
+        Prefers.put("playback_auto_fullscreen", autoFullscreen);
     }
 
     public static boolean isCspWarmup() {
@@ -670,6 +779,14 @@ public class Setting {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         if (keys != null) for (String key : keys) if (key != null && !key.trim().isEmpty()) result.add(key.trim());
         Prefers.put("csp_warmup_sites", App.gson().toJson(result));
+    }
+
+    public static int getSearchColumn() {
+        return Math.min(Math.max(Prefers.getInt("search_column", 1), 1), 3);
+    }
+
+    public static void putSearchColumn(int column) {
+        Prefers.put("search_column", column == 2 ? 2 : (column == 3 ? 3 : 1));
     }
 
     public static boolean isDebugLog() {
@@ -894,13 +1011,12 @@ public class Setting {
         Prefers.put("zhuyin", zhuyin);
     }
 
-    /** Appearance mode: -1 follows system, 0 forces light, 1 forces dark. */
-    public static int getThemeMode() {
-        return Prefers.getInt("theme_mode", -1);
+    public static boolean isAutoClearCache() {
+        return Prefers.getBoolean("auto_clear_cache");
     }
 
-    public static void putThemeMode(int mode) {
-        Prefers.put("theme_mode", mode < 0 ? -1 : Math.min(mode, 1));
+    public static void putAutoClearCache(boolean auto) {
+        Prefers.put("auto_clear_cache", auto);
     }
 
     public static int getThemeColor() {
@@ -955,701 +1071,53 @@ public class Setting {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false;
         return new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + App.get().getPackageName())).resolveActivity(App.get().getPackageManager()) != null || new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).resolveActivity(App.get().getPackageManager()) != null;
     }
-
-    public static String getAudioConfig() {
-        return Prefers.getString("audio_config");
+    public static int getSourceBlockMask() {
+        return Prefers.getInt("source_block_mask", 0);
     }
 
-    public static void putAudioConfig(String value) {
-        Prefers.put("audio_config", value);
+    public static void putSourceBlockMask(int mask) {
+        Prefers.put("source_block_mask", mask);
     }
 
-    public static boolean isAudioSiteEnabled(String key, String name) {
-        return AudioConfig.objectFrom(getAudioConfig()).isSiteEnabled(key, name);
+    public static boolean isSourceBlocked(int source) {
+        return (getSourceBlockMask() & source) != 0;
     }
 
-    public static String getShortDramaConfig() {
-        return Prefers.getString("short_drama_config");
+    public static boolean isSourceAllowed(int source) {
+        return !isSourceBlocked(source);
     }
 
-    public static void putShortDramaConfig(String value) {
-        Prefers.put("short_drama_config", value);
+    public static void setSourceBlocked(int source, boolean blocked) {
+        int mask = getSourceBlockMask();
+        if (blocked) mask |= source;
+        else mask &= ~source;
+        putSourceBlockMask(mask);
     }
 
-    public static boolean isShortDramaSiteEnabled(String key, String name) {
-        return ShortDramaConfig.objectFrom(getShortDramaConfig()).isSiteEnabled(key, name);
+    public static int getSourceBlockedCount() {
+        int mask = getSourceBlockMask();
+        int count = 0;
+        for (int source : SOURCE_ALL) if ((mask & source) != 0) count++;
+        return count;
     }
 
-    public static String getTmdbConfig() {
-        return Prefers.getString("tmdb_config");
+    // ===== 下载目录配置 =====
+    /** 默认下载子目录名：tvbox/Download/ */
+    public static final String DOWNLOAD_DIR_DEFAULT = "tvbox/Download";
+
+    /** 获取当前下载目录绝对路径。未设置时返回默认路径（tvbox/Download）。 */
+    public static String getDownloadDir() {
+        String custom = Prefers.getString("download_dir", "");
+        if (custom != null && !custom.trim().isEmpty()) return custom;
+        return Path.root() + File.separator + DOWNLOAD_DIR_DEFAULT;
     }
 
-    public static void putTmdbConfig(String value) {
-        Prefers.put("tmdb_config", value);
-    }
-
-    public static boolean isTmdbReady() {
-        return com.fongmi.android.tv.bean.TmdbConfig.objectFrom(getTmdbConfig()).isReady();
-    }
-
-    public static boolean isTmdbSiteEnabled(String key, String name) {
-        return com.fongmi.android.tv.bean.TmdbConfig.objectFrom(getTmdbConfig()).isSiteEnabled(key, name);
-    }
-
-    public static String getAiConfig() {
-        return Prefers.getString("ai_config");
-    }
-
-    public static void putAiConfig(String value) {
-        Prefers.put("ai_config", value);
-    }
-
-    public static boolean isAiConfigReady() {
-        return AiConfig.objectFrom(getAiConfig()).isReady();
-    }
-
-    public static boolean isAiTitleExtraction() {
-        return Prefers.getBoolean("ai_title_extraction", false);
-    }
-
-    public static void putAiTitleExtraction(boolean enabled) {
-        Prefers.put("ai_title_extraction", enabled);
-    }
-
-    public static boolean isAiAdDetection() {
-        return Prefers.getBoolean("ai_ad_detection", false);
-    }
-
-    public static void putAiAdDetection(boolean enabled) {
-        Prefers.put("ai_ad_detection", enabled);
-    }
-
-    public static synchronized TmdbMatchCache getTmdbMatchCache() {
-        return TmdbMatchCache.objectFrom(AppCache.get(AppCache.KEY_TMDB_MATCH));
-    }
-
-    public static synchronized void putTmdbMatchCache(TmdbMatchCache cache) {
-        AppCache.put(AppCache.KEY_TMDB_MATCH, App.gson().toJson(cache));
-    }
-
-    public static synchronized TmdbSeasonMatchCache getTmdbSeasonMatchCache() {
-        return TmdbSeasonMatchCache.objectFrom(AppCache.get(AppCache.KEY_TMDB_SEASON_MATCH));
-    }
-
-    public static synchronized void putTmdbSeasonMatchCache(TmdbSeasonMatchCache cache) {
-        AppCache.put(AppCache.KEY_TMDB_SEASON_MATCH, App.gson().toJson(cache));
-    }
-    public static DanmakuMatchCache getDanmakuMatchCache() {
-        return DanmakuMatchCache.objectFrom(Prefers.getString("danmaku_match_cache"));
-    }
-
-    public static void putDanmakuMatchCache(DanmakuMatchCache cache) {
-        Prefers.put("danmaku_match_cache", App.gson().toJson(cache));
-    }
-
-    public static boolean isTmdbEnabled() {
-        if (!Prefers.getPrefers().contains("tmdb_enabled")) {
-            if (Prefers.getPrefers().contains("detail_open_mode")) return isTmdbMode(clampDetailOpenMode(Prefers.getInt("detail_open_mode", DETAIL_OPEN_ENHANCED)));
-            if (Prefers.getPrefers().contains("search_detail_page")) return Prefers.getBoolean("search_detail_page", true);
-        }
-        return Prefers.getBoolean("tmdb_enabled", false);
-    }
-
-    public static void putTmdbEnabled(boolean enabled) {
-        Prefers.put("tmdb_enabled", enabled);
-    }
-
-    public static int getTmdbModel() {
-        return clampTmdbModel(Prefers.getInt("tmdb_model", TMDB_MODEL_NATIVE));
-    }
-
-    public static void putTmdbModel(int model) {
-        Prefers.put("tmdb_model", clampTmdbModel(model));
-    }
-
-    private static int clampTmdbModel(int model) {
-        return model == TMDB_MODEL_NATIVE ? TMDB_MODEL_NATIVE : TMDB_MODEL_NATIVE;
-    }
-
-    public static int getDetailInteractionMode() {
-        if (Prefers.getPrefers().contains("detail_open_mode")) {
-            return isTmdbMode(getDetailOpenMode()) ? DETAIL_INTERACTION_SYSTEM : DETAIL_INTERACTION_ORIGINAL;
-        }
-        if (!Prefers.getPrefers().contains("detail_interaction_mode")) {
-            return isTmdbEnabled() ? DETAIL_INTERACTION_SYSTEM : DETAIL_INTERACTION_ORIGINAL;
-        }
-        int mode = clampDetailInteractionMode(Prefers.getInt("detail_interaction_mode", DETAIL_INTERACTION_ORIGINAL));
-        return mode == DETAIL_INTERACTION_SYSTEM && !isTmdbEnabled() ? DETAIL_INTERACTION_ORIGINAL : mode;
-    }
-
-    public static void putDetailInteractionMode(int mode) {
-        int value = clampDetailInteractionMode(mode);
-        putDetailOpenMode(value == DETAIL_INTERACTION_ORIGINAL ? DETAIL_OPEN_DIRECT : DETAIL_OPEN_ORIGINAL_ENHANCED);
-    }
-
-    private static int clampDetailInteractionMode(int mode) {
-        return mode == DETAIL_INTERACTION_SYSTEM ? DETAIL_INTERACTION_SYSTEM : DETAIL_INTERACTION_ORIGINAL;
-    }
-
-    public static int getDetailThemeMode() {
-        if (Prefers.getPrefers().contains("detail_theme_mode")) {
-            int theme = Prefers.getInt("detail_theme_mode", DETAIL_THEME_CURRENT);
-            if (theme == DETAIL_STYLE_PROFILE && isCurrentThemePreference()) return DETAIL_STYLE_NATIVE;
-            return clampDetailThemeMode(theme);
-        }
-        if (Prefers.getPrefers().contains("tmdb_detail_style")) return clampDetailThemeMode(Prefers.getInt("tmdb_detail_style", DETAIL_STYLE_PROFILE));
-        return getDetailOpenMode() == DETAIL_OPEN_ORIGINAL_ENHANCED ? DETAIL_STYLE_NATIVE : DETAIL_STYLE_PROFILE;
-    }
-
-    public static void putDetailThemeMode(int mode) {
-        int value = clampDetailThemeMode(mode);
-        Prefers.put("detail_theme_mode", value);
-        Prefers.put("tmdb_detail_style", value);
-    }
-
-    private static int clampDetailThemeMode(int mode) {
-        if (mode == DETAIL_STYLE_PROFILE || mode == DETAIL_STYLE_CINEMA || mode == DETAIL_STYLE_NATIVE) return mode;
-        return DETAIL_STYLE_NATIVE;
-    }
-
-    private static boolean isCurrentThemePreference() {
-        if (Prefers.getPrefers().contains("detail_open_mode")) return false;
-        if (Prefers.getPrefers().contains("tmdb_detail_style")) return false;
-        return Prefers.getPrefers().contains("detail_interaction_mode") && Prefers.getInt("detail_interaction_mode", DETAIL_INTERACTION_ORIGINAL) == DETAIL_INTERACTION_SYSTEM && isTmdbEnabled();
-    }
-
-    public static int getTmdbMatchMode() {
-        if (Prefers.getPrefers().contains("tmdb_match_mode")) return clampTmdbMatchMode(Prefers.getInt("tmdb_match_mode", TMDB_MATCH_SMART));
-        if (Prefers.getPrefers().contains("tmdb_match_dialog")) return Prefers.getBoolean("tmdb_match_dialog", true) ? TMDB_MATCH_STRICT_DIALOG : TMDB_MATCH_STRICT;
-        return TMDB_MATCH_SMART;
-    }
-
-    public static void putTmdbMatchMode(int mode) {
-        Prefers.put("tmdb_match_mode", clampTmdbMatchMode(mode));
-    }
-
-    public static boolean isTmdbSmartMatch() {
-        int mode = getTmdbMatchMode();
-        return mode == TMDB_MATCH_SMART || mode == TMDB_MATCH_SMART_DIALOG;
-    }
-
-    public static boolean isTmdbMatchDialog() {
-        int mode = getTmdbMatchMode();
-        return mode == TMDB_MATCH_STRICT_DIALOG || mode == TMDB_MATCH_SMART_DIALOG;
-    }
-
-    public static boolean isPersonalRecommendation() {
-        if (Prefers.getPrefers().contains("personal_recommendation")) return Prefers.getBoolean("personal_recommendation", false);
-        return Prefers.getBoolean("ai_recommendation", false);
-    }
-
-    public static void putPersonalRecommendation(boolean enabled) {
-        Prefers.put("personal_recommendation", enabled);
-        Prefers.put("ai_recommendation", enabled);
-    }
-
-    @Deprecated
-    public static boolean isAiRecommendation() {
-        return isPersonalRecommendation();
-    }
-
-    @Deprecated
-    public static void putAiRecommendation(boolean enabled) {
-        putPersonalRecommendation(enabled);
-    }
-
-    private static int clampTmdbMatchMode(int mode) {
-        if (mode == TMDB_MATCH_STRICT || mode == TMDB_MATCH_SMART || mode == TMDB_MATCH_STRICT_DIALOG || mode == TMDB_MATCH_SMART_DIALOG) return mode;
-        return TMDB_MATCH_SMART;
-    }
-
-    public static boolean isTmdbDetailBackdropSlide() {
-        return Prefers.getBoolean("tmdb_detail_backdrop_slide", true);
-    }
-
-    public static void putTmdbDetailBackdropSlide(boolean enabled) {
-        Prefers.put("tmdb_detail_backdrop_slide", enabled);
-    }
-
-    public static boolean isTmdbDetailPage() {
-        return isTmdbMode(getDetailOpenMode()) && getTmdbModel() == TMDB_MODEL_NATIVE && TmdbConfig.objectFrom(getTmdbConfig()).isReady();
-    }
-
-    public static boolean isTmdbDetailModeConfigured() {
-        return isTmdbMode(getDetailOpenMode()) && getTmdbModel() == TMDB_MODEL_NATIVE;
-    }
-
-    public static int getDetailOpenMode() {
-        int mode;
-        if (Prefers.getPrefers().contains("detail_open_mode")) {
-            int stored = Prefers.getInt("detail_open_mode", DETAIL_OPEN_ENHANCED);
-            if (stored == DETAIL_OPEN_CINEMA) {
-                if (!Prefers.getPrefers().contains("detail_theme_mode") && !Prefers.getPrefers().contains("tmdb_detail_style")) putDetailThemeMode(DETAIL_STYLE_CINEMA);
-                mode = DETAIL_OPEN_ENHANCED;
-                Prefers.put("detail_open_mode", mode);
-            } else {
-                mode = clampDetailOpenMode(stored);
-            }
-        } else if (Prefers.getPrefers().contains("detail_interaction_mode")) {
-            mode = getDetailInteractionMode() == DETAIL_INTERACTION_SYSTEM ? DETAIL_OPEN_ORIGINAL_ENHANCED : DETAIL_OPEN_DIRECT;
-            Prefers.put("detail_open_mode", mode);
-            migrateCurrentDetailTheme(mode);
-        } else if (Prefers.getPrefers().contains("search_detail_page")) {
-            mode = Prefers.getBoolean("search_detail_page") ? DETAIL_OPEN_ENHANCED : DETAIL_OPEN_DIRECT;
+    /** 设置自定义下载目录（绝对路径）。传 null/空串重置为默认。 */
+    public static void setDownloadDir(String absPath) {
+        if (absPath == null || absPath.trim().isEmpty()) {
+            Prefers.remove("download_dir");
         } else {
-            mode = isTmdbEnabled() ? DETAIL_OPEN_ORIGINAL_ENHANCED : DETAIL_OPEN_DIRECT;
-            migrateCurrentDetailTheme(mode);
+            Prefers.put("download_dir", absPath.trim());
         }
-        return mode;
-    }
-
-    public static void putDetailOpenMode(int mode) {
-        if (mode == DETAIL_OPEN_CINEMA) {
-            putDetailThemeMode(DETAIL_STYLE_CINEMA);
-            mode = DETAIL_OPEN_ENHANCED;
-        } else if (mode == DETAIL_OPEN_FUSION) {
-            putDetailThemeMode(DETAIL_STYLE_PROFILE);
-        } else if (mode == DETAIL_OPEN_ORIGINAL_ENHANCED) {
-            putDetailThemeMode(DETAIL_STYLE_NATIVE);
-        }
-        int value = clampDetailOpenMode(mode);
-        Prefers.put("detail_open_mode", value);
-        Prefers.put("detail_interaction_mode", isTmdbMode(value) ? DETAIL_INTERACTION_SYSTEM : DETAIL_INTERACTION_ORIGINAL);
-        putTmdbEnabled(isTmdbMode(value));
-    }
-
-    public static boolean isTmdbMode(int mode) {
-        return mode == DETAIL_OPEN_FUSION || mode == DETAIL_OPEN_ENHANCED || mode == DETAIL_OPEN_PLAYER || mode == DETAIL_OPEN_ORIGINAL_ENHANCED;
-    }
-
-    public static boolean isStandaloneTmdbDetailMode(int mode) {
-        return mode == DETAIL_OPEN_FUSION || mode == DETAIL_OPEN_ENHANCED || mode == DETAIL_OPEN_PLAYER;
-    }
-
-    public static boolean isFusionDetailPage() {
-        return getDetailOpenMode() == DETAIL_OPEN_FUSION;
-    }
-
-    public static boolean isPlayerDetailPage() {
-        return getDetailOpenMode() == DETAIL_OPEN_PLAYER;
-    }
-
-    public static boolean isDirectDetailPage() {
-        return getDetailOpenMode() == DETAIL_OPEN_DIRECT;
-    }
-
-    public static boolean isSearchDetailPage() {
-        return getDetailOpenMode() == DETAIL_OPEN_ENHANCED;
-    }
-
-    public static boolean isOriginalEnhancedDetailPage() {
-        return getDetailOpenMode() == DETAIL_OPEN_ORIGINAL_ENHANCED;
-    }
-
-    public static boolean isCinemaDetailPage() {
-        return isTmdbDetailPage() && isTmdbCinemaStyle();
-    }
-
-    public static void putSearchDetailPage(boolean enabled) {
-        putDetailOpenMode(enabled ? DETAIL_OPEN_ENHANCED : DETAIL_OPEN_DIRECT);
-    }
-
-    public static int nextDetailOpenMode() {
-        int[] modes = {DETAIL_OPEN_ORIGINAL_ENHANCED, DETAIL_OPEN_FUSION, DETAIL_OPEN_ENHANCED, DETAIL_OPEN_PLAYER, DETAIL_OPEN_DIRECT};
-        int mode = getDetailOpenMode();
-        for (int i = 0; i < modes.length; i++) if (modes[i] == mode) return modes[(i + 1) % modes.length];
-        return DETAIL_OPEN_ORIGINAL_ENHANCED;
-    }
-
-    private static int clampDetailOpenMode(int mode) {
-        if (mode == DETAIL_OPEN_CINEMA) return DETAIL_OPEN_ENHANCED;
-        if (mode == DETAIL_OPEN_FUSION || mode == DETAIL_OPEN_ENHANCED || mode == DETAIL_OPEN_DIRECT || mode == DETAIL_OPEN_PLAYER || mode == DETAIL_OPEN_ORIGINAL_ENHANCED) return mode;
-        return DETAIL_OPEN_ORIGINAL_ENHANCED;
-    }
-
-    private static void migrateCurrentDetailTheme(int mode) {
-        if (mode != DETAIL_OPEN_ORIGINAL_ENHANCED) return;
-        if (Prefers.getPrefers().contains("tmdb_detail_style")) return;
-        if (!Prefers.getPrefers().contains("detail_theme_mode") || Prefers.getInt("detail_theme_mode", DETAIL_STYLE_PROFILE) == DETAIL_STYLE_PROFILE) putDetailThemeMode(DETAIL_STYLE_NATIVE);
-    }
-
-    public static int getTmdbDetailStyle() {
-        return getDetailThemeMode();
-    }
-
-    public static void putTmdbDetailStyle(int style) {
-        putDetailThemeMode(style);
-    }
-
-    public static boolean isTmdbCinemaStyle() {
-        return getTmdbDetailStyle() == DETAIL_STYLE_CINEMA;
-    }
-
-    public static boolean isTmdbNativeStyle() {
-        return getTmdbDetailStyle() == DETAIL_STYLE_NATIVE;
-    }
-
-    public static int getTmdbDetailTheme() {
-        return clampTmdbDetailTheme(Prefers.getInt("tmdb_detail_theme", 2));
-    }
-
-    public static void putTmdbDetailTheme(int theme) {
-        Prefers.put("tmdb_detail_theme", clampTmdbDetailTheme(theme));
-    }
-
-    public static boolean getTmdbEpisodeGridMode() {
-        return Prefers.getBoolean("tmdb_episode_grid_mode", !"mobile".equals(BuildConfig.FLAVOR_mode));
-    }
-
-    public static void putTmdbEpisodeGridMode(boolean gridMode) {
-        Prefers.put("tmdb_episode_grid_mode", gridMode);
-    }
-
-    public static boolean isTmdbEpisodeFileSize() {
-        return Prefers.getBoolean("tmdb_episode_file_size", false);
-    }
-
-    public static void putTmdbEpisodeFileSize(boolean enabled) {
-        Prefers.put("tmdb_episode_file_size", enabled);
-    }
-
-    public static boolean getTmdbEpisodeShowScrapedName() {
-        return Prefers.getBoolean("tmdb_episode_show_scraped_name", true);
-    }
-
-    public static void putTmdbEpisodeShowScrapedName(boolean showScraped) {
-        Prefers.put("tmdb_episode_show_scraped_name", showScraped);
-    }
-
-    public static int nextTmdbDetailTheme(int theme) {
-        return clampTmdbDetailTheme(theme) == 2 ? 1 : 2;
-    }
-
-    public static boolean resolveTmdbDetailLightTheme(int theme, boolean systemNight) {
-        int value = clampTmdbDetailTheme(theme);
-        return value != 1;
-    }
-
-    static int clampTmdbDetailTheme(int theme) {
-        return theme == 1 ? 1 : 2;
-    }
-
-    public static boolean isHomeHistory() {
-        return Prefers.getBoolean("home_history", true);
-    }
-
-    public static void putHomeHistory(boolean homeHistory) {
-        Prefers.put("home_history", homeHistory);
-    }
-
-    public static boolean isEpisodeHistory() {
-        return Prefers.getBoolean("episode_history", true);
-    }
-
-    public static void putEpisodeHistory(boolean episodeHistory) {
-        Prefers.put("episode_history", episodeHistory);
-    }
-
-    public static int getGlobalHistoryMode() {
-        // Read the raw value so a legacy Boolean can be migrated without
-        // mistaking an Integer 0 for Boolean false during app startup.
-        Object value = Prefers.getPrefers().getAll().get("global_history_mode");
-        if (value instanceof Boolean legacy) return legacy ? GLOBAL_HISTORY_AUTO : GLOBAL_HISTORY_OFF;
-        if (value instanceof Number number) return clampGlobalHistoryMode(number.intValue());
-        return GLOBAL_HISTORY_OFF;
-    }
-
-    public static void putGlobalHistoryMode(int mode) {
-        mode = clampGlobalHistoryMode(mode);
-        Prefers.put("global_history_mode", mode == GLOBAL_HISTORY_OFF ? -1 : mode);
-    }
-
-    public static int getInterfaceFailoverMode() {
-        return InterfaceFailoverPolicy.clampMode(Prefers.getInt("interface_failover_mode", InterfaceFailoverPolicy.DEFAULT_MODE));
-    }
-
-    public static void putInterfaceFailoverMode(int mode) {
-        int value = InterfaceFailoverPolicy.clampMode(mode);
-        Prefers.put("interface_failover_mode", value);
-        if (value == InterfaceFailoverPolicy.OFF) VodConfig.cancelFailover();
-    }
-
-    public static boolean isGlobalHistoryEnabled() {
-        return getGlobalHistoryMode() != GLOBAL_HISTORY_OFF;
-    }
-
-    public static boolean isGlobalHistoryAuto() {
-        return getGlobalHistoryMode() == GLOBAL_HISTORY_AUTO;
-    }
-
-    public static boolean isGlobalHistorySearch() {
-        return getGlobalHistoryMode() == GLOBAL_HISTORY_SEARCH;
-    }
-
-    private static int clampGlobalHistoryMode(int mode) {
-        return mode == GLOBAL_HISTORY_AUTO || mode == GLOBAL_HISTORY_SEARCH ? mode : GLOBAL_HISTORY_OFF;
-    }
-
-    public static boolean isHistoryAggregationByTmdb() {
-        return isTmdbReady() && Prefers.getBoolean("history_aggregation_by_tmdb", true);
-    }
-
-    public static void putHistoryAggregationByTmdb(boolean value) {
-        Prefers.put("history_aggregation_by_tmdb", value);
-    }
-
-    public static boolean isHistoryAggregationEffective() {
-        return isHistoryAggregationByTmdb();
-    }
-
-    public static boolean isHomeVodAutoLoad() {
-        return Prefers.getBoolean("home_vod_auto_load", true);
-    }
-
-    public static void putHomeVodAutoLoad(boolean autoLoad) {
-        Prefers.put("home_vod_auto_load", autoLoad);
-    }
-
-    public static boolean isHomeSiteLock() {
-        return Prefers.getBoolean("home_site_lock", false);
-    }
-
-    public static void putHomeSiteLock(boolean homeSiteLock) {
-        Prefers.put("home_site_lock", homeSiteLock);
-    }
-
-    public static boolean isAutoBackup() {
-        return Prefers.getBoolean("auto_backup", false);
-    }
-
-    public static void putAutoBackup(boolean autoBackup) {
-        Prefers.put("auto_backup", autoBackup);
-    }
-
-    public static int getFullscreenMenuKey() {
-        int menuKey = Prefers.getInt("fullscreen_menu_key", FULLSCREEN_MENU_KEY_CONTROL);
-        // 旧版本不认新增取值，钳制可避免设置页用越界下标取 string-array。
-        return menuKey < FULLSCREEN_MENU_KEY_CONTROL || menuKey > FULLSCREEN_MENU_KEY_NEXT_EPISODE ? FULLSCREEN_MENU_KEY_CONTROL : menuKey;
-    }
-
-    public static void putFullscreenMenuKey(int menuKey) {
-        Prefers.put("fullscreen_menu_key", menuKey);
-    }
-
-    public static int getHomeMenuKey() {
-        int menuKey = Prefers.getInt("home_menu_key", 0);
-        return menuKey < 0 || menuKey > 11 ? 0 : menuKey;
-    }
-
-    public static void putHomeMenuKey(int menuKey) {
-        Prefers.put("home_menu_key", menuKey);
-    }
-
-    public static boolean isPlayBackToDetail() {
-        return Prefers.getBoolean("play_back_to_detail");
-    }
-
-    public static void putPlayBackToDetail(boolean backToDetail) {
-        Prefers.put("play_back_to_detail", backToDetail);
-    }
-
-   public static boolean isSubtitleAutoMatchEnabled() {
-       return Prefers.getBoolean("subtitle_auto_match", false);
-   }
-
-   public static void putSubtitleAutoMatchEnabled(boolean enabled) {
-       Prefers.put("subtitle_auto_match", enabled);
-   }
-
-   public static boolean isPlaybackOverlayEnabled() {
-       return Prefers.getBoolean("playback_overlay_enabled", true);
-   }
-
-   public static void putPlaybackOverlayEnabled(boolean enabled) {
-       Prefers.put("playback_overlay_enabled", enabled);
-   }
-    public static String getSubtitlePreferredLanguage() {
-        return Prefers.getString("subtitle_preferred_language", "zh");
-    }
-
-    public static void putSubtitlePreferredLanguage(String language) {
-        Prefers.put("subtitle_preferred_language", language == null || language.isEmpty() ? "zh" : language);
-    }
-
-    public static String getRealtimeSubtitleModel() {
-        String model = Prefers.getString("subtitle_realtime_model", REALTIME_SUBTITLE_MODEL_ZH);
-        return isRealtimeSubtitleModel(model) ? model : REALTIME_SUBTITLE_MODEL_ZH;
-    }
-
-    public static void putRealtimeSubtitleModel(String model) {
-        Prefers.put("subtitle_realtime_model", isRealtimeSubtitleModel(model) ? model : REALTIME_SUBTITLE_MODEL_ZH);
-    }
-
-    private static boolean isRealtimeSubtitleModel(String model) {
-        return switch (model) {
-            case REALTIME_SUBTITLE_MODEL_ZH,
-                 REALTIME_SUBTITLE_MODEL_YUE,
-                 REALTIME_SUBTITLE_MODEL_EN,
-                 REALTIME_SUBTITLE_MODEL_DE,
-                 REALTIME_SUBTITLE_MODEL_FR,
-                 REALTIME_SUBTITLE_MODEL_ES,
-                 REALTIME_SUBTITLE_MODEL_JA,
-                 REALTIME_SUBTITLE_MODEL_ZH_EN -> true;
-            case null, default -> false;
-        };
-    }
-    public static String getSubtitleSourceEnvironment() {
-        String environment = Prefers.getString("subtitle_source_environment");
-        if (!environment.isEmpty()) return environment;
-        String legacyToken = Prefers.getString("subtitle_assrt_token");
-        if (legacyToken.isEmpty()) return "";
-        JsonObject migrated = new JsonObject();
-        migrated.addProperty("ASSRT_TOKEN", legacyToken);
-        environment = migrated.toString();
-        Prefers.put("subtitle_source_environment", environment);
-        Prefers.put("subtitle_assrt_token", "");
-        return environment;
-    }
-
-    public static void putSubtitleSourceEnvironment(String environment) {
-        Prefers.put("subtitle_source_environment", environment == null ? "" : environment.trim());
-    }
-
-    public static String getSubtitleSourceEnvironment(String sourceKey) {
-        if (sourceKey == null || sourceKey.trim().isEmpty()) return "";
-        try {
-            JsonObject root = com.google.gson.JsonParser.parseString(getSubtitleSourceEnvironment()).getAsJsonObject();
-            if (root.has(sourceKey) && root.get(sourceKey).isJsonObject()) return root.getAsJsonObject(sourceKey).toString();
-            if ("assrt".equals(sourceKey) && root.has("ASSRT_TOKEN")) {
-                JsonObject migrated = new JsonObject();
-                migrated.add("ASSRT_TOKEN", root.get("ASSRT_TOKEN").deepCopy());
-                return migrated.toString();
-            }
-        } catch (RuntimeException ignored) {
-        }
-        return "";
-    }
-
-    public static void putSubtitleSourceEnvironment(String sourceKey, String environment) {
-        if (sourceKey == null || sourceKey.trim().isEmpty()) return;
-        JsonObject root;
-        try {
-            root = com.google.gson.JsonParser.parseString(getSubtitleSourceEnvironment()).getAsJsonObject();
-        } catch (RuntimeException ignored) {
-            root = new JsonObject();
-        }
-        if ("assrt".equals(sourceKey)) root.remove("ASSRT_TOKEN");
-        String value = environment == null ? "" : environment.trim();
-        if (value.isEmpty()) root.remove(sourceKey);
-        else root.add(sourceKey, com.google.gson.JsonParser.parseString(value).getAsJsonObject());
-        putSubtitleSourceEnvironment(root.size() == 0 ? "" : root.toString());
-    }
-
-    public static int getSubtitleAiMaxConcurrency() {
-        return clampSubtitleAiMaxConcurrency(Prefers.getInt("subtitle_ai_max_concurrency", 2));
-    }
-
-    public static void putSubtitleAiMaxConcurrency(int value) {
-        Prefers.put("subtitle_ai_max_concurrency", clampSubtitleAiMaxConcurrency(value));
-    }
-
-    public static int getSubtitleAiChunkCount() {
-        return clampSubtitleAiChunkCount(Prefers.getInt("subtitle_ai_chunk_count", 2));
-    }
-
-    public static void putSubtitleAiChunkCount(int value) {
-        Prefers.put("subtitle_ai_chunk_count", clampSubtitleAiChunkCount(value));
-    }
-
-    private static int clampSubtitleAiMaxConcurrency(int value) {
-        return Math.max(1, Math.min(value, 8));
-    }
-
-    private static int clampSubtitleAiChunkCount(int value) {
-        return Math.max(1, Math.min(value, 32));
-    }
-
-    public static int getIntroSkipMode() {
-        return Prefers.getInt("intro_skip_mode", INTRO_SKIP_OFF);
-    }
-
-    public static void putIntroSkipMode(int mode) {
-        Prefers.put("intro_skip_mode", mode);
-    }
-
-    public static boolean isAutoSkipIntroOutro() {
-        return getIntroSkipMode() == INTRO_SKIP_AUTO;
-    }
-
-    public static boolean isIntroSkipEnabled() {
-        return getIntroSkipMode() != INTRO_SKIP_OFF;
-    }
-
-    public static void putAutoSkipIntroOutro(boolean enabled) {
-        putIntroSkipMode(enabled ? INTRO_SKIP_AUTO : INTRO_SKIP_OFF);
-    }
-
-    /**
-     * 允许跳过的片段类型位掩码。默认回顾 + 片头 + 片尾，预告不默认开——预告在片尾之后，
-     * 跳掉它等于直接进下一集，属于更激进的行为，让用户自己选。
-     */
-    public static int getIntroSkipKinds() {
-        return Prefers.getInt("intro_skip_kinds", INTRO_SKIP_KIND_DEFAULT);
-    }
-
-    public static void putIntroSkipKinds(int kinds) {
-        Prefers.put("intro_skip_kinds", kinds & INTRO_SKIP_KIND_ALL);
-    }
-
-    public static boolean isIntroSkipKindEnabled(int kind) {
-        return (getIntroSkipKinds() & kind) != 0;
-    }
-
-    public static int getSearchUi() {
-        return Prefers.getInt("search_ui", 1) == 0 ? 0 : 1;
-    }
-
-    public static void putSearchUi(int ui) {
-        Prefers.put("search_ui", ui == 0 ? 0 : 1);
-    }
-
-    public static int getSearchThread() {
-        return clampSearchThread(Prefers.getInt("search_thread", 20));
-    }
-
-    public static void putSearchThread(int thread) {
-        Prefers.put("search_thread", clampSearchThread(thread));
-    }
-
-    private static int clampSearchThread(int thread) {
-        return Math.max(1, Math.min(thread, 100));
-    }
-
-    public static int getSearchColumn() {
-        return clampSearchColumn(Prefers.getInt("search_column", 0));
-    }
-
-    public static void putSearchColumn(int column) {
-        Prefers.put("search_column", clampSearchColumn(column));
-    }
-
-    private static int clampSearchColumn(int column) {
-        return column < 0 || column > 2 ? 0 : column;
-    }
-
-    public static int getSearchResultSort() {
-        return Prefers.getInt("search_result_sort", 0);
-    }
-
-    public static void putSearchResultSort(int sort) {
-        Prefers.put("search_result_sort", sort == 0 ? 0 : 1);
-    }
-
-    public static int getSearchSimilarity() {
-        return Prefers.getInt("search_similarity", 30);
-    }
-
-    public static void putSearchSimilarity(int percent) {
-        Prefers.put("search_similarity", Math.max(0, Math.min(100, percent)));
     }
 }

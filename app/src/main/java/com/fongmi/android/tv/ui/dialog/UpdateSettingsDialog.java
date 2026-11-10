@@ -33,7 +33,7 @@ public final class UpdateSettingsDialog {
     }
 
     public static void show(FragmentActivity activity) {
-        Dialog dialog = new Dialog(activity, R.style.Theme_WebHTV_Dialog);
+        Dialog dialog = new Dialog(activity, R.style.Theme_WebHTV_LightDialog);
         DialogUpdateSettingsBinding binding = DialogUpdateSettingsBinding.inflate(LayoutInflater.from(dialog.getContext()));
         State state = State.load();
         dialog.setContentView(binding.getRoot());
@@ -48,7 +48,11 @@ public final class UpdateSettingsDialog {
 
     private static void bind(FragmentActivity activity, Dialog dialog, DialogUpdateSettingsBinding binding, State state) {
         binding.close.setOnClickListener(view -> dialog.dismiss());
-        binding.ociMirror.setOnClickListener(view -> chooseOci(activity, binding, state));
+        binding.githubModeGroup.addOnButtonCheckedListener((group, id, checked) -> {
+            if (checked) state.githubMode = id == R.id.githubModeStrip ? GithubProxy.MODE_STRIP_SCHEME : GithubProxy.MODE_FULL_URL;
+        });
+        binding.githubProxy.setOnClickListener(view -> chooseGithub(activity, dialog, binding, state));
+        binding.ociMirror.setOnClickListener(view -> chooseOci(activity, dialog, binding, state));
         binding.save.setOnClickListener(view -> save(activity, dialog, binding, state));
     }
 
@@ -71,7 +75,22 @@ public final class UpdateSettingsDialog {
         binding.sourceTabs.selectTab(binding.sourceTabs.getTabAt(position));
     }
 
-    private static void chooseOci(FragmentActivity activity, DialogUpdateSettingsBinding binding, State state) {
+    private static void chooseGithub(FragmentActivity activity, Dialog dialog, DialogUpdateSettingsBinding binding, State state) {
+        GithubProxy.Preset[] presets = GithubProxy.presets();
+        CharSequence[] labels = new CharSequence[presets.length];
+        int selected = 0;
+        for (int i = 0; i < presets.length; i++) {
+            labels[i] = label(activity, presets[i].label, presets[i].id);
+            if (presets[i].id.equals(state.githubProxy)) selected = i;
+        }
+        ChoiceDialog choice = ChoiceDialog.showSingle(activity, R.string.update_github_proxy, labels, selected, which -> {
+            state.githubProxy = presets[which].id;
+            binding.githubProxy.post(() -> renderGithub(activity, binding, state));
+        });
+        choice.setDismissCallback(() -> refreshDialogWindow(dialog));
+    }
+
+    private static void chooseOci(FragmentActivity activity, Dialog dialog, DialogUpdateSettingsBinding binding, State state) {
         OciMirror.Preset[] presets = OciMirror.presets();
         CharSequence[] labels = new CharSequence[presets.length];
         int selected = 0;
@@ -79,9 +98,22 @@ public final class UpdateSettingsDialog {
             labels[i] = label(activity, presets[i].label, presets[i].id);
             if (presets[i].id.equals(state.ociMirror)) selected = i;
         }
-        ChoiceDialog.showSingle(activity, R.string.update_oci_mirror, labels, selected, which -> {
+        ChoiceDialog choice = ChoiceDialog.showSingle(activity, R.string.update_oci_mirror, labels, selected, which -> {
             state.ociMirror = presets[which].id;
-            renderOci(activity, binding, state);
+            binding.ociMirror.post(() -> renderOci(activity, binding, state));
+        });
+        choice.setDismissCallback(() -> refreshDialogWindow(dialog));
+    }
+
+    private static void refreshDialogWindow(Dialog dialog) {
+        Window window = dialog == null ? null : dialog.getWindow();
+        if (window == null) return;
+        View decor = window.getDecorView();
+        decor.post(() -> {
+            WindowManager.LayoutParams params = window.getAttributes();
+            params.dimAmount = 0.58f;
+            window.setAttributes(params);
+            decor.postInvalidate();
         });
     }
 

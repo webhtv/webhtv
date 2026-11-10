@@ -950,9 +950,10 @@ public final class MpvHlsProxy extends NanoHTTPD {
                 }
                 return text;
             }
-            if (!TextUtils.equals(outcome.manifest(), text)) {
-                SpiderDebug.log(TAG, "adblock filtered session=%d bytes=%d->%d structured=%s legacy=%s url=%s",
-                        session, text.length(), outcome.manifest().length(), outcome.structured(), outcome.legacy(), shortUrl(url));
+            if (!TextUtils.equals(filtered, text)) {
+                SpiderDebug.log(TAG,
+                        "adblock filtered session=%d bytes=%d->%d url=%s",
+                        session, text.length(), filtered.length(), shortUrl(url));
             }
             recordAndNotifyAdblock(url, outcome);
             return outcome.manifest();

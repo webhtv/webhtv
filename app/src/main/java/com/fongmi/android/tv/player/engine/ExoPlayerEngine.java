@@ -277,7 +277,6 @@ public class ExoPlayerEngine implements PlayerEngine {
     public Player rebuild(Player.Listener listener) {
         ExoFrameSchedulingPlayerSettings schedulingSettings =
                 settingsForRebuild();
-        audioOutputAttemptGeneration++;
         compressedAudioDirectPolicy.resetOutputProgress();
         preCache.stop("engine-rebuild");
         cancelTunnelingWatchdog();
@@ -308,9 +307,7 @@ public class ExoPlayerEngine implements PlayerEngine {
                 dolbyVisionPlaybackState,
                 compressedAudioDirectPolicy,
                 assSession,
-                subtitleSession,
-                mediaSignals,
-                mediaClock);
+                subtitleSession);
         frameSchedulingSettings = schedulingSettings;
         frameSchedulingSessionLock.onRendererRebuilt(
                 schedulingSettings.decision());
@@ -693,7 +690,6 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public void stop() {
-        audioOutputAttemptGeneration++;
         compressedAudioDirectPolicy.resetOutputProgress();
         preCache.stop("player-stop");
         cancelDecoderRuntimeStableWindow();
@@ -992,14 +988,10 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public ErrorAction handleError(PlaybackException e) {
-        boolean directAudioFailure = isAudioOutputFailure(e)
-                || compressedAudioDirectPolicy.requestPcmFallbackForStuckPlayback(e);
-        boolean requestedFallback = directAudioFailure
-                && compressedAudioDirectPolicy.consumePcmFallbackRequest();
-        boolean fallbackAlreadyPending = pcmFallbackInProgress.get()
-                || pcmFallbackScheduledAttempt.get() == audioOutputAttemptGeneration;
-        if (directAudioFailure && (requestedFallback || fallbackAlreadyPending)) {
-            if (requestPcmFallback()) {
+        if ((isAudioOutputFailure(e)
+                || compressedAudioDirectPolicy.requestPcmFallbackForStuckPlayback(e))
+                && compressedAudioDirectPolicy.consumePcmFallbackRequest()) {
+            if (retryAudioOutputWithPcm()) {
                 PlaybackTrace.log(
                         "player-engine",
                         getPlaybackTraceId(),
@@ -1059,10 +1051,6 @@ public class ExoPlayerEngine implements PlayerEngine {
     private boolean retryAudioOutputWithPcm() {
         if (!pcmFallbackInProgress.compareAndSet(false, true)) return false;
         try {
-            if (player == null || spec == null) return false;
-            long position = Math.max(0, player.getCurrentPosition());
-            boolean shouldPlay = playWhenReady;
-            preCache.stop("audio-output-pcm-fallback");
             startInternal(position, shouldPlay, true);
             if (SpiderDebug.isEnabled()) {
                 SpiderDebug.log(
@@ -1181,9 +1169,6 @@ public class ExoPlayerEngine implements PlayerEngine {
     private void startInternal(long position, boolean playWhenReady, boolean pcmRetry) {
         audioOutputAttemptGeneration++;
         compressedAudioDirectPolicy.prepareForPlayback(spec.getUrl(), pcmRetry);
-        preCache.setPlaylistPreloadDurationMs(player, 0);
-        queuedSpec = null;
-        queuedMediaId = null;
         this.playWhenReady = playWhenReady;
         firstFrameRendered = false;
         cancelTunnelingProgressWatchdog();

@@ -2163,7 +2163,6 @@ public void resetTrack(int type) {
         beginIjkRuntimeManualOverride();
         beginPlaybackTrace("switch-player-result");
         type = PlayerSetting.sanitizePlayer(type);
-        manualPlayerSwitchPending = true;
         boolean resetVideoSurface = type != playerType;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
         int decode = engine.getDecode();
@@ -3874,7 +3873,7 @@ public void resetTrack(int type) {
                 || !playbackAutoSession.active()
                 || playerType != PlayerSetting.IJK
                 || !PlaybackPerformanceSetting.isAuto(PlayerSetting.IJK)
-                || PlayerSetting.getActivePlayer() != PlayerSetting.IJK) return;
+                || playerType != PlayerSetting.IJK) return;
         long now = Math.max(0, nowElapsedMs);
         IjkRuntimeProfileController.Facts facts = currentIjkRuntimeFacts(now);
         IjkRuntimeProfileController.RuntimeSample sample =
@@ -5528,10 +5527,6 @@ public void resetTrack(int type) {
 
     private void prepareMpvOutputForNewItem() {
         resetMpvOutputEvaluationState();
-        // 必须在 instanceof 早退之前注入：Exo 和 IJK 也要恢复外挂字幕。
-        // 也必须在下面算 externalSubtitleActive 之前，否则 MPV 的输出模式判定
-        // 会漏掉这条刚挂上的字幕。
-        restorePendingSubtitle();
         mpvSurfaceFallbackTried = false;
         List<Track> persistedTracks = Track.find(getKey());
         Track persistedSubtitle = findRequestedSubtitle(persistedTracks);
@@ -5561,17 +5556,7 @@ public void resetTrack(int type) {
         }
         boolean shouldStartDirect = MpvPerformanceSetting.shouldUseSurfaceDirect(
                 autoDirectEligible, Util.isLeanback(), engine.isHard());
-        boolean externalSubtitleActive = spec != null && spec.getSubs() != null && !spec.getSubs().isEmpty();
-        boolean leaveForSubtitle = MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(
-                automaticOutput, mpv.isSurfaceDirect(), externalSubtitleActive, mpvExplicitSubtitlePreference);
-        if (leaveForSubtitle) shouldStartDirect = false;
-        if (automaticOutput && MpvPerformanceSetting.isAutoSurfaceDirectEnabled()
-                && mpv.isConfiguredSurfaceDirect() && shouldStartDirect) {
-            if (SpiderDebug.isEnabled()) SpiderDebug.log("mpv-output", "preserve direct output for new item reason=auto-sticky");
-            return;
-        }
         if (mpv.isConfiguredSurfaceDirect() == shouldStartDirect
-                && !hwdecOverrideCleared
                 && !clearAutoVulkanRenderer && !dv7HandlingChanged && !dv8HandlingChanged) return;
         if (SpiderDebug.isEnabled()) SpiderDebug.log("mpv-output", "prepare new item rebuild currentDirect=%s desiredDirect=%s mode=%s hwdecOverrideCleared=%s clearAutoVulkan=%s dv7HandlingChanged=%s dv8HandlingChanged=%s", mpv.isSurfaceDirect(), shouldStartDirect, MpvPerformanceSetting.getOutputModeText(), hwdecOverrideCleared, clearAutoVulkanRenderer, dv7HandlingChanged, dv8HandlingChanged);
         mpv.setSurfaceDirectOverride(shouldStartDirect);
@@ -6070,7 +6055,7 @@ public void resetTrack(int type) {
     }
 
     public void start(PlaySpec spec, long timeout, boolean playWhenReady, long positionMs) {
-        mediaSession.begin(0L);
+        Integer forced = spec.getForcedPlayer();
         endPlaybackTelemetrySession("replace-start");
         prepareIjkRuntimeForUserPlayback();
         clearPendingSwitchRestore();
@@ -6087,6 +6072,16 @@ public void resetTrack(int type) {
         hardDecodeSwitchRetryArmed = false;
         softDecodeFallbackAttempted = false;
         setMediaItem(timeout);
+        int desiredKernel;
+        if (forced != null) {
+            desiredKernel = forced;
+        } else {
+            desiredKernel = PlayerSetting.getPlayer();
+        }
+        if (desiredKernel != playerType) {
+            final Integer target = desiredKernel;
+            App.post(() -> switchPlayer(target, false), 200);
+        }
     }
 
     public void parse(String key, Result result, boolean useParse, MediaMetadata metadata) {

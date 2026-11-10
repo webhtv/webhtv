@@ -35,6 +35,7 @@ import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.setting.SiteBlockSetting;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityCollectBinding;
 import com.fongmi.android.tv.model.SearchProgress;
@@ -42,6 +43,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteGroupOrderStore;
 import com.fongmi.android.tv.setting.SiteHealthStore;
+import com.fongmi.android.tv.setting.SiteOrderStore;
 import com.fongmi.android.tv.ui.adapter.CollectAdapter;
 import com.fongmi.android.tv.ui.adapter.SearchAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -50,9 +52,7 @@ import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
 import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.fongmi.android.tv.utils.SearchPageState;
-import com.fongmi.android.tv.utils.SearchResultFilter;
-import com.fongmi.android.tv.utils.SearchSourceVisibility;
+import com.fongmi.android.tv.utils.SearchModeStore;
 import com.github.catvod.crawler.SpiderDebug;
 import com.google.android.material.textview.MaterialTextView;
 import com.google.gson.reflect.TypeToken;
@@ -91,8 +91,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private final SearchPageState mPaging = new SearchPageState();
     private final List<Vod> mPendingItems = new ArrayList<>();
     private Runnable mApplyCollect;
-    private String mPendingCollectSiteKey = "";
-    private String mBoundSearchSiteKey = "";
+    private int mPendingCollectPosition = RecyclerView.NO_POSITION;
+    private int mLastSearchFocus;
     private boolean mScrolling;
     private boolean mLeavingForPlayback;
     private final Map<String, SearchPosition> mSearchPositions = new HashMap<>();
@@ -203,33 +203,48 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         setSearchColumn();
         updateFilterControls();
         search();
-        focusInitialSource();
+        initModeToggle();
+        mBinding.collect.post(() -> mBinding.collect.requestFocus());
+    }
+
+    private void initModeToggle() {
+        mBinding.modeToggle.setOnClickListener(v -> onModeToggle());
+        updateModeToggleIcon();
+    }
+
+    private void updateModeToggleIcon() {
+        int iconRes;
+        switch (Setting.getSearchColumn()) {
+            case SearchAdapter.MODE_LIST: iconRes = R.drawable.ic_site_detail; break;
+            case SearchAdapter.MODE_TEXT: iconRes = R.drawable.ic_site_single_column; break;
+            default: iconRes = R.drawable.ic_site_double_column; break;
+        }
+        mBinding.modeToggle.setImageResource(iconRes);
+    }
+
+    private void onModeToggle() {
+        Setting.putSearchColumn(Setting.getSearchColumn() % 3 + 1);
+        applyMode();
     }
 
     @Override
-    protected void initEvent() {
-        mBinding.searchGroup.setOnClickListener(this::showGroupPopup);
-        mBinding.similarityFilter.setOnClickListener(v -> onSimilarityFilter());
-        mBinding.searchColumn.setOnClickListener(v -> toggleSearchColumn());
-        mBinding.searchGroup.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return mBinding.similarityFilter.requestFocus();
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusBelowTop();
-            return keyCode == KeyEvent.KEYCODE_DPAD_LEFT;
-        });
-        mBinding.similarityFilter.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && mBinding.searchGroup.getVisibility() == View.VISIBLE) return mBinding.searchGroup.requestFocus();
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return mBinding.searchColumn.requestFocus();
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusBelowTop();
-            return false;
-        });
-        mBinding.searchColumn.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return mBinding.similarityFilter.requestFocus();
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusBelowTop();
-            return false;
-        });
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_MENU) {
+            onModeToggle();
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    private void applyMode() {
+        int count = getCount();
+        ((GridLayoutManager) mBinding.recycler.getLayoutManager()).setSpanCount(count);
+        mBinding.recycler.setItemViewCacheSize(count * 3);
+        mSearchAdapter.setSize(getItemWidth(count), getItemHeight(count));
+        mSearchAdapter.setMode(Setting.getSearchColumn());
+        updateModeToggleIcon();
+        mLastSearchFocus = 0;
+        mBinding.recycler.scrollToPosition(0);
     }
 
     private void setRecyclerView() {
@@ -247,22 +262,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
                 scheduleCollect(position, 260);
             }
         });
-        mBinding.collectHorizontal.setHasFixedSize(true);
-        mBinding.collectHorizontal.setItemAnimator(null);
-        mBinding.collectHorizontal.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.collectHorizontal.setAdapter(mCollectAdapter);
-        mBinding.collectHorizontal.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
-            @Override
-            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                if (TouchOptimizationHelper.isTouchActive(parent)) return;
-                scheduleCollect(position, 260);
-            }
-        });
-        setSearchLayout();
-        mBinding.collect.setOnKeyListener((view, keyCode, event) -> {
-            if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
-            return focusFirstSearchResult();
-        });
+        mBinding.collect.setOnKeyListener((view, keyCode, event) -> false);
         mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.setItemAnimator(null);
         mBinding.recycler.setItemViewCacheSize(count * 3);
@@ -274,9 +274,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
                 saveSearchPosition(getActiveSiteKey());
                 if (!canLoadImage()) return;
                 recyclerView.post(() -> {
-                    if (!canLoadImage()) return;
-                    ensureSearchRows(count, 2);
-                    preloadNextRows(count);
+                    ensureSearchRows(getCount(), 2);
+                    preloadNextRows(getCount());
                 });
             }
 
@@ -287,17 +286,26 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
                 if (scrolling == mScrolling) return;
                 mScrolling = scrolling;
                 if (mScrolling) {
-                    ensureSearchRows(count, 2);
-                    preloadNextRows(count);
+                    recyclerView.post(() -> {
+                        ensureSearchRows(getCount(), 2);
+                        preloadNextRows(getCount());
+                    });
                 } else {
                     Glide.with(CollectActivity.this).resumeRequests();
-                    flushPendingItems();
-                    ensureSearchRows(count, 2);
-                    preloadNextRows(count);
+                    recyclerView.post(() -> {
+                        flushPendingItems();
+                        ensureSearchRows(getCount(), 2);
+                        preloadNextRows(getCount());
+                    });
                 }
             }
         });
-        mBinding.recycler.setAdapter(mSearchAdapter = new SearchAdapter(this, getItemWidth(count), getItemHeight(count), isListMode(count)));
+        mBinding.recycler.setAdapter(mSearchAdapter = new SearchAdapter(this, getItemWidth(count), getItemHeight(count)));
+        mBinding.recycler.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus || mBinding.recycler.getFocusedChild() != null) return;
+            restoreSearchFocus();
+        });
+        mSearchAdapter.setMode(Setting.getSearchColumn());
     }
 
     private boolean canLoadImage() {
@@ -334,257 +342,10 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private void setSites() {
-        String siteKey = getSiteKey();
-        String group = getGroup();
-        mSites = new ArrayList<>();
-        for (Site site : VodConfig.get().getSites()) {
-            if (!site.isSearchable()) continue;
-            if (!siteKey.isEmpty() && !site.getKey().equals(siteKey)) continue;
-            if (!group.isEmpty() && !site.inGroup(group)) continue;
-            mSites.add(site);
-        }
-        if (Setting.getSearchResultSort() != 1) SiteHealthStore.sortSites(mSites);
-        mGroups = TextUtils.isEmpty(siteKey) && TextUtils.isEmpty(group) ? SiteGroupOrderStore.sort(Site.getGroups(mSites)) : new ArrayList<>();
-    }
-
-    private boolean focusBelowTop() {
-        if (isSearchLandscape()) {
-            focusSelectedCollect();
-            return true;
-        }
-        if (focusFirstResult()) return true;
-        focusSelectedCollect();
-        return true;
-    }
-
-    private boolean canFilterGroup() {
-        return TextUtils.isEmpty(getSiteKey()) && TextUtils.isEmpty(getGroup()) && !mGroups.isEmpty();
-    }
-
-    private String getSimilarityFilterTitle() {
-        if (mSimilarity == 0) return getString(R.string.search_filter_similarity_unlimited);
-        if (mSimilarity == 100) return getString(R.string.search_filter_similarity_exact);
-        return getString(R.string.search_filter_similarity_value, mSimilarity);
-    }
-
-    private void updateFilterControls() {
-        mBinding.searchGroup.setVisibility(canFilterGroup() ? View.VISIBLE : View.GONE);
-        if (TextUtils.isEmpty(mFilterGroup)) mBinding.searchGroup.setText(R.string.search_scope_all);
-        else mBinding.searchGroup.setText(mFilterGroup);
-        String value = getSimilarityFilterTitle();
-        mBinding.similarityFilter.setText(value);
-        mBinding.similarityFilter.setSelected(mSimilarity > 0);
-        mBinding.similarityFilter.setContentDescription(getString(R.string.search_filter_similarity_description, value, getString(R.string.search_filter_similarity_hint)));
-    }
-
-    private void focusInitialSource() {
-        if (mCollectAdapter.getItemCount() == 0) {
-            mBinding.searchColumn.requestFocus();
-            return;
-        }
-        BaseGridView collect = isSearchLandscape() ? mBinding.collectHorizontal : mBinding.collect;
-        collect.setSelectedPosition(0, holder -> holder.itemView.requestFocus());
-    }
-
-    private void onSimilarityFilter() {
-        String activeSiteKey = getActiveSiteKey();
-        SliderNumberDialog.show(this, R.string.search_filter_similarity, mSimilarity, 0, 100, "%", R.string.search_filter_similarity_hint, value -> {
-            mSimilarity = value;
-            Setting.putSearchSimilarity(value);
-            mSearchPositions.clear();
-            updateFilterControls();
-            applyFilters(activeSiteKey);
-        });
-    }
-
-    private void showGroupPopup(View anchor) {
-        if (!canFilterGroup()) return;
-        if (mGroupPopup != null) mGroupPopup.dismiss();
-        ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundResource(R.drawable.shape_search_scope_popup);
-        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        int padding = ResUtil.dp2px(GROUP_POPUP_PADDING_DP);
-        content.setPadding(padding, padding, padding, padding);
-        scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        addGroupPopupItem(content, getString(R.string.search_scope_all), "");
-        for (String group : mGroups) addGroupPopupItem(content, group, group);
-        mGroupPopup = new PopupWindow(scroll, groupPopupWidth(anchor), groupPopupHeight(), true);
-        mGroupPopup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        mGroupPopup.setOutsideTouchable(true);
-        mGroupPopup.setElevation(ResUtil.dp2px(12));
-        mGroupPopup.setOnDismissListener(() -> {
-            mGroupPopup = null;
-            anchor.requestFocus();
-        });
-        mGroupPopup.showAsDropDown(anchor, anchor.getWidth() - mGroupPopup.getWidth(), ResUtil.dp2px(8), Gravity.NO_GRAVITY);
-    }
-
-    private int groupPopupWidth(View anchor) {
-        int width = ResUtil.getTextWidth(getString(R.string.search_scope_all), 18);
-        for (String group : mGroups) width = Math.max(width, ResUtil.getTextWidth(group, 18));
-        width = Math.max(ResUtil.dp2px(GROUP_POPUP_MIN_WIDTH_DP), width + ResUtil.dp2px(56));
-        return Math.min(Math.max(anchor.getWidth(), width), ResUtil.getScreenWidth() - ResUtil.dp2px(48));
-    }
-
-    private int groupPopupHeight() {
-        int itemHeight = ResUtil.dp2px(GROUP_POPUP_ITEM_HEIGHT_DP);
-        int gap = ResUtil.dp2px(GROUP_POPUP_ITEM_GAP_DP);
-        int padding = ResUtil.dp2px(GROUP_POPUP_PADDING_DP);
-        int rowHeight = itemHeight + gap * 2;
-        int contentHeight = (mGroups.size() + 1) * rowHeight + padding * 2;
-        return Math.min(contentHeight, GROUP_POPUP_MAX_ITEMS * rowHeight + padding * 2);
-    }
-
-    private void addGroupPopupItem(LinearLayout parent, String text, String group) {
-        MaterialTextView view = new MaterialTextView(this);
-        view.setText(text);
-        view.setTextColor(ContextCompat.getColorStateList(this, R.color.selector_search_scope_text));
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        view.setGravity(Gravity.CENTER_VERTICAL);
-        view.setSingleLine(true);
-        view.setEllipsize(TextUtils.TruncateAt.END);
-        view.setIncludeFontPadding(false);
-        view.setFocusable(true);
-        view.setBackgroundResource(R.drawable.selector_search_scope_item);
-        int padding = ResUtil.dp2px(20);
-        view.setPadding(padding, 0, padding, 0);
-        view.setSelected(Objects.equals(mFilterGroup, group));
-        view.setOnClickListener(v -> {
-            if (mGroupPopup != null) mGroupPopup.dismiss();
-            setFilterGroup(group);
-        });
-        int gap = ResUtil.dp2px(GROUP_POPUP_ITEM_GAP_DP);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(GROUP_POPUP_ITEM_HEIGHT_DP));
-        params.setMargins(gap, gap, gap, gap);
-        parent.addView(view, params);
-        if (Objects.equals(mFilterGroup, group)) view.post(view::requestFocus);
-    }
-
-    private void setFilterGroup(String group) {
-        String activeSiteKey = getActiveSiteKey();
-        mSearchPositions.clear();
-        mFilterGroup = Objects.toString(group, "");
-        updateFilterControls();
-        applyFilters(activeSiteKey);
-        if (!mFilterGroup.isEmpty()) Notify.show(getString(R.string.search_scope_group_hint, mFilterGroup));
-    }
-
-    private boolean matchFilter(Site site) {
-        return TextUtils.isEmpty(mFilterGroup) || site.inGroup(mFilterGroup);
-    }
-
-    private Collect addMasterCollect(List<Vod> items) {
-        Site site = items.get(0).getSite();
-        Collect collect = findCollect(mAllCollectItems, site.getKey());
-        if (collect == null) {
-            collect = new Collect(site, new ArrayList<>());
-            mAllCollectItems.add(collect);
-        }
-        collect.getList().addAll(items);
-        return collect;
-    }
-
-    private Collect findCollect(List<Collect> items, String siteKey) {
-        for (Collect item : items) if (item.getSite().getKey().equals(siteKey)) return item;
-        return null;
-    }
-
-    private String getActiveSiteKey() {
-        if (mCollectAdapter == null || mCollectAdapter.getItemCount() == 0) return "all";
-        return mCollectAdapter.getActivated().getSite().getKey();
-    }
-
-    private List<Collect> getFilteredCollectItems(String activeSiteKey) {
-        List<Collect> items = new ArrayList<>();
-        Collect all = Collect.all();
-        all.setSelected("all".equals(activeSiteKey));
-        items.add(all);
-        for (int i = 1; i < mAllCollectItems.size(); i++) {
-            Collect raw = mAllCollectItems.get(i);
-            if (!matchFilter(raw.getSite())) continue;
-            List<Vod> visible = SearchResultFilter.filter(raw.getList(), getKeyword(), mSimilarity);
-            if (!SearchSourceVisibility.shouldShow(!visible.isEmpty())) continue;
-            Collect item = new Collect(raw.getSite(), visible);
-            item.setPage(mPaging.getPage(raw.getSite().getKey()));
-            item.setSelected(raw.getSite().getKey().equals(activeSiteKey));
-            all.getList().addAll(visible);
-            items.add(item);
-        }
-        if (getSelectedCollect(items) == all) all.setSelected(true);
-        return items;
-    }
-
-    private Collect getSelectedCollect(List<Collect> items) {
-        for (Collect item : items) if (item.isSelected()) return item;
-        return items.get(0);
-    }
-
-    private void applyFilters(String activeSiteKey) {
-        removeApplyCollect();
-        mPendingItems.clear();
-        List<Collect> items = getFilteredCollectItems(activeSiteKey);
-        Collect activated = getSelectedCollect(items);
-        mCollectAdapter.setItems(items);
-        int position = items.indexOf(activated);
-        mCollectAdapter.setSelected(Math.max(0, position));
-        RecyclerView collect = isSearchLandscape() ? mBinding.collectHorizontal : mBinding.collect;
-        if (position >= 0) {
-            if (collect instanceof androidx.leanback.widget.HorizontalGridView horizontal) horizontal.setSelectedPosition(position);
-            if (collect instanceof androidx.leanback.widget.VerticalGridView vertical) vertical.setSelectedPosition(position);
-        }
-        restoreScroller(activated.getSite().getKey());
-        setSearchItemsLazy(new ArrayList<>(activated.getList()));
-        updateEmptyState(activated);
-        mBinding.recycler.post(this::maybeLoadSelectedPage);
-    }
-
-    private void updateEmptyState(Collect activated) {
-        String siteKey = activated.getSite().getKey();
-        boolean loading = "all".equals(siteKey) ? mPaging.hasPending() : mPaging.isPending(siteKey);
-        boolean show = mSimilarity > 0 && mSearchCompleted && !loading && activated.getList().isEmpty() && hasRawResults(siteKey);
-        if (show) {
-            String text = mSimilarity == 100 ? getString(R.string.search_filter_empty_exact) : getString(R.string.search_filter_empty, mSimilarity);
-            mBinding.empty.setText(text);
-        }
-        mBinding.empty.setVisibility(show ? View.VISIBLE : View.GONE);
-    }
-
-    private void restoreScroller(String siteKey) {
-        if (mPaging.isPending(siteKey)) return;
-        mScroller.reset();
-        if ("all".equals(siteKey)) return;
-        mScroller.setPage(mPaging.getPage(siteKey));
-        mScroller.setEnable(mPaging.getPageCount(siteKey));
-    }
-
-    private void maybeLoadNextPage(String siteKey, boolean rawPageHasItems, boolean visiblePageHasItems) {
-        if (!siteKey.equals(getActiveSiteKey())) return;
-        if (!mPaging.shouldContinue(siteKey, mSimilarity > 0, rawPageHasItems, visiblePageHasItems)) return;
-        restoreScroller(siteKey);
-        mScroller.checkMore();
-        if (mPaging.isPending(siteKey)) updateEmptyState(mCollectAdapter.getActivated());
-    }
-
-    private void maybeLoadSelectedPage() {
-        if (mCollectAdapter == null || mCollectAdapter.getItemCount() == 0) return;
-        Collect activated = mCollectAdapter.getActivated();
-        String siteKey = activated.getSite().getKey();
-        Collect raw = findCollect(mAllCollectItems, siteKey);
-        maybeLoadNextPage(siteKey, raw != null && !raw.getList().isEmpty(), !activated.getList().isEmpty());
-    }
-
-    private boolean hasRawResults(String siteKey) {
-        if (!"all".equals(siteKey)) {
-            Collect raw = findCollect(mAllCollectItems, siteKey);
-            return raw != null && !raw.getList().isEmpty();
-        }
-        for (int i = 1; i < mAllCollectItems.size(); i++) {
-            Collect raw = mAllCollectItems.get(i);
-            if (matchFilter(raw.getSite()) && !raw.getList().isEmpty()) return true;
-        }
-        return false;
+        mSites = new ArrayList<>(SearchModeStore.filterSites(VodConfig.get().getSites(), getSiteKey()));
+        mSites.removeIf(SiteBlockSetting::isBlocked);
+        if (Setting.isSiteHealthSort()) SiteHealthStore.sortSites(mSites);
+        else SiteOrderStore.sortSites(mSites);
     }
 
     private void search() {
@@ -616,73 +377,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private int getCount() {
-        int column = Setting.getSearchColumn();
-        if (column == 1) return 1; // 1列 (列表模式)
-        if (column == 2) return 2; // 2列
-        return getAutoCount(); // 自适应
-    }
-
-    private int getAutoCount() {
-        return Product.getColumn();
-    }
-
-    private boolean isSearchLandscape() {
-        return Setting.getSearchUi() == 0;
-    }
-
-    private boolean isListMode(int count) {
-        return count == 1;
-    }
-
-    private void setSearchColumn() {
-        int iconRes = getSearchColumnIcon();
-        mBinding.searchColumn.setImageResource(iconRes);
-        String description = getSearchColumnDescription();
-        mBinding.searchColumn.setContentDescription(description);
-    }
-
-    private int getSearchColumnIcon() {
-        int column = Setting.getSearchColumn();
-        if (column == 1) return R.drawable.ic_site_list; // 列表模式 (1列)
-        return R.drawable.ic_site_grid; // 网格模式 (自适应或默认)
-    }
-
-    private String getSearchColumnDescription() {
-        String[] options = getResources().getStringArray(R.array.select_search_column);
-        int column = Setting.getSearchColumn();
-        String current = column == 1 ? options[1] : options[0]; // 0: 自适应, 1: 1列
-        int nextColumn = column == 1 ? 0 : 1;
-        String next = nextColumn == 1 ? options[1] : options[0];
-        return getString(R.string.setting_search_column) + ": " + current + " → " + next;
-    }
-
-    private void toggleSearchColumn() {
-        int current = Setting.getSearchColumn();
-        int next = current == 1 ? 0 : 1; // 0: 自适应 ↔ 1: 1列
-        Setting.putSearchColumn(next);
-        setSearchColumn();
-        updateRecyclerLayout();
-    }
-
-    private void updateRecyclerLayout() {
-        mSearchPositions.clear();
-        mBoundSearchSiteKey = "";
-        int count = getCount();
-        GridLayoutManager layoutManager = (GridLayoutManager) mBinding.recycler.getLayoutManager();
-        if (layoutManager != null) {
-            layoutManager.setSpanCount(count);
-        }
-        mSearchAdapter = new SearchAdapter(this, getItemWidth(count), getItemHeight(count), isListMode(count));
-        mBinding.recycler.setAdapter(mSearchAdapter);
-        mBinding.recycler.setItemViewCacheSize(count * 3);
-
-        // 重新加载当前选中的收藏项
-        if (mCollectAdapter != null && mCollectAdapter.getPosition() >= 0) {
-            Collect activated = mCollectAdapter.getActivated();
-            if (activated != null) {
-                setSearchItemsLazy(new ArrayList<>(activated.getList()));
-            }
-        }
+        return Math.max(1, Setting.getSearchColumn() == SearchAdapter.MODE_GRID ? Product.getColumn() : 2);
     }
 
     private int getItemWidth(int count) {
@@ -707,67 +402,15 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void setSearch(Result result) {
         if (result == null) return;
-        boolean hasItems = !result.getList().isEmpty();
-        String resultSiteKey = hasItems ? result.getVod().getSiteKey() : "";
-        SearchPageState.Completion completion = mPaging.complete(resultSiteKey, hasItems, result.getPageCount(), SearchPageState.pageToken(result.getList()));
-        if (!completion.handled()) return;
-        Collect raw = findCollect(mAllCollectItems, completion.siteKey());
-        if (completion.accepted() && raw != null) raw.setPage(completion.page());
-        restoreScroller(getActiveSiteKey());
-        if (mLeavingForPlayback) return;
-        if (!completion.accepted()) {
-            if (mCollectAdapter.getItemCount() > 0) updateEmptyState(mCollectAdapter.getActivated());
-            if (!completion.siteKey().equals(getActiveSiteKey())) maybeLoadSelectedPage();
-            return;
-        }
-        applySearchResult(result);
-        if (!completion.siteKey().equals(getActiveSiteKey())) maybeLoadSelectedPage();
-    }
-
-    private void applySearchResult(Result result) {
-        List<Vod> rawItems = new ArrayList<>(result.getList());
-        Collect raw = addMasterCollect(rawItems);
-        raw.setPage(mPaging.getPage(raw.getSite().getKey()));
-        if (!matchFilter(raw.getSite())) return;
-        List<Vod> visible = SearchResultFilter.filter(rawItems, getKeyword(), mSimilarity);
-        updateProjectedCollect(raw, visible);
-        if (visible.isEmpty()) {
-            updateEmptyState(mCollectAdapter.getActivated());
-            maybeLoadNextPage(raw.getSite().getKey(), true, false);
-            return;
-        }
-        String activeSiteKey = getActiveSiteKey();
-        mCollectAdapter.add(visible);
-        if ("all".equals(activeSiteKey) || raw.getSite().getKey().equals(activeSiteKey)) addSearchItems(visible);
-        updateEmptyState(mCollectAdapter.getActivated());
-    }
-
-    private int getProjectedCollectPosition(String siteKey) {
-        int position = 1;
-        for (int i = 1; i < mAllCollectItems.size(); i++) {
-            Collect item = mAllCollectItems.get(i);
-            if (item.getSite().getKey().equals(siteKey)) break;
-            if (mCollectAdapter.findCollectIndex(item.getSite().getKey()) >= 0) position++;
-        }
-        return position;
-    }
-
-    private void updateProjectedCollect(Collect raw, List<Vod> visible) {
-        int index = mCollectAdapter.findCollectIndex(raw.getSite().getKey());
-        if (index < 0) {
-            if (visible.isEmpty()) return;
-            Collect collect = new Collect(raw.getSite(), new ArrayList<>(visible));
-            collect.setPage(mPaging.getPage(raw.getSite().getKey()));
-            mCollectAdapter.add(getProjectedCollectPosition(raw.getSite().getKey()), collect);
-        } else {
-            Collect collect = mCollectAdapter.get(index);
-            collect.setPage(mPaging.getPage(raw.getSite().getKey()));
-            if (!visible.isEmpty()) collect.getList().addAll(visible);
-            mCollectAdapter.update(index, collect);
-        }
+        mScroller.endLoading(result);
+        Collect activated = mCollectAdapter.getActivated();
+        boolean same = !result.getList().isEmpty() && activated.getSite() != null && activated.getSite().equals(result.getVod().getSite());
+        if (same) activated.getList().addAll(result.getList());
+        if (same) addSearchItems(result.getList());
     }
 
     private void addSearchItems(List<Vod> items) {
+        if (items == null || items.isEmpty()) return;
         if (mScrolling) mPendingItems.addAll(items);
         else mSearchAdapter.appendSource(items, getCount() * 4);
     }
@@ -870,23 +513,6 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     @Override
     public boolean onCollectKey(int position, int keyCode, KeyEvent event) {
-        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-        if (isSearchLandscape()) {
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                mBinding.searchColumn.requestFocus();
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusFirstResult();
-            if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return true;
-            return false;
-        }
-        // 横排站点的左右键交给列表导航；只有竖排站点按右键进入搜索结果。
-        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return focusFirstSearchResult();
-        // 在第一项按上键，跳转到切换按钮
-        if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            mBinding.searchColumn.requestFocus();
-            return true;
-        }
         return false;
     }
 
@@ -897,8 +523,9 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         String siteKey = item.getSite().getKey();
         boolean same = siteKey.equals(getActiveSiteKey());
         mCollectAdapter.setSelected(position);
-        if (!same) mBoundSearchSiteKey = "";
-        restoreScroller(siteKey);
+        mSearchAdapter.setAllMode("all".equals(item.getSite().getKey()));
+        mScroller.reset();
+        mScroller.setPage(item.getPage());
         mPendingItems.clear();
         if (same && delayMillis > 0 && siteKey.equals(mPendingCollectSiteKey)) return;
         applyCollectDeferred(siteKey, delayMillis);
@@ -925,16 +552,14 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private void setSearchItemsLazy(List<Vod> items) {
-        String siteKey = getActiveSiteKey();
-        mBoundSearchSiteKey = siteKey;
-        SearchPosition saved = mSearchPositions.get(siteKey);
-        int position = saved == null ? 0 : saved.adapterPosition;
-        mSearchAdapter.setSource(items, Math.max(getCount() * 4, position + getCount()));
+        mSearchAdapter.setSource(items, getCount() * 4);
+        mLastSearchFocus = 0;
         mBinding.recycler.post(() -> {
-            if (!siteKey.equals(getActiveSiteKey())) return;
-            restoreSearchPosition(siteKey);
-            ensureSearchRows(getCount(), 2);
-            preloadNextRows(getCount());
+            scrollSearchToTop();
+            mBinding.recycler.post(() -> {
+                ensureSearchRows(getCount(), 2);
+                preloadNextRows(getCount());
+            });
         });
     }
 
@@ -959,35 +584,6 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         int position = saved == null ? 0 : Math.min(saved.adapterPosition, itemCount - 1);
         int offset = saved == null ? 0 : saved.offset;
         layoutManager.scrollToPositionWithOffset(Math.max(0, position), offset);
-    }
-
-    private boolean focusFirstSearchResult() {
-        if (mSearchAdapter == null) return false;
-        String siteKey = getActiveSiteKey();
-        if (!siteKey.equals(mBoundSearchSiteKey)) {
-            removeApplyCollect();
-            Collect activated = mCollectAdapter.findActivated(siteKey);
-            if (activated == null) return false;
-            setSearchItemsLazy(new ArrayList<>(activated.getList()));
-            updateEmptyState(activated);
-            maybeLoadSelectedPage();
-        }
-        if (mSearchAdapter.getItemCount() == 0) return false;
-        mBinding.recycler.post(() -> {
-            if (!siteKey.equals(mBoundSearchSiteKey) || !siteKey.equals(getActiveSiteKey())) return;
-            restoreSearchPosition(siteKey);
-            mBinding.recycler.post(() -> {
-                if (!siteKey.equals(mBoundSearchSiteKey) || !siteKey.equals(getActiveSiteKey())) return;
-                RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
-                SearchPosition saved = mSearchPositions.get(siteKey);
-                int itemCount = mSearchAdapter == null ? 0 : mSearchAdapter.getItemCount();
-                int position = saved == null || itemCount <= 0 ? 0 : Math.min(saved.adapterPosition, itemCount - 1);
-                View target = manager == null ? null : manager.findViewByPosition(position);
-                if (target != null) target.requestFocus();
-                else mBinding.recycler.requestFocus();
-            });
-        });
-        return true;
     }
 
     @Override
@@ -1022,46 +618,63 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     @Override
     public boolean onItemKey(int position, int keyCode, KeyEvent event) {
-        if (event.getAction() != KeyEvent.ACTION_DOWN || position < 0) return false;
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (position < 0) return true;
+        mLastSearchFocus = position;
         int count = getCount();
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return onSearchDown(position, count);
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return onSearchUp(position, count);
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return false;
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return position % count == count - 1;
         return false;
     }
 
-    private boolean onSearchUp(int position, int count) {
-        if (position < count) {
-            if (isSearchLandscape()) focusSelectedCollect();
-            else mBinding.searchColumn.requestFocus();
-            return true;
+    private void restoreSearchFocus() {
+        if (mLastSearchFocus < 0) return;
+        RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
+        if (!(manager instanceof GridLayoutManager layoutManager)) return;
+        int pos = Math.min(mLastSearchFocus, mSearchAdapter.getItemCount() - 1);
+        if (pos < 0) return;
+        View target = layoutManager.findViewByPosition(pos);
+        if (target != null) {
+            target.requestFocus();
+            return;
         }
-        return false;
-    }
-
-    private boolean focusFirstResult() {
-        return focusFirstSearchResult();
-    }
-
-    private void focusSelectedCollect() {
-        RecyclerView collect = isSearchLandscape() ? mBinding.collectHorizontal : mBinding.collect;
-        int position = mCollectAdapter != null ? mCollectAdapter.getPosition() : 0;
-        RecyclerView.ViewHolder holder = collect.findViewHolderForAdapterPosition(position);
-        if (holder != null) holder.itemView.requestFocus();
-        else collect.requestFocus();
+        layoutManager.scrollToPositionWithOffset(pos, 0);
+        mBinding.recycler.post(() -> {
+            View view = layoutManager.findViewByPosition(pos);
+            if (view != null) view.requestFocus();
+        });
     }
 
     private boolean onSearchDown(int position, int count) {
         int next = position + count;
         if (next + count >= mSearchAdapter.getItemCount()) flushPendingItems();
         mSearchAdapter.ensureLoaded(next + 1, count * 3);
-        boolean bottom = next >= mSearchAdapter.getItemCount();
-        if (bottom) {
+        if (next < mSearchAdapter.getItemCount()) {
+            moveSearchFocus(next);
+        } else {
             mScroller.checkMore();
-            return true;
         }
-        focusSearchTarget(next);
         return true;
+    }
+
+    private void moveSearchFocus(int position) {
+        RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
+        if (!(manager instanceof GridLayoutManager layoutManager)) return;
+        View target = layoutManager.findViewByPosition(position);
+        if (target != null) {
+            target.requestFocus();
+            return;
+        }
+        int itemHeight = 0;
+        View child = layoutManager.getChildAt(0);
+        if (child != null) itemHeight = child.getHeight();
+        int offset = Math.max(0, layoutManager.getHeight() - itemHeight - ResUtil.dp2px(8));
+        layoutManager.scrollToPositionWithOffset(position, offset);
+        mBinding.recycler.post(() -> {
+            View view = layoutManager.findViewByPosition(position);
+            if (view != null) view.requestFocus();
+        });
     }
 
     @Override

@@ -252,7 +252,7 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
         ExoPlaybackThresholdCoordinator.process().disrupt(
                 ExoPlaybackThresholdCoordinator.currentSession());
         snapshot = Snapshot.empty();
-        DROPPED_FRAME_ACCOUNTING.reset();
+        totalDroppedFrames = 0;
         lastBandwidthLogMs = 0;
         lastMediaEstimateLogMs = 0;
         lastFrameTimingLogMs = 0;

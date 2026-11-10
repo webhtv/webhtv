@@ -21,6 +21,8 @@ import com.fongmi.android.tv.utils.Util;
 public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener implements ScaleGestureDetector.OnScaleGestureListener {
 
     private static final int DISTANCE = 100;
+    // 静态变量，进程内共享，App关闭就失效，不写Pref
+    private static float sessionBright = -1f;
 
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector detector;
@@ -77,17 +79,8 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
             downY = e.getY();
         }
         if (action == MotionEvent.ACTION_POINTER_DOWN) multiTouch = true;
-        // 被父容器拦截或来电时只收到 CANCEL：HUD 与倍速同样要收尾，
-        // 否则 widget 会一直盖在画面上、倍速卡在长按后的速率。
-        if (end) listener.onTouchEnd();
-        // 短剧的亮度/音量在长按之后才生效，此时 GestureDetector 已不再回调 onScroll，
-        // 只能在这里自行处理移动事件，详见 handleAdjust。用实时指数判断而不是 multiTouch：
-        // 后者在 ACTION_POINTER_UP 时不会复位，会把抬起一根手指后的单指调节一起挡掉。
-        if (shortDrama && action == MotionEvent.ACTION_MOVE && e.getPointerCount() == 1 && !lock && !changeScale) handleAdjust(e);
-        // 手势被父容器拦截或来电时只收到 CANCEL，同样要落盘，否则窗口已改而记忆值未更新
-        if (changeBright && end) PlayerSetting.putBrightness(currentBright);
-        if (changeSpeed && end) listener.onSpeedEnd();
-        // seek 只在正常抬手时提交：CANCEL 属于手势被打断，维持原位置更符合预期。
+        if (action == MotionEvent.ACTION_UP) listener.onTouchEnd();
+        if (changeSpeed && action == MotionEvent.ACTION_UP) listener.onSpeedEnd();
         if (changeTime && action == MotionEvent.ACTION_UP) listener.onSeekEnd(time);
         boolean handled = e.getPointerCount() == 2 ? scaleDetector.onTouchEvent(e) : detector.onTouchEvent(e);
         // 必须等 detector 处理完再清：onFling 是 detector 在 UP 时回调的，它要读
@@ -117,36 +110,9 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
     }
 
     private void applyBrightness() {
-        // merge 在「用户未设定且无夜间上限」时返回 -1，即 BRIGHTNESS_OVERRIDE_NONE，
-        // 写入窗口就是恢复跟随系统。所以这里必须无条件写，不能短路：
-        // 否则夜间模式由「有上限」切回「无上限」时窗口会停留在旧的压暗值。
-        applyWindowBrightness(BrightnessPolicy.merge(PlayerSetting.getBrightness(), brightLimit));
-    }
-
-    /**
-     * 设置夜间模式亮度上限（负数表示无上限），随后立即重算窗口亮度。
-     */
-    public void setBrightLimit(float limit) {
-        this.brightLimit = limit;
-        applyBrightness();
-    }
-
-    /**
-     * 退出播放页时把窗口亮度交还系统。
-     * <p>
-     * 窗口销毁本身会让覆盖值失效，但同一个 Activity 内（切到详情、关闭「记住亮度」后）
-     * 不还原就会一直停在旧的覆盖值上，表现为「屏幕莫名一直偏亮」。
-     */
-    public void release() {
-        applyWindowBrightness(BrightnessPolicy.FOLLOW_SYSTEM);
-    }
-
-    private void applyWindowBrightness(float brightness) {
+        if (sessionBright < 0) return;
         WindowManager.LayoutParams attributes = activity.getWindow().getAttributes();
-        // 值没变就不要回写，避免无谓的窗口属性更新；也保证「从未接管」的页面
-        // (如直播页) 不会因为显式写入默认值而触发多余的 relayout。
-        if (attributes.screenBrightness == brightness) return;
-        attributes.screenBrightness = brightness;
+        attributes.screenBrightness = sessionBright;
         activity.getWindow().setAttributes(attributes);
     }
 
@@ -309,7 +275,10 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
     @Override
     public boolean onSingleTapConfirmed(@NonNull MotionEvent e) {
         if (isMultiple(e) || changeScale) return true;
-        listener.onSingleTap(getVideoX(e), getVideoWidth());
+        // 使用视图相对坐标和 videoView 尺寸，保证 PIP 小窗模式下也能正确识别右上角等区域
+        int w = (videoView != null && videoView.getWidth() > 0) ? videoView.getWidth() : ResUtil.getScreenWidth(App.get());
+        int h = (videoView != null && videoView.getHeight() > 0) ? videoView.getHeight() : ResUtil.getScreenHeight(App.get());
+        listener.onSingleTap(e.getX(), e.getY(), w, h);
         return true;
     }
 
@@ -360,7 +329,7 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
         // 否则夜间模式下滑到顶会把 1.0 落盘，切到无上限的页面（如直播）就突然全亮。
         float brightness = BrightnessPolicy.merge(BrightnessPolicy.scroll(bright, deltaY, height), brightLimit);
         currentBright = brightness;
-        applyWindowBrightness(brightness);
+        sessionBright = brightness;
         listener.onBright((int) (brightness * 100));
     }
 
@@ -422,6 +391,10 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
             onSingleTap();
         }
 
+        default void onSingleTap(float x, float y, float width, float height) {
+            onSingleTap(x, width);
+        }
+ 
         void onDoubleTap();
 
         void onTouchEnd();

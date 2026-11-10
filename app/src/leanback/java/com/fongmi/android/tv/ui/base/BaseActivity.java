@@ -31,6 +31,7 @@ import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.Util;
+import com.github.catvod.utils.Prefers;
 
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
@@ -41,27 +42,20 @@ import me.jessyan.autosize.AutoSizeCompat;
 
 public abstract class BaseActivity extends AppCompatActivity {
 
-    private static final int DESIGN_WIDTH_IN_DP = 960;
-    private static final int DESIGN_HEIGHT_IN_DP = 540;
+    private int mLastUiScale;
 
     protected abstract ViewBinding getBinding();
 
     @Override
     protected void attachBaseContext(Context newBase) {
-        super.attachBaseContext(Setting.wrapLanguage(newBase));
+        super.attachBaseContext(Setting.wrapDisplay(newBase));
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        ThemeController.applyFromPreferences(this);
-        registerFragmentLifecycleCallbacks();
-        // getBinding() inflates on every call, so resolve it once: the root that is set as
-        // content must be the same instance that initView()/initEvent() configure.
-        View content = getBinding().getRoot();
-        setContentView(content);
-        bindFullWindowContent();
-        ThemeController.bindTheme(content);
+        mLastUiScale = Setting.getUiScale();
+        setContentView(getBinding().getRoot());
         EventBus.getDefault().register(this);
         initView(savedInstanceState);
         ThemeController.bindTheme(content);
@@ -178,6 +172,13 @@ public abstract class BaseActivity extends AppCompatActivity {
             // Keep the TV AutoSize pipeline and express the user scale through its design size.
             applyUiScale();
             AutoSizeCompat.autoConvertDensityOfGlobal(resources);
+            float factor = Setting.getUiScaleFactor();
+            if (factor != 1.0f) {
+                android.util.DisplayMetrics metrics = resources.getDisplayMetrics();
+                metrics.density *= factor;
+                metrics.scaledDensity *= factor;
+                metrics.densityDpi = (int) (metrics.densityDpi * factor);
+            }
             return resources;
         } catch (Exception ignored) {
             return resources;
@@ -220,26 +221,20 @@ public abstract class BaseActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        TouchOptimizationHelper.sync(getWindow().getDecorView());
+        if (Setting.getUiScale() != mLastUiScale) {
+            mLastUiScale = Setting.getUiScale();
+            Prefers.put("skip_startup", true);
+            recreate();
+            return;
+        }
         Updater.create().resume(this);
         ApkUrlPush.get().resume(this);
     }
 
-    private void registerFragmentLifecycleCallbacks() {
-        getSupportFragmentManager().registerFragmentLifecycleCallbacks(new FragmentManager.FragmentLifecycleCallbacks() {
-            @Override
-            public void onFragmentViewCreated(@NonNull FragmentManager fragmentManager, @NonNull Fragment fragment, @NonNull View view, Bundle savedInstanceState) {
-                TouchOptimizationHelper.sync(view);
-            }
-
-            @Override
-            public void onFragmentStarted(@NonNull FragmentManager fragmentManager, @NonNull Fragment fragment) {
-                if (!(fragment instanceof DialogFragment dialog) || dialog.getDialog() == null) return;
-                Window window = dialog.getDialog().getWindow();
-                if (window == null) return;
-                window.getDecorView().post(() -> TouchOptimizationHelper.sync(window.getDecorView()));
-            }
-        }, true);
+    protected boolean shouldSkipStartup() {
+        boolean skip = Prefers.getBoolean("skip_startup", false);
+        if (skip) Prefers.remove("skip_startup");
+        return skip;
     }
 
     @Override

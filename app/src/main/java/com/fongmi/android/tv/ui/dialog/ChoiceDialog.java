@@ -61,6 +61,7 @@ public final class ChoiceDialog extends DialogFragment {
     private OnItemEnabled itemEnabled;
     private OnNeutral neutralAction;
     private Runnable positiveAction;
+    private Runnable dismissCallback;
 
     public interface OnChoice {
         void onChoice(int which);
@@ -78,85 +79,27 @@ public final class ChoiceDialog extends DialogFragment {
         CharSequence onNeutral();
     }
 
-    public interface OnTmdbSeasonChoice {
-        void onAuto();
-
-        void onTmdbCounts();
-
-        void onFlat();
-
-        default void onAi() {
-        }
-
-        void onSeason(int seasonNumber);
+    public static ChoiceDialog showSingle(Fragment fragment, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
+        return showSingle(fragment.getChildFragmentManager(), fragment.getString(titleRes), items, selected, choice);
     }
 
-    public static void showTmdbSeason(
-            FragmentActivity activity,
-            List<Integer> seasonNumbers,
-            Map<Integer, Integer> episodeCounts,
-            TmdbSeasonResolver.Resolution resolution,
-            OnTmdbSeasonChoice listener) {
-        if (activity == null || listener == null) return;
-        List<Integer> seasons = new ArrayList<>();
-        if (seasonNumbers != null) {
-            for (Integer season : seasonNumbers) {
-                if (season != null && season >= 0 && !seasons.contains(season)) seasons.add(season);
-            }
-        }
-        CharSequence[] items = new CharSequence[seasons.size() + 4];
-        items[0] = activity.getString(R.string.tmdb_season_auto);
-        items[1] = activity.getString(R.string.tmdb_season_auto_by_counts);
-        items[2] = activity.getString(R.string.tmdb_season_keep_original);
-        items[3] = activity.getString(R.string.tmdb_season_ai_analyze);
-        for (int index = 0; index < seasons.size(); index++) {
-            int season = seasons.get(index);
-            int count = episodeCounts == null ? 0 : Math.max(0, episodeCounts.getOrDefault(season, 0));
-            items[index + 4] = season == 0
-                    ? activity.getString(R.string.tmdb_season_special, count)
-                    : activity.getString(R.string.tmdb_season_option, season, count);
-        }
-        int selected = selectedTmdbSeasonIndex(seasons, resolution);
-        showSingle(activity.getSupportFragmentManager(), activity.getString(R.string.tmdb_season_match_title), items, selected, which -> {
-            if (which == 0) listener.onAuto();
-            else if (which == 1) listener.onTmdbCounts();
-            else if (which == 2) listener.onFlat();
-            else if (which == 3) listener.onAi();
-            else if (which - 4 < seasons.size()) listener.onSeason(seasons.get(which - 4));
-        });
+    public static ChoiceDialog showSingle(FragmentActivity activity, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
+        return showSingle(activity.getSupportFragmentManager(), activity.getString(titleRes), items, selected, choice);
     }
 
-    private static int selectedTmdbSeasonIndex(List<Integer> seasons, TmdbSeasonResolver.Resolution resolution) {
-        if (resolution == null) return 0;
-        if (resolution.getSource() == TmdbSeasonResolver.Source.MANUAL_MULTI_SLICE) return 1;
-        if (resolution.getSource() == TmdbSeasonResolver.Source.MANUAL_FLAT) return 2;
-        if (resolution.getSource() != TmdbSeasonResolver.Source.MANUAL || resolution.getSelectedSeason() == null) return 0;
-        int index = seasons.indexOf(resolution.getSelectedSeason());
-        return index < 0 ? 0 : index + 4;
+    public static ChoiceDialog showSingleNoCancel(Fragment fragment, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
+        return showSingle(fragment.getChildFragmentManager(), fragment.getString(titleRes), items, selected, false, choice);
     }
 
-
-    public static void showSingle(Fragment fragment, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
-        showSingle(fragment.getChildFragmentManager(), fragment.getString(titleRes), items, selected, choice);
+    public static ChoiceDialog showSingleNoCancel(FragmentActivity activity, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
+        return showSingle(activity.getSupportFragmentManager(), activity.getString(titleRes), items, selected, false, choice);
     }
 
-    public static void showSingle(FragmentActivity activity, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
-        showSingle(activity.getSupportFragmentManager(), activity.getString(titleRes), items, selected, choice);
+    public static ChoiceDialog showSingle(FragmentManager manager, CharSequence title, CharSequence[] items, int selected, OnChoice choice) {
+        return showSingle(manager, title, items, selected, true, choice);
     }
 
-    public static void showSingleNoCancel(Fragment fragment, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
-        showSingle(fragment.getChildFragmentManager(), fragment.getString(titleRes), items, selected, false, choice);
-    }
-
-    public static void showSingleNoCancel(FragmentActivity activity, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
-        showSingle(activity.getSupportFragmentManager(), activity.getString(titleRes), items, selected, false, choice);
-    }
-
-    public static void showSingle(FragmentManager manager, CharSequence title, CharSequence[] items, int selected, OnChoice choice) {
-        showSingle(manager, title, items, selected, true, choice);
-    }
-
-    private static void showSingle(FragmentManager manager, CharSequence title, CharSequence[] items, int selected, boolean showCancel, OnChoice choice) {
+    public static ChoiceDialog showSingle(FragmentManager manager, CharSequence title, CharSequence[] items, int selected, boolean showCancel, OnChoice choice) {
         ChoiceDialog dialog = new ChoiceDialog();
         dialog.title = title;
         dialog.items = items == null ? new CharSequence[0] : Arrays.copyOf(items, items.length);
@@ -164,9 +107,10 @@ public final class ChoiceDialog extends DialogFragment {
         dialog.showCancel = showCancel;
         dialog.choice = choice;
         dialog.show(manager, ChoiceDialog.class.getSimpleName());
+        return dialog;
     }
 
-    public static void showSingle(FragmentManager manager, CharSequence title, CharSequence[] items, int selected, String neutral, OnNeutral neutralAction, OnChoice choice) {
+    public static ChoiceDialog showSingle(FragmentManager manager, CharSequence title, CharSequence[] items, int selected, String neutral, OnNeutral neutralAction, OnChoice choice) {
         ChoiceDialog dialog = new ChoiceDialog();
         dialog.title = title;
         dialog.items = items == null ? new CharSequence[0] : Arrays.copyOf(items, items.length);
@@ -177,6 +121,7 @@ public final class ChoiceDialog extends DialogFragment {
         dialog.positive = ResUtil.getString(R.string.dialog_positive);
         dialog.dismissOnChoice = false;
         dialog.show(manager, ChoiceDialog.class.getSimpleName());
+        return dialog;
     }
 
     public static void showMulti(FragmentActivity activity, int titleRes, CharSequence[] items, boolean[] checked, OnApply apply) {
@@ -382,6 +327,16 @@ public final class ChoiceDialog extends DialogFragment {
             if (child.isEnabled() && child.isFocusable() && child.requestFocus()) return true;
         }
         return true;
+    }
+
+    public void setDismissCallback(Runnable callback) {
+        this.dismissCallback = callback;
+    }
+
+    @Override
+    public void onDismiss(@NonNull android.content.DialogInterface dialog) {
+        super.onDismiss(dialog);
+        if (dismissCallback != null) dismissCallback.run();
     }
 
     private View createView(LayoutInflater inflater) {

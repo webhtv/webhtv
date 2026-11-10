@@ -1,5 +1,5 @@
-<resources xmlns:xliff="http://schemas.android.com/apk/res-auto">
-
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    
     <!-- App -->
    <string name="app_name">默影视</string>
    <string name="setting_app_branding">App icon</string>
@@ -62,15 +62,20 @@
     <string name="pause">Pause</string>
     <string name="play_op">OP</string>
     <string name="play_ed">ED</string>
+    <string name="play_sub_head">SubIn</string>
+    <string name="play_sub_tail">SubOut</string>
     <string name="play_exo">EXO</string>
     <string name="play_next">Next</string>
     <string name="play_prev">Prev</string>
+    <string name="play_vod">VOD</string>
+    <string name="play_live">Live</string>
     <string name="play_stop">Stop</string>
     <string name="play_repeat">Repeat</string>
     <string name="play_forward">→</string>
     <string name="play_backward">←</string>
     <string name="play_speed">1.00</string>
     <string name="play_reset">Reset</string>
+    <string name="play_setting">Setting</string>
     <string name="play_decode">Hard</string>
     <string name="play_params">Playback params</string>
     <string name="codec_capability_short">Codec caps</string>
@@ -84,9 +89,29 @@
     <string name="play_timer">Timer</string>
     <string name="play_title">Chapter</string>
     <string name="play_scale">Default</string>
+    <string name="play_rotate">Rotate</string>
     <string name="play_lut">LUT</string>
     <string name="play_config">Config</string>
     <string name="play_cast">Cast</string>
+    <string name="play_download">Download</string>
+    <string name="download_notify_channel">Download</string>
+    <string name="download_notify_title">Downloading</string>
+    <string name="download_done_notify_title">Download complete</string>
+    <string name="download_failed_notify_title">Download failed</string>
+    <string name="download_need_file_permission">File access permission is required to download</string>
+    <string name="download_started">Download started</string>
+    <string name="download_manager_title">Downloads</string>
+    <string name="download_manager_empty">No download tasks</string>
+    <string name="download_manager_path">Storage path</string>
+    <string name="download_manager_cancel">Cancel</string>
+    <string name="download_manager_delete">Delete</string>
+    <string name="download_manager_path_changed">Download path updated</string>
+    <string name="download_manager_pending">Pending</string>
+    <string name="download_manager_cancelled">Cancelled</string>
+    <string name="download_action_pause">Pause</string>
+    <string name="download_action_resume">Resume</string>
+    <string name="download_action_retry">Retry</string>
+    <string name="download_status_paused">Paused</string>
     <string name="play_change">Change</string>
     <string name="play_short_display">Short</string>
     <string name="play_search">Search</string>
@@ -521,6 +546,16 @@
     <string name="remote_trust_send_server_failed">Failed to save on the other device: %1$s</string>
     <string name="remote_trust_config_select">Select</string>
     <string name="setting_login_state">Login state learning</string>
+    <string name="setting_file_sites">Source blocking</string>
+    <string name="setting_source_block_dialog_title">Select sources to block</string>
+    <string name="setting_source_block_count">Blocked %1$d / %2$d</string>
+    <string name="source_vod_url">Vod URL</string>
+    <string name="source_live_url">Live URL</string>
+    <string name="source_sites_json">Folder: /tvbox/sites-json/</string>
+    <string name="source_sites_js">Folder: /tvbox/sites-js/</string>
+    <string name="source_sites_py">Folder: /tvbox/sites-py/</string>
+    <string name="source_sites_raw">Folder: /tvbox/sites/ </string>
+    <string name="source_lives_file">Folder: /tvbox/lives/ </string>
     <string name="setting_site_health_sort">Site health ranking</string>
     <string name="setting_site_health_enable">Enable site health ranking</string>
     <string name="setting_site_health_dialog_sort">Sort site dialog</string>
@@ -1017,11 +1052,18 @@
     <string name="setting_auto">Auto</string>
     <string name="setting_custom">Custom</string>
     <string name="setting_language">Language</string>
+    <string name="setting_default_launch">Default launch</string>
     <string name="setting_size">Image size</string>
     <string name="setting_ui_scale">Interface size</string>
+    <string name="setting_title_lines">Title wrapping</string>
+    <string name="setting_site_delete_title">Delete file site</string>
+    <string name="setting_site_delete_message">Delete %1$s and its source file? This cannot be undone.</string>
+    <string name="setting_site_delete_done">Deleted %1$s</string>
+    <string name="setting_site_delete_failed">Delete failed, the file may is in use</string>
     <string name="dialog_close">Close</string>
     <string name="setting_doh">DoH</string>
     <string name="setting_proxy">Proxy</string>
+    <string name="setting_autoClearCache">Auto‑clear on exit</string>
     <string name="setting_cache">Cache</string>
     <string name="cache_management_title">Cache management</string>
     <string name="cache_management_scanning">Calculating…</string>
@@ -1161,6 +1203,7 @@
     <string name="sync_item_webhome">WebHome saved data</string>
     <string name="sync_item_search">Search records</string>
     <string name="sync_item_history">Watch history</string>
+    <string name="history_watched_time">Watched %1$s</string>
     <string name="sync_item_keep">Favorites</string>
     <string name="sync_item_settings">App settings</string>
     <string name="sync_item_remote_relay">Relay server config</string>
@@ -1182,8 +1225,8 @@
     <string name="sync_receive_success">Sync data received</string>
     <string name="sync_paths_title">Sync folders</string>
     <string name="sync_paths_edit">Edit</string>
-    <string name="sync_paths_desc">One external-storage relative path per line. TV, TVBox and TVData are synced by default. You can add local package folders; folder contents are synced with Jar/script saved data.</string>
-    <string name="sync_paths_hint">TV&#10;TVBox&#10;TVData</string>
+    <string name="sync_paths_desc">One external-storage relative path per line. Select folders in the directory tree below; folder contents are synced with Jar/script saved data.</string>
+    <string name="sync_paths_hint"></string>
     <string name="sync_paths_up">Collapse</string>
     <string name="sync_paths_refresh">Refresh</string>
     <string name="sync_paths_enter">Open folder</string>
@@ -1264,6 +1307,8 @@
     <string name="player_pad_live">Tablet live</string>
     <string name="player_button_up">Up</string>
     <string name="player_button_down">Down</string>
+    <string name="player_button_top">Top</string>
+    <string name="site_sort_title">Site Sort</string>
     <string name="play_episodes">Episodes</string>
     <string name="player_exo_4k_compat">Playback performance</string>
     <string name="player_immersive_audio_mode">Immersive audio mode</string>
@@ -1360,8 +1405,6 @@
     <string name="player_scale">Scale</string>
     <string name="player_lut">LUT color</string>
     <string name="player_mpv_config">MPV config manager</string>
-    <string name="player_mpv_render">MPV renderer</string>
-    <string name="mpv_render_native_unavailable">Unavailable</string>
     <string name="player_bluray_menu">Blu-ray disc menu</string>
     <string name="disc_menu_root">Top menu</string>
     <string name="disc_menu_popup">Pop-up menu</string>
@@ -1492,6 +1535,7 @@
     <string name="player_music_notification">Music background notification</string>
     <string name="player_audio_book_notification">Audiobook background notification</string>
     <string name="player_adblock">Remove ads</string>
+    <string name="player_auto_fullscreen">Auto fullscreen</string>
     <string name="player_tunnel">Tunnel mode</string>
     <string name="player_buffer">Forward buffer target</string>
     <string name="player_buffer_bytes">Memory buffer limit</string>
@@ -1884,7 +1928,7 @@
 
     <!-- Hint -->
     <string name="copied">Copied</string>
-    <string name="debug_log_dialog_message">Debug log service is running.\n\nLAN URL:\n%1$s\n\nLocal URL:\n%2$s\n\nIf this TV has no browser, open the LAN URL from a computer or phone on the same network.</string>
+    <string name="debug_log_dialog_message">Debug log service is running.\n\nLAN URL:\n%1$s\n\nLocal URL:\n%2$s\n\nXBPQ URL:\n%3$s\n\nIf this TV has no browser, open the LAN URL from a computer or phone on the same network.</string>
     <string name="debug_log_open_browser">Open browser</string>
     <string name="debug_log_copy_url">Copy URL</string>
     <string name="debug_log_no_browser">No browser app found. Use the LAN URL from another device.</string>
@@ -2071,8 +2115,10 @@
     </string-array>
 
     <string-array name="select_ui_scale">
-        <item>Follow system</item>
-        <item>Smallest</item>
+        <item>Relaxed</item>
+        <item>Slightly relaxed</item>
+        <item>Standard</item>
+        <item>Mild compact</item>
         <item>Compact</item>
         <item>Slightly compact</item>
         <item>Standard</item>
@@ -2082,17 +2128,25 @@
         <item>Largest</item>
     </string-array>
 
+    <string-array name="select_title_lines">
+        <item>Off</item>
+        <item>Up to 2 lines</item>
+        <item>Up to 3 lines</item>
+        <item>Unlimited</item>
+    </string-array>
+
     <string-array name="select_language">
         <item>Follow system</item>
         <item>Simplified Chinese</item>
         <item>Traditional Chinese</item>
     </string-array>
 
-    <string name="aspect_ratio_title">Custom aspect ratio</string>
-    <string name="aspect_ratio_width">Width</string>
-    <string name="aspect_ratio_height">Height</string>
-    <string name="aspect_ratio_hint">Enter a ratio such as 2560:1080 or 64:27</string>
-    <string name="aspect_ratio_invalid">Enter a valid ratio</string>
+    <string-array name="select_default_launch">
+        <item>Home</item>
+        <item>Live</item>
+        <item>Recent</item>
+    </string-array>
+
     <string-array name="select_scale">
         <item>Default</item>
         <item>16:9</item>
@@ -2953,161 +3007,67 @@
 
 <string name="player_audio_badge_queue">Queue</string>
 
-<string name="player_audio_repeat">Repeat</string>
+    <string name="player_audio_badge_queue">Queue</string>
+    <string name="player_audio_repeat">Repeat</string>
 
-    <string name="web_theme_detail_loading">Loading details…</string>
-    <string name="node_title">Preparing cat source</string>
-    <string name="node_prepare">Preparing…</string>
-    <string name="node_hint">First run only: the Node runtime is downloaded once and reused afterwards.</string>
-    <string name="node_downloading">Downloading Node runtime</string>
-    <string name="node_extracting">Extracting…</string>
-    <string name="node_bundle">Checking cat source bundle…</string>
-    <string name="node_starting">Starting service…</string>
-    <string name="node_waiting">Waiting for service to be ready…</string>
-    <string name="node_ready">Cat source ready</string>
-    <string name="node_stopping">Stopping previous cat source…</string>
-    <string name="node_switch_restart">Switching cat source…</string>
-    <string name="node_background">Run in background</string>
-    <string name="node_speed">%1$s/s</string>
-    <string name="node_size_pair">%1$s / %2$s</string>
-    <string name="setting_ad">Ad blocking</string>
-    <string name="setting_ad_summary">Master switch, rules, intro skip</string>
-    <string name="setting_ad_group_basic">Basic</string>
-    <string name="setting_ad_group_rule">Rules and stats</string>
-    <string name="setting_ad_group_segment">Segment skipping</string>
-    <string name="setting_ad_master">Ad blocking master switch</string>
-    <string name="dialog_tmdb_test_config">Test configuration</string>
-    <string name="dialog_tmdb_test_result_title">Configuration test</string>
-    <string name="dialog_tmdb_test_api_success">TMDB API: connected and returned valid data (%1$d ms)</string>
-    <string name="dialog_tmdb_test_api_failed">TMDB API: failed (%1$s, %2$d ms)</string>
-    <string name="dialog_tmdb_test_image_success">Image domain: connected and returned a valid image (%1$d ms)</string>
-    <string name="dialog_tmdb_test_image_failed">Image domain: failed (%1$s, %2$d ms)</string>
-    <string name="dialog_tmdb_test_omdb_success">OMDb API: connected and returned valid data (%1$d ms)</string>
-    <string name="dialog_tmdb_test_omdb_failed">OMDb API: failed (%1$s, %2$d ms)</string>
-    <string name="site_health_report_search_hint">Search by site name</string>
-    <string name="nav_following">Following</string>
-    <string name="home_following">Following</string>
-    <string name="sync_item_follow">Following</string>
-    <string name="following">Follow</string>
-    <string name="following_add">Add to following</string>
-    <string name="following_added">Following</string>
-    <string name="following_channel_name">Following updates</string>
-    <string name="following_channel_description">New episode updates for followed shows</string>
-    <string name="following_notification_title">%1$s has a new episode</string>
-    <string name="following_notification_text">Official release: episode %1$d; current source: episode %2$d</string>
-    <string name="following_check_all">Check updates</string>
-    <string name="following_check">Check</string>
-    <string name="following_checking">Checking…</string>
-    <string name="following_check_done">Update check complete</string>
-    <string name="following_check_failed">Update check failed. Previous data was kept.</string>
-    <string name="following_empty">No followed shows yet. Open a series detail page and tap “Add to following”.</string>
-    <string name="following_summary">%1$d followed · %2$d unread</string>
-    <string name="following_continue">Continue</string>
-    <string name="following_read">Mark read</string>
-    <string name="following_read_all">Mark all read</string>
-    <string name="following_notify_on">Notify on</string>
-    <string name="following_notify_off">Notify off</string>
-    <string name="following_change_source">Source</string>
-    <string name="following_cancel">Unfollow</string>
-    <string name="following_delete_title">Unfollow this show?</string>
-    <string name="following_delete_message">The viewing history and TMDB progress will be kept.</string>
-    <string name="following_canceled">Unfollowed</string>
-    <string name="following_official">Official: episode %1$d</string>
-    <string name="following_season_total">Season: %1$d episodes</string>
-    <string name="following_series_total">Series: %1$d episodes</string>
-    <string name="following_weekday">Updates every %1$s</string>
-    <string name="following_official_unknown">Official status unknown</string>
-    <string name="following_source">Current source: episode %1$d</string>
-    <string name="following_source_unknown">Current source not checked</string>
-    <string name="following_source_failed">Current source check failed</string>
-    <string name="following_watched">Watched to episode %1$d</string>
-    <string name="following_watched_unknown">No watch progress yet</string>
-    <string name="following_unwatched">%1$d episodes remaining</string>
-    <string name="following_unwatched_none">Up to date</string>
-    <string name="following_new_count">New %1$d</string>
-    <string name="following_enabled_hint">Following is currently disabled.</string>
-    <string name="following_notification_permission_hint">Notifications were not authorized; in-app badges still work.</string>
-    <string name="following_server_import">Import subscriptions</string>
-    <string name="following_server_url">Server address (http/https)</string>
-    <string name="following_server_token">Token (not stored)</string>
-    <string name="following_server_preview">Preview</string>
-    <string name="following_server_import_action">Import</string>
-    <string name="following_server_invalid">Enter a valid http/https server address</string>
-    <string name="following_server_empty">No importable subscriptions found</string>
-    <string name="following_server_preview_title">Subscriptions to import</string>
-    <string name="following_server_result">Imported %1$d, updated %2$d</string>
-    <string name="following_filter_updates">Updates only</string>
-    <string name="following_filter_all">Show all</string>
-    <string name="following_filter_empty">No followed shows have unwatched updates.</string>
-    <string name="following_filter_unwatched">Unfinished</string>
-    <string name="following_filter_ended">Ended</string>
-    <string name="following_filter_failed">Check failed</string>
-    <string name="setting_following">Following updates</string>
-    <string name="following_next_season">Follow new season S%1$d</string>
-    <string-array name="following_weekdays">
-        <item>Sunday</item>
-        <item>Monday</item>
-        <item>Tuesday</item>
-        <item>Wednesday</item>
-        <item>Thursday</item>
-        <item>Friday</item>
-        <item>Saturday</item>
-    </string-array>
-    <string name="setting_plugin_manager">Plugin manager</string>
-    <string name="plugin_manager_entry_count">%1$d plugin(s)</string>
-    <string name="plugin_manager_import">Import package</string>
-    <string name="plugin_manager_reload">Reload</string>
-    <string name="plugin_manager_empty">No plugins yet. Import a package directory that contains manifest.json.</string>
-    <string name="plugin_manager_permission_required">Storage permission is required to pick a plugin directory</string>
-    <string name="plugin_manager_invalid_path">The selected directory path is unreadable</string>
-    <string name="plugin_manager_import_ok">Plugin imported and enabled: %1$s</string>
-    <string name="plugin_manager_import_failed">Import failed: %1$s</string>
-    <string name="plugin_manager_delete_title">Delete plugin</string>
-    <string name="plugin_manager_delete_message">Remove %1$s from the list and delete its files from this device?</string>
-    <string name="plugin_manager_save_failed">Could not save plugin settings: %1$s</string>
-    <string name="plugin_manager_delete_failed">Removed from the list, but the plugin files could not be deleted: %1$s</string>
-    <string name="plugin_manager_load_failed">Could not read the plugin list: %1$s</string>
-    <string name="plugin_manager_entry_meta">v%1$s · %2$s · %3$s</string>
-    <string name="plugin_manager_params">Parameters</string>
-    <string name="plugin_manager_params_title">Parameters for %1$s</string>
-    <string name="plugin_manager_params_hint">JSON object, e.g. {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
-    <string name="plugin_manager_params_invalid">Parameters must be a JSON object</string>
-    <string name="plugin_manager_params_too_large">Parameters are too large to save</string>
-    <string name="plugin_manager_remote_import">Import from URL</string>
-    <string name="plugin_manager_remote_title">Import from URL</string>
-    <string name="plugin_manager_remote_hint">https://github.com/owner/repo</string>
-    <string name="plugin_manager_remote_helper">https only. Accepts a GitHub repository URL, a GitHub /tree/branch URL, or a direct .zip URL.</string>
-    <string name="plugin_manager_remote_paste">Paste</string>
-    <string name="plugin_manager_remote_start">Fetch</string>
-    <string name="plugin_manager_remote_failed">Could not get the plugin package: %1$s</string>
-    <string name="plugin_manager_remote_empty">No plugin was found in that package</string>
-    <string name="plugin_manager_remote_found">%1$d plugin(s) found</string>
-    <string name="plugin_manager_remote_source">Source: %1$s</string>
-    <string name="plugin_manager_remote_select_all">Select all</string>
-    <string name="plugin_manager_remote_select_none">Select none</string>
-    <string name="plugin_manager_remote_do_import">Import</string>
-    <string name="plugin_manager_remote_candidate_meta">v%1$s · runtime %2$s</string>
-    <string name="plugin_manager_remote_name_separator">", "</string>
-    <string name="plugin_manager_remote_confirm_title">Confirm install</string>
-    <string name="plugin_manager_remote_confirm_message">This will install %1$d plugin(s): %2$s\n\nPermissions being granted (combined): %3$s</string>
-    <string name="plugin_manager_remote_confirm_not_sandboxed">These plugins are NOT sandboxed: they run inside this app with this app\'s own trust, so they can read and modify this app\'s data and use its network. No safety check was performed on them. Only install plugins from sources you trust.</string>
-    <string name="plugin_manager_perm_net_request_plain">net.request — this plugin can access the network (send data out and fetch remote content).</string>
-    <string name="plugin_manager_perm_ui_panel_plain">ui.panel — this plugin can draw its own content on the playback screen.</string>
-    <string name="plugin_manager_remote_install">Install</string>
-    <string name="plugin_manager_remote_result_title">Import result</string>
-    <string name="plugin_manager_remote_item_ok">%1$s: installed</string>
-    <string name="plugin_manager_remote_item_failed">%1$s: %2$s</string>
-    <string name="plugin_manager_remote_all_ok">Installed %1$d plugin(s)</string>
-    <string name="plugin_manager_remote_batch_failed">The import could not start: %1$s</string>
-    <string name="plugin_manager_remote_busy">Another plugin task is already running</string>
-    <string name="plugin_manager_perm_none">No declared permissions</string>
-    <string name="plugin_manager_perm_separator">" · "</string>
-    <string name="plugin_manager_perm_net_request">Network access (net.request)</string>
-    <string name="plugin_manager_perm_ui_panel">Drawing on the playback panel (ui.panel)</string>
-    <string name="plugin_manager_perm_ui_floating">Floating overlay (ui.floating)</string>
-    <string name="plugin_manager_perm_ui_toolbar">Toolbar button (ui.toolbar)</string>
-    <string name="plugin_manager_perm_ui_page">Page surface (ui.page)</string>
-    <string name="plugin_manager_perm_events">Playback events (plugin.events)</string>
-    <string name="plugin_manager_perm_episode_data">Episode data (plugin.data.episode)</string>
-    <string name="plugin_panel_title">Plugin panel</string>
+    <string name="setting">Config</string>
+    <string name="confirm">OK</string>
+    <string name="search_sites">Search sites…</string>
+    <string name="select_all">Select all</string>
+    <string name="select_none">Select none</string>
+    <string name="select_invert">Invert</string>
+    <string name="search_source_all">All sources</string>
+    <string name="search_source_home">Home source</string>
+    <string name="search_source_tag">Tag source</string>
+    <string name="search_source_white">Whitelist</string>
+    <string name="search_source_black">Blacklist</string>
+    <string name="search_site_count">%d site(s)</string>
+    <string name="search_site_count_of">Selected %d / %d</string>
+
+    <!-- History & Keep -->
+    <string name="history_title">History</string>
+    <string name="keep_title">Favorites</string>
+    <string name="menu_clear">Clear</string>
+    <string name="menu_delete">Delete</string>
+    <string name="dialog_clear_history">Clear history</string>
+    <string name="dialog_clear_history_message">Clear all watch history? This cannot be undone.</string>
+    <string name="dialog_clear_keep">Clear favorites</string>
+    <string name="dialog_clear_keep_message">Clear all favorites? This cannot be undone.</string>
+
+    <!-- Multi-repo -->
+    <string name="multi_repo">Multi Repo</string>
+    <string name="multi_repo_empty">No repos yet, please add one</string>
+    <string name="multi_repo_manage_title">Repo Management</string>
+    <string name="multi_repo_add">Add Repo</string>
+    <string name="multi_repo_add_title">Add Repo Source</string>
+    <string name="copied_repo_url">Repo link copied to clipboard: %s</string>
+    <string name="empty_url_tip">Repo link is empty</string>
+    <string name="multi_repo_name">Repo Name</string>
+    <string name="multi_repo_url">Repo URL</string>
+    <string name="multi_repo_name_hint">Enter repo name…</string>
+    <string name="multi_repo_url_hint">Enter repo URL…</string>
+    <string name="multi_repo_name_empty">Please enter repo name</string>
+    <string name="multi_repo_url_empty">Please enter repo URL</string>
+    <string name="multi_repo_push_info">⇦ Scan QR code to input</string>
+    <string name="multi_repo_fetch_fail">Failed to load repo</string>
+    <string name="multi_repo_config_list">Config list</string>
+    <string name="multi_repo_site_list">Site list</string>
+    <string name="multi_repo_site_empty">No sites in this interface</string>
+    <string name="multi_repo_first_open">No repo configured. Add one now?</string>
+    <string name="multi_repo_settings">Multi Repo Settings</string>
+    <string name="live_epg_select">Select EPG source</string>
+    <string name="live_epg_default">Follow live source</string>
+    <string name="live_epg_follow">Source</string>
+    <string name="live_epg_apply">Add</string>
+    <string name="live_epg_save">Save</string>
+    <string name="live_epg_edit">Edit</string>
+    <string name="live_epg_delete">Delete</string>
+    <string name="live_epg_hint">XML/GZ or {name}/{date} template URL</string>
+    <string name="live_epg_empty">Enter an EPG URL or select a source below</string>
+    <string name="push_info">Scan QR Code or enter the URL in browser\n<xliff:g name="name">%s</xliff:g></string>
+    <string name="live_program">Program</string>
+    <string name="live_program_current">Live</string>
+    <string name="live_epg_yesterday">Yesterday</string>
+    <string name="live_epg_tomorrow">Tomorrow</string>
+    <string name="live_epg_today">Today</string>
 </resources>

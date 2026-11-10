@@ -8,6 +8,7 @@
     tools:ignore="NestedWeights">
 
     <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:animateLayoutChanges="true"
@@ -42,22 +43,10 @@
                 android:src="@drawable/ic_repo_github"
                 app:tint="?attr/webhtvColorOnWallpaper" />
 
-            <androidx.appcompat.widget.AppCompatImageButton
-                android:id="@+id/cnbRepo"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="4dp"
-                android:background="@drawable/selector_item"
-                android:contentDescription="@string/repo_cnb"
-                android:focusable="true"
-                android:padding="10dp"
-                android:src="@drawable/ic_repo_cnb"
-                app:tint="?attr/webhtvColorOnWallpaper" />
-
         </androidx.appcompat.widget.LinearLayoutCompat>
 
         <androidx.appcompat.widget.LinearLayoutCompat
-            android:id="@+id/lab"
+            android:id="@+id/fileSites"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
@@ -70,18 +59,18 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
-                android:text="@string/setting_lab"
-                android:textColor="?attr/webhtvColorOnWallpaper"
+                android:text="@string/setting_file_sites"
+                android:textColor="@color/white"
                 android:textSize="18sp" />
 
             <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/labText"
+                android:id="@+id/fileSitesText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="end"
-                android:text="@string/setting_lab_summary"
-                android:textColor="?attr/webhtvColorOnWallpaper"
-                android:textSize="18sp" />
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                tools:text="开" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 

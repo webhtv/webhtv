@@ -2,21 +2,12 @@ package com.fongmi.android.tv.utils;
 
 public class Github {
 
-    private static final String GITHUB_LATEST = "https://github.com/Silent1566/webhtv/releases/latest/download";
-    private static final String GITHUB_RELEASE = "https://github.com/Silent1566/webhtv/releases/download";
-    private static final String GITHUB_UPDATE_CHANNEL = GITHUB_RELEASE + "/update-channel";
-    private static final String CNB_MANIFEST = "https://cnb.cool/fish2035/webhtv-release/-/git/raw/main/apk";
-    private static final String GITHUB_API = "https://api.github.com/repos/Silent1566/webhtv/releases/tags";
-    private static final String GITHUB_RELEASES_API = "https://api.github.com/repos/Silent1566/webhtv/releases";
-    private static final String GITHUB_RELEASE_ASSETS_API = "https://api.github.com/repos/Silent1566/webhtv/releases/assets";
-
-    public static String getChannelAsset(String name) {
-        return GITHUB_UPDATE_CHANNEL + "/" + name;
-    }
-
-    public static String getCnbMirrorAsset(String name) {
-        return CNB_MANIFEST + "/" + name;
-    }
+    private static final String GITHUB_LATEST = "https://github.com/llb0/webhtv/releases/latest/download";
+    private static final String GITHUB_RELEASE = "https://github.com/llb0/webhtv/releases/download";
+    private static final String GITHUB_API = "https://api.github.com/repos/llb0/webhtv/releases/tags";
+    private static final String GITHUB_RELEASES_API = "https://api.github.com/repos/llb0/webhtv/releases";
+    private static final String GITHUB_RELEASE_ASSETS_API = "https://api.github.com/repos/llb0/webhtv/releases/assets";
+    private static final String CNB = "https://cnb.cool/fish2035/webhtv-release/-/git/raw/main";
 
     public static String getCnbAsset(String name) {
         return getGithubLatestAsset(name);

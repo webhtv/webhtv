@@ -32,10 +32,6 @@ import androidx.media3.extractor.ExtractorsFactory;
 import androidx.media3.extractor.ts.TsExtractor;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.cache.CacheCenter;
-import com.fongmi.android.tv.cache.CacheModuleId;
-import com.fongmi.android.tv.cache.CachePolicyStore;
-import com.fongmi.android.tv.cache.PlaybackCacheBudget;
 import com.fongmi.android.tv.player.exo.ass.AssFontSet;
 import com.fongmi.android.tv.player.exo.ass.ExoAssSession;
 import com.fongmi.android.tv.player.cache.DiskCacheCapacityPolicy;
@@ -328,8 +324,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
                 && mediaItem.localConfiguration.tag instanceof com.fongmi.android.tv.player.PlaybackDiagnosticCollector.Context) {
             itemFactory = createItemMediaSourceFactory(headers, fonts, mediaItem);
         }
-        if (isConcatenatingUrl(url)) return createConcatenatingMediaSource(mediaItem, url, itemFactory);
-        return itemFactory.createMediaSource(mediaItem);
+        else return defaultMediaSourceFactory.createMediaSource(mediaItem);
     }
 
     private MediaSource createConcatenatingMediaSource(
@@ -340,11 +335,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
                 .setLoadOnlySelectedTracks(PlaybackPerformanceSetting.isLoadOnlySelectedTracksEnabled());
         for (String split : url.split(CONCAT_SOURCE_SEPARATOR_REGEX)) {
             String[] info = split.split(CONCAT_DURATION_SEPARATOR_REGEX);
-            if (info.length >= 2) {
-                builder.add(itemFactory.createMediaSource(
-                        mediaItem.buildUpon().setUri(UrlUtil.uri(info[0])).build()),
-                        Long.parseLong(info[1]));
-            }
+            if (info.length >= 2) builder.add(sourceFactory.createMediaSource(mediaItem.buildUpon().setUri(UrlUtil.uri(info[0])).build()), Long.parseLong(info[1]));
         }
         return builder.build();
     }

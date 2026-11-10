@@ -14,6 +14,10 @@ import com.fongmi.android.tv.ui.custom.CustomWebView;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.WebViewUtil;
+import com.fongmi.android.tv.web.HeaderPolicy;
+import com.fongmi.android.tv.web.WebHomeHiddenResolver;
+import com.fongmi.android.tv.web.WebHomeInlineVodStore;
+import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Json;
@@ -43,11 +47,13 @@ import okhttp3.Response;
 public class ParseJob implements ParseCallback {
 
     private final AtomicBoolean done = new AtomicBoolean();
+    private final AtomicBoolean fallback = new AtomicBoolean();
     private final List<CustomWebView> webViews;
     private ExecutorService executor;
     private ExecutorService infinite;
     private ParseCallback callback;
     private Parse parse;
+    private Result result;
 
     private ParseJob(ParseCallback callback) {
         this.executor = Executors.newSingleThreadExecutor();
@@ -61,6 +67,7 @@ public class ParseJob implements ParseCallback {
     }
 
     public ParseJob start(Result result, boolean useParse) {
+        this.result = result;
         setParse(result, useParse);
         execute(result);
         return this;
@@ -338,7 +345,13 @@ public class ParseJob implements ParseCallback {
 
     @Override
     public void onParseError() {
-        if (SpiderDebug.isEnabled()) SpiderDebug.log("parse-job", "error");
+        if (done.get() || fallback.get()) return;
+        // 系统嗅探失败：WebHome 内联剧集再让隐藏实例用站点脚本解析一次（注入嗅探兜底）
+        if (scheduleFallback()) return;
+        finishError();
+    }
+ 
+    private void finishError() {
         if (!done.compareAndSet(false, true)) return;
         App.post(() -> {
             if (callback != null) callback.onParseError();
@@ -346,6 +359,35 @@ public class ParseJob implements ParseCallback {
         });
     }
 
+    private boolean scheduleFallback() {
+        if (result == null) return false;
+        // 只处理 WebHome 内联剧集：地址能在内联库里查到才兜底，避免影响普通站点解析
+        String key = result.getUrl().v();
+        JsonObject payload = WebHomeInlineVodStore.episodePayload(key);
+        if (payload == null) return false;
+        if (!fallback.compareAndSet(false, true)) return false;
+        ExecutorService pool = infinite != null ? infinite : executor;
+        if (pool == null) return false;
+        SpiderDebug.log("parse", "system sniff failed, fallback to webhome id=%s", key);
+        pool.submit(() -> {
+            JsonObject resolved = WebHomeHiddenResolver.resolve(payload);
+            String url = resolved == null ? "" : Json.safeString(resolved, "url");
+            if (TextUtils.isEmpty(url)) {
+                finishError();
+                return;
+            }
+            WebHomeInlineVodStore.cacheMedia(key, resolved);
+            onParseSuccess(headersOf(resolved), url, "WebHome");
+        });
+        return true;
+    }
+ 
+    private Map<String, String> headersOf(JsonObject resolved) {
+        Map<String, String> headers = result.getHeader() == null ? new HashMap<>() : new HashMap<>(result.getHeader());
+        if (resolved != null && resolved.has("headers")) headers.putAll(HeaderPolicy.parse(resolved.get("headers")));
+        return headers;
+    }
+ 
     private void stopWeb() {
         for (CustomWebView webView : webViews) webView.stop(false);
         for (CustomWebView webView : webViews) webView.destroy();

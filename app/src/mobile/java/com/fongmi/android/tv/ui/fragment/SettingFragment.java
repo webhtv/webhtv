@@ -44,6 +44,7 @@ import com.fongmi.android.tv.ui.dialog.CacheManagementDialog;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.net.OkHttp;
 
@@ -57,6 +58,7 @@ import java.util.List;
 public class SettingFragment extends BaseFragment implements ConfigListener, SiteListener, LiveListener {
 
     private FragmentSettingBinding mBinding;
+    private String[] defaultLaunch;
 
     public static SettingFragment newInstance() {
         return new SettingFragment();
@@ -99,6 +101,8 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     private void setOtherText() {
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
+        mBinding.autoClearCacheText.setText(getSwitch(Setting.isAutoClearCache()));
+        mBinding.defaultLaunchText.setText((defaultLaunch = ResUtil.getStringArray(R.array.select_default_launch))[Setting.getDefaultLaunch()]);
     }
 
     private void setCacheText() {
@@ -129,12 +133,10 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
+        mBinding.defaultLaunch.setOnClickListener(this::setDefaultLaunch);
         mBinding.appearance.setOnClickListener(this::onAppearance);
-        mBinding.cache.setOnClickListener(this::onCacheClear);
-        // The plain click restores the pre-split one-key clear; the panel moved to the long press.
-        // The row stays single-line by user request, so §15.2's "not long-press only" intent is a
-        // recorded deviation rather than a printed hint (docs/CACHE-MGMT-01-cache-management-design.md).
-        mBinding.cache.setOnLongClickListener(this::onCacheManage);
+        mBinding.autoClearCache.setOnClickListener(this::setAutoClearCache);
+        mBinding.cache.setOnClickListener(this::onCache);
         mBinding.backup.setOnClickListener(this::onBackup);
         mBinding.enhance.setOnClickListener(this::onEnhance);
         mBinding.tmdb.setOnClickListener(this::onTmdb);
@@ -304,6 +306,11 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         return true;
     }
 
+    private void setAutoClearCache(View view) {
+        Setting.putAutoClearCache(!Setting.isAutoClearCache());
+        mBinding.autoClearCacheText.setText(getSwitch(Setting.isAutoClearCache()));
+    }
+
     private void setIncognito(View view) {
         Setting.putIncognito(!Setting.isIncognito());
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
@@ -321,45 +328,20 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.dohText.setText(doh.getName());
     }
 
-    /**
-     * The settings row's plain click: clear every cache at once, the way this row behaved before it
-     * opened the cache management panel.
-     *
-     * <p>The full clean runs in the background and reports itself through a notification without
-     * opening the panel; the row re-reads itself when the cleanup publishes its change. With cache
-     * management switched off the legacy {@link FileUtil#clearCache} path is kept, because the panel
-     * and its cleanup engine belong to the feature that switch turns off.</p>
-     */
-    private void onCacheClear(View view) {
-        if (!CachePolicyStore.isManagementEnabled()) {
-            FileUtil.clearCache(new Callback() {
-                @Override
-                public void success() {
-                    setCacheText();
-                }
-            });
-            return;
-        }
-        CacheManagementDialog.cleanEverything();
+    private void setDefaultLaunch(View view) {
+        ChoiceDialog.showSingle(this, R.string.setting_default_launch, defaultLaunch, Setting.getDefaultLaunch(), which -> {
+            Setting.putDefaultLaunch(which);
+            mBinding.defaultLaunchText.setText(defaultLaunch[which]);
+        });
     }
 
-    /**
-     * The settings row's long press: open the cache management panel (graded cleanup, module
-     * limits, auto cleanup and the running state).
-     *
-     * <p>With the plain click now clearing everything this is the panel's only entry. The row stays
-     * single-line by user request, so the gesture is not printed under the title and the panel is
-     * reached by the long press alone (deviation recorded in
-     * docs/CACHE-MGMT-01-cache-management-design.md). With cache management switched off there is
-     * no panel to open, so the long press keeps the legacy behaviour and repeats the plain clear.</p>
-     */
-    private boolean onCacheManage(View view) {
-        if (!CachePolicyStore.isManagementEnabled()) {
-            onCacheClear(view);
-            return true;
-        }
-        CacheManagementDialog.show(this);
-        return true;
+    private void onCache(View view) {
+        FileUtil.clearCache(new Callback() {
+            @Override
+            public void success() {
+                setCacheText();
+            }
+        });
     }
 
     private void onBackup(View view) {

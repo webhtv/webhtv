@@ -35,7 +35,7 @@ android {
     ndkVersion "29.0.14206865"
 
     defaultConfig {
-        applicationId "com.silent.android.webhtv"
+        applicationId "com.fongmi.android"
         minSdk libs.versions.minSdk.get().toInteger()
         targetSdk libs.versions.targetSdk.get().toInteger()
         versionCode 560
@@ -47,6 +47,7 @@ android {
         buildConfigField "String", "GIT_STATE", "\"${gitState}\""
         buildConfigField "String", "MPV_NATIVE_SOURCES", "\"${mpvSourceRevisions}\""
         buildConfigField "String", "MEDIA3_VERSION", "\"${libs.versions.media3.get()}\""
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         javaCompileOptions {
             annotationProcessorOptions {
                 arguments = ["room.schemaLocation": "$projectDir/schemas".toString(), "eventBusIndex": "com.fongmi.android.tv.event.EventIndex"]
@@ -99,6 +100,9 @@ android {
                 keyAlias localProps['keyAlias']
                 keyPassword releaseKeyPassword
                 storePassword localProps['storePassword']
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
             }
         }
     }
@@ -213,10 +217,10 @@ dependencies {
     annotationProcessor libs.eventbus.annotation.processor
     annotationProcessor libs.glide.compiler
     coreLibraryDesugaring libs.desugar
+    testImplementation libs.junit
     testLeanbackImplementation 'org.robolectric:robolectric:4.16'
     androidTestImplementation libs.junit
-    androidTestImplementation libs.room.testing
-    androidTestImplementation libs.work.testing
+    androidTestImplementation 'androidx.test:runner:1.7.0'
     testImplementation libs.okhttp.mockwebserver
     androidTestImplementation libs.androidx.test.runner
     androidTestImplementation libs.androidx.test.rules

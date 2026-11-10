@@ -13,22 +13,6 @@ public final class PlaybackTrace {
     public static final String NONE = "none";
 
     private static final AtomicLong SEQUENCE = new AtomicLong();
-
-    /**
-     * Chronological order for reporting, which is not the enum declaration order:
-     * a first frame normally arrives before {@code STATE_READY}, so iterating an
-     * {@link EnumMap} directly would print the timeline out of sequence.
-     */
-    private static final Stage[] STAGE_ORDER = {
-            Stage.REQUEST,
-            Stage.PARSE_COMPLETE,
-            Stage.PREPARE,
-            Stage.TRACKS,
-            Stage.FIRST_FRAME,
-            Stage.AUDIO_PLAYABLE,
-            Stage.READY,
-    };
-
     private final PlaybackDiagnosticSession diagnostics = new PlaybackDiagnosticSession();
     private final EnumMap<Stage, Long> stageTimes = new EnumMap<>(Stage.class);
     private String traceId = "";

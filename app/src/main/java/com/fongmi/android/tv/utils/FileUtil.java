@@ -9,6 +9,7 @@ import androidx.core.content.FileProvider;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.parser.EpgParser;
 import com.fongmi.android.tv.impl.Callback;
 import com.github.catvod.utils.Path;
 
@@ -83,13 +84,29 @@ public class FileUtil {
     public static void clearCache(Callback callback) {
         Task.execute(() -> {
             Path.clear(Path.cache());
-            AppCache.clearLegacyPreferences();
-            // 这两个缓存都是进程内单例：只删文件的话内存 map 还在，
-            // 下一次写入会把整张旧 map 重新落盘，等于没清。
-            com.fongmi.android.tv.bean.EpisodePositionCache.get().clear();
-            com.fongmi.android.tv.bean.FlagPreferenceCache.get().clear();
+            FileUtil.deleteEpgDir();
             App.post(callback::success);
         });
+    }
+
+    public static void deleteEpgDir() {
+        synchronized (EpgParser.SYNC_LOCK) {
+            File epgDir = new File(Path.files(), "epg");
+            if (!epgDir.exists()) return;
+            deleteRecursive(epgDir);
+        }
+    }
+
+    private static boolean deleteRecursive(File file) {
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecursive(child);
+                }
+            }
+        }
+        return file.delete();
     }
 
     public static void getCacheSize(Callback callback) {
@@ -150,7 +167,9 @@ public class FileUtil {
     }
 
     public static Uri getShareUri(String path) {
-        return getShareUri(new File(path.replace("file://", "")));
+        if (path == null) return null;
+        File file = com.github.catvod.utils.Path.local(path);
+        return file != null ? getShareUri(file) : null;
     }
 
     public static Uri getShareUri(File file) {

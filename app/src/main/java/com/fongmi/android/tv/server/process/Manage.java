@@ -213,7 +213,7 @@ public class Manage implements Process {
         }
         if ("push".equals(action)) {
             String playUrl = params.get("url");
-            if (!TextUtils.isEmpty(playUrl)) ServerEvent.push(playUrl);
+            if (!TextUtils.isEmpty(playUrl)) ServerEvent.push(playUrl, params.get("name"));
             return Nano.ok();
         }
         return Nano.ok();

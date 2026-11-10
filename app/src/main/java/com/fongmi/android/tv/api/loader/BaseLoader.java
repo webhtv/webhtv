@@ -71,54 +71,10 @@ public class BaseLoader {
         return api.startsWith("csp_");
     }
 
-    public Future<?> clear() {
-        return clear("unknown");
-    }
-
-    public Future<?> clear(String reason) {
-        String source = reason == null || reason.isEmpty() ? "unknown" : reason;
-        SpiderDebug.log("base-loader", "clear requested reason=%s", source);
-        LoaderClearQueue.Entry entry = clearQueue.submit(source, id -> clear(id, source));
-        return entry.future();
-    }
-
-    private void clear(int id, String reason) {
-        SpiderDebug.log("base-loader", "clear start id=%d reason=%s", id, reason);
-        clear("jar", jarLoader::clear);
-        clear("py", pyLoader::clear);
-        clear("js", jsLoader::clear);
-        clear("cat", catSpiders::clear);
-        SpiderDebug.log("base-loader", "clear done id=%d reason=%s", id, reason);
-    }
-
-    public void awaitClear() throws InterruptedException {
-        if (clearQueue.isRunning()) return;
-        LoaderClearQueue.Entry entry = clearQueue.latest();
-        if (entry == null) return;
-        Future<?> future = entry.future();
-        int id = entry.id();
-        String reason = entry.reason();
-        boolean waiting = !future.isDone();
-        long start = System.nanoTime();
-        if (waiting) SpiderDebug.log("base-loader", "clear wait start id=%d reason=%s", id, reason);
-        try {
-            future.get();
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause() == null ? e : e.getCause();
-            SpiderDebug.log("base-loader", "clear wait failed id=%d reason=%s error=%s:%s", id, reason, cause.getClass().getSimpleName(), cause.getMessage());
-            SpiderDebug.log("base-loader", cause);
-        } finally {
-            if (waiting) SpiderDebug.log("base-loader", "clear wait done id=%d reason=%s elapsedMs=%d", id, reason, (System.nanoTime() - start) / 1_000_000L);
-        }
-    }
-
-    private void clear(String name, Runnable action) {
-        try {
-            action.run();
-        } catch (Throwable e) {
-            SpiderDebug.log("base-loader", "clear failed loader=%s error=%s:%s", name, e.getClass().getSimpleName(), e.getMessage());
-            SpiderDebug.log("base-loader", e);
-        }
+    public void clear() {
+        jarLoader.clear();
+        pyLoader.clear();
+        jsLoader.clear();
     }
 
     public Spider getSpider(String key, String api, String ext, String jar) {

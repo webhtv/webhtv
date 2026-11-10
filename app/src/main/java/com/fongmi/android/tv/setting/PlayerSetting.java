@@ -425,7 +425,7 @@ public class PlayerSetting {
     }
 
     public static boolean isAutoChange() {
-        return Prefers.getBoolean("player_auto_change", true);
+        return Prefers.getBoolean("player_auto_change", false);
     }
 
     public static void putAutoChange(boolean autoChange) {
@@ -456,15 +456,6 @@ public class PlayerSetting {
 
     public static void putBlurayMenu(boolean enabled) {
         Prefers.put("playback_bluray_menu", enabled);
-    }
-
-    /** Whether switching to another line must wait for an explicit play action. */
-    public static boolean isDeferFlagSwitchPlayback() {
-        return Prefers.getBoolean("player_defer_flag_switch", false);
-    }
-
-    public static void putDeferFlagSwitchPlayback(boolean defer) {
-        Prefers.put("player_defer_flag_switch", defer);
     }
 
     public static int getBackground() {
@@ -516,214 +507,6 @@ public class PlayerSetting {
 
     public static void putDefaultSpeed(float speed) {
         Prefers.put("play_speed", Math.min(Math.max(speed, 0.5f), 5));
-    }
-
-    public static boolean isDisplayTime() {
-        migrateLegacyOsd();
-        return Prefers.getBoolean(KEY_DISPLAY_TIME);
-    }
-
-    public static void putDisplayTime(boolean displayTime) {
-        Prefers.put(KEY_DISPLAY_TIME, displayTime);
-    }
-
-    public static boolean isDisplayTraffic() {
-        migrateLegacyOsd();
-        return Prefers.getBoolean(KEY_DISPLAY_TRAFFIC);
-    }
-
-    public static void putDisplayTraffic(boolean displayTraffic) {
-        Prefers.put(KEY_DISPLAY_TRAFFIC, displayTraffic);
-    }
-
-    public static boolean isDisplaySize() {
-        migrateLegacyOsd();
-        return Prefers.getBoolean(KEY_DISPLAY_SIZE, true);
-    }
-
-    public static void putDisplaySize(boolean displaySize) {
-        Prefers.put(KEY_DISPLAY_SIZE, displaySize);
-    }
-
-    public static boolean isDisplayProgress() {
-        migrateLegacyOsd();
-        return Prefers.getBoolean(KEY_DISPLAY_PROGRESS, true);
-    }
-
-    public static void putDisplayProgress(boolean displayProgress) {
-        Prefers.put(KEY_DISPLAY_PROGRESS, displayProgress);
-    }
-
-    public static boolean isDisplayMini() {
-        migrateLegacyOsd();
-        return Prefers.getBoolean(KEY_DISPLAY_MINI);
-    }
-
-    public static void putDisplayMini(boolean displayMini) {
-        Prefers.put(KEY_DISPLAY_MINI, displayMini);
-    }
-
-    public static boolean isDisplayTitle() {
-        migrateLegacyOsd();
-        return Prefers.getBoolean(KEY_DISPLAY_TITLE, true);
-    }
-
-    public static void putDisplayTitle(boolean displayTitle) {
-        Prefers.put(KEY_DISPLAY_TITLE, displayTitle);
-    }
-
-    /**
-     * 媒体信息徽标的**总开关**，由设置页「媒体信息位置」那一行唯一控制（选角位=开、选关闭=关）。
-     * 它与「屏显设置」里的常驻项是两件事：总开关关掉时，全屏唤醒控制栏也不显示。
-     */
-    public static boolean isDisplayMediaBadges() {
-        return Prefers.getBoolean(KEY_DISPLAY_MEDIA_BADGES);
-    }
-
-    public static void putDisplayMediaBadges(boolean value) {
-        Prefers.put(KEY_DISPLAY_MEDIA_BADGES, value);
-    }
-
-    /**
-     * 控制栏隐藏时媒体信息是否继续常驻（屏显设置里的那个媒体信息项 / 播放控件里的芯片）。
-     * 总开关打开时，控制栏唤醒本来就显示，这个常驻开关只是额外让它在隐藏时也留在画面上。
-     */
-    public static boolean isDisplayMediaBadgesPersistent() {
-        migrateMediaBadgePersist();
-        return Prefers.getBoolean(KEY_DISPLAY_MEDIA_BADGES_PERSIST);
-    }
-
-    public static void putDisplayMediaBadgesPersistent(boolean value) {
-        Prefers.put(KEY_DISPLAY_MEDIA_BADGES_PERSIST, value);
-    }
-
-    /**
-     * 媒体徽标所在角：0 左上、1 右上、2 左下、3 右下。默认右下，
-     * 因为左下/右下的习惯位置留给进度与网速，徽标在最外侧更少冲突。
-     */
-    public static int getMediaBadgePosition() {
-        return sanitizeMediaBadgePosition(Prefers.getInt(KEY_MEDIA_BADGE_POSITION, 3));
-    }
-
-    public static void putMediaBadgePosition(int position) {
-        Prefers.put(KEY_MEDIA_BADGE_POSITION, sanitizeMediaBadgePosition(position));
-    }
-
-    private static int sanitizeMediaBadgePosition(int position) {
-        return position < 0 || position > 3 ? 3 : position;
-    }
-
-    /**
-     * 「媒体信息位置」单选里的关闭项。位置键只存四角（0..3），
-     * 「开 / 关」由 {@code player_osd_media_badges} 表达，因此关闭时位置键必须保持原值，
-     * 重新开启才会回到用户上一次选的那个角（默认右下角）。
-     */
-    public static final int MEDIA_BADGE_POSITION_OFF = 4;
-
-    /** 「媒体信息位置」单选的选中项：开启时是四角，关闭时是关闭项。 */
-    public static int getMediaBadgeChoice() {
-        return isDisplayMediaBadges() ? getMediaBadgePosition() : MEDIA_BADGE_POSITION_OFF;
-    }
-
-    /**
-     * 应用「媒体信息位置」单选结果——这一行就是媒体信息的**总开关**：
-     * 选角位 = 打开（并记住该角，全屏唤醒控制栏即可看到）；选「关闭」= 彻底关闭。
-     * 它不影响「屏显设置」的其它项，也不要求屏显常驻打开：常驻是另一个独立开关。
-     */
-    public static void putMediaBadgeChoice(int which) {
-        if (which == MEDIA_BADGE_POSITION_OFF) {
-            putDisplayMediaBadges(false);
-            return;
-        }
-        putMediaBadgePosition(which);
-        putDisplayMediaBadges(true);
-    }
-
-    public static boolean[] getDisplayChecked() {
-        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics(), isDisplayMediaBadges() && isDisplayMediaBadgesPersistent()};
-    }
-
-    public static void putDisplayChecked(boolean[] checked) {
-        putDisplayTime(valueAt(checked, 0, isDisplayTime()));
-        putDisplayTraffic(valueAt(checked, 1, isDisplayTraffic()));
-        putDisplaySize(valueAt(checked, 2, isDisplaySize()));
-        putDisplayProgress(valueAt(checked, 3, isDisplayProgress()));
-        putDisplayMini(valueAt(checked, 4, isDisplayMini()));
-        putDisplayTitle(valueAt(checked, 5, isDisplayTitle()));
-        putOsdDiagnostics(valueAt(checked, 6, isOsdDiagnostics()));
-        boolean persistent = valueAt(checked, 7, isDisplayMediaBadgesPersistent());
-        // 勾上「媒体信息」等于「打开总开关并常驻」；取消只取消常驻，唤醒控制栏时仍然可见。
-        if (persistent) putDisplayMediaBadges(true);
-        putDisplayMediaBadgesPersistent(persistent);
-    }
-
-    public static boolean[] getLiveDisplayChecked() {
-        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayTitle(), isOsdDiagnostics()};
-    }
-
-    public static void putLiveDisplayChecked(boolean[] checked) {
-        putDisplayTime(valueAt(checked, 0, isDisplayTime()));
-        putDisplayTraffic(valueAt(checked, 1, isDisplayTraffic()));
-        putDisplaySize(valueAt(checked, 2, isDisplaySize()));
-        putDisplayTitle(valueAt(checked, 3, isDisplayTitle()));
-        putOsdDiagnostics(valueAt(checked, 4, isOsdDiagnostics()));
-    }
-
-    /**
-     * 是否记住播放页亮度。关闭时播放页完全不接管窗口亮度（跟随系统），
-     * 手势调节只在当次播放生效、不落盘，退出播放页即还原。
-     * <p>
-     * 默认关闭：历史上「一进播放页就自动变亮」的反馈都源于无条件套用记忆值，
-     * 而自动亮度机型的手势基准是固定的 0.5（见 Util.getBrightness），
-     * 随手一滑就会把偏高的值永久固化，用户没有任何入口关掉它。
-     */
-    public static boolean isRememberBrightness() {
-        return Prefers.getBoolean(KEY_REMEMBER_BRIGHTNESS, false);
-    }
-
-    /**
-     * 切换开关时两个方向都丢弃记忆值，让每次开启都从「跟随系统」起步。
-     * <p>
-     * 只在关闭时清理是不对称的：旧版用户升级后 prefs 里可能残留一个很旧甚至被夹到 1.0 的值，
-     * 开启开关会立刻把屏幕拉到那个亮度，正是本开关要消除的现象。
-     * 由用户开启后自己滑一次来建立记忆值，语义最清晰。
-     */
-    public static void putRememberBrightness(boolean remember) {
-        Prefers.put(KEY_REMEMBER_BRIGHTNESS, remember);
-        Prefers.remove("player_brightness");
-    }
-
-    public static float getBrightness() {
-        if (!isRememberBrightness()) return BrightnessPolicy.FOLLOW_SYSTEM;
-        migrateLegacyBrightness();
-        return Math.min(Math.max(Prefers.getFloat("player_brightness", -1), -1), 1);
-    }
-
-    public static void putBrightness(float brightness) {
-        if (!isRememberBrightness()) return;
-        legacyBrightnessMigrated = true;
-        Prefers.put(KEY_BRIGHTNESS_MIGRATED, true);
-        Prefers.put("player_brightness", Math.min(Math.max(brightness, 0), 1));
-    }
-
-    /**
-     * 旧版 Util.getBrightness() 把 Settings.System.SCREEN_BRIGHTNESS 写死除以 255，
-     * 在 1023/2047/4095 量程机型上算出的基准值远大于 1，手势结果被永久夹到 1.0 并持久化，
-     * 表现为「一进播放页屏幕自动变到最亮且调不下来」。这里一次性丢弃这个污染值，
-     * 让亮度回到跟随系统，用户重新调节即可。
-     * <p>
-     * 自「记住播放亮度」开关引入后，putRememberBrightness 在开关的两个方向都会清空
-     * player_brightness，历史污染值已在开关开启时被无条件清掉，这段迁移退化为兜底：
-     * 只有当将来出现「不经开关就启用记忆」的新路径时才会再次生效。
-     */
-    private static void migrateLegacyBrightness() {
-        if (legacyBrightnessMigrated) return;
-        legacyBrightnessMigrated = true;
-        if (Prefers.getBoolean(KEY_BRIGHTNESS_MIGRATED)) return;
-        Prefers.put(KEY_BRIGHTNESS_MIGRATED, true);
-        float saved = Prefers.getFloat("player_brightness", -1);
-        // 只丢弃大量程机型上的 1.0：255 量程机型不会产生这个 bug，那里的 1.0 是用户主动设的最亮
-        if (BrightnessPolicy.isLegacyPollutedValue(saved, Util.getBrightnessScale())) Prefers.remove("player_brightness");
     }
 
     public static boolean isCaption() {
@@ -944,7 +727,7 @@ public class PlayerSetting {
     }
 
     public static boolean isOsdTitle() {
-        return isDisplayTitle();
+        return Prefers.getBoolean("player_osd_title", true);
     }
 
     public static void putOsdTitle(boolean value) {
@@ -952,7 +735,7 @@ public class PlayerSetting {
     }
 
     public static boolean isOsdResolution() {
-        return isDisplaySize();
+        return Prefers.getBoolean("player_osd_resolution", true);
     }
 
     public static void putOsdResolution(boolean value) {
@@ -960,7 +743,7 @@ public class PlayerSetting {
     }
 
     public static boolean isOsdTime() {
-        return isDisplayTime();
+        return Prefers.getBoolean("player_osd_time", true);
     }
 
     public static void putOsdTime(boolean value) {
@@ -968,7 +751,7 @@ public class PlayerSetting {
     }
 
     public static boolean isOsdProgress() {
-        return isDisplayProgress();
+        return Prefers.getBoolean("player_osd_progress", true);
     }
 
     public static void putOsdProgress(boolean value) {
@@ -1005,6 +788,120 @@ public class PlayerSetting {
 
     public static void putOsdDiagnostics(boolean value) {
         Prefers.put("player_osd_diagnostics", value);
+    }
+
+    // 点播屏显设置
+    public static boolean isOsdVodTitle() {
+        return Prefers.getBoolean("player_osd_vod_title", isOsdTitle());
+    }
+
+    public static void putOsdVodTitle(boolean value) {
+        Prefers.put("player_osd_vod_title", value);
+    }
+
+    public static boolean isOsdVodResolution() {
+        return Prefers.getBoolean("player_osd_vod_resolution", isOsdResolution());
+    }
+
+    public static void putOsdVodResolution(boolean value) {
+        Prefers.put("player_osd_vod_resolution", value);
+    }
+
+    public static boolean isOsdVodTime() {
+        return Prefers.getBoolean("player_osd_vod_time", isOsdTime());
+    }
+
+    public static void putOsdVodTime(boolean value) {
+        Prefers.put("player_osd_vod_time", value);
+    }
+
+    public static boolean isOsdVodProgress() {
+        return Prefers.getBoolean("player_osd_vod_progress", isOsdProgress());
+    }
+
+    public static void putOsdVodProgress(boolean value) {
+        Prefers.put("player_osd_vod_progress", value);
+    }
+
+    public static boolean isOsdVodTraffic() {
+        return Prefers.getBoolean("player_osd_vod_traffic", isOsdTraffic());
+    }
+
+    public static void putOsdVodTraffic(boolean value) {
+        Prefers.put("player_osd_vod_traffic", value);
+    }
+
+    public static boolean isOsdVodMini() {
+        return Prefers.getBoolean("player_osd_vod_mini", isOsdMini());
+    }
+
+    public static void putOsdVodMini(boolean value) {
+        Prefers.put("player_osd_vod_mini", value);
+    }
+
+    public static boolean isOsdVodDiagnostics() {
+        return Prefers.getBoolean("player_osd_vod_diagnostics", isOsdDiagnostics());
+    }
+
+    public static void putOsdVodDiagnostics(boolean value) {
+        Prefers.put("player_osd_vod_diagnostics", value);
+    }
+
+    // 直播屏显设置
+    public static boolean isOsdLiveTitle() {
+        return Prefers.getBoolean("player_osd_live_title", isOsdTitle());
+    }
+
+    public static void putOsdLiveTitle(boolean value) {
+        Prefers.put("player_osd_live_title", value);
+    }
+
+    public static boolean isOsdLiveResolution() {
+        return Prefers.getBoolean("player_osd_live_resolution", isOsdResolution());
+    }
+
+    public static void putOsdLiveResolution(boolean value) {
+        Prefers.put("player_osd_live_resolution", value);
+    }
+
+    public static boolean isOsdLiveTime() {
+        return Prefers.getBoolean("player_osd_live_time", isOsdTime());
+    }
+
+    public static void putOsdLiveTime(boolean value) {
+        Prefers.put("player_osd_live_time", value);
+    }
+
+    public static boolean isOsdLiveProgress() {
+        return Prefers.getBoolean("player_osd_live_progress", isOsdProgress());
+    }
+
+    public static void putOsdLiveProgress(boolean value) {
+        Prefers.put("player_osd_live_progress", value);
+    }
+
+    public static boolean isOsdLiveTraffic() {
+        return Prefers.getBoolean("player_osd_live_traffic", isOsdTraffic());
+    }
+
+    public static void putOsdLiveTraffic(boolean value) {
+        Prefers.put("player_osd_live_traffic", value);
+    }
+
+    public static boolean isOsdLiveMini() {
+        return Prefers.getBoolean("player_osd_live_mini", isOsdMini());
+    }
+
+    public static void putOsdLiveMini(boolean value) {
+        Prefers.put("player_osd_live_mini", value);
+    }
+
+    public static boolean isOsdLiveDiagnostics() {
+        return Prefers.getBoolean("player_osd_live_diagnostics", isOsdDiagnostics());
+    }
+
+    public static void putOsdLiveDiagnostics(boolean value) {
+        Prefers.put("player_osd_live_diagnostics", value);
     }
 
     public static boolean isOsdEnabled() {

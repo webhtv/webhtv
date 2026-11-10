@@ -249,6 +249,21 @@ import com.fongmi.android.tv.player.lyrics.LyricsResult;
 import com.fongmi.android.tv.player.lut.LutSetting;
 import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.setting.LyricsSetting;
+import com.fongmi.android.tv.setting.PlayerButtonSetting;
+import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.setting.SiteHealthStore;
+import com.fongmi.android.tv.setting.SiteOrderStore;
+import com.fongmi.android.tv.ui.adapter.ArrayAdapter;
+import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
+import com.fongmi.android.tv.ui.adapter.FlagAdapter;
+import com.fongmi.android.tv.ui.adapter.ParseAdapter;
+import com.fongmi.android.tv.ui.adapter.PartAdapter;
+import com.fongmi.android.tv.ui.adapter.QualityAdapter;
+import com.fongmi.android.tv.ui.adapter.QuickAdapter;
+import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
+import com.fongmi.android.tv.ui.custom.CustomMovement;
+import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.FlagSelectionListener;
 import com.fongmi.android.tv.ui.custom.AudioPlayerBackgroundDrawable;
 import com.fongmi.android.tv.ui.custom.KaraokeResultView;
@@ -257,10 +272,27 @@ import com.fongmi.android.tv.ui.dialog.ControlDialog;
 import com.fongmi.android.tv.ui.dialog.PanNetworkDiagnosticDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerKernelDialog;
 import com.fongmi.android.tv.ui.dialog.QuickSearchDialog;
+import com.fongmi.android.tv.ui.dialog.ShooterSubtitleHelper;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
+import com.fongmi.android.tv.ui.dialog.SubtitlePickerDialog;
 import com.fongmi.android.tv.ui.dialog.TitleDialog;
 import com.fongmi.android.tv.ui.dialog.TimerDialog;
+import com.fongmi.android.tv.ui.dialog.TrackDialog;
+import com.fongmi.android.tv.ui.fragment.SettingPlayerFragment;
+import com.fongmi.android.tv.utils.Clock;
+import com.fongmi.android.tv.utils.FileChooser;
+import com.fongmi.android.tv.utils.FocusLoop;
+import com.fongmi.android.tv.utils.ImgUtil;
+import com.fongmi.android.tv.utils.KeyUtil;
+import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Sniffer;
+import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Traffic;
+import com.fongmi.android.tv.utils.Util;
+import com.fongmi.android.tv.web.WebHomeInlineVodStore;
+import com.github.catvod.crawler.SpiderDebug;
+import com.github.bassaer.library.MDColor;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -421,18 +453,17 @@ private boolean runtimeSourceOnly;
     private static final long TV_TOUCH_SEEK_SCALE = 50L;
 
     private CustomKeyDownVod mKeyDown;
-    private AudioManager mTvAudioManager;
-    private int mTvTouchAxis;
-    private boolean mTvTouchMulti;
-    private float mTvTouchDownX;
-    private float mTvTouchDownY;
-    private float mTvTouchBright;
-    private float mTvTouchVolume;
-    private long mTvTouchSeek;
+    private float mSpeedBeforeLongPress = 1.0f;
+    private String mCastEpisodeHint = "";
+    private boolean mCastSearch;
+    private int mCastDetailRetry;
     private SiteViewModel mViewModel;
     private List<String> mBroken;
     private History mHistory;
     private boolean fullscreen;
+    private boolean startFullscreen;
+    private boolean webHomeSniffer;
+    private boolean mWasPlaying;
     private boolean initAuto;
     private boolean autoMode;
     private boolean revealManualSearch;
@@ -560,16 +591,16 @@ private boolean runtimeSourceOnly;
     private String playHealthKey;
     private long detailStartTime;
     private long playerStartTime;
-    private long pendingResumeSeekMs = C.TIME_UNSET;
-    private boolean tmdbHistoryResumePending;
+    private long mInitialPlaybackPosition = C.TIME_UNSET;
+    private boolean mWasPlayingBeforeSetting;
     private boolean pendingLutImport;
     private boolean playerKernelSwitchRefreshing;
-    private int playerKernelSwitchRequestId;
-    private int mPendingPlayerKernel = PlayerSetting.NONE;
     private MpvPlayer mDiscMenuPlayer;
     private final Runnable mDiscMenuStateListener = this::updateDiscMenuButton;
     private MpvPlayer mCustomButtonPlayer;
     private final Runnable mCustomButtonStateListener = this::updateCustomButtonStates;
+    private final Runnable mDiscMenuStateListener = this::updateDiscMenuAction;
+    private final String[] labels = {"0°", "90°", "180°", "270°"};
 
     private final ActivityResultLauncher<Intent> mLutDir = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
         if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null || result.getData().getData() == null) return;
@@ -634,22 +665,21 @@ private boolean runtimeSourceOnly;
     }
 
     public static void push(FragmentActivity activity, String text) {
-        PushParser.Parsed push = PushParser.fromText(text);
-        Uri uri = Uri.parse(push.getUrl());
-        if (FileChooser.isValid(activity, uri)) file(activity, FileChooser.getPathFromUri(uri), push.getTitle());
-        else startPush(activity, push);
+        push(activity, text, "");
     }
-
-    @Override
-    protected boolean customWall() {
-        return true;
+ 
+    public static void push(FragmentActivity activity, String text, String name) {
+        if (TextUtils.isEmpty(text)) return;
+        if (FileChooser.isValid(activity, Uri.parse(text))) {
+            file(activity, FileChooser.getPathFromUri(Uri.parse(text)));
+            return;
+        }
+        // 带请求头的推送串（url@Headers=<json>）不能被正则截断，整串交给 PUSH 链路解析
+        String url = text.contains(Sniffer.HEADERS_TAG) ? text : Sniffer.getUrl(text);
+        if (TextUtils.isEmpty(url)) return;
+        start(activity, SiteApi.PUSH, url, TextUtils.isEmpty(name) ? Sniffer.pushUrl(url) : name);
     }
-
-    @Override
-    protected boolean customWallMotion() {
-        return false;
-    }
-
+ 
     public static void file(FragmentActivity activity, String path) {
         file(activity, path, "");
     }
@@ -661,7 +691,11 @@ private boolean runtimeSourceOnly;
     }
 
     public static void cast(Activity activity, History history) {
-        start(activity, history.getSiteKey(), history.getVodId(), history.getVodName(), history.getVodPic(), null, false, true, (TmdbItem) null, history.getWallPic());
+        start(activity, history.getSiteKey(), history.getVodId(), history.getVodName(), history.getVodPic(), null, false, true, history.getWallPic(), null, false, history);
+    }
+
+    public static void startFullscreen(Activity activity, History history) {
+        start(activity, history.getSiteKey(), history.getVodId(), history.getVodName(), history.getVodPic(), null, false, false, history.getWallPic(), null, true);
     }
 
     public static void collect(Activity activity, String key, String id, String name, String pic) {
@@ -757,22 +791,14 @@ private boolean runtimeSourceOnly;
     }
 
     public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, String wallPic, String content) {
-        start(activity, key, id, name, pic, mark, collect, cast, (TmdbItem) null, wallPic, content);
+        start(activity, key, id, name, pic, mark, collect, cast, wallPic, content, false);
     }
 
-    public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, com.fongmi.android.tv.bean.TmdbItem tmdbItem) {
-        start(activity, key, id, name, pic, mark, collect, cast, tmdbItem, null, null);
+    public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, String wallPic, String content, boolean fullscreen) {
+        start(activity, key, id, name, pic, mark, collect, cast, wallPic, content, fullscreen, null);
     }
 
-    public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, com.fongmi.android.tv.bean.TmdbItem tmdbItem, String wallPic) {
-        start(activity, key, id, name, pic, mark, collect, cast, tmdbItem, wallPic, null);
-    }
-
-    public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, com.fongmi.android.tv.bean.TmdbItem tmdbItem, String wallPic, String content) {
-        start(activity, key, id, name, pic, mark, collect, cast, tmdbItem, wallPic, content, "");
-    }
-
-    public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, com.fongmi.android.tv.bean.TmdbItem tmdbItem, String wallPic, String content, String searchKeyword) {
+    public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, String wallPic, String content, boolean fullscreen, History history) {
         long launch = System.currentTimeMillis();
         SpiderDebug.log("video-flow", "launch request key=%s id=%s name=%s collect=%s cast=%s", key, id, name, collect, cast);
         ImgUtil.preload(activity, pic);
@@ -800,6 +826,7 @@ private boolean runtimeSourceOnly;
         intent.putExtra("tmdbMode", tmdbItem != null);
         intent.putExtra("tmdbItem", tmdbItem);
         intent.putExtra("collect", collect);
+        if (history != null) intent.putExtra("castHistory", history.toString());
         intent.putExtra("cast", cast);
         intent.putExtra("mark", mark);
         intent.putExtra("name", name);
@@ -808,6 +835,7 @@ private boolean runtimeSourceOnly;
         intent.putExtra("content", content);
         intent.putExtra("key", key);
         intent.putExtra("id", id);
+        intent.putExtra("startFullscreen", fullscreen);
         activity.startActivity(intent);
         SpiderDebug.log("video-flow", "launch dispatched cost=%dms key=%s id=%s", System.currentTimeMillis() - launch, key, id);
     }
@@ -1418,33 +1446,23 @@ private boolean runtimeSourceOnly;
         return item;
     }
 
+    /** OSD 左上角标题。
+     *
+     *  注意：OSD 与控制面板是两套渲染 —— 控制面板可见时 PlayerOsdController.render()
+     *  会把整个 OSD root 置 GONE 并直接 return，左上角显示的是控制面板自己的标题。
+     *  所以「控制面板标题正确、OSD 标题错误」并不是同一处数据的两种表现，而是两个数据源：
+     *  控制面板的标题由 updateVod() 用详情返回的真实片名刷新过，而 OSD 一直读的是
+     *  getName()（intent 里的启动快照）。这里改为优先取界面上已确认的片名，
+     *  详情回来后 OSD 会在下一次 render（每秒一次）自动纠偏。 */
     private String getOsdTitle() {
-        String title = EpisodeTitleFormatter.buildPlaybackTitle(getPlaybackName(), getCurrentEpisodeTitle());
-        String episodeInfo = tmdbEpisodeCompactText();
-        return TextUtils.isEmpty(episodeInfo) ? title : title + " · " + episodeInfo;
-    }
-
-    private String getPlaybackName() {
-        CharSequence name = mBinding == null || mBinding.name == null ? "" : mBinding.name.getText();
-        return TextUtils.isEmpty(name) ? getName() : name.toString();
-    }
-
-    private String getCurrentEpisodeTitle() {
-        return mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0 ? "" : getEpisodeTitle(getEpisode());
-    }
-
-    private String getEpisodeTitle(Episode episode) {
-        return episode == null ? "" : EpisodeAdapter.getTitle(episode);
-    }
-
-    private CharSequence getPlaybackControlTitle() {
-        return getPlaybackControlTitle(mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0 ? null : getEpisode());
-    }
-
-    private CharSequence getPlaybackControlTitle(Episode episode) {
-        String name = getPlaybackName();
-        String title = getEpisodeTitle(episode);
-        return TextUtils.isEmpty(title) || TextUtils.equals(name, title) ? name : getString(R.string.detail_title, name, title);
+        String name = getName();
+        CharSequence shown = mBinding == null ? null : mBinding.name.getText();
+        if (!TextUtils.isEmpty(shown)) name = shown.toString();
+        else if (mHistory != null && !TextUtils.isEmpty(mHistory.getVodName())) name = mHistory.getVodName();
+        if (mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0) return name;
+        String episode = Objects.toString(getEpisode().getName(), "");
+        if (TextUtils.isEmpty(episode) || TextUtils.equals(name, episode)) return name;
+        return TextUtils.isEmpty(name) ? episode : name + " " + episode;
     }
 
     private int getScale() {
@@ -1491,6 +1509,26 @@ private boolean runtimeSourceOnly;
         return mBinding.control.seek;
     }
 
+    // 自动全屏：进播放页默认只是预览小窗，播放起来后补一次全屏。
+    // 触发条件二选一：
+    //   webHomeSniffer  -> 网页嗅探(JS) "自动播" 明确要求，无视"播放自动全屏"开关
+    //   Setting.isPlaybackAutoFullscreen() -> Java 侧发起的播放，受播放设置开关控制
+    // 延时重试是必须的：播放器还没就绪时 enterFullscreen() 可能被丢弃。
+    private final Runnable mAutoFullscreen = new Runnable() {
+        int retry = 0;
+        @Override
+        public void run() {
+            if (isFinishing() || isDestroyed()) return;
+            if (isFullscreen()) return;
+            enterFullscreen();                    // 现成动作：和点小窗走的是同一个
+            if (!isFullscreen() && retry++ < 5) App.post(this, 800);
+        }
+    };
+
+    private void scheduleAutoFullscreen() {
+        if (webHomeSniffer || Setting.isPlaybackAutoFullscreen()) App.post(mAutoFullscreen, 1200);
+    }
+
     @Override
     protected long getDurationFallbackMs() {
         return mHistory == null ? C.TIME_UNSET : mHistory.getDuration();
@@ -1510,23 +1548,9 @@ private boolean runtimeSourceOnly;
         setPlayerKernel();
         setDecode();
         setLut();
-        // C111: setViewModel() runs on the initView tick, but the adapters (mFlagAdapter/mQualityAdapter/...)
-        // are only created by stage 1-recycler. A retained ViewModel replays its last Result into
-        // mPendingDetail/mPendingPlayer the moment the service connects, and detail/player results then
-        // dereference a not-yet-created adapter. Queue the whole tail behind the stages instead of running it
-        // inline; a non-empty queue means stage 1 has not run yet, an empty one means it already has, so the
-        // normal path stays inline and unchanged.
-        if (!mInitViewStages.isEmpty()) {
-            deferInitViewStage("4-service-results", this::applyServiceReadyResults);
-            return;
-        }
-        applyServiceReadyResults();
-    }
-
-    private void applyServiceReadyResults() {
-        if (consumeImmersiveAudioLaunch()) return;
-        if (!detailRequested && mViewModel != null) checkId();
-        flushPendingFastTmdbPlayback();
+        if ((startFullscreen || isCast()) && !isFullscreen()) enterFullscreen();
+        scheduleAutoFullscreen();
+        if (!detailRequested) checkId();
         if (mPendingDetail != null) {
             Result result = mPendingDetail;
             mPendingDetail = null;
@@ -1576,11 +1600,9 @@ private boolean runtimeSourceOnly;
     protected void initView(Bundle savedInstanceState) {
         long start = System.currentTimeMillis();
         SpiderDebug.log("video-flow", "initView start sinceLaunch=%dms key=%s id=%s", getLaunchCost(start), getKey(), getId());
-        initializeRuntimeDetailMode();
-        restoreImmersiveAudioRequest();
-        mTmdbDetailTimeout = this::showTmdbDetailFallback;
-        mTmdbEpisodeTimeout = this::showTmdbEpisodeFallback;
-        initTmdbMode();
+        startFullscreen = getIntent().getBooleanExtra("startFullscreen", false);
+        webHomeSniffer = getIntent().getBooleanExtra("webHomeSniffer", false);
+        if (!isCast() && hasInitialPreview()) showInitialPreview();
         super.initView(savedInstanceState);
         SpiderDebug.log("video-flow", "initView after playback cost=%dms", System.currentTimeMillis() - start);
         applyPlaybackOverlay();
@@ -1695,47 +1717,17 @@ private boolean runtimeSourceOnly;
         mBinding.control.action.ending.setDownListener(this::onEndingSub);
         mBinding.control.action.opening.setUpListener(this::onOpeningAdd);
         mBinding.control.action.opening.setDownListener(this::onOpeningSub);
+        mBinding.control.action.subHead.setUpListener(this::onSubHeadAdd);
+        mBinding.control.action.subHead.setDownListener(this::onSubHeadSub);
+        mBinding.control.action.rotate.setUpListener(this::onRotateAdd);
+        mBinding.control.action.rotate.setDownListener(this::onRotateSub);
+        mBinding.control.action.subTail.setUpListener(this::onSubTailAdd);
+        mBinding.control.action.subTail.setDownListener(this::onSubTailSub);
         mBinding.control.action.text.setUpListener(this::onSubtitleClick);
         mBinding.control.action.text.setDownListener(this::onSubtitleClick);
         mBinding.control.action.next.setOnClickListener(view -> checkNext());
         mBinding.control.action.prev.setOnClickListener(view -> checkPrev());
         mBinding.control.action.episodes.setOnClickListener(view -> onEpisodes());
-        mBinding.episodeReverse.setOnClickListener(view -> onRevSort());
-        mBinding.episodeViewMode.setOnClickListener(view -> toggleEpisodeViewMode());
-        mBinding.episodeFileName.setOnClickListener(view -> toggleEpisodeFileName());
-        mBinding.episodeReverse.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
-        mBinding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
-        mBinding.episodeFileName.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
-        mBinding.control.action.scale.setOnClickListener(guarded(this::onScale));
-        mBinding.control.action.actionQuality.setOnClickListener(guarded(this::onQuality));
-        mBinding.control.action.lut.setOnClickListener(guarded(this::onLut));
-        mBinding.control.action.speed.setOnClickListener(guarded(this::onSpeed));
-        mBinding.control.action.reset.setOnClickListener(guarded(this::onReset));
-        // 错误层的重试复用控制层同一条「重做本次播放」动作：onReset() 会按用户的「重置」
-        // 设置决定从头重播还是重新拉流，所以不新写播放路径，也就不会与既有的自动换源
-        // （startFlow）产生第二套恢复逻辑。重试成功后的收尾由 showProgress() 负责隐藏错误层。
-        mBinding.widget.retry.setOnClickListener(guarded(this::onReset));
-        mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
-        mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
-        mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
-        mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
-        mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
-        mBinding.control.action.multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy));
-        mBinding.control.action.panDiagnostic.setOnClickListener(guarded(this::onPanDiagnostic));
-        mBinding.control.action.codecCapability.setOnClickListener(guarded(this::onCodecCapability));
-        mBinding.control.action.ending.setOnClickListener(guarded(this::onEnding));
-        mBinding.control.action.repeat.setOnClickListener(guarded(this::onRepeat));
-        mBinding.control.action.search.setOnClickListener(view -> onSearch());
-        mBinding.control.action.search.setOnLongClickListener(view -> {
-            onGlobalSearch();
-            return true;
-        });
-        mBinding.control.action.change2.setOnClickListener(view -> onChange());
-        mBinding.control.action.fullscreen.setOnClickListener(guarded(this::onFullscreen));
-        mBinding.control.action.danmaku.setOnClickListener(guarded(this::onDanmaku));
-        mBinding.control.action.danmaku.setOnLongClickListener(view -> onDanmakuToggle());
-        mBinding.control.action.adFeedback.setOnClickListener(view -> onAdFeedback());
-        mBinding.control.action.opening.setOnClickListener(guarded(this::onOpening));
         mBinding.control.action.discMenu.setOnClickListener(view -> {
             hideControl();
             openDiscMenu();
@@ -1745,33 +1737,59 @@ private boolean runtimeSourceOnly;
             showDiscMenuControls();
             return true;
         });
-        if (mBinding.control.action.immersiveAudio != null) mBinding.control.action.immersiveAudio.setOnClickListener(view -> toggleImmersiveAudioMode());
-        if (mBinding.control.action.cast != null) mBinding.control.action.cast.setOnClickListener(view -> onCast());
-        if (mBinding.control.action.timer != null) mBinding.control.action.timer.setOnClickListener(view -> onTimer());
-        if (mBinding.audioPlay != null) mBinding.audioPlay.setOnClickListener(view -> checkPlay());
-        if (mBinding.audioNext != null) mBinding.audioNext.setOnClickListener(view -> checkNext());
-        if (mBinding.audioPrev != null) mBinding.audioPrev.setOnClickListener(view -> checkPrev());
-        if (mBinding.audioRepeatAction != null) mBinding.audioRepeatAction.setOnClickListener(view -> onRepeat());
-        if (mBinding.audioQueueAction != null) mBinding.audioQueueAction.setOnClickListener(view -> onAudioQueue());
-        if (mBinding.audioLyricsAction != null) mBinding.audioLyricsAction.setOnClickListener(view -> onLyricsSearch());
-        if (mBinding.audioKeepAction != null) mBinding.audioKeepAction.setOnClickListener(view -> onKeep());
-        if (mBinding.audioCastAction != null) mBinding.audioCastAction.setOnClickListener(view -> onCast());
-        if (mBinding.audioSettingAction != null) mBinding.audioSettingAction.setOnClickListener(view -> onSetting());
-        if (mBinding.audioKaraokeAction != null) mBinding.audioKaraokeAction.setOnClickListener(view -> onKaraokeMode());
-        if (mBinding.audioBackgroundAction != null) mBinding.audioBackgroundAction.setOnClickListener(view -> randomizeAudioBackgroundMix(false));
-        if (mBinding.audioMoreAction != null) mBinding.audioMoreAction.setOnClickListener(view -> onAudioMore());
-        if (mBinding.audioTrackAction != null) mBinding.audioTrackAction.setOnClickListener(view -> onTrack(C.TRACK_TYPE_AUDIO));
-        if (mBinding.audioSubtitleAction != null) mBinding.audioSubtitleAction.setOnClickListener(view -> onTrack(C.TRACK_TYPE_TEXT));
-        if (mBinding.audioStage != null) mBinding.audioStage.setOnClickListener(view -> focusAudioStageDefault());
-
+        mBinding.control.action.scale.setOnClickListener(view -> onScale());
+        mBinding.control.action.rotate.setOnClickListener(view -> onRotate());
+        mBinding.control.action.lut.setOnClickListener(view -> onLut());
+        mBinding.control.action.speed.setOnClickListener(view -> onSpeed());
+        mBinding.control.action.reset.setOnClickListener(view -> onReset());
+        mBinding.control.action.title.setOnClickListener(view -> onTitle());
+        mBinding.control.action.player.setOnClickListener(view -> onPlayerKernel());
+        mBinding.control.action.player.setOnLongClickListener(view -> onChooseLong());
+        mBinding.control.action.decode.setOnClickListener(view -> onDecode());
+        mBinding.control.action.playParams.setOnClickListener(view -> onPlayParams());
+        mBinding.control.action.panDiagnostic.setOnClickListener(view -> onPanDiagnostic());
+        mBinding.control.action.codecCapability.setOnClickListener(view -> onCodecCapability());
+        mBinding.control.action.immersiveAudio.setOnClickListener(view -> toggleImmersiveAudioMode());
+        mBinding.control.action.ending.setOnClickListener(view -> onEnding());
+        mBinding.control.action.subHead.setOnClickListener(view -> onSubHead());
+        mBinding.control.action.subTail.setOnClickListener(view -> onSubTail());
+        mBinding.control.action.repeat.setOnClickListener(view -> onRepeat());
+        mBinding.control.action.change2.setOnClickListener(view -> onChange());
+        mBinding.control.action.fullscreen.setOnClickListener(view -> onFullscreen());
+        mBinding.control.action.danmaku.setOnClickListener(view -> onDanmaku());
+        mBinding.control.action.setting.setOnClickListener(view -> {
+            mWasPlayingBeforeSetting = player().isPlaying();
+            showSettingPlayer();
+        });
+        mBinding.control.action.cast.setOnClickListener(view -> onCast());
+        mBinding.control.action.timer.setOnClickListener(view -> onTimer());
+        mBinding.control.action.opening.setOnClickListener(view -> onOpening());
+        mBinding.audioPlay.setOnClickListener(view -> checkPlay());
+        mBinding.audioNext.setOnClickListener(view -> checkNext());
+        mBinding.audioPrev.setOnClickListener(view -> checkPrev());
+        mBinding.audioRepeatAction.setOnClickListener(view -> onRepeat());
+        mBinding.audioQueueAction.setOnClickListener(view -> onAudioQueue());
+        mBinding.audioLyricsAction.setOnClickListener(view -> onLyricsSearch());
+        mBinding.audioKeepAction.setOnClickListener(view -> onKeep());
+        mBinding.audioCastAction.setOnClickListener(view -> onCast());
+        mBinding.audioSettingAction.setOnClickListener(view -> onSetting());
+        mBinding.audioKaraokeAction.setOnClickListener(view -> onKaraokeMode());
+        mBinding.audioBackgroundAction.setOnClickListener(view -> randomizeAudioBackgroundMix(false));
+        mBinding.audioMoreAction.setOnClickListener(view -> onAudioMore());
+        mBinding.audioTrackAction.setOnClickListener(view -> onTrack(C.TRACK_TYPE_AUDIO));
+        mBinding.audioSubtitleAction.setOnClickListener(view -> onTrack(C.TRACK_TYPE_TEXT));
+        mBinding.audioStage.setOnClickListener(view -> focusAudioStageDefault());
         mBinding.shortDisplay.setOnClickListener(view -> onShortDisplay());
         mBinding.control.action.speed.setOnLongClickListener(view -> onSpeedLong());
+        mBinding.control.action.rotate.setOnLongClickListener(view -> onRotateReset());
         mBinding.control.action.reset.setOnLongClickListener(view -> onResetToggle());
         mBinding.control.action.ending.setOnLongClickListener(view -> onEndingReset());
         mBinding.control.action.opening.setOnLongClickListener(view -> onOpeningReset());
+        mBinding.control.action.subHead.setOnLongClickListener(view -> onSubHeadReset());
+        mBinding.control.action.subTail.setOnLongClickListener(view -> onSubTailReset());
         setActionFocusScroll();
-        mBinding.video.setOnTouchListener(this::onVideoTouch);
-        registerFlagSelectionListener();
+        mBinding.video.setOnTouchListener((view, event) -> dispatchDiscMenuTouch(event) || mKeyDown.onTouchEvent(event));
+        mBinding.flag.addOnChildViewHolderSelectedListener(new FlagSelectionListener(mBinding.flag, mFlagAdapter, this));
         mBinding.episode.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -1808,13 +1826,42 @@ private boolean runtimeSourceOnly;
         mIntroSkipPlayback.setSkipConfirmDismisser(this::dismissIntroSkipConfirm);
     }
 
-    private void dismissIntroSkipConfirm() {
-        if (mIntroSkipConfirmDialog == null) return;
-        try {
-            mIntroSkipConfirmDialog.dismiss();
-        } catch (Throwable ignored) {
-        }
-        mIntroSkipConfirmDialog = null;
+    private View[] audioStageFocusButtons() {
+        return new View[]{
+                mBinding.audioRepeatAction, mBinding.audioPrev, mBinding.audioPlay, mBinding.audioNext, mBinding.audioQueueAction,
+                mBinding.audioLyricsAction, mBinding.audioKaraokeAction, mBinding.audioMoreAction,
+                mBinding.audioCastAction, mBinding.audioKeepAction, mBinding.audioSettingAction, mBinding.audioTrackAction, mBinding.audioSubtitleAction, mBinding.audioInfoAction,
+                mBinding.audioBackgroundAction
+        };
+    }
+
+    private void showAudioStageFocusHighlight(@Nullable View target) {
+        if (target == null) return;
+        App.removeCallbacks(mHideAudioFocusRunnable);
+        resetAudioStageIconBackgrounds();
+        if (isAudioStageIconButton(target)) target.setBackground(ResUtil.getDrawable(R.drawable.shape_audio_action_icon_focused));
+        App.post(mHideAudioFocusRunnable, 3000);
+    }
+
+    private void hideAudioStageFocusHighlight() {
+        if (isFinishing() || isDestroyed()) return;
+        resetAudioStageIconBackgrounds();
+    }
+
+    private void resetAudioStageIconBackgrounds() {
+        for (View view : audioStageIconButtons()) view.setBackground(ResUtil.getDrawable(R.drawable.selector_audio_action_icon));
+    }
+
+    private boolean isAudioStageIconButton(View view) {
+        for (View item : audioStageIconButtons()) if (view == item) return true;
+        return false;
+    }
+
+    private View[] audioStageIconButtons() {
+        return new View[]{
+                mBinding.audioRepeatAction, mBinding.audioPrev, mBinding.audioPlay, mBinding.audioNext, mBinding.audioQueueAction,
+                mBinding.audioLyricsAction, mBinding.audioKaraokeAction, mBinding.audioMoreAction
+        };
     }
 
     private void setActionFocusScroll() {
@@ -2016,7 +2063,59 @@ private boolean runtimeSourceOnly;
         applyDanmakuState();
         mBinding.control.action.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
         setupActionButtons();
-        setPlayerButton();
+    }
+
+    private void setupActionButtons() {
+        mActionButtons = new HashMap<>();
+        addActionButton(PlayerButtonSetting.NEXT, mBinding.control.action.next);
+        addActionButton(PlayerButtonSetting.PREV, mBinding.control.action.prev);
+        addActionButton(PlayerButtonSetting.EPISODES, mBinding.control.action.episodes);
+        addActionButton(PlayerButtonSetting.RESET, mBinding.control.action.reset);
+        addActionButton(PlayerButtonSetting.CHANGE, mBinding.control.action.change2);
+        addActionButton(PlayerButtonSetting.FULLSCREEN, mBinding.control.action.fullscreen);
+        addActionButton(PlayerButtonSetting.PLAYER, mBinding.control.action.player);
+        addActionButton(PlayerButtonSetting.DECODE, mBinding.control.action.decode);
+        addActionButton(PlayerButtonSetting.PLAY_PARAMS, mBinding.control.action.playParams);
+        addActionButton(PlayerButtonSetting.CODEC_CAPABILITY, mBinding.control.action.codecCapability);
+        addActionButton(PlayerButtonSetting.SPEED, mBinding.control.action.speed);
+        addActionButton(PlayerButtonSetting.SCALE, mBinding.control.action.scale);
+        addActionButton(PlayerButtonSetting.ROTATE, mBinding.control.action.rotate);
+        addActionButton(PlayerButtonSetting.LUT, mBinding.control.action.lut);
+        addActionButton(PlayerButtonSetting.TEXT, mBinding.control.action.text);
+        addActionButton(PlayerButtonSetting.AUDIO, mBinding.control.action.audio);
+        addActionButton(PlayerButtonSetting.VIDEO, mBinding.control.action.video);
+        addActionButton(PlayerButtonSetting.OPENING, mBinding.control.action.opening);
+        addActionButton(PlayerButtonSetting.ENDING, mBinding.control.action.ending);
+        addActionButton(PlayerButtonSetting.SUB_HEAD, mBinding.control.action.subHead);
+        addActionButton(PlayerButtonSetting.SUB_TAIL, mBinding.control.action.subTail);
+        addActionButton(PlayerButtonSetting.DANMAKU, mBinding.control.action.danmaku);
+        addActionButton(PlayerButtonSetting.TITLE, mBinding.control.action.title);
+        addActionButton(PlayerButtonSetting.REPEAT, mBinding.control.action.repeat);
+        addActionButton(PlayerButtonSetting.PUSH, mBinding.control.action.cast);
+        addActionButton(PlayerButtonSetting.TIMER, mBinding.control.action.timer);
+        addActionButton(PlayerButtonSetting.PDS, mBinding.control.action.panDiagnostic);
+        addActionButton(PlayerButtonSetting.SETTING, mBinding.control.action.setting);
+        PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+        setupCustomActionButtons();
+        updateDiscMenuAction();
+    }
+
+    private void updateDiscMenuAction() {
+        updateCustomButtonStates();
+        MpvPlayer mpv = service() != null && isOwner()
+                && player().getPlayer() instanceof MpvPlayer active ? active : null;
+        if (mDiscMenuPlayer != mpv) {
+            if (mDiscMenuPlayer != null) mDiscMenuPlayer.removeDiscMenuStateListener(mDiscMenuStateListener);
+            mDiscMenuPlayer = mpv;
+            if (mpv != null) mpv.addDiscMenuStateListener(mDiscMenuStateListener);
+        }
+        boolean available = mpv != null && mpv.isDiscMenuAvailable();
+        if (!available && mBinding.control.action.discMenu.hasFocus()) mBinding.control.action.playParams.requestFocus();
+        mBinding.control.action.discMenu.setVisibility(available ? View.VISIBLE : View.GONE);
+    }
+
+    private void addActionButton(String id, View view) {
+        mActionButtons.put(id, view);
     }
 
     private void setupCustomActionButtons() {
@@ -2102,16 +2201,8 @@ private boolean runtimeSourceOnly;
 
     private void applyActionButtonVisibility() {
         updateCustomButtonVisibility();
-        mBinding.control.action.cast.setVisibility(isFullscreen() ? View.GONE : View.VISIBLE);
         updateImmersiveAudioAction();
-        updatePanDiagnosticAction();
-        updateDiscMenuButton();
-        if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
-    }
-
-    private void updatePanDiagnosticAction() {
-        if (mBinding == null) return;
-        mBinding.control.action.panDiagnostic.setVisibility(isFullscreen() && canRunPanDiagnostic() ? View.VISIBLE : View.GONE);
+        updateDiscMenuAction();
     }
 
     private void setPlayerButton() {
@@ -2249,8 +2340,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void checkCast() {
-        if (isCast() && !isFullscreen()) enterFullscreen();
-        else if (mAudioStageVisible) mBinding.progressLayout.showContent();
+        if (mAudioStageVisible) mBinding.progressLayout.showContent();
         else if (hasInitialPreview()) showInitialPreview();
         else mBinding.progressLayout.showProgress();
     }
@@ -2260,595 +2350,8 @@ private boolean runtimeSourceOnly;
         detailRequested = true;
         if (getId().startsWith("push://")) getIntent().putExtra("key", SiteApi.PUSH).putExtra("id", getId().substring(7));
         if (getId().isEmpty() || getId().startsWith("msearch:")) setEmpty(false);
-        else if (!setCachedTmdbDetail()) getDetail();
-    }
-
-    private boolean setCachedTmdbDetail() {
-        Vod cached = VodDetailCache.take(getTmdbVodCacheKey());
-        VodEventGuard.alignCachedIdentity(cached, getKey(), getId());
-        if (cached == null) return false;
-        detailStartTime = System.currentTimeMillis();
-        detailHealthRecorded = true;
-        if (shouldRequestCachedDetailLoading()) mBinding.progressLayout.showProgress();
-        SpiderDebug.log("video-flow", "detail cache hit queued key=%s id=%s name=%s", getKey(), getId(), cached.getName());
-        if (tryStartFastTmdbPlayback(cached)) {
-            return true;
-        }
-        if (isIntentTmdbPlayback() && shouldWaitForPlaybackService()) {
-            queueFastTmdbPlaybackUntilServiceReady(cached);
-            return true;
-        }
-        applyCachedTmdbDetailNextFrame(cached);
-        return true;
-    }
-
-    private boolean shouldWaitForPlaybackService() {
-        return service() == null || mViewModel == null;
-    }
-
-    private void queueFastTmdbPlaybackUntilServiceReady(Vod item) {
-        mPendingFastTmdbPlaybackVod = item;
-        SpiderDebug.log("video-flow", "fast tmdb playback pending service key=%s id=%s name=%s", getKey(), getId(), item.getName());
-    }
-
-    // C111: initView's heavy tail cannot run in the same tick that first requests the loading spinner,
-    // otherwise the spinner never gets a frame. Stages are queued in original order and pumped one per frame.
-    private void deferInitViewStage(String name, Runnable stage) {
-        mInitViewStages.addLast(() -> runInitViewStage(name, stage));
-        // A stage queued after the chain was launched (the service-ready tail) has no scheduler of its own:
-        // the frame-paced chain may already have drained, and pumpInitViewStage() drops the queue on teardown
-        // without rescheduling. Re-arm the net so a late stage is still pumped instead of waiting forever.
-        if (mInitViewStagesLaunched) armInitViewStageSafetyNet();
-    }
-
-    private void runInitViewStage(String name, Runnable stage) {
-        long start = System.currentTimeMillis();
-        SpiderDebug.log("video-flow", "initView stage-%s begin sinceLaunch=%dms", name, getLaunchCost(start));
-        try {
-            stage.run();
-        } finally {
-            SpiderDebug.log("video-flow", "initView stage-%s end cost=%dms", name, System.currentTimeMillis() - start);
-        }
-    }
-
-    private void launchInitViewStages() {
-        if (mInitViewStagesLaunched || mInitViewStages.isEmpty()) return;
-        mInitViewStagesLaunched = true;
-        mInitViewLastPumpAt = System.currentTimeMillis();
-        final View root = mBinding == null ? null : mBinding.getRoot();
-        if (root == null) {
-            SpiderDebug.log("video-flow", "initView stage schedule fallback root=null left=%d", mInitViewStages.size());
-            App.post(this::pumpInitViewStage);
-            return;
-        }
-        ViewTreeObserver observer = root.getViewTreeObserver();
-        if (observer == null || !observer.isAlive()) {
-            SpiderDebug.log("video-flow", "initView stage schedule fallback observer dead left=%d", mInitViewStages.size());
-            App.post(this::pumpInitViewStage);
-            return;
-        }
-        // Wait for one real traversal so the spinner has been painted, then hand the pump to the looper
-        // queue; running inside the frame callback would still sit in front of that frame's draw.
-        observer.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-            @Override
-            public boolean onPreDraw() {
-                ViewTreeObserver live = root.getViewTreeObserver();
-                if (live.isAlive()) live.removeOnPreDrawListener(this);
-                SpiderDebug.log("video-flow", "initView first frame drawn sinceLaunch=%dms stages=%d", getLaunchCost(System.currentTimeMillis()), mInitViewStages.size());
-                root.post(VideoActivity.this::pumpInitViewStage);
-                return true;
-            }
-        });
-        armInitViewStageSafetyNet();
-    }
-
-    // Safety net only: the frame-paced chain owns the pacing, but it dies silently if the root detaches
-    // between two stages (postOnAnimation callbacks are then dropped) and the remaining stages never run,
-    // which would leave the detail request unissued. Re-arm while stages are left so a stalled chain still
-    // finishes; a drained queue means the chain already did its job and the net stops.
-    private void armInitViewStageSafetyNet() {
-        final View root = mBinding == null ? null : mBinding.getRoot();
-        if (root == null) return;
-        root.postDelayed(() -> {
-            if (mInitViewStages.isEmpty()) return;
-            // Only take over when the frame-paced chain has really stalled; otherwise the net would add a
-            // second, slower pacing source and drain one stage per 500ms on a slow first frame.
-            if (System.currentTimeMillis() - mInitViewLastPumpAt < INIT_VIEW_STAGE_STALL_TIMEOUT_MS) {
-                armInitViewStageSafetyNet();
-                return;
-            }
-            SpiderDebug.log("video-flow", "initView stage schedule fallback stalled left=%d", mInitViewStages.size());
-            pumpInitViewStage();
-            armInitViewStageSafetyNet();
-        }, INIT_VIEW_STAGE_FALLBACK_DELAY_MS);
-    }
-
-    private void pumpInitViewStage() {
-        mInitViewLastPumpAt = System.currentTimeMillis();
-        Runnable stage = mInitViewStages.pollFirst();
-        if (stage == null) return;
-        if (isFinishing() || isDestroyed()) {
-            int dropped = mInitViewStages.size() + 1;
-            mInitViewStages.clear();
-            SpiderDebug.log("video-flow", "initView stages dropped finishing=%s destroyed=%s dropped=%d key=%s id=%s", isFinishing(), isDestroyed(), dropped, getKey(), getId());
-            return;
-        }
-        stage.run();
-        scheduleNextInitViewStage();
-    }
-
-    private void scheduleNextInitViewStage() {
-        if (mInitViewStages.isEmpty()) return;
-        final View root = mBinding == null ? null : mBinding.getRoot();
-        if (root == null || !root.isAttachedToWindow()) {
-            SpiderDebug.log("video-flow", "initView stage schedule fallback attached=false left=%d", mInitViewStages.size());
-            App.post(this::pumpInitViewStage);
-            return;
-        }
-        // Two frame callbacks leave at least two drawn frames between stages; the looper post then puts the
-        // next stage after that frame's traversal instead of before it.
-        root.postOnAnimation(() -> root.postOnAnimation(() -> root.post(VideoActivity.this::pumpInitViewStage)));
-    }
-
-    private void registerFlagSelectionListener() {
-        if (mFlagSelectionListenerRegistered || mFlagAdapter == null) return;
-        mFlagSelectionListenerRegistered = true;
-        mBinding.flag.addOnChildViewHolderSelectedListener(new FlagSelectionListener(mBinding.flag, mFlagAdapter, this));
-        SpiderDebug.log("video-flow", "flag selection listener registered flags=%d", mFlagAdapter.getItemCount());
-    }
-
-    // C111: request the full-page spinner only when this tick really has nothing to reveal anyway. checkCast()
-    // already revealed the shell/preview for those branches, and the fast playback path forces the content
-    // state a few statements later, so asking for progress there would only flip the visible state back.
-    private boolean shouldRequestCachedDetailLoading() {
-        if (shouldRevealShellWhileLoading()) return false;
-        if (hasInitialPreview() || mAudioStageVisible) return false;
-        return !isIntentTmdbPlayback();
-    }
-
-    private void flushPendingFastTmdbPlayback() {
-        Vod item = mPendingFastTmdbPlaybackVod;
-        if (item == null) return;
-        mPendingFastTmdbPlaybackVod = null;
-        if (mFastTmdbPlaybackStarted) {
-            App.removeCallbacks(mPendingFastTmdbPlaybackStart);
-            App.post(mPendingFastTmdbPlaybackStart, TMDB_FAST_PLAYBACK_START_DELAY_MS);
-            return;
-        }
-        if (tryStartFastTmdbPlayback(item)) return;
-        applyCachedTmdbDetailNextFrame(item);
-    }
-
-    private void applyCachedTmdbDetailNextFrame(Vod item) {
-        mBinding.getRoot().postDelayed(() -> {
-            if (isFinishing() || isDestroyed()) return;
-            long start = System.currentTimeMillis();
-            setDetail(Result.vod(item));
-            SpiderDebug.log("video-flow", "detail cache apply cost=%dms key=%s id=%s name=%s", System.currentTimeMillis() - start, getKey(), getId(), item.getName());
-        }, TMDB_CACHED_DETAIL_APPLY_DELAY_MS);
-    }
-
-    private boolean tryStartFastTmdbPlayback(Vod item) {
-        if (!isIntentTmdbPlayback() || mFastTmdbPlaybackStarted || item == null) return false;
-        long start = System.currentTimeMillis();
-        mSourceEpisodeSeasonCache.clear();
-        mVod = item;
-        mFastTmdbPlaybackStarted = true;
-        mFastTmdbFullDetailBound = false;
-        takeFastTmdbDetailCache();
-        prepareFastTmdbPlaybackItem(item);
-        mBinding.name.setText(getFastTmdbPlaybackInitialName(item));
-        mBinding.widget.title.setText(getFastTmdbPlaybackInitialTitle(item));
-        mBinding.widget.title.setSelected(true);
-        setText(item);
-        hydrateFastTmdbPlaybackDetail(item);
-        requestInitialPlaybackFocus();
-        showProgress();
-        showFastTmdbPlaybackContent();
-        SpiderDebug.log("video-flow", "fast tmdb playback reveal cost=%dms key=%s episode=%s", System.currentTimeMillis() - start, getKey(), getIntentPlaybackEpisodeName());
-        if (shouldWaitForPlaybackService()) {
-            queueFastTmdbPlaybackUntilServiceReady(item);
-            return true;
-        }
-        App.removeCallbacks(mPendingFastTmdbPlaybackStart);
-        App.post(mPendingFastTmdbPlaybackStart, TMDB_FAST_PLAYBACK_START_DELAY_MS);
-        return true;
-    }
-
-    private String getFastTmdbPlaybackInitialName(Vod item) {
-        return item == null || TextUtils.isEmpty(item.getName()) ? getName() : item.getName();
-    }
-
-    private CharSequence getFastTmdbPlaybackInitialTitle(Vod item) {
-        String name = getFastTmdbPlaybackInitialName(item);
-        String episode = TextUtils.isEmpty(getIntentPlaybackEpisodeName()) ? getMark() : getIntentPlaybackEpisodeName();
-        return TextUtils.isEmpty(episode) || TextUtils.equals(name, episode) ? name : getString(R.string.detail_title, name, episode);
-    }
-
-    private void showFastTmdbPlaybackContent() {
-        if (!mBinding.progressLayout.isContent()) {
-            mBinding.progressLayout.showContent();
-            SpiderDebug.log("video-flow", "fast tmdb playback content reveal key=%s id=%s", getKey(), getId());
-        }
-    }
-
-    private void startPendingFastTmdbPlayback() {
-        if (isFinishing() || isDestroyed() || !mFastTmdbPlaybackStarted || mVod == null) return;
-        if (service() == null || mViewModel == null) return;
-        long start = System.currentTimeMillis();
-        Vod item = mVod;
-        prepareFastTmdbPlaybackItem(item);
-        Flag flag = findFastTmdbPlaybackFlag(item);
-        Episode episode = findFastTmdbPlaybackEpisode(flag);
-        if (flag == null || episode == null || TextUtils.isEmpty(episode.getUrl())) {
-            mFastTmdbPlaybackStarted = false;
-            // 快速起播失败回落时从未起播，状态收圈路径全都到不了，这里必须显式收起加载圈，否则转圈永久残留。
-            hideProgress();
-            SpiderDebug.log("video-flow", "fast tmdb playback missing playable episode key=%s id=%s", getKey(), getId());
-            applyCachedTmdbDetailNextFrame(item);
-            return;
-        }
-        mFastPlaybackFlag = flag;
-        mFastPlaybackEpisode = episode;
-        if (!TextUtils.equals(mBinding.name.getText(), item.getName())) {
-            mBinding.name.setText(item.getName());
-        }
-        CharSequence playbackTitle = getPlaybackControlTitle(episode);
-        if (!TextUtils.equals(mBinding.widget.title.getText(), playbackTitle)) {
-            mBinding.widget.title.setText(playbackTitle);
-        }
-        playerStartTime = System.currentTimeMillis();
-        beginPlayHealth();
-        prepareFastTmdbPlaybackHistory(item, flag, episode);
-        SpiderDebug.log("video-flow", "fast tmdb playback start cost=%dms key=%s flag=%s episode=%s url=%s", System.currentTimeMillis() - start, getKey(), flag.getFlag(), episode.getName(), episode.getUrl());
-        // 快播路径不经过 getPlayer：不在这里补发，插件第一次点击就会读到上一集的上下文。
-        publishPluginEpisodeContext(episode);
-        beginPlayerContentRequest(getKey(), flag.getFlag(), episode.getUrl());
-        mPlaybackFlagKey = playbackFlagKey(flag);
-        mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), applyHistoryPlayerKernel());
-        mBinding.getRoot().post(() -> hydrateFastTmdbPlaybackDetail(item));
-        applyFastTmdbPlaybackFullDetailNextFrame(item);
-    }
-
-    private void applyFastTmdbPlaybackFullDetailNextFrame(Vod item) {
-        if (mFastTmdbFullDetailBound) return;
-        mFastTmdbFullDetailBound = true;
-        mBinding.getRoot().postDelayed(() -> {
-            if (isFinishing() || isDestroyed()) return;
-            long start = System.currentTimeMillis();
-            prepareFastTmdbPlaybackItem(item);
-            setDetail(Result.vod(item));
-            SpiderDebug.log("video-flow", "fast tmdb full detail bind cost=%dms key=%s id=%s name=%s", System.currentTimeMillis() - start, getKey(), getId(), item.getName());
-        }, TMDB_CACHED_DETAIL_APPLY_DELAY_MS);
-    }
-
-    private void prepareFastTmdbPlaybackItem(Vod item) {
-        item.checkPic(firstNonEmpty(getPic(), getTmdbVodPic()));
-        item.checkName(getName());
-        item.checkContent(firstNonEmpty(item.getContent(), getTmdbVodContent(), getContent()));
-        setIfEmpty(item.getYear(), getTmdbVodYear(), item::setYear);
-        setIfEmpty(item.getArea(), getTmdbVodArea(), item::setArea);
-        setIfEmpty(item.getTypeName(), getTmdbVodType(), item::setTypeName);
-        setIfEmpty(item.getDirector(), getTmdbVodDirector(), item::setDirector);
-        setIfEmpty(item.getActor(), getTmdbVodActor(), item::setActor);
-    }
-
-    private void hydrateFastTmdbPlaybackDetail(Vod item) {
-        if (isFinishing() || isDestroyed() || item == null) return;
-        long start = System.currentTimeMillis();
-        boolean cacheHit = applyFastTmdbDetailCache(item);
-        String content = firstNonEmpty(item.getContent(), getTmdbVodContent(), getContent());
-        String artwork = firstNonEmpty(getInitialArtwork(item), getTmdbVodPic(), getPic());
-        String wall = firstNonEmpty(cachedFastTmdbBackdrop(), getWallPic(), mHistory == null ? "" : mHistory.getWallPic());
-        if (!TextUtils.isEmpty(content)) {
-            item.setContent(content);
-            mBinding.content.setTag(content);
-            if (isTmdbMode() && !isIntentTmdbPlayback()) {
-                suppressTmdbNativeTextFields();
-                mBinding.tmdbOverview.setSingleLine(false);
-                mBinding.tmdbOverview.setHorizontallyScrolling(false);
-                mBinding.tmdbOverview.setMaxLines(Integer.MAX_VALUE);
-                CharSequence overview = getString(R.string.detail_content, content);
-                if (!TextUtils.equals(mBinding.tmdbOverview.getText(), overview)) {
-                    mBinding.tmdbOverview.setText(overview);
-                }
-                mBinding.tmdbOverview.setVisibility(View.VISIBLE);
-                mBinding.tmdbOverview.post(this::updateTmdbOverviewButton);
-            }
-        }
-        if (!TextUtils.isEmpty(item.getName()) && !TextUtils.equals(mBinding.name.getText(), item.getName())) {
-            mBinding.name.setText(item.getName());
-        }
-        if (!TextUtils.isEmpty(wall)) setContextWall(wall);
-        if (mHistory != null) {
-            if (!TextUtils.isEmpty(item.getName())) mHistory.setVodName(historyVodName(item));
-            enrichHistoryMeta(item);
-            if (!TextUtils.isEmpty(wall)) mHistory.setWallPic(wall);
-            if (!TextUtils.isEmpty(artwork)) {
-                mHistory.setVodPic(artwork);
-                loadArtwork(artwork);
-                updateEpisodeFallbackStillUrl();
-            }
-            setMetadata();
-            PlaybackEventCollector.get().updateHistory(mHistory);
-        }
-        SpiderDebug.log("video-flow", "fast tmdb detail hydrate cost=%dms key=%s content=%s artwork=%s cache=%s", System.currentTimeMillis() - start, getKey(), !TextUtils.isEmpty(content), !TextUtils.isEmpty(artwork), cacheHit);
-    }
-
-    private boolean applyFastTmdbDetailCache(Vod item) {
-        TmdbDetailCache.Entry cached = takeFastTmdbDetailCache();
-        if (cached == null || item == null) return false;
-        mFastTmdbDetailCache = cached;
-        JsonObject detail = cached.getDetail();
-        String overview = cachedTmdbOverview(detail);
-        if (!TextUtils.isEmpty(overview) && (TextUtils.isEmpty(item.getContent()) || overview.length() > item.getContent().length())) {
-            item.setContent(overview);
-        }
-        String title = new com.fongmi.android.tv.service.TmdbService().preferredTitle(cached.getItem(), detail, currentTmdbConfig());
-        if (TextUtils.isEmpty(title)) title = firstNonEmpty(cachedTmdbString(detail, "title"), cachedTmdbString(detail, "name"), cached.getItem() == null ? "" : cached.getItem().getTitle());
-        if (!TextUtils.isEmpty(title) && TextUtils.isEmpty(item.getName())) item.setName(title);
-        String artwork = firstNonEmpty(cachedFastTmdbPoster(cached), cachedFastTmdbBackdrop(cached));
-        if (!TextUtils.isEmpty(artwork) && TextUtils.isEmpty(item.getPic())) item.setPic(artwork);
-        return true;
-    }
-
-    private String cachedFastTmdbBackdrop() {
-        return cachedFastTmdbBackdrop(mFastTmdbDetailCache);
-    }
-
-    private String cachedFastTmdbBackdrop(TmdbDetailCache.Entry cached) {
-        if (cached == null) return "";
-        return firstNonEmpty(cachedTmdbImage(cached.getDetail(), "backdrop_path", true), cached.getItem() == null ? "" : cached.getItem().getBackdropUrl());
-    }
-
-    private void setIfEmpty(String current, String value, java.util.function.Consumer<String> setter) {
-        if (TextUtils.isEmpty(current) && !TextUtils.isEmpty(value)) setter.accept(value);
-    }
-
-    private String cachedFastTmdbPoster(TmdbDetailCache.Entry cached) {
-        if (cached == null) return "";
-        return firstNonEmpty(cachedTmdbImage(cached.getDetail(), "poster_path"), cached.getItem() == null ? "" : cached.getItem().getPosterUrl());
-    }
-
-    private TmdbDetailCache.Entry takeFastTmdbDetailCache() {
-        if (mFastTmdbDetailCacheChecked) return mFastTmdbDetailCache;
-        mFastTmdbDetailCacheChecked = true;
-        mFastTmdbDetailCache = TmdbDetailCache.take(getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), getTmdbItem(), currentTmdbLanguage());
-        if (mFastTmdbDetailCache != null) {
-            TmdbItem item = mFastTmdbDetailCache.getItem();
-            SpiderDebug.log("video-flow", "fast tmdb detail memory-cache hit title=%s media=%s id=%d", item == null ? "" : item.getTitle(), item == null ? "" : item.getMediaType(), item == null ? 0 : item.getTmdbId());
-        }
-        return mFastTmdbDetailCache;
-    }
-
-    private String cachedTmdbOverview(JsonObject detail) {
-        try {
-            return new com.fongmi.android.tv.service.TmdbService().translatedOverview(detail, currentTmdbConfig());
-        } catch (Throwable e) {
-            return cachedTmdbString(detail, "overview");
-        }
-    }
-
-    private com.fongmi.android.tv.bean.TmdbConfig currentTmdbConfig() {
-        try {
-            return com.fongmi.android.tv.bean.TmdbConfig.effectiveCurrent();
-        } catch (Throwable e) {
-            return null;
-        }
-    }
-
-    private String currentTmdbLanguage() {
-        return TmdbLanguagePolicy.requestLanguage(currentTmdbConfig(), Setting.getLanguage());
-    }
-
-    private String cachedTmdbImage(JsonObject detail, String key) {
-        return cachedTmdbImage(detail, key, false);
-    }
-
-    private String cachedTmdbImage(JsonObject detail, String key, boolean backdrop) {
-        String path = cachedTmdbString(detail, key);
-        if (TextUtils.isEmpty(path)) return "";
-        if (path.startsWith("http://") || path.startsWith("https://")) return path;
-        String base = "";
-        try {
-            com.fongmi.android.tv.bean.TmdbConfig config = com.fongmi.android.tv.bean.TmdbConfig.effectiveCurrent();
-            base = backdrop ? config.getBackdropBase() : config.getImageBase();
-        } catch (Throwable ignored) {
-        }
-        return TextUtils.isEmpty(base) ? path : base + (path.startsWith("/") ? path : "/" + path);
-    }
-
-    private JsonObject cachedTmdbObject(JsonObject object, String key) {
-        if (object == null || TextUtils.isEmpty(key) || !object.has(key) || object.get(key).isJsonNull() || !object.get(key).isJsonObject()) return null;
-        return object.getAsJsonObject(key);
-    }
-
-    private JsonArray cachedTmdbArray(JsonObject object, String key) {
-        if (object == null || TextUtils.isEmpty(key) || !object.has(key) || object.get(key).isJsonNull() || !object.get(key).isJsonArray()) return null;
-        return object.getAsJsonArray(key);
-    }
-
-    private String cachedTmdbString(JsonObject object, String key) {
-        if (object == null || TextUtils.isEmpty(key) || !object.has(key) || object.get(key).isJsonNull()) return "";
-        try {
-            return object.get(key).getAsString();
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private String firstNonEmpty(String... values) {
-        if (values == null) return "";
-        for (String value : values) if (!TextUtils.isEmpty(value)) return value;
-        return "";
-    }
-
-    private Flag findFastTmdbPlaybackFlag(Vod item) {
-        if (item == null) return null;
-        // 不再退回第一条线路：intent 选集失配时交给正常链路按历史身份重新定位，而不是静默播列表第一条。
-        return findIntentPlaybackFlag(item.getFlags(), getIntentPlaybackFlagKey(),
-                getIntentPlaybackFlag(), getIntentPlaybackEpisodeUrl());
-    }
-
-    private Episode findFastTmdbPlaybackEpisode(Flag flag) {
-        // 同上：定位不到就返回 null，由 startPendingFastTmdbPlayback 回落正常链路，绝不取第一集。
-        return findIntentPlaybackEpisode(flag, getIntentPlaybackEpisodeName(), getIntentPlaybackEpisodeUrl());
-    }
-
-    private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode) {
-        mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), getHistoryTmdbItem(), currentSourceSeasonNumber(item));
-        mHistory = mHistory == null ? createHistory(item) : mHistory;
-        if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
-        if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
-        mHistory.setVodName(historyVodName(item));
-        if (!TextUtils.isEmpty(getInitialArtwork(item))) mHistory.setVodPic(getInitialArtwork(item));
-        enrichHistoryMeta(item);
-        selectFastTmdbPlaybackEpisode(item, flag, episode);
-        updateFastTmdbPlaybackHistory(flag, episode);
-        setOpeningEndingText();
-        float speed = getPlaybackSpeed();
-        mBinding.control.action.speed.setText(player().setSpeed(speed));
-        PlaybackEventCollector.get().updateHistory(mHistory);
-    }
-
-    private void selectFastTmdbPlaybackEpisode(Vod item, Flag selectedFlag, Episode selectedEpisode) {
-        if (item == null || selectedFlag == null || selectedEpisode == null) return;
-        for (Flag flag : item.getFlags()) flag.toggle(flag == selectedFlag, selectedEpisode);
-    }
-
-    private void updateFastTmdbPlaybackHistory(Flag flag, Episode episode) {
-        Episode historyEpisode = withSourceSeasonEpisodeIdentity(withIntentTmdbEpisodeIdentity(episode));
-        // 快速 TMDB 播放在历史续播或聚合开启时，允许同一标准季集跨线路共享进度。
-        boolean crossSource = mHistory.isCrossSourcePlayback();
-        boolean shareEpisodeProgress = crossSource || isResumeFromHistory() || Setting.isHistoryAggregationEffective();
-        // 历史集 URL 能定位到当前线路条目（同集多版本并存）时才启用版本消歧；换线路/刷新保留集号容错。
-        boolean versionAware = flag.containsEpisodeUrl(mHistory.getEpisode());
-        boolean sameEpisode = historyEpisode.matchesPlayback(mHistory.getEpisode(), versionAware);
-        boolean compatibleFlag = shareEpisodeProgress || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
-        if (!sameEpisode || !compatibleFlag) mIntroSkipPlayback.reset();
-        if (!sameEpisode || !compatibleFlag) {
-            EpisodePositionCache.EpisodePosition cached = skipEpisodePositionCache(flag) ? null : EpisodePositionCache.get().get(getKey(), getId(), flag.getFlag(), episodePositionCacheName(episode, currentSourceSeasonNumber()));
-            if (cached != null) {
-                mHistory.setPosition(cached.position);
-                mHistory.setDuration(cached.duration);
-            } else {
-                mHistory.setPosition(C.TIME_UNSET);
-                mHistory.setDuration(C.TIME_UNSET);
-            }
-        }
-        setHistoryFlag(flag);
-        mHistory.setVodRemarks(getHistoryEpisodeName(historyEpisode));
-        mHistory.setEpisodeUrl(episode.getUrl());
-        if (historyEpisode.getTmdbEpisode() != null || !sameEpisode) mHistory.setTmdbEpisodePosition(historyEpisode);
-    }
-
-    private void resetDetailForNewIntent() {
-        if (mTmdbUIAdapter != null) mTmdbUIAdapter.beginDetailRequest();
-        detailRequested = false;
-        detailHealthRecorded = false;
-        playHealthRecorded = false;
-        revealManualSearch = false;
-        episodeGridMode = false;
-        mPendingDetail = null;
-        mPendingPlayer = null;
-        mPendingFastTmdbPlaybackVod = null;
-        App.removeCallbacks(mPendingFastTmdbPlaybackStart);
-        mVod = null;
-        mSourceVodName = "";
-        mSourceEpisodeSeasonCache.clear();
-        mFastTmdbDetailCache = null;
-        mFastPlaybackFlag = null;
-        mFastPlaybackEpisode = null;
-        mFastTmdbPlaybackStarted = false;
-        mFastTmdbDetailCacheChecked = false;
-        mTmdbAutoDialogShown = false;
-        mTmdbDetailLoading = false;
-        mTmdbDetailRevealed = false;
-        mTmdbEpisodeFallbackReleased = false;
-        mPersonalRecommendationGeneration++;
-        mTmdbDialogGeneration++;
-        App.removeCallbacks(mR4);
-        App.removeCallbacks(mTmdbDetailTimeout);
-        App.removeCallbacks(mTmdbEpisodeTimeout);
-        resetPendingTmdbBind();
-        stopBackdropAutoScroll();
-        mBackdropSignature = null;
-        mBackdropSlideshowActive = false;
-        if (mViewModel != null) mViewModel.stopSearch();
-        if (mViewModel != null) mViewModel.cancelPlayerContent();
-        invalidatePlayerContent();
-        if (mBroken != null) mBroken.clear();
-        clearDetailAdapters();
-        clearTmdbDetailViews();
-        // 换条目/重新加载：手动播放状态归零，新条目的待播封面与待办焦点重新判定。
-        mManualPlaybackStarted = false;
-        mBinding.scroll.scrollTo(0, 0);
-        mBinding.name.setText(getName());
-        mBinding.widget.title.setText(getName());
-        // 换条目后初始焦点照旧交给预览框：手动模式下在预览框上按确认键即完成「全屏 + 起播」。
-        requestInitialPlaybackFocus();
-        updateVideoCover();
-        if (service() != null) {
-            player().reset();
-            player().stop();
-            player().clear();
-        }
-        updateNavigationKey();
-        // singleTop 切换条目时也要先按新 Intent 准备详情壳，不能沿用旧条目的操作按钮。
-        prepareInitialDetailShell();
-        mBinding.progressLayout.showProgress();
-    }
-
-    private void clearDetailAdapters() {
-        clearEpisodeGridDecoration();
-        if (mFlagAdapter != null) mFlagAdapter.clear();
-        if (mEpisodeAdapter != null) {
-            mEpisodeAdapter.setUseTmdbCard(false);
-            mEpisodeAdapter.clear();
-        }
-        if (mEpisodeGridAdapter != null) {
-            mEpisodeGridAdapter.setUseTmdbCard(false);
-            mEpisodeGridAdapter.clear();
-        }
-        if (mArrayAdapter != null) mArrayAdapter.clear();
-        if (mQualityAdapter != null) mQualityAdapter.addAll(Result.empty());
-        if (mPartAdapter != null) mPartAdapter.clear();
-        if (mQuickAdapter != null) mQuickAdapter.clear();
-        mBinding.episodeContainer.setVisibility(View.GONE);
-        mBinding.episodeHeader.setVisibility(View.GONE);
-        mBinding.episodeReverse.setVisibility(View.GONE);
-        mBinding.episodeViewMode.setVisibility(View.GONE);
-        mBinding.episodeLoadingIndicator.setVisibility(View.GONE);
-        mBinding.quality.setVisibility(View.GONE);
-    }
-
-    private void clearTmdbDetailViews() {
-        clearTmdbGrid(mBinding.tmdbCast, R.id.tmdbCastLabel);
-        clearTmdbGrid(mBinding.tmdbPhotos, R.id.tmdbPhotosLabel);
-        clearTmdbGrid(mBinding.tmdbPosters, R.id.tmdbPostersLabel);
-        clearTmdbGrid(mBinding.tmdbCrew, R.id.tmdbCrewLabel);
-        clearTmdbGrid(mBinding.tmdbRecommendations, R.id.tmdbRecommendationsLabel);
-        clearTmdbGrid(mBinding.tmdbRelatedVideos, R.id.tmdbRelatedVideosLabel);
-        clearNativePersonalRecommendations();
-        // 重置背景幻灯片去重签名：切换条目时 setupBackdropSlideshow 靠 signature 去重，
-        // 不清则新条目剧照与旧 signature 判定“相同”而跳过更新，导致背景海报不换。
-        stopBackdropAutoScroll();
-        mBackdropSignature = null;
-        mBinding.tmdbOverview.setText("");
-        mBinding.tmdbOverview.setVisibility(View.GONE);
-        mTmdbDetailFieldsApplied = false;
-        View ratingsLabel = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatingsLabel);
-        View ratings = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatings);
-        if (ratingsLabel != null) ratingsLabel.setVisibility(View.GONE);
-        if (ratings != null) ratings.setVisibility(View.GONE);
-        setTmdbRematchVisible(false);
-    }
-
-    private void clearTmdbGrid(RecyclerView grid, int labelId) {
-        grid.setAdapter(null);
-        grid.setVisibility(View.GONE);
-        View label = mBinding.getRoot().findViewById(labelId);
-        if (label != null) label.setVisibility(View.GONE);
+        else if (!TextUtils.isEmpty(getKey()) && VodConfig.get().getSite(getKey()).isEmpty() && !SiteApi.PUSH.equals(getKey()) && !WebHomeInlineVodStore.KEY.equals(getKey())) startCastSearch(getName());
+        else getDetail();
     }
 
     private void getDetail() {
@@ -2894,6 +2397,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void setDetail(Result result) {
+        if (isFinishing() || isDestroyed()) return;
         long cost = System.currentTimeMillis() - detailStartTime;
         SpiderDebug.log("video-flow", "detail finish cost=%dms empty=%s msg=%s", cost, result.getList().isEmpty(), result.getMsg());
         recordDetailHealth(result, cost);
@@ -2915,8 +2419,18 @@ private boolean runtimeSourceOnly;
             SpiderDebug.log("video-flow", "detail pending service key=%s id=%s", getKey(), getId());
             return;
         }
-        if (result.getList().isEmpty()) setEmpty(result.hasMsg());
-        else setDetail(result.getVod());
+        if (result.getList().isEmpty()) {
+            if (isCast() && mCastDetailRetry < 1 && TextUtils.isEmpty(result.getMsg())) {
+                mCastDetailRetry++;
+                SpiderDebug.log("video-flow", "cast detail empty, retry after 800ms attempt=%d", mCastDetailRetry);
+                App.post(() -> getDetail(), 800);
+                return;
+            }
+            setEmpty(result.hasMsg());
+        } else {
+            mCastDetailRetry = 0;
+            setDetail(result.getVod());
+        }
         Notify.show(result.getMsg());
     }
 
@@ -2933,6 +2447,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void showEmpty() {
+        if (isFinishing() || isDestroyed()) return;
         mBinding.progressLayout.showEmpty();
     }
 
@@ -2948,26 +2463,10 @@ private boolean runtimeSourceOnly;
         item.checkPic(getPic());
         item.checkName(getName());
         item.checkContent(getContent());
-        applyIntentTmdbVodRemark(item);
-        TmdbConfig tmdbConfig = TmdbConfig.effectiveCurrent();
-        TmdbSourcePayload sourcePayload = TmdbSourcePayloadParser.parse(item.getTmdb());
-        TmdbBundle sourceBundle = TmdbSourceAdapter.toBundle(sourcePayload, item, tmdbConfig);
-        TmdbSourceState sourceState = TmdbSourceAvailability.classify(item, sourcePayload, sourceBundle);
-        DetailRuntimeModePolicy.Decision decision = DetailRuntimeModePolicy.resolve(new DetailRuntimeModePolicy.Input(
-                policyConfiguredMode(),
-                tmdbConfig.isReady(),
-                TmdbSitePolicy.isEnabled(tmdbConfig, getKey(), getId()),
-                sourceState
-        ));
-        applyRuntimeDetailMode(decision.runtimeMode());
-        runtimeSourceOnly = decision.sourceOnly();
-        boolean loadTmdbDetail = shouldLoadTmdbDetail();
-        setOriginalEnhancedActionVisibility(loadTmdbDetail && (isRuntimeOriginalEnhancedMode() || isIntentTmdbPlayback()));
-        if (isIntentTmdbPlayback()) com.fongmi.android.tv.utils.TmdbEpisodeSorter.sort(item);
-        applyTmdbEpisodeTitles(item);
-        setTmdbRematchVisible(loadTmdbDetail && !runtimeSourceOnly);
-        // 非 TMDB：立即揭开，全部内容一次性出现；TMDB：继续停在 loading，等富集完成再揭开
-        if (!loadTmdbDetail) mBinding.progressLayout.showContent();
+        // 详情拿到真实片名后同步回 intent：getName() 是启动时传入的快照，
+        // 不回写的话 OSD 左上角标题、换站搜索兜底等都会一直用那个可能已过期的名字
+        if (!item.getName().isEmpty()) getIntent().putExtra("name", item.getName());
+        mBinding.progressLayout.showContent();
         mBinding.name.setText(item.getName());
         mFlagAdapter.addAll(item.getFlags());
         requestInitialPlaybackFocus();
@@ -3884,15 +3383,7 @@ private boolean runtimeSourceOnly;
 
     @Override
     public void onItemClick(Flag item) {
-        if (isFinishing() || isDestroyed()) return;
-        invalidateShortDramaQueue("line-switch");
-        if (mFlagAdapter.getItemCount() == 0 || item == null) return;
-        int position = mFlagAdapter.indexOf(item);
-        Flag resolved = mFlagAdapter.get(position < 0 ? 0 : position);
-        boolean initialBinding = mEpisodeAdapter.getItemCount() == 0;
-        if (resolved.isSelected() && isPlaybackFlag(resolved) && !initialBinding) return;
-        Flag previous = getFlag();
-        SpiderDebug.log("playback-action", "flag switch ui=leanback site=%s from=%s to=%s fullscreen=%s", getKey(), previous == null ? "" : previous.getFlag(), resolved.getFlag(), isFullscreen());
+        if (isFinishing() || isDestroyed() || mFlagAdapter.getItemCount() == 0 || item.isSelected()) return;
         int oldPosition = mFlagAdapter.getSelectedPosition();
         mFlagAdapter.setSelected(resolved);
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.setActiveFlag(resolved);
@@ -4063,11 +3554,9 @@ private boolean runtimeSourceOnly;
         if (position != RecyclerView.NO_POSITION) scrollToEpisode(position);
     }
 
-    private boolean seamless(Flag flag) {
-        // 选集定位以历史身份（URL 优先、集号容错）为主，刮削标题（mark）只作兜底：
-        // 只有走 find(Episode) 才命中 Flag.find 的 URL 优先分支，否则同集多版本会被集名打分选成第一版本。
-        Episode episode = mHistory == null ? null : flag.find(mHistory.getEpisode(), true);
-        if (episode == null && !getMark().isEmpty()) episode = flag.find(getMark(), false);
+    private void seamless(Flag flag) {
+        String hint = !TextUtils.isEmpty(mCastEpisodeHint) ? mCastEpisodeHint : mHistory.getVodRemarks();
+        Episode episode = getMark().isEmpty() ? flag.find(hint, true) : flag.find(mHistory.getVodRemarks(), false);
         setQualityVisible(episode != null && episode.isSelected() && mQualityAdapter.getItemCount() > 1);
         if (episode == null || (isPlaybackFlag(flag) && episode.isSelected())) return false;
         selectEpisode(episode, false);
@@ -4354,8 +3843,19 @@ private boolean runtimeSourceOnly;
     }
 
     private void updateEpisodeWindowNow() {
-        // HorizontalGridView不需要设置固定高度
-        // 已改为横向滚动，让其自动适应内容高度
+        if (isFinishing() || isDestroyed()) return;
+        int height = getEpisodeWindowHeight();
+        if (height <= 0) return;
+        ViewGroup.LayoutParams params = mBinding.episode.getLayoutParams();
+        if (params instanceof LinearLayoutCompat.LayoutParams layoutParams) {
+            if (layoutParams.height == height && layoutParams.weight == 0) return;
+            layoutParams.height = height;
+            layoutParams.weight = 0;
+            mBinding.episode.setLayoutParams(layoutParams);
+        } else if (params.height != height) {
+            params.height = height;
+            mBinding.episode.setLayoutParams(params);
+        }
     }
 
     private int getEpisodeWindowHeight() {
@@ -4446,8 +3946,16 @@ private boolean runtimeSourceOnly;
         return 0;
     }
 
-    private int episodeFocusIndex(int id) {
-        return getEpisodeFocusOrders().indexOf(id);
+    private void updateFocus() {
+        if (isFinishing() || isDestroyed()) return;
+        mArrayAdapter.setNextFocus(findFocusUp(2), findFocusDown(2));
+        mEpisodeAdapter.setNextFocusUp(findFocusUp(3));
+        mFlagAdapter.setNextFocusDown(findFocusDown(0));
+        mEpisodeAdapter.setNextFocusDown(findFocusDown(3));
+        mPartAdapter.setNextFocus(findFocusUp(4), findFocusDown(4));
+        mQuickAdapter.setNextFocus(findFocusUp(5), findFocusDown(5));
+        int searchDown = isVisible(mBinding.quick) ? R.id.quick : findFocusDown(-1);
+        mBinding.search.setNextFocusDownId(searchDown == 0 ? View.NO_ID : searchDown);
     }
 
     private boolean isEpisodeFocusTarget(View view) {
@@ -4988,7 +4496,7 @@ private boolean runtimeSourceOnly;
         mBinding.video.requestFocus();
         mBinding.video.setForeground(null);
         mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
-        mBinding.flag.setSelectedPosition(mFlagAdapter.getPosition());
+        if (mFlagAdapter != null) mBinding.flag.setSelectedPosition(mFlagAdapter.getPosition());
         mKeyDown.setFull(true);
         setFullscreen(true);
         mFocus2 = null;
@@ -5043,11 +4551,193 @@ private boolean runtimeSourceOnly;
         initSearch(keyword, false);
     }
 
-    private void onGlobalSearch() {
-        String keyword = mBinding.name.getText().toString().trim();
-        if (TextUtils.isEmpty(keyword)) keyword = getName();
-        if (TextUtils.isEmpty(keyword)) return;
-        SearchActivity.start(this, keyword);
+    private boolean onLyricsSearch() {
+        if (!isLyricsSearchAvailable()) return false;
+        LyricsRequest request = service() == null ? null : LyricsRequest.from(player());
+        String keyword = request == null ? getName() : request.displayKeyword();
+        String signature = getLyricsSearchSuggestionSignature(request, getName());
+        showLyricsSearchSheet(keyword, request, signature, ++mLyricsSearchSheetSeq);
+        return true;
+    }
+
+    private void showLyricsSearchSheet(String keyword, @Nullable LyricsRequest request, String signature, int sheetSeq) {
+        BottomSheetDialog dialog = createAudioSheet();
+        LinearLayout root = createAudioSheetRoot();
+        if (ResUtil.isLand(this)) {
+            int height = audioDrawerHeight();
+            root.setMinimumHeight(height);
+            root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height));
+        }
+        root.addView(createAudioSheetTitle(getString(R.string.player_lyrics_reload)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(34)));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setMaxLines(1);
+        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(0x70FFFFFF);
+        input.setHint(getString(R.string.player_lyrics_keyword));
+        input.setTextSize(15);
+        input.setPadding(ResUtil.dp2px(14), 0, ResUtil.dp2px(14), 0);
+        input.setBackground(audioSheetControlBackground(0x14FFFFFF, 0x32FFFFFF));
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT | InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE);
+        input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        input.setText(TextUtils.isEmpty(keyword) ? "" : keyword);
+        if (input.getText() != null) input.setSelection(input.getText().length());
+        row.addView(input, new LinearLayout.LayoutParams(0, ResUtil.dp2px(50), 1));
+        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(ResUtil.dp2px(50), ResUtil.dp2px(50));
+        searchParams.leftMargin = ResUtil.dp2px(10);
+        View searchButton = createAudioSheetIconButton(R.drawable.ic_action_search, () -> submitLyricsSearchSheet(input, request));
+        row.addView(searchButton, searchParams);
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        inputParams.topMargin = ResUtil.dp2px(12);
+        root.addView(row, inputParams);
+
+        dialog.setContentView(root);
+        input.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId != EditorInfo.IME_ACTION_SEARCH) return false;
+            submitLyricsSearchSheet(input, request);
+            return true;
+        });
+        LinearLayout suggestionsRoot = new LinearLayout(this);
+        suggestionsRoot.setOrientation(LinearLayout.VERTICAL);
+        root.addView(suggestionsRoot, audioSheetWrapTopParams(8));
+
+        TextView status = createAudioSheetText("", 13, false);
+        status.setTextColor(SHEET_TEXT_MUTED);
+        status.setVisibility(View.GONE);
+        root.addView(status, audioSheetTopParams(8, 26));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setVisibility(View.GONE);
+        mLyricsResultList = new LinearLayout(this);
+        mLyricsResultList.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(mLyricsResultList, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(scroll, ResUtil.isLand(this)
+                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1)
+                : lyricsResultSheetParams(1));
+
+        showLyricsSearchSheetDialog(dialog);
+        focusLyricsSearchTarget(input, searchButton);
+        dialog.setOnCancelListener(d -> mLyricsSearchSeq++);
+        dialog.setOnDismissListener(d -> {
+            if (mLyricsSearchDialog == dialog) {
+                mLyricsSearchDialog = null;
+                mLyricsSearchSheetSeq++;
+            }
+            if (mLyricsResultDialog == dialog) {
+                mLyricsResultDialog = null;
+                mLyricsResultList = null;
+                mLyricsSearchStatus = null;
+            }
+        });
+        mLyricsSearchDialog = dialog;
+        mLyricsResultDialog = dialog;
+        mLyricsSearchStatus = status;
+        loadLyricsSearchSuggestions(dialog, suggestionsRoot, input, searchButton, request, keyword, signature, sheetSeq, mLyricsSearchSeq);
+    }
+
+    private void focusLyricsSearchTarget(EditText input, View focusTarget) {
+        if (input == null || focusTarget == null) return;
+        input.clearFocus();
+        Util.hideKeyboard(input);
+        focusTarget.requestFocus();
+    }
+
+    private void loadLyricsSearchSuggestions(BottomSheetDialog dialog, LinearLayout root, EditText input, View searchButton, @Nullable LyricsRequest request, String keyword, String signature, int sheetSeq, int searchSeqAtOpen) {
+        Task.execute(() -> {
+            List<String> suggestions = request == null ? LyricsRequest.searchSuggestions(keyword) : request.searchSuggestions();
+            List<String> values = withLastLyricsSearchSuggestion(suggestions, signature);
+            App.post(() -> {
+                if (sheetSeq != mLyricsSearchSheetSeq || !dialog.isShowing()) return;
+                View firstSuggestion = addLyricsSearchSuggestions(root, input, searchButton, request, values);
+                View focusTarget = firstSuggestion == null ? searchButton : firstSuggestion;
+                focusLyricsSearchTarget(input, focusTarget);
+                focusTarget.postDelayed(() -> {
+                    if (sheetSeq != mLyricsSearchSheetSeq || !dialog.isShowing()) return;
+                    focusLyricsSearchTarget(input, focusTarget);
+                }, 220);
+                focusTarget.postDelayed(() -> {
+                    if (sheetSeq != mLyricsSearchSheetSeq || !dialog.isShowing()) return;
+                    focusLyricsSearchTarget(input, focusTarget);
+                }, 420);
+                String current = input.getText() == null ? "" : input.getText().toString();
+                String autoKeyword = firstLyricsSearchSuggestion(values);
+                if (!TextUtils.isEmpty(autoKeyword) && mLyricsSearchSeq == searchSeqAtOpen && (TextUtils.isEmpty(current) || TextUtils.equals(current, keyword))) {
+                    searchLyrics(autoKeyword, request, true);
+                }
+            });
+        });
+    }
+
+    private String firstLyricsSearchSuggestion(List<String> suggestions) {
+        if (suggestions == null) return "";
+        for (String suggestion : suggestions) {
+            String value = Objects.toString(suggestion, "").trim();
+            if (!TextUtils.isEmpty(value)) return value;
+        }
+        return "";
+    }
+
+    @Nullable
+    private View addLyricsSearchSuggestions(LinearLayout root, EditText input, View searchButton, @Nullable LyricsRequest request, List<String> suggestions) {
+        root.removeAllViews();
+        if (suggestions == null || suggestions.isEmpty()) return null;
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setOverScrollMode(HorizontalScrollView.OVER_SCROLL_NEVER);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        View first = null;
+        int count = Math.min(8, suggestions.size());
+        for (int i = 0; i < count; i++) {
+            String text = suggestions.get(i);
+            if (TextUtils.isEmpty(text)) continue;
+            TextView chip = createLyricsSearchSuggestionChip(input, searchButton, request, text);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(32));
+            if (row.getChildCount() > 0) params.leftMargin = ResUtil.dp2px(6);
+            row.addView(chip, params);
+            if (first == null) first = chip;
+        }
+        if (row.getChildCount() == 0) return null;
+        scroll.addView(row, new HorizontalScrollView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(32)));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(32));
+        params.topMargin = ResUtil.dp2px(8);
+        root.addView(scroll, params);
+        return first;
+    }
+
+    private TextView createLyricsSearchSuggestionChip(EditText input, View searchButton, @Nullable LyricsRequest request, String text) {
+        TextView chip = createAudioSheetText(text, 13, false);
+        chip.setGravity(Gravity.CENTER);
+        chip.setSingleLine(true);
+        chip.setEllipsize(TextUtils.TruncateAt.END);
+        chip.setPadding(ResUtil.dp2px(10), 0, ResUtil.dp2px(10), 0);
+        chip.setTextColor(SHEET_TEXT_SECONDARY);
+        chip.setBackground(audioSheetControlBackground(SHEET_CONTROL_BG_SUBTLE, SHEET_CONTROL_STROKE));
+        setAudioSheetFocusable(chip);
+        chip.setOnClickListener(v -> {
+            input.setText(text);
+            if (input.getText() != null) input.setSelection(input.getText().length());
+            focusLyricsSearchTarget(input, searchButton);
+            searchLyrics(text, request, false);
+        });
+        return chip;
+    }
+
+    private void submitLyricsSearchSheet(EditText input, @Nullable LyricsRequest request) {
+        String keyword = input.getText() == null ? "" : input.getText().toString().trim();
+        if (TextUtils.isEmpty(keyword)) {
+            input.setError(getString(R.string.player_lyrics_keyword_required));
+            return;
+        }
+        Util.hideKeyboard(input);
+        searchLyrics(keyword, request, false);
     }
 
     private void onShortDisplay() {
@@ -5075,7 +4765,9 @@ private boolean runtimeSourceOnly;
             return;
         }
         CastVideo video = new CastVideo(Objects.toString(mBinding.widget.title.getText(), ""), player().getUrl(), player().getPosition(), player().getHeaders());
-        CastDialog.create().history(mHistory).video(video).fm(true).show(this);
+        // webhome_inline 的 VOD 只在发送端内存里，远端拿 history 必然 not found；
+        // 改写成自包含的 push_agent 推送串（真实地址 + 请求头）后再发。
+        CastDialog.create().history(SiteApi.castHistory(mHistory, player().getUrl(), player().getHeaders())).video(video).fm(true).show(this);
     }
 
     private void onTimer() {
@@ -5088,6 +4780,685 @@ private boolean runtimeSourceOnly;
         if (keep != null) keep.delete();
         else createKeep();
         checkKeepImg();
+    }
+
+    private void checkPlay() {
+        setR1Callback();
+        if (player().isPlaying()) onPaused();
+        else if (player().isEmpty()) onRefresh();
+        else onPlay();
+    }
+
+    private void onAudioQueue() {
+        restoreActiveAudioPlaylist();
+        showAudioQueueSheet(getAudioStageTitle());
+    }
+
+    private void showAudioQueueSheet(String keyword) {
+        showAudioQueueSheet(keyword, AUDIO_QUEUE_TAB_CURRENT, false);
+    }
+
+    private void showAudioQueueSheet(String keyword, int selectedTab, boolean focusSearch) {
+        if (mAudioQueueDialog != null && mAudioQueueDialog.isShowing()) mAudioQueueDialog.dismiss();
+        int tab = selectedTab == AUDIO_QUEUE_TAB_SEARCH ? AUDIO_QUEUE_TAB_SEARCH : AUDIO_QUEUE_TAB_CURRENT;
+        boolean queueDrawer = tab == AUDIO_QUEUE_TAB_CURRENT && isLandscapeAudioSheet();
+        Dialog dialog = queueDrawer ? createAudioQueueDialog() : createAudioSheet();
+        LinearLayout root = createAudioSheetRoot();
+        if (tab == AUDIO_QUEUE_TAB_CURRENT && isLandscapeAudioSheet()) styleAudioQueueDrawerRoot(root);
+        if (tab == AUDIO_QUEUE_TAB_SEARCH) {
+            root.addView(createAudioQueueSearchHeader(dialog), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(34)));
+        } else {
+            root.addView(createAudioPlaylistHeader(dialog), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(42)));
+        }
+
+        TextInputEditText input = null;
+        if (tab == AUDIO_QUEUE_TAB_SEARCH) {
+            ScrollView scroll = new ScrollView(this);
+            LinearLayout content = new LinearLayout(this);
+            content.setOrientation(LinearLayout.VERTICAL);
+            scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            TextInputLayout layout = new TextInputLayout(this);
+            styleAudioSheetInput(layout, getString(R.string.player_audio_playlist_search_hint));
+            input = new TextInputEditText(layout.getContext());
+            input.setSingleLine(true);
+            input.setMaxLines(1);
+            input.setTextColor(Color.WHITE);
+            input.setHintTextColor(0x70FFFFFF);
+            input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT | InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE);
+            input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+            input.setText(TextUtils.isEmpty(keyword) ? "" : keyword);
+            if (input.getText() != null) input.setSelection(input.getText().length());
+            layout.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            row.addView(layout, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            TextInputEditText finalInput = input;
+            LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(ResUtil.dp2px(46), ResUtil.dp2px(46));
+            searchParams.leftMargin = ResUtil.dp2px(8);
+            row.addView(createAudioSheetIconButton(R.drawable.ic_action_search, () -> submitAudioQueueSearch(finalInput)), searchParams);
+            root.addView(row, audioSheetWrapTopParams(8));
+
+            mAudioQueueStatus = createAudioSheetText("", 13, false);
+            mAudioQueueStatus.setTextColor(SHEET_TEXT_MUTED);
+            root.addView(mAudioQueueStatus, audioSheetTopParams(4, 24));
+            content.addView(createAudioSheetSection(getString(R.string.player_audio_playlist_results)));
+            mAudioQueueSearchList = new LinearLayout(this);
+            mAudioQueueSearchList.setOrientation(LinearLayout.VERTICAL);
+            content.addView(mAudioQueueSearchList, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, audioQueueContentHeight(tab)));
+        } else {
+            mAudioQueueList = new RecyclerView(this);
+            mAudioQueueList.setOverScrollMode(View.OVER_SCROLL_NEVER);
+            mAudioQueueList.setItemAnimator(null);
+            mAudioQueueList.setLayoutManager(new LinearLayoutManager(this));
+            mAudioQueueList.setAdapter(mAudioQueueAdapter = new AudioQueueAdapter());
+            root.addView(mAudioQueueList, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, audioQueueContentHeight(tab)));
+        }
+
+        dialog.setContentView(root);
+        dialog.setOnDismissListener(d -> {
+            if (mAudioQueueDialog == dialog) {
+                mAudioQueueDialog = null;
+                mAudioQueueList = null;
+                mAudioQueueAdapter = null;
+                mAudioQueueSearchList = null;
+                mAudioQueueStatus = null;
+                mAudioQueueSearchSeq++;
+            }
+        });
+        mAudioQueueDialog = dialog;
+        renderAudioQueueList();
+        if (input != null) {
+            TextInputEditText finalInput = input;
+            input.setOnEditorActionListener((v, actionId, event) -> {
+                if (actionId != EditorInfo.IME_ACTION_SEARCH) return false;
+                submitAudioQueueSearch(finalInput);
+                return true;
+            });
+        }
+        if (queueDrawer) showAudioQueueDrawerDialog(dialog);
+        else showCompactPlaybackSheet((BottomSheetDialog) dialog);
+        if (focusSearch && input != null) {
+            TextInputEditText finalInput = input;
+            input.post(() -> Util.showKeyboard(finalInput));
+        }
+    }
+
+    private TextView createAudioSheetSection(String label) {
+        TextView view = createAudioSheetText(label, 13, true);
+        view.setTextColor(0xB8FFFFFF);
+        view.setGravity(Gravity.CENTER_VERTICAL);
+        view.setPadding(ResUtil.dp2px(2), ResUtil.dp2px(8), ResUtil.dp2px(2), ResUtil.dp2px(2));
+        return view;
+    }
+
+    private void submitAudioQueueSearch(TextInputEditText input) {
+        String keyword = input.getText() == null ? "" : input.getText().toString().trim();
+        if (TextUtils.isEmpty(keyword)) {
+            input.setError(getString(R.string.player_audio_playlist_search_required));
+            return;
+        }
+        Util.hideKeyboard(input);
+        searchAudioQueue(keyword);
+    }
+
+    private void searchAudioQueue(String keyword) {
+        int seq = ++mAudioQueueSearchSeq;
+        setAudioQueueStatus(getString(R.string.search_loading));
+        if (mAudioQueueSearchList != null) mAudioQueueSearchList.removeAllViews();
+        Task.execute(() -> {
+            try {
+                Result result = SiteApi.searchContent(getSite(), keyword, false, "1");
+                List<Vod> items = result.getList();
+                items.removeIf(item -> TextUtils.isEmpty(item.getId()));
+                App.post(() -> showAudioQueueSearchResults(seq, items));
+            } catch (Exception e) {
+                App.post(() -> {
+                    if (seq == mAudioQueueSearchSeq) setAudioQueueStatus(Notify.getError(R.string.player_audio_playlist_search_failed, e));
+                });
+            }
+        });
+    }
+
+    private void showAudioQueueSearchResults(int seq, List<Vod> items) {
+        if (seq != mAudioQueueSearchSeq || mAudioQueueSearchList == null) return;
+        mAudioQueueSearchList.removeAllViews();
+        if (items == null || items.isEmpty()) {
+            setAudioQueueStatus(getString(R.string.player_audio_playlist_no_results));
+            return;
+        }
+        setAudioQueueStatus(getString(R.string.player_audio_playlist_result_count, items.size()));
+        for (int i = 0; i < items.size(); i++) {
+            Vod item = items.get(i);
+            TextView view = createAudioSheetItem(audioQueueVodLabel(item), () -> addAudioQueueVod(item));
+            mAudioQueueSearchList.addView(view, audioSheetTopParams(i == 0 ? 4 : 0, 50));
+        }
+    }
+
+    private String audioQueueVodLabel(Vod item) {
+        String name = item == null ? "" : item.getName();
+        String remark = item == null ? "" : item.getRemarks();
+        String site = item == null ? "" : item.getSiteName();
+        String sub = TextUtils.isEmpty(remark) ? site : TextUtils.isEmpty(site) ? remark : remark + " · " + site;
+        return TextUtils.isEmpty(sub) ? name : name + "\n" + sub;
+    }
+
+    private void addAudioQueueVod(Vod item) {
+        if (item == null || TextUtils.isEmpty(item.getId())) return;
+        int seq = ++mAudioQueueSearchSeq;
+        setAudioQueueStatus(getString(R.string.player_audio_playlist_adding, item.getName()));
+        Task.execute(() -> {
+            try {
+                String key = TextUtils.isEmpty(item.getSiteKey()) ? getKey() : item.getSiteKey();
+                Vod vod = SiteApi.detailContent(key, item.getId()).getVod();
+                App.post(() -> appendAudioQueueVod(seq, vod));
+            } catch (Exception e) {
+                App.post(() -> {
+                    if (seq == mAudioQueueSearchSeq) setAudioQueueStatus(Notify.getError(R.string.player_audio_playlist_add_failed, e));
+                });
+            }
+        });
+    }
+
+    private void appendAudioQueueVod(int seq, Vod vod) {
+        if (seq != mAudioQueueSearchSeq || vod == null) return;
+        Flag queue = getFlag();
+        if (queue == null || vod.getFlags().isEmpty()) {
+            setAudioQueueStatus(getString(R.string.player_audio_playlist_add_empty));
+            return;
+        }
+        int added = 0;
+        for (Flag source : vod.getFlags()) {
+            for (Episode item : source.getEpisodes()) {
+                if (TextUtils.isEmpty(item.getUrl())) continue;
+                Episode episode = Episode.create(audioQueueEpisodeName(vod, item, source), item.getUrl());
+                if (containsAudioQueueEpisode(queue.getEpisodes(), episode)) continue;
+                queue.getEpisodes().add(episode);
+                putAudioQueueMetadata(episode, vod, item, source);
+                added++;
+            }
+        }
+        setEpisodeAdapter(queue.getEpisodes());
+        renderAudioQueueList();
+        setAudioQueueStatus(added > 0 ? getString(R.string.player_audio_playlist_added, added) : getString(R.string.player_audio_playlist_exists));
+    }
+
+    private View createAudioPlaylistHeader(Dialog dialog) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout titleGroup = new LinearLayout(this);
+        titleGroup.setGravity(Gravity.CENTER_VERTICAL);
+        titleGroup.setOrientation(LinearLayout.VERTICAL);
+        TextView title = createAudioSheetText(getString(R.string.player_audio_playlist), 17, true);
+        title.setSingleLine(true);
+        TextView subtitle = createAudioSheetText(AudioPlaylistStore.active().name, 12, false);
+        subtitle.setSingleLine(true);
+        subtitle.setEllipsize(TextUtils.TruncateAt.END);
+        subtitle.setTextColor(SHEET_TEXT_MUTED);
+        titleGroup.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        titleGroup.addView(subtitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(titleGroup, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        row.addView(createAudioSheetMiniButton(getString(R.string.play_search), false, () -> {
+            dialog.dismiss();
+            showAudioQueueSheet(getAudioStageTitle(), AUDIO_QUEUE_TAB_SEARCH, true);
+        }), audioSheetMiniButtonParams(58, false));
+        row.addView(createAudioSheetMiniButton(getString(R.string.player_audio_playlist_switch), false, this::showAudioPlaylistSwitchSheet), audioSheetMiniButtonParams(58, true));
+        row.addView(createAudioSheetMiniButton(getString(R.string.player_audio_playlist_create), false, this::showAudioPlaylistCreateSheet), audioSheetMiniButtonParams(54, true));
+        return row;
+    }
+
+    private View createAudioQueueSearchHeader(Dialog dialog) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(createAudioSheetTitle(getString(R.string.play_search)), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        row.addView(createAudioSheetMiniButton(getString(R.string.player_audio_playlist), false, () -> {
+            dialog.dismiss();
+            showAudioQueueSheet("", AUDIO_QUEUE_TAB_CURRENT, false);
+        }), audioSheetMiniButtonParams(58, false));
+        return row;
+    }
+
+    private void restoreActiveAudioPlaylist() {
+        Flag queue = getFlag();
+        if (queue == null) return;
+        List<Episode> items = queue.getEpisodes();
+        String selectedKey = audioQueueEpisodeKey(getEpisode());
+        for (int i = items.size() - 1; i >= 0; i--) {
+            Episode item = items.get(i);
+            if (!isAudioQueueEpisode(item)) continue;
+            items.remove(i);
+            removeAudioQueueMetadata(item);
+        }
+        AudioPlaylistStore.Playlist playlist = AudioPlaylistStore.active();
+        for (AudioPlaylistStore.Entry entry : playlist.items) {
+            if (entry == null || TextUtils.isEmpty(entry.url)) continue;
+            Episode episode = Episode.create(TextUtils.isEmpty(entry.name) ? entry.title : entry.name, entry.url);
+            if (containsAudioQueueEpisode(items, episode)) continue;
+            items.add(episode);
+            putAudioQueueMetadata(episode, entry);
+            if (TextUtils.equals(audioQueueEpisodeKey(episode), selectedKey)) episode.setSelected(true);
+        }
+        setEpisodeAdapter(items);
+        renderAudioQueueList();
+    }
+
+    private void showAudioPlaylistSwitchSheet() {
+        BottomSheetDialog dialog = createAudioSheet();
+        LinearLayout root = createAudioSheetRoot();
+        root.addView(createAudioSheetTitle(getString(R.string.player_audio_playlist_switch)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(32)));
+        AudioPlaylistStore.Playlist active = AudioPlaylistStore.active();
+        List<AudioPlaylistStore.Playlist> playlists = AudioPlaylistStore.list();
+        for (int i = 0; i < playlists.size(); i++) {
+            AudioPlaylistStore.Playlist playlist = playlists.get(i);
+            TextView item = createAudioSheetItem(playlist.name + " · " + playlist.items.size(), () -> {
+                AudioPlaylistStore.setActive(playlist.id);
+                restoreActiveAudioPlaylist();
+                dialog.dismiss();
+                if (mAudioQueueDialog != null) {
+                    mAudioQueueDialog.dismiss();
+                    showAudioQueueSheet("", AUDIO_QUEUE_TAB_CURRENT, false);
+                }
+            });
+            boolean selected = TextUtils.equals(active.id, playlist.id);
+            item.setTextColor(selected ? SHEET_TEXT_PRIMARY : SHEET_TEXT_SECONDARY);
+            item.setBackground(audioSheetItemBackground(selected));
+            root.addView(item, audioSheetTopParams(i == 0 ? 8 : 0, 50));
+        }
+        dialog.setContentView(root);
+        showCompactPlaybackSheet(dialog);
+    }
+
+    private void showAudioPlaylistCreateSheet() {
+        BottomSheetDialog dialog = createAudioSheet();
+        LinearLayout root = createAudioSheetRoot();
+        root.addView(createAudioSheetTitle(getString(R.string.player_audio_playlist_create)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(32)));
+        TextInputLayout layout = new TextInputLayout(this);
+        styleAudioSheetInput(layout, getString(R.string.player_audio_playlist_name_hint));
+        TextInputEditText input = new TextInputEditText(layout.getContext());
+        input.setSingleLine(true);
+        input.setMaxLines(1);
+        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(0x70FFFFFF);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT | InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        layout.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(layout, audioSheetTopParams(12, 62));
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.END);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.addView(createAudioSheetButton(getString(R.string.dialog_positive), true, () -> {
+            String name = input.getText() == null ? "" : input.getText().toString().trim();
+            AudioPlaylistStore.create(name);
+            restoreActiveAudioPlaylist();
+            dialog.dismiss();
+            if (mAudioQueueDialog != null) {
+                mAudioQueueDialog.dismiss();
+                showAudioQueueSheet("", AUDIO_QUEUE_TAB_CURRENT, false);
+            }
+        }), audioSheetButtonParams(false));
+        root.addView(actions, audioSheetTopParams(12, 44));
+        dialog.setContentView(root);
+        input.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId != EditorInfo.IME_ACTION_DONE) return false;
+            AudioPlaylistStore.create(input.getText() == null ? "" : input.getText().toString().trim());
+            restoreActiveAudioPlaylist();
+            dialog.dismiss();
+            if (mAudioQueueDialog != null) {
+                mAudioQueueDialog.dismiss();
+                showAudioQueueSheet("", AUDIO_QUEUE_TAB_CURRENT, false);
+            }
+            return true;
+        });
+        showCompactPlaybackSheet(dialog);
+        input.post(() -> Util.showKeyboard(input));
+    }
+
+    private String audioQueueEpisodeName(Vod vod, Episode episode, Flag flag) {
+        String song = vod.getName();
+        String name = episode.getName();
+        boolean single = flag.getEpisodes().size() <= 1;
+        if (TextUtils.isEmpty(song)) return name;
+        if (single || TextUtils.isEmpty(name) || name.matches("\\d+")) return song;
+        if (name.contains(song)) return name;
+        return song + " - " + name;
+    }
+
+    private boolean containsAudioQueueEpisode(List<Episode> items, Episode target) {
+        for (Episode item : items) {
+            if (!TextUtils.isEmpty(item.getUrl()) && item.getUrl().equals(target.getUrl())) return true;
+            if (item.matches(target)) return true;
+        }
+        return false;
+    }
+
+    private int getSelectedEpisodePosition(List<Episode> items) {
+        for (int i = 0; i < items.size(); i++) if (items.get(i).isSelected()) return i;
+        return 0;
+    }
+
+    private void renderAudioQueueList() {
+        if (mAudioQueueAdapter == null) return;
+        Flag flag = getFlag();
+        List<Episode> items = flag == null ? new ArrayList<>() : flag.getEpisodes();
+        int selected = getSelectedEpisodePosition(items);
+        mAudioQueueAdapter.setItems(items, selected);
+        if (mAudioQueueList != null && selected >= 0) {
+            mAudioQueueList.post(() -> {
+                if (isFinishing() || isDestroyed() || mAudioQueueList == null) return;
+                mAudioQueueList.scrollToPosition(selected);
+                mAudioQueueList.post(() -> focusAudioQueueItem(selected));
+            });
+        }
+    }
+
+    private void focusAudioQueueItem(int position) {
+        if (isFinishing() || isDestroyed()) return;
+        if (mAudioQueueList == null) return;
+        RecyclerView.ViewHolder holder = mAudioQueueList.findViewHolderForAdapterPosition(position);
+        if (holder != null) holder.itemView.requestFocus();
+    }
+
+    private void focusAudioQueueSelectedItem() {
+        if (mAudioQueueList == null || mAudioQueueAdapter == null) return;
+        int selected = mAudioQueueAdapter.getSelectedPosition();
+        if (selected < 0) return;
+        mAudioQueueList.post(() -> {
+            if (isFinishing() || isDestroyed() || mAudioQueueList == null) return;
+            mAudioQueueList.scrollToPosition(selected);
+            mAudioQueueList.post(() -> focusAudioQueueItem(selected));
+        });
+    }
+
+    private class AudioQueueAdapter extends RecyclerView.Adapter<AudioQueueAdapter.Holder> {
+
+        private final List<Episode> items = new ArrayList<>();
+        private int selected = -1;
+
+        private void setItems(List<Episode> next, int selected) {
+            items.clear();
+            if (next != null) items.addAll(next);
+            this.selected = selected;
+            notifyDataSetChanged();
+        }
+
+        private int getSelectedPosition() {
+            return selected;
+        }
+
+        @Override
+        public int getItemCount() {
+            return Math.max(1, items.size());
+        }
+
+        @NonNull
+        @Override
+        public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            LinearLayout row = new LinearLayout(parent.getContext());
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setFocusable(true);
+            row.setFocusableInTouchMode(false);
+            row.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(44)));
+
+            TextView title = createAudioSheetText("", 14, false);
+            title.setGravity(Gravity.CENTER_VERTICAL);
+            title.setSingleLine(true);
+            title.setMaxLines(1);
+            title.setEllipsize(TextUtils.TruncateAt.END);
+            title.setBackground(null);
+            row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+
+            ImageView remove = createAudioSheetInlineIconButton(R.drawable.ic_action_delete, () -> {});
+            row.addView(remove, new LinearLayout.LayoutParams(ResUtil.dp2px(36), ResUtil.dp2px(36)));
+            return new Holder(row, title, remove);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull Holder holder, int position) {
+            if (items.isEmpty()) {
+                holder.title.setText(getString(R.string.player_audio_playlist_empty));
+                holder.title.setTextColor(0x99FFFFFF);
+                holder.remove.setVisibility(View.GONE);
+                holder.remove.setFocusable(false);
+                holder.row.setBackground(null);
+                holder.row.setOnClickListener(null);
+                holder.row.setOnLongClickListener(null);
+                holder.row.setOnKeyListener(null);
+                holder.remove.setOnKeyListener(null);
+                return;
+            }
+            Episode item = items.get(position);
+            boolean active = position == selected;
+            holder.title.setText((position + 1) + ". " + item.getDisplayName());
+            holder.title.setTextColor(active ? SHEET_TEXT_PRIMARY : SHEET_TEXT_SECONDARY);
+            holder.remove.setVisibility(View.VISIBLE);
+            holder.remove.setFocusable(true);
+            holder.remove.setOnClickListener(v -> removeAudioQueueEpisode(item));
+            holder.remove.setOnKeyListener((v, keyCode, event) -> {
+                if (!KeyUtil.isLeftKey(event)) return false;
+                if (KeyUtil.isActionDown(event)) holder.row.requestFocus();
+                return true;
+            });
+            holder.row.setBackground(audioSheetItemBackground(active));
+            holder.row.setOnClickListener(v -> playAudioQueueEpisode(item));
+            holder.row.setOnLongClickListener(v -> {
+                removeAudioQueueEpisode(item);
+                return true;
+            });
+            holder.row.setOnKeyListener((v, keyCode, event) -> {
+                if (!KeyUtil.isRightKey(event) || holder.remove.getVisibility() != View.VISIBLE) return false;
+                if (KeyUtil.isActionDown(event)) holder.remove.requestFocus();
+                return true;
+            });
+        }
+
+        private class Holder extends RecyclerView.ViewHolder {
+
+            private final LinearLayout row;
+            private final TextView title;
+            private final ImageView remove;
+
+            private Holder(@NonNull LinearLayout row, TextView title, ImageView remove) {
+                super(row);
+                this.row = row;
+                this.title = title;
+                this.remove = remove;
+            }
+        }
+    }
+
+    private void playAudioQueueEpisode(Episode item) {
+        if (item == null) return;
+        if (mAudioQueueDialog != null) mAudioQueueDialog.dismiss();
+        onItemClick(item);
+    }
+
+    private void removeAudioQueueEpisode(Episode target) {
+        Flag queue = getFlag();
+        if (queue == null || target == null) return;
+        List<Episode> items = queue.getEpisodes();
+        if (items.size() <= 1) {
+            setAudioQueueStatus(getString(R.string.player_audio_playlist_keep_one));
+            return;
+        }
+        int index = indexOfAudioQueueEpisode(items, target);
+        if (index < 0) return;
+        Episode removed = items.get(index);
+        boolean selected = removed.isSelected();
+        Episode next = selected ? items.get(index + 1 < items.size() ? index + 1 : index - 1) : null;
+        items.remove(index);
+        removeAudioQueueMetadata(removed);
+        AudioPlaylistStore.removeItem(removed.getUrl());
+        if (selected && next != null) onItemClick(next);
+        else setEpisodeAdapter(items);
+        renderAudioQueueList();
+        setAudioQueueStatus(getString(R.string.player_audio_playlist_removed, removed.getDisplayName()));
+    }
+
+    private int indexOfAudioQueueEpisode(List<Episode> items, Episode target) {
+        for (int i = 0; i < items.size(); i++) {
+            Episode item = items.get(i);
+            if (!TextUtils.isEmpty(item.getUrl()) && item.getUrl().equals(target.getUrl())) return i;
+            if (item.matches(target)) return i;
+        }
+        return -1;
+    }
+
+    private void putAudioQueueMetadata(Episode episode, Vod vod, Episode sourceEpisode, Flag source) {
+        String key = audioQueueEpisodeKey(episode);
+        mAudioQueueFlags.put(key, source.getFlag());
+        mAudioQueueTitles.put(key, vod.getName());
+        mAudioQueuePics.put(key, vod.getPic());
+        mAudioQueueLyrics.put(key, getTimedLyrics(vod.getContent()));
+        String artist = getArtistFromEpisode(vod.getName(), sourceEpisode.getName());
+        if (!TextUtils.isEmpty(artist)) mAudioQueueArtists.put(key, artist);
+        AudioPlaylistStore.Entry entry = new AudioPlaylistStore.Entry();
+        entry.name = episode.getName();
+        entry.url = episode.getUrl();
+        entry.playFlag = source.getFlag();
+        entry.title = vod.getName();
+        entry.artist = artist;
+        entry.pic = vod.getPic();
+        entry.lyrics = getTimedLyrics(vod.getContent());
+        AudioPlaylistStore.upsertItem(entry);
+    }
+
+    private void putAudioQueueMetadata(Episode episode, AudioPlaylistStore.Entry entry) {
+        String key = audioQueueEpisodeKey(episode);
+        Flag flag = getFlag();
+        String playFlag = TextUtils.isEmpty(entry.playFlag) && flag != null ? flag.getFlag() : entry.playFlag;
+        mAudioQueueFlags.put(key, playFlag);
+        mAudioQueueTitles.put(key, entry.title);
+        mAudioQueuePics.put(key, entry.pic);
+        mAudioQueueLyrics.put(key, entry.lyrics);
+        if (!TextUtils.isEmpty(entry.artist)) mAudioQueueArtists.put(key, entry.artist);
+    }
+
+    private void removeAudioQueueMetadata(Episode episode) {
+        String key = audioQueueEpisodeKey(episode);
+        mAudioQueueFlags.remove(key);
+        mAudioQueueTitles.remove(key);
+        mAudioQueueArtists.remove(key);
+        mAudioQueuePics.remove(key);
+        mAudioQueueLyrics.remove(key);
+    }
+
+    private void applyAudioQueueMetadata(Episode item) {
+        if (!isAudioQueueEpisode(item)) {
+            updateAudioStageText();
+            return;
+        }
+        updateAudioStageText();
+    }
+
+    private void setAudioQueueStatus(String text) {
+        if (mAudioQueueStatus == null) {
+            Notify.show(text);
+            return;
+        }
+        mAudioQueueStatus.setText(Objects.toString(text, ""));
+    }
+
+    private void onAudioMore() {
+        ArrayList<String> items = new ArrayList<>();
+        ArrayList<Runnable> actions = new ArrayList<>();
+        addAudioMoreItem(items, actions, getString(R.string.keep), this::onKeep);
+        addAudioMoreItem(items, actions, getString(R.string.home_setting), this::onSetting);
+        addAudioMoreItem(items, actions, getString(R.string.push), this::onCast);
+        addAudioMoreItem(items, actions, getString(R.string.play_timer), this::onTimer);
+        addAudioMoreItem(items, actions, getString(R.string.player_audio_background), this::showAudioBackgroundPanel);
+        if (service() != null && !player().isEmpty()) addAudioMoreItem(items, actions, getString(R.string.player_osd), this::onPlayParams);
+        if (service() != null && player().haveTrack(C.TRACK_TYPE_AUDIO)) addAudioMoreItem(items, actions, getString(R.string.play_track_audio), () -> onTrack(C.TRACK_TYPE_AUDIO));
+        BottomSheetDialog dialog = createAudioSheet();
+        LinearLayout root = createAudioSheetRoot();
+        root.addView(createAudioSheetTitle(getString(R.string.player_audio_more)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(32)));
+        root.addView(createKaraokeActionGrid(dialog, true, items.toArray(new String[0]), actions.toArray(new Runnable[0]), 3), karaokeActionGridParams(10));
+        dialog.setContentView(root);
+        showCompactPlaybackSheet(dialog);
+    }
+
+    private void addAudioMoreItem(List<String> items, List<Runnable> actions, String label, Runnable action) {
+        items.add(label);
+        actions.add(action);
+    }
+
+    private void showAudioBackgroundPanel() {
+        BottomSheetDialog dialog = createAudioSheet();
+        LinearLayout root = createAudioSheetRoot();
+        LinearLayout[] gridRef = new LinearLayout[1];
+        String[] labels = new String[]{
+                getString(PlayerSetting.isAudioBackgroundDecorated() ? R.string.player_audio_background_decorated_turn_off : R.string.player_audio_background_decorated_turn_on),
+                getString(PlayerSetting.isAudioBackgroundLightEffect() ? R.string.player_audio_background_light_effect_on : R.string.player_audio_background_light_effect_off),
+                getString(R.string.player_audio_background_random_plain),
+                getString(R.string.player_audio_background_random_decoration),
+        };
+        Runnable[] actions = new Runnable[]{
+                () -> {
+                    toggleAudioBackgroundDecorated();
+                    updateAudioBackgroundPanel(gridRef[0]);
+                },
+                () -> {
+                    toggleAudioBackgroundLightEffect();
+                    updateAudioBackgroundPanel(gridRef[0]);
+                },
+                () -> {
+                    randomizeAudioPlainBackground();
+                    updateAudioBackgroundPanel(gridRef[0]);
+                },
+                () -> {
+                    randomizeAudioBackgroundDecoration();
+                    updateAudioBackgroundPanel(gridRef[0]);
+                },
+        };
+        root.addView(createAudioSheetTitle(getString(R.string.player_audio_background)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(32)));
+        gridRef[0] = createKaraokeActionGrid(dialog, true, labels, actions, 2, false);
+        root.addView(gridRef[0], karaokeActionGridParams(10));
+        dialog.setContentView(root);
+        showAudioBackgroundSheet(dialog);
+    }
+
+    private void updateAudioBackgroundPanel(LinearLayout grid) {
+        if (grid == null || grid.getChildCount() == 0 || !(grid.getChildAt(0) instanceof ViewGroup row)) return;
+        if (row.getChildCount() > 0 && row.getChildAt(0) instanceof TextView button) button.setText(getString(PlayerSetting.isAudioBackgroundDecorated() ? R.string.player_audio_background_decorated_turn_off : R.string.player_audio_background_decorated_turn_on));
+        if (row.getChildCount() > 1 && row.getChildAt(1) instanceof TextView button) button.setText(getString(PlayerSetting.isAudioBackgroundLightEffect() ? R.string.player_audio_background_light_effect_on : R.string.player_audio_background_light_effect_off));
+    }
+
+    private void toggleAudioBackgroundDecorated() {
+        boolean decorated = !PlayerSetting.isAudioBackgroundDecorated();
+        PlayerSetting.putAudioBackgroundDecorated(decorated);
+        applyAudioBackground();
+        Notify.show(getString(decorated ? R.string.player_audio_background_decorated_on : R.string.player_audio_background_decorated_off));
+    }
+
+    private void toggleAudioBackgroundLightEffect() {
+        boolean lightEffect = !PlayerSetting.isAudioBackgroundLightEffect();
+        PlayerSetting.putAudioBackgroundLightEffect(lightEffect);
+        applyAudioBackground();
+        Notify.show(getString(lightEffect ? R.string.player_audio_background_light_effect_on : R.string.player_audio_background_light_effect_off));
+    }
+
+    private void randomizeAudioPlainBackground() {
+        PlayerSetting.putAudioBackground(PlayerSetting.AUDIO_BACKGROUND_RANDOM);
+        PlayerSetting.putAudioBackgroundSeed(newAudioBackgroundSeed(0, PlayerSetting.getAudioBackgroundSeed()));
+        applyAudioBackground();
+        Notify.show(getString(R.string.player_audio_background_random_plain_done));
+    }
+
+    private void randomizeAudioBackgroundDecoration() {
+        PlayerSetting.putAudioBackground(PlayerSetting.AUDIO_BACKGROUND_RANDOM);
+        PlayerSetting.putAudioBackgroundDecorated(true);
+        PlayerSetting.putAudioBackgroundDecorationSeed(newAudioBackgroundDecorationSeed());
+        applyAudioBackground();
+        Notify.show(getString(R.string.player_audio_background_random_decoration_done));
+    }
+
+    private void setAudioToolRowVisible(boolean visible, boolean requestFocus) {
+        mBinding.audioToolRow.setVisibility(View.GONE);
+        mBinding.audioMoreAction.setSelected(false);
     }
 
     private void onVideo() {
@@ -5246,6 +5617,36 @@ private boolean runtimeSourceOnly;
         setScale(tag);
     }
 
+    private void rotate(boolean z) {
+        int next;
+        int current = getVideoRotation();
+        if (z) {
+            next = (current + 90) % 360;
+        } else {
+            next = (current - 90 + 360) % 360;
+        }
+        setVideoRotation(next);
+        mBinding.control.action.rotate.setText(labels[next / 90]);
+    }
+
+    private void onRotate() {
+        onRotateAdd();
+    }
+
+    private void onRotateAdd() {
+        rotate(true);
+    }
+
+    private void onRotateSub() {
+        rotate(false);
+    }
+
+    private boolean onRotateReset() {
+        setVideoRotation(0);
+        mBinding.control.action.rotate.setText(getString(R.string.play_rotate));
+        return true;
+    }
+
     private void onLut() {
         mBinding.lutQuick.toggle(player(), mBinding.exo, this::onLutChanged, new com.fongmi.android.tv.ui.custom.LutQuickPanel.ImportCallback() {
             @Override
@@ -5268,6 +5669,7 @@ private boolean runtimeSourceOnly;
     }
 
     private boolean focusLutQuickContent() {
+        if (isFinishing() || isDestroyed()) return false;
         if (!isVisible(mBinding.lutQuick)) return false;
         View focus = getCurrentFocus();
         RecyclerView recycler = findRecyclerView(mBinding.lutQuick);
@@ -5304,6 +5706,7 @@ private boolean runtimeSourceOnly;
             if (recycler.getChildAdapterPosition(child) == position && focusFirstChild(child)) return true;
         }
         recycler.post(() -> {
+            if (recycler == null || !recycler.isAttachedToWindow()) return;
             RecyclerView.ViewHolder next = recycler.findViewHolderForAdapterPosition(position);
             if (next != null) {
                 focusFirstChild(next.itemView);
@@ -5396,7 +5799,8 @@ private boolean runtimeSourceOnly;
         mHistory.setUserSpeed(player().getSpeed());
     }
 
-    private void onReset() {
+    @Override
+    public void onReset() {
         if (isReplay()) onReplay();
         else onRefresh();
     }
@@ -5513,10 +5917,48 @@ private boolean runtimeSourceOnly;
         return true;
     }
 
-    private void setEnding(long ending) {
-        mHistory.setEnding(ending);
-        setOpeningEndingText();
-        syncHistory();
+    private void onSubHead() {
+        setSubHead(player().getPosition());
+    }
+
+    private void onSubHeadAdd() {
+        setSubHead(Math.max(0, Math.max(0, mHistory.getSubHead()) + 1000));
+    }
+
+    private void onSubHeadSub() {
+        setSubHead(Math.max(0, Math.max(0, mHistory.getSubHead()) - 1000));
+    }
+
+    private boolean onSubHeadReset() {
+        setSubHead(0);
+        return true;
+    }
+
+    private void onSubTail() {
+        setSubTail(player().getPosition());
+    }
+
+    private void onSubTailAdd() {
+        setSubTail(Math.max(0, Math.max(0, mHistory.getSubTail()) + 1000));
+    }
+
+    private void onSubTailSub() {
+        setSubTail(Math.max(0, Math.max(0, mHistory.getSubTail()) - 1000));
+    }
+
+    private boolean onSubTailReset() {
+        setSubTail(0);
+        return true;
+    }
+
+    private void onChoose() {
+        PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), mBinding.widget.title.getText());
+        setRedirect(true);
+    }
+
+    private boolean onChooseLong() {
+        onChoose();
+        return true;
     }
 
     private void onPlayerKernel() {
@@ -5570,7 +6012,7 @@ private boolean runtimeSourceOnly;
                 App.post(() -> switchPlayerKernelWithResult(requestId, generation, key, flag, episode, nextType, result, position, speed, repeat, metadata));
             } catch (Throwable e) {
                 App.post(() -> {
-                    if (!isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
+                    if (isFinishing() || isDestroyed()) return;
                     playerKernelSwitchRefreshing = false;
                     setPlayerKernel();
                     setDecode();
@@ -5581,10 +6023,8 @@ private boolean runtimeSourceOnly;
         return true;
     }
 
-    private void switchPlayerKernelWithResult(int requestId, int generation, String key, String flag, String episode,
-                                              int type, Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
-        if (requestId != playerKernelSwitchRequestId
-                || !isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
+    private void switchPlayerKernelWithResult(int type, Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
+        if (isFinishing() || isDestroyed()) return;
         playerKernelSwitchRefreshing = false;
         if (!canApplyPlayerContentRequest(requestId, generation, key, flag, episode)) return;
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
@@ -5819,6 +6259,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void hideControl() {
+        if (isFinishing() || isDestroyed()) return;
         mBinding.control.getRoot().setVisibility(View.GONE);
         updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(false);
@@ -5832,7 +6273,14 @@ private boolean runtimeSourceOnly;
         if (isGone(mBinding.control.getRoot())) mBinding.widget.top.setVisibility(View.GONE);
     }
 
+    private void setTraffic() {
+        if (isFinishing() || isDestroyed()) return;
+        Traffic.setSpeed(mBinding.progress.traffic);
+        App.post(mR3, 1000);
+    }
+
     private void setR1Callback() {
+        if (isVisible(mBinding.settingContainer)) return;
         App.post(mR1, Constant.INTERVAL_HIDE);
     }
 
@@ -5841,8 +6289,8 @@ private boolean runtimeSourceOnly;
     }
 
     private void setArtwork(String url) {
-        if (mHistory != null) mHistory.setVodPic(url);
-        loadArtwork(url);
+        if (mHistory != null && TextUtils.isEmpty(mHistory.getVodPic())) mHistory.setVodPic(url);
+        loadArtwork(mHistory != null ? mHistory.getVodPic() : url, mPlaybackEpisodeKey);
         setContextWall(getContextWall());
         updateEpisodeFallbackStillUrl();
     }
@@ -5983,29 +6431,27 @@ private boolean runtimeSourceOnly;
         }
     }
 
-    private boolean checkHistory(Vod item) {
-        TmdbItem tmdbItem = getHistoryTmdbItem();
-        History resumeHistory = getIntentResumeHistory();
-        if (hasIntentResumeHistory() && resumeHistory == null) {
-            Notify.show(R.string.history_record_missing);
-            finish();
-            return false;
-        }
-        mHistory = resumeHistory == null
-                ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
-                : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
+    private void checkHistory(Vod item) {
+        mHistory = History.find(getHistoryKey());
+        boolean fromDb = mHistory != null;
         mHistory = mHistory == null ? createHistory(item) : mHistory;
+        // 诊断用：intent 里带的启动片名 vs 详情返回的权威片名。
+        // 两者不一致 = 启动时那条历史的 vodName 是脏的（DB 里 key 与 name 不匹配）。
+        SpiderDebug.log("video-flow", "checkHistory fromDb=%s intentName=%s detailName=%s historyName=%s",
+                fromDb, getName(), item.getName(), mHistory.getVodName());
+        applyCastHistory();
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
-        applyIntentPlaybackSelection(item);
-        if (resumeHistory == null && Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
-        setOpeningEndingText();
-        // 如果历史记录中已有有效倍速，使用历史倍速；否则使用默认播放倍速
-        float speed = getPlaybackSpeed();
-        mBinding.control.action.speed.setText(player().setSpeed(speed));
-        mHistory.setVodName(historyVodName(item));
-        mHistory.setVodPic(getInitialArtwork(item));
-        enrichHistoryMeta(item);
+        if (Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
+        mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
+        mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
+        mBinding.control.action.subHead.setText(mHistory.getSubHead() <= 0 ? getString(R.string.play_sub_head) : Util.timeMs(mHistory.getSubHead()));
+        mBinding.control.action.subTail.setText(mHistory.getSubTail() <= 0 ? getString(R.string.play_sub_tail) : Util.timeMs(mHistory.getSubTail()));
+        mOsd.setEnding(mHistory.getEnding());
+        mBinding.control.action.speed.setText(player().setSpeed(PlayerSetting.getDefaultSpeed()));
+        mHistory.setSpeed(player().getSpeed());
+        if (TextUtils.isEmpty(mHistory.getVodName())) mHistory.setVodName(item.getName());
+        if (!TextUtils.isEmpty(mHistory.getVodName())) getIntent().putExtra("name", mHistory.getVodName());
         PlaybackEventCollector.get().updateHistory(mHistory);
         setArtwork(getInitialArtwork(item));
         setScale(getScale());
@@ -6015,6 +6461,16 @@ private boolean runtimeSourceOnly;
 
     private boolean shouldKeepPushArtwork() {
         return SiteApi.PUSH.equals(getKey()) && !TextUtils.isEmpty(getPic());
+    }
+
+    private void applyCastHistory() {
+        String json = Objects.toString(getIntent().getStringExtra("castHistory"), "");
+        if (TextUtils.isEmpty(json)) return;
+        History pushed = History.objectFrom(json);
+        if (pushed == null || TextUtils.isEmpty(pushed.getVodId())) return;
+        if (pushed.getPosition() > 0) mHistory.setPosition(pushed.getPosition());
+        if (!TextUtils.isEmpty(pushed.getVodRemarks())) mCastEpisodeHint = pushed.getVodRemarks();
+        SpiderDebug.log("video-flow", "cast history pointer applied position=%d episodeHint=%s", mHistory.getPosition(), mCastEpisodeHint);
     }
 
     private String getInitialArtwork(Vod item) {
@@ -6266,6 +6722,7 @@ private boolean runtimeSourceOnly;
                 }
             }
             updatePlaybackHistoryPosition();
+            mHistory.setPlayerType(player().getPlayerType());
             mHistory.setCreateTime(System.currentTimeMillis());
         }
         if (exit && service() != null) PlaybackEventCollector.get().onStop(player());
@@ -6446,36 +6903,24 @@ private boolean runtimeSourceOnly;
         boolean id = !item.getId().isEmpty();
         boolean pic = !item.getPic().isEmpty();
         boolean name = !item.getName().isEmpty();
-        boolean keyChanged = false;
-        if (id) {
-            getIntent().putExtra("id", item.getId());
-            if (mHistory != null) {
-                String nextKey = getHistoryKey();
-                keyChanged = !TextUtils.equals(mHistory.getKey(), nextKey);
-                if (keyChanged) mHistory.replace(nextKey);
-            }
-        }
-        boolean historyReloaded = reloadHistoryAfterTmdbMatch();
-        if (name) mHistory.setVodName(historyVodName(item));
-        if (name && !TextUtils.equals(mBinding.name.getText(), item.getName())) {
-            mBinding.name.setText(item.getName());
-        }
-        // 原生增强：TMDB 富集完成后回写题材/地区/演员/主创到 History（enrichVod 已填充 item），仅补空字段
-        if (mHistory != null) mHistory.enrichMeta(item.getTypeName(), item.getArea(), item.getActor(), item.getDirector(), item.getYear());
-        // 跨源聚合：TMDB 匹配完成后把 tmdbId 盖章到 History，供列表去重与跨源续播使用（不依赖脆弱的名称回查缓存）
-        boolean tmdbIdStamped = stampHistoryTmdbId();
+        if (id) getIntent().putExtra("id", item.getId());
+        if (id) mHistory.replace(getHistoryKey());
+        if (name && TextUtils.isEmpty(mHistory.getVodName())) mHistory.setVodName(item.getName());
+        if (!TextUtils.isEmpty(mHistory.getVodName())) getIntent().putExtra("name", mHistory.getVodName());   // 同上：真实片名回写，OSD 才不会停留在启动时的旧值
+        if (!TextUtils.isEmpty(mHistory.getVodName())) mBinding.name.setText(mHistory.getVodName());
+        if (!TextUtils.isEmpty(mHistory.getVodName())) mBinding.widget.title.setText(mHistory.getVodName());
+        if (!TextUtils.isEmpty(mHistory.getVodName())) updateAudioStageText();
         updateFlag(getFlag(), item.getFlags());
         if (historyReloaded) resumeHistoryAfterTmdbMatch();
         boolean episodeTitleChanged = refreshCurrentHistoryEpisodeTitle();
         CharSequence playbackTitle = getPlaybackControlTitle();
         if (!TextUtils.equals(mBinding.widget.title.getText(), playbackTitle)) mBinding.widget.title.setText(playbackTitle);
         if (pic) setArtwork(item.getPic());
-        if (pic || name) setMetadata();
-        // key 迁移后必须写回，避免 replace 删旧 key 后未 save 导致历史消失
-        if (keyChanged || pic || name || episodeTitleChanged || tmdbIdStamped) syncHistory();
-        if (pic || name) updateKeep();
+        if (pic || !TextUtils.isEmpty(mHistory.getVodName())) setMetadata();
+        if (pic || !TextUtils.isEmpty(mHistory.getVodName())) syncHistory();
+        if (pic || !TextUtils.isEmpty(mHistory.getVodName())) updateKeep();
         if (id) updateNavigationKey();
-        if (name) setPartAdapter();
+        if (!TextUtils.isEmpty(mHistory.getVodName())) setPartAdapter();
         PlaybackEventCollector.get().updateHistory(mHistory);
         setText(item);
         if (shouldUseTmdbLayout()) suppressTmdbNativeTextFields();
@@ -6714,9 +7159,1614 @@ private boolean runtimeSourceOnly;
         refreshControlDialog();
     }
 
-    @Override
-    protected void onSubtitleSelected(Sub sub) {
-        if (SubtitleRestoreCoordinator.remember(mHistory, sub)) syncHistory();
+    private void refreshLyrics() {
+        if (isMusicLike() && mAudioRefreshLyricsRunnable != null) {
+            App.removeCallbacks(mAudioRefreshLyricsRunnable);
+            App.post(mAudioRefreshLyricsRunnable, mAudioStageVisible ? 320 : 120);
+            return;
+        }
+        refreshLyricsNow();
+    }
+
+    private void refreshLyricsNow() {
+        if (isFinishing() || isDestroyed()) return;
+        if (mLyrics == null || service() == null) return;
+        int seq = ++mLyricsRefreshSeq;
+        setAudioOnly(LyricsController.isAudioOnly(player()));
+        boolean audioContent = shouldUseImmersiveAudio();
+        setAudioStageVisible(audioContent);
+        if (!audioContent) {
+            mLyrics.refresh(player(), false);
+            scheduleRefreshKaraoke(seq, false, 0);
+            return;
+        }
+        LyricsRequest request = LyricsRequest.from(player());
+        String playbackKey = Objects.toString(mPlaybackEpisodeKey, "");
+        Task.execute(() -> {
+            boolean hasChoice = mLyrics.hasChoice(request);
+            App.post(() -> {
+                if (seq != mLyricsRefreshSeq || service() == null || !TextUtils.equals(playbackKey, Objects.toString(mPlaybackEpisodeKey, ""))) return;
+                if (!hasChoice && showInlineLyrics()) {
+                    scheduleRefreshKaraoke(seq, true, 420);
+                    return;
+                }
+                mLyrics.refresh(player(), true);
+                scheduleRefreshKaraoke(seq, true, 420);
+            });
+        });
+    }
+
+    private void scheduleRefreshKaraoke(int seq, boolean audioContent, long delayMs) {
+        App.post(() -> {
+            if (seq != mLyricsRefreshSeq) return;
+            refreshKaraoke(audioContent);
+        }, delayMs);
+    }
+
+    private void setAudioStageVisible(boolean visible) {
+        visible = visible && PlayerSetting.isImmersiveAudioMode();
+        if (visible) ensureImmersiveAudioControllers();
+        if (mAudioStageVisible == visible) {
+            syncAudioStageSurface(visible);
+            updateAudioStageText();
+            updateAudioStageControls();
+            return;
+        }
+        mAudioStageVisible = visible;
+        if (!visible) mAudioLightEffectAnimated = false;
+        mBinding.audioStage.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible) {
+            mBinding.audioStage.bringToFront();
+            hideProgress();
+            hideControl();
+            hideInfo();
+            Util.hideSystemUI(this);
+        } else {
+            setAudioToolRowVisible(false, false);
+        }
+        if (visible) scheduleAudioBackground(96);
+        syncAudioStageSurface(visible);
+        applyAudioBackgroundActionInsets();
+        applyAudioStageLayout(visible);
+        updateAudioStageText();
+        updateAudioStageControls();
+        if (visible) mBinding.audioStage.post(this::focusAudioStageDefault);
+    }
+
+    private boolean shouldUseImmersiveAudio() {
+        return PlayerSetting.isImmersiveAudioMode() && (isAudioOnly() || isMusicLike());
+    }
+
+    private void syncAudioStageSurface(boolean visible) {
+        boolean immersiveEnabled = PlayerSetting.isImmersiveAudioMode();
+        mBinding.lyrics.setAudioStageMode(visible);
+        mBinding.lyrics.setSuppressed(visible || !immersiveEnabled);
+        mBinding.audioLyrics.setSuppressed(!visible);
+        syncKaraokeStageVisibility();
+        setVideoDetailsVisible(!visible);
+    }
+
+    private void showInitialAudioStage() {
+        mAudioStageVisible = true;
+        mBinding.audioStage.setVisibility(View.VISIBLE);
+        mBinding.audioStage.bringToFront();
+        hideProgress();
+        mBinding.control.getRoot().setVisibility(View.GONE);
+        if (mOsd != null) mOsd.setControlsVisible(false);
+        App.removeCallbacks(mR1);
+        hideInfo();
+        syncAudioStageSurface(true);
+        applyAudioBackgroundActionInsets();
+        applyAudioStageLayout(true);
+        mBinding.audioTitle.setText(TextUtils.isEmpty(getName()) ? getString(R.string.player_audio_badge_audio) : getName());
+        mBinding.audioSubtitle.setVisibility(View.GONE);
+        Util.hideSystemUI(this);
+    }
+
+    private void syncKaraokeStageVisibility() {
+        if (mBinding == null) return;
+        if (!PlayerSetting.isImmersiveAudioMode()) {
+            mBinding.karaoke.setVisibility(View.GONE);
+            mBinding.audioKaraoke.setVisibility(View.GONE);
+            return;
+        }
+        if (mAudioStageVisible) {
+            mBinding.karaoke.setVisibility(View.GONE);
+            if (PlayerSetting.isKaraokeMode() && mBinding.audioKaraoke.getVisibility() == View.GONE) mBinding.audioKaraoke.setVisibility(View.INVISIBLE);
+        } else {
+            mBinding.audioKaraoke.setVisibility(View.GONE);
+        }
+    }
+
+    private void applyAudioStageLayout(boolean visible) {
+        if (isFullscreen()) return;
+        if (visible) {
+            mBinding.video.setForeground(null);
+            mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
+        } else {
+            mBinding.video.setForeground(ResUtil.getDrawable(R.drawable.selector_video));
+            mBinding.video.setLayoutParams(mFrameParams);
+        }
+    }
+
+    private void setVideoDetailsVisible(boolean visible) {
+        int value = visible ? View.VISIBLE : View.GONE;
+        mBinding.name.setVisibility(value);
+        mBinding.remark.setVisibility(visible && !TextUtils.isEmpty(mBinding.remark.getText()) ? View.VISIBLE : View.GONE);
+        mBinding.row1.setVisibility(value);
+        mBinding.director.setVisibility(visible && !TextUtils.isEmpty(mBinding.director.getText()) ? View.VISIBLE : View.GONE);
+        mBinding.actor.setVisibility(visible && !TextUtils.isEmpty(mBinding.actor.getText()) ? View.VISIBLE : View.GONE);
+        mBinding.row2.setVisibility(value);
+        mBinding.scroll.setVisibility(value);
+    }
+
+    private void updateAudioStageText() {
+        if (mBinding == null) return;
+        String title = getAudioStageTitle();
+        String subtitle = getAudioStageArtist(title);
+        mBinding.audioTitle.setText(TextUtils.isEmpty(title) ? getString(R.string.player_audio_badge_audio) : title);
+        mBinding.audioSubtitle.setText(subtitle);
+        mBinding.audioSubtitle.setVisibility(TextUtils.isEmpty(subtitle) ? View.GONE : View.VISIBLE);
+        mBinding.audioBadgeLyrics.setText(PlayerSetting.isKaraokeMode() ? getString(R.string.player_karaoke_mode) : getString(R.string.player_audio_badge_lyrics));
+    }
+
+    private void updateAudioStageControls() {
+        if (mBinding == null) return;
+        if (mAudioStageVisible) setVideoDetailsVisible(false);
+        applyAudioBackgroundActionInsets();
+        boolean hasPrev = hasAudioAdjacent(mHistory != null && mHistory.isRevPlay() ? 1 : -1);
+        boolean hasNext = hasAudioAdjacent(mHistory != null && mHistory.isRevPlay() ? -1 : 1);
+        mBinding.audioPrev.setEnabled(hasPrev);
+        mBinding.audioPrev.setAlpha(hasPrev ? 1f : 0.35f);
+        mBinding.audioNext.setEnabled(hasNext);
+        mBinding.audioNext.setAlpha(hasNext ? 1f : 0.35f);
+        mBinding.audioQueueAction.setEnabled(true);
+        mBinding.audioQueueAction.setAlpha(1f);
+        setAudioToolEnabled(mBinding.audioTrackAction, service() != null && player().haveTrack(C.TRACK_TYPE_AUDIO));
+        setAudioToolEnabled(mBinding.audioSubtitleAction, service() != null && player().haveTrack(C.TRACK_TYPE_TEXT));
+        setAudioToolEnabled(mBinding.audioInfoAction, service() != null && !player().isEmpty());
+        setAudioRepeatSelected(service() != null && player().isRepeatOne());
+        mBinding.audioKaraokeAction.setSelected(false);
+        checkKeepImg();
+        checkAudioPlayImg(service() != null && player().isPlaying());
+        syncAudioCoverRotation();
+    }
+
+    private void applyAudioBackgroundActionInsets() {
+        if (mBinding == null || mBinding.audioBackgroundAction == null) return;
+        ViewGroup.LayoutParams raw = mBinding.audioBackgroundAction.getLayoutParams();
+        if (!(raw instanceof FrameLayout.LayoutParams params)) return;
+        int top = -mBinding.audioStage.getPaddingTop();
+        int end = -mBinding.audioStage.getPaddingEnd();
+        if (params.topMargin == top && params.getMarginEnd() == end) return;
+        params.topMargin = top;
+        params.setMarginEnd(end);
+        mBinding.audioBackgroundAction.setLayoutParams(params);
+    }
+
+    private boolean hasAudioAdjacent(int offset) {
+        if (mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() <= 0) return false;
+        int position = mEpisodeAdapter.getSelectedPosition();
+        if (position == RecyclerView.NO_POSITION) position = mEpisodeAdapter.getPosition();
+        int target = position + offset;
+        return target >= 0 && target < mEpisodeAdapter.getItemCount();
+    }
+
+    private void setAudioToolEnabled(View view, boolean enabled) {
+        view.setEnabled(enabled);
+        view.setAlpha(enabled ? 1f : 0.35f);
+    }
+
+    private void setAudioRepeatSelected(boolean selected) {
+        if (mBinding == null) return;
+        mBinding.audioRepeatAction.setSelected(selected);
+        mBinding.audioRepeatAction.setAlpha(selected ? 1f : 0.62f);
+    }
+
+    private void applyAudioBackground() {
+        if (isFinishing() || isDestroyed()) return;
+        if (mBinding == null || !mAudioStageVisible) return;
+        mAudioLightEffectAnimated = service() != null && player().isPlaying();
+        AudioPlayerBackgroundDrawable drawable = new AudioPlayerBackgroundDrawable(PlayerSetting.getAudioBackground(), mAudioArtworkColor, PlayerSetting.isAudioBackgroundDecorated(), PlayerSetting.isAudioBackgroundLightEffect(), mAudioLightEffectAnimated, PlayerSetting.getAudioBackgroundSeed(), PlayerSetting.getAudioBackgroundDecorationSeed());
+        syncAudioBackgroundHalo(drawable);
+        mBinding.audioStage.setBackground(drawable);
+        scheduleAudioBackgroundHaloSync(drawable);
+        mBinding.audioStage.invalidate();
+    }
+
+    private void scheduleAudioBackgroundHaloSync(AudioPlayerBackgroundDrawable drawable) {
+        mBinding.audioStage.post(() -> syncAudioBackgroundHalo(drawable));
+        mBinding.audioStage.postDelayed(() -> syncAudioBackgroundHalo(drawable), 120);
+        mBinding.audioStage.postDelayed(() -> syncAudioBackgroundHalo(drawable), 360);
+    }
+
+    private void scheduleAudioBackground(long delayMs) {
+        if (mApplyAudioBackgroundRunnable == null) return;
+        App.post(mApplyAudioBackgroundRunnable, delayMs);
+    }
+
+    private void randomizeAudioBackgroundMix(boolean notify) {
+        PlayerSetting.putAudioBackground(PlayerSetting.AUDIO_BACKGROUND_RANDOM);
+        PlayerSetting.putAudioBackgroundDecorated(true);
+        PlayerSetting.putAudioBackgroundSeed(newAudioBackgroundSeed(2, PlayerSetting.getAudioBackgroundSeed()));
+        PlayerSetting.putAudioBackgroundDecorationSeed(newAudioBackgroundDecorationSeed());
+        applyAudioBackground();
+        if (notify) Notify.show(getString(R.string.player_audio_background_random_mix_done));
+    }
+
+    private int newAudioBackgroundDecorationSeed() {
+        int previous = PlayerSetting.getAudioBackgroundDecorationSeed();
+        int previousMotif = audioBackgroundDecorationMotif(previous);
+        for (int i = 0; i < 8; i++) {
+            int seed = newAudioBackgroundSeed(10 + i, previous);
+            if (audioBackgroundDecorationMotif(seed) != previousMotif) return seed;
+        }
+        return newAudioBackgroundSeed(31, previous);
+    }
+
+    private int newAudioBackgroundSeed(int salt, int previous) {
+        int previousHue = audioBackgroundHue(previous);
+        for (int i = 0; i < 8; i++) {
+            int seed = mixAudioBackgroundSeed((int) System.nanoTime() ^ (int) System.currentTimeMillis() ^ (++mAudioBackgroundRandomNonce * 0x9E3779B9) ^ salt * 0x45D9F3B);
+            if (seed != 0 && seed != previous && hueDistance(audioBackgroundHue(seed), previousHue) >= 36) return seed;
+        }
+        return mixAudioBackgroundSeed(previous ^ (++mAudioBackgroundRandomNonce * 0x7FEB352D) ^ salt * 0x846CA68B);
+    }
+
+    private int audioBackgroundDecorationMotif(int seed) {
+        return Math.floorMod(mixAudioBackgroundSeed(seed == 0 ? 0x5A17B3 : seed), 24);
+    }
+
+    private int audioBackgroundHue(int seed) {
+        return Math.floorMod(mixAudioBackgroundSeed(seed == 0 ? 0x5A17B3 : seed), 360);
+    }
+
+    private int hueDistance(int a, int b) {
+        int distance = Math.abs(a - b);
+        return Math.min(distance, 360 - distance);
+    }
+
+    private int mixAudioBackgroundSeed(int value) {
+        value ^= value >>> 16;
+        value *= 0x7FEB352D;
+        value ^= value >>> 15;
+        value *= 0x846CA68B;
+        value ^= value >>> 16;
+        return value;
+    }
+
+    private void syncAudioBackgroundHalo(AudioPlayerBackgroundDrawable drawable) {
+        if (isFinishing() || isDestroyed()) return;
+        if (mBinding == null || drawable == null) return;
+        View anchor = mBinding.audioCover != null ? mBinding.audioCover : mBinding.audioDisc;
+        if (mBinding.audioStage.getWidth() <= 0 || anchor.getWidth() <= 0 || anchor.getHeight() <= 0) return;
+        if (mBinding.audioStage.getBackground() != drawable) return;
+        Rect bounds = new Rect(0, 0, anchor.getWidth(), anchor.getHeight());
+        mBinding.audioStage.offsetDescendantRectToMyCoords(anchor, bounds);
+        float cx = bounds.exactCenterX();
+        float cy = bounds.exactCenterY();
+        float radius = Math.max(anchor.getWidth(), anchor.getHeight()) * 0.56f;
+        drawable.setRecordHaloAnchor(cx, cy, radius);
+    }
+
+    private void updateAudioArtworkColor(String key, @Nullable Drawable drawable) {
+        if (TextUtils.equals(mAudioArtworkColorKey, key)) return;
+        mAudioArtworkColorKey = key;
+        mAudioArtworkColor = extractAudioArtworkColor(drawable);
+        if (mAudioStageVisible && PlayerSetting.getAudioBackground() == PlayerSetting.AUDIO_BACKGROUND_ARTWORK && mApplyAudioBackgroundRunnable != null) {
+            App.removeCallbacks(mApplyAudioBackgroundRunnable);
+            App.post(mApplyAudioBackgroundRunnable, 240);
+        }
+    }
+
+    private void scheduleAudioArtworkColorUpdate(String owner, String key, @Nullable Drawable drawable) {
+        App.post(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (!TextUtils.equals(mArtworkRequestOwner, owner)) return;
+            updateAudioArtworkColor(key, drawable);
+        }, 180);
+    }
+
+    private int extractAudioArtworkColor(@Nullable Drawable drawable) {
+        if (drawable == null) return Color.rgb(255, 111, 145);
+        Bitmap bitmap = null;
+        try {
+            bitmap = createPaletteBitmap(drawable);
+            Palette palette = Palette.from(bitmap).maximumColorCount(8).generate();
+            Palette.Swatch swatch = palette.getVibrantSwatch();
+            if (swatch == null) swatch = palette.getLightVibrantSwatch();
+            if (swatch == null) swatch = palette.getDominantSwatch();
+            return swatch == null ? Color.rgb(255, 111, 145) : swatch.getRgb();
+        } catch (Exception ignored) {
+            return Color.rgb(255, 111, 145);
+        } finally {
+            if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+        }
+    }
+
+    private Bitmap createPaletteBitmap(Drawable drawable) {
+        int width = 72;
+        int height = 72;
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
+    }
+
+    private void checkAudioPlayImg(boolean isPlaying) {
+        if (mBinding == null) return;
+        mBinding.audioPlay.setImageResource(isPlaying ? androidx.media3.ui.R.drawable.exo_icon_pause : androidx.media3.ui.R.drawable.exo_icon_play);
+        updateAudioLightEffectAnimation(isPlaying);
+        syncAudioCoverRotation();
+    }
+
+    private void updateAudioLightEffectAnimation(boolean animated) {
+        if (!mAudioStageVisible || !PlayerSetting.isAudioBackgroundLightEffect() || mAudioLightEffectAnimated == animated) return;
+        mAudioLightEffectAnimated = animated;
+        Drawable background = mBinding.audioStage.getBackground();
+        if (background instanceof AudioPlayerBackgroundDrawable drawable) drawable.setAnimated(animated);
+        else scheduleAudioBackground(96);
+    }
+
+    private void syncAudioCoverRotation() {
+        if (!mAudioStageVisible || service() == null || !player().isPlaying()) {
+            stopAudioCoverRotation();
+            return;
+        }
+        if (mAudioCoverAnimator == null) {
+            mAudioCoverAnimator = ObjectAnimator.ofFloat(mBinding.audioCover, View.ROTATION, mBinding.audioCover.getRotation(), mBinding.audioCover.getRotation() + 360f);
+            mAudioCoverAnimator.setDuration(20000);
+            mAudioCoverAnimator.setInterpolator(new LinearInterpolator());
+            mAudioCoverAnimator.setRepeatCount(ObjectAnimator.INFINITE);
+            mAudioCoverAnimator.setRepeatMode(ObjectAnimator.RESTART);
+        }
+        if (!mAudioCoverAnimator.isStarted()) mAudioCoverAnimator.start();
+    }
+
+    private void stopAudioCoverRotation() {
+        if (mAudioCoverAnimator == null) return;
+        mAudioCoverAnimator.cancel();
+        mAudioCoverAnimator = null;
+    }
+
+    private void syncKaraokePosition() {
+        if (service() == null || player().isEmpty()) return;
+        long position = Math.max(0, player().getPosition() + PlayerSetting.getLyricsTimeOffsetMs());
+        boolean playing = player().isPlaying();
+        mBinding.karaoke.syncPosition(position, playing);
+        mBinding.audioKaraoke.syncPosition(position, playing);
+    }
+
+    private String getAudioStageTitle() {
+        Episode episode = getEpisode();
+        String queuedTitle = mAudioQueueTitles.get(audioQueueEpisodeKey(episode));
+        if (!TextUtils.isEmpty(queuedTitle)) return queuedTitle;
+        if (isAudioQueueEpisode(episode) && !TextUtils.isEmpty(episode.getDisplayName())) return episode.getDisplayName();
+        if (mHistory != null && !TextUtils.isEmpty(mHistory.getVodName())) return mHistory.getVodName();
+        if (!TextUtils.isEmpty(getName())) return getName();
+        CharSequence text = mBinding.name.getText();
+        return text == null ? "" : text.toString();
+    }
+
+    private String getAudioStageArtist(String title) {
+        Episode item = getEpisode();
+        String queuedArtist = mAudioQueueArtists.get(audioQueueEpisodeKey(item));
+        if (!TextUtils.isEmpty(queuedArtist)) return queuedArtist;
+        String episode = item == null ? "" : item.getName();
+        String artist = getArtistFromEpisode(title, cleanAudioEpisodeForArtist(episode));
+        return TextUtils.equals(artist, title) ? "" : artist;
+    }
+
+    private String getEpisodeArtwork(Episode episode) {
+        String queuedPic = mAudioQueuePics.get(audioQueueEpisodeKey(episode));
+        if (!TextUtils.isEmpty(queuedPic)) return queuedPic;
+        return mHistory == null ? "" : mHistory.getVodPic();
+    }
+
+    private Episode getPlaybackEpisode() {
+        String key = Objects.toString(mPlaybackEpisodeKey, "");
+        Flag flag = getFlag();
+        if (TextUtils.isEmpty(key) || flag == null) return getEpisode();
+        for (Episode episode : flag.getEpisodes()) if (TextUtils.equals(audioQueueEpisodeKey(episode), key)) return episode;
+        return getEpisode();
+    }
+
+    private String getEpisodeInlineLyrics(Episode episode) {
+        if (isAudioQueueEpisode(episode)) return Objects.toString(mAudioQueueLyrics.get(audioQueueEpisodeKey(episode)), "");
+        return mDetailLyrics;
+    }
+
+    private void applyPlaybackArtwork(Episode episode) {
+        loadArtwork(getEpisodeArtwork(episode), audioQueueEpisodeKey(episode));
+    }
+
+    private String cleanAudioEpisodeForArtist(String episode) {
+        String value = Objects.toString(episode, "").trim();
+        if (value.isEmpty()) return "";
+        String[] parts = value.split("[|｜]");
+        return parts.length == 0 ? value : parts[parts.length - 1].trim();
+    }
+
+    private void refreshKaraoke(boolean audioContent) {
+        if (mKaraoke == null || service() == null) return;
+        boolean loadTrack = !mSkipKaraokeTrackAutoLoad;
+        mKaraoke.refresh(this, player(), audioContent, loadTrack);
+    }
+
+    private boolean isLyricsSearchAvailable() {
+        if (mLyrics == null || service() == null) return false;
+        setAudioOnly(LyricsController.isAudioOnly(player()));
+        return shouldUseImmersiveAudio();
+    }
+
+    private String getLyricsSearchKeyword() {
+        if (service() == null) return getName();
+        LyricsRequest request = LyricsRequest.from(player());
+        return request.displayKeyword();
+    }
+
+    private List<String> getLyricsSearchSuggestions() {
+        if (service() == null) return withLastLyricsSearchSuggestion(LyricsRequest.searchSuggestions(getName()), getLyricsSearchSuggestionSignature(null, getName()));
+        LyricsRequest request = LyricsRequest.from(player());
+        return withLastLyricsSearchSuggestion(request.searchSuggestions(), getLyricsSearchSuggestionSignature(request, getName()));
+    }
+
+    private String getLyricsSearchCacheKey(String keyword) {
+        if (service() == null) return keyword;
+        return LyricsRequest.from(player()).withKeyword(keyword).signature();
+    }
+
+    private void rememberLyricsSearchKeyword(String keyword) {
+        rememberLyricsSearchKeyword(keyword, getLyricsSearchSignature());
+    }
+
+    private void rememberLyricsSearchKeyword(String keyword, String signature) {
+        String value = Objects.toString(keyword, "").trim();
+        if (TextUtils.isEmpty(value)) return;
+        mLyricsLastSearchSignature = signature;
+        mLyricsLastSearchKeyword = value;
+    }
+
+    private String getLyricsSearchSignature() {
+        if (service() == null) return getLyricsSearchSuggestionSignature(null, getName());
+        return getLyricsSearchSuggestionSignature(LyricsRequest.from(player()), getName());
+    }
+
+    private String getLyricsSearchSuggestionSignature(@Nullable LyricsRequest request, String fallback) {
+        if (request == null || TextUtils.isEmpty(request.getTitle())) return Objects.toString(fallback, "");
+        return "lyrics-ui|" + request.getTitle() + "|" + request.getArtist() + "|" + request.getDurationSec();
+    }
+
+    private List<String> withLastLyricsSearchSuggestion(List<String> suggestions, String signature) {
+        String keyword = Objects.toString(mLyricsLastSearchKeyword, "").trim();
+        if (TextUtils.isEmpty(keyword) || !TextUtils.equals(mLyricsLastSearchSignature, signature)) return suggestions;
+        List<String> values = new ArrayList<>();
+        values.add(keyword);
+        for (String suggestion : suggestions) {
+            String value = Objects.toString(suggestion, "").trim();
+            if (TextUtils.isEmpty(value) || containsLyricsSearchSuggestion(values, value)) continue;
+            values.add(value);
+            if (values.size() >= 8) break;
+        }
+        return values;
+    }
+
+    private boolean containsLyricsSearchSuggestion(List<String> suggestions, String keyword) {
+        for (String suggestion : suggestions) if (suggestion.equalsIgnoreCase(keyword)) return true;
+        return false;
+    }
+
+    private void searchLyrics(String keyword) {
+        searchLyrics(keyword, null, false);
+    }
+
+    private void searchLyrics(String keyword, @Nullable LyricsRequest baseRequest, boolean automatic) {
+        if (mLyrics == null || service() == null) return;
+        setAudioOnly(LyricsController.isAudioOnly(player()));
+        int seq = ++mLyricsSearchSeq;
+        LyricsRequest request = createLyricsSearchRequest(baseRequest, keyword);
+        String cacheKey = request == null ? Objects.toString(keyword, "") : request.signature();
+        rememberLyricsSearchKeyword(keyword, getLyricsSearchSuggestionSignature(request, keyword));
+        if (TextUtils.equals(mLyricsSearchKeyword, cacheKey) && mLyricsSearchResults != null && !mLyricsSearchResults.isEmpty()) {
+            showLyricsResults(seq, cacheKey, mLyricsSearchResults, true);
+            return;
+        }
+        boolean audioContent = shouldUseImmersiveAudio();
+        if (request == null || !audioContent) {
+            showLyricsResults(seq, cacheKey, List.of(), true);
+            return;
+        }
+        if (isLyricsSearchSheetShowing()) {
+            if (!automatic) clearLyricsInlineResults();
+            setLyricsSearchStatus(getString(R.string.player_lyrics_searching), true);
+        } else {
+            showLyricsSearching(seq);
+        }
+        mLyrics.search(request, (results, complete) -> showLyricsResults(seq, cacheKey, results, complete));
+    }
+
+    @Nullable
+    private LyricsRequest createLyricsSearchRequest(@Nullable LyricsRequest baseRequest, String keyword) {
+        try {
+            LyricsRequest request = baseRequest != null ? baseRequest : LyricsRequest.from(player());
+            return request == null ? null : request.withKeyword(keyword);
+        } catch (Throwable e) {
+            SpiderDebug.log("lyrics-ui", "search request failed keyword=%s error=%s", keyword, e.getMessage());
+            return null;
+        }
+    }
+
+    private boolean isLyricsSearchSheetShowing() {
+        return mLyricsSearchDialog != null && mLyricsSearchDialog.isShowing();
+    }
+
+    private void setLyricsSearchStatus(String text, boolean visible) {
+        if (mLyricsSearchStatus == null) return;
+        mLyricsSearchStatus.setText(Objects.toString(text, ""));
+        mLyricsSearchStatus.setVisibility(visible && !TextUtils.isEmpty(text) ? View.VISIBLE : View.GONE);
+    }
+
+    private void clearLyricsInlineResults() {
+        mLyricsSearchResults = null;
+        mLyricsSearchKeyword = "";
+        updateLyricsResultList(new String[0]);
+    }
+
+    private void showLyricsSearching(int seq) {
+        dismissLyricsResultDialog();
+        BottomSheetDialog dialog = createAudioSheet();
+        LinearLayout root = createAudioSheetRoot();
+        root.addView(createAudioSheetTitle(getString(R.string.player_lyrics_search)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(34)));
+        TextView message = createAudioSheetText(getString(R.string.player_lyrics_searching), 15, false);
+        root.addView(message, audioSheetTopParams(14, 44));
+        TextView cancel = createAudioSheetButton(getString(R.string.dialog_cancel), false, () -> {
+            if (seq == mLyricsSearchSeq) mLyricsSearchSeq++;
+            dialog.dismiss();
+        });
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.END);
+        actions.addView(cancel, audioSheetButtonParams(false));
+        root.addView(actions, audioSheetTopParams(10, 44));
+        dialog.setContentView(root);
+        dialog.setOnCancelListener(d -> {
+            if (seq == mLyricsSearchSeq) mLyricsSearchSeq++;
+        });
+        dialog.setOnDismissListener(d -> {
+            if (mLyricsResultDialog == dialog) mLyricsResultDialog = null;
+        });
+        mLyricsResultDialog = dialog;
+        showAudioSheet(dialog);
+    }
+
+    private void showLyricsResults(int seq, String cacheKey, List<LyricsResult> results, boolean complete) {
+        if (seq != mLyricsSearchSeq) return;
+        if (isFinishing()) return;
+        if (results == null || results.isEmpty()) {
+            if (complete) {
+                if (isLyricsSearchSheetShowing()) {
+                    clearLyricsInlineResults();
+                    setLyricsSearchStatus(getString(R.string.player_lyrics_not_found), true);
+                } else {
+                    dismissLyricsResultDialog();
+                    Notify.show(R.string.player_lyrics_not_found);
+                }
+            }
+            return;
+        }
+        mLyricsSearchResults = results;
+        mLyricsSearchKeyword = cacheKey;
+        if (isLyricsSearchSheetShowing()) setLyricsSearchStatus(getString(R.string.player_lyrics_select), true);
+        String[] labels = new String[results.size()];
+        for (int i = 0; i < results.size(); i++) labels[i] = getLyricsResultLabel(results.get(i));
+        if (mLyricsResultDialog != null && mLyricsResultList != null && mLyricsResultDialog.isShowing()) {
+            updateLyricsResultList(labels);
+            updateLyricsResultSheetHeight(labels.length);
+            return;
+        }
+        dismissLyricsResultDialog();
+        BottomSheetDialog dialog = createAudioSheet();
+        LinearLayout root = createAudioSheetRoot();
+        root.addView(createAudioSheetTitle(getString(R.string.player_lyrics_select)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(34)));
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        mLyricsResultList = new LinearLayout(this);
+        mLyricsResultList.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(mLyricsResultList, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(scroll, lyricsResultSheetParams(labels.length));
+        dialog.setContentView(root);
+        dialog.setOnCancelListener(d -> {
+            if (seq == mLyricsSearchSeq) mLyricsSearchSeq++;
+        });
+        dialog.setOnDismissListener(d -> {
+            if (mLyricsResultDialog == dialog) {
+                mLyricsResultDialog = null;
+                mLyricsResultList = null;
+            }
+        });
+        mLyricsResultDialog = dialog;
+        updateLyricsResultList(labels);
+        showCompactPlaybackSheet(dialog, false);
+    }
+
+    private void applyLyrics(LyricsResult result) {
+        if (mLyrics == null || service() == null) return;
+        mLyricsSearchSeq++;
+        mInlineLyrics = "";
+        mLyrics.apply(player(), result, true, applied -> {
+            if (applied != null) {
+                mLyricsSelectedResultKey = getLyricsResultKey(applied);
+            }
+            updateLyricsResultSelection();
+            Notify.show(applied == null ? getString(R.string.player_lyrics_not_found) : getString(R.string.player_lyrics_loaded, applied.getSource()));
+        });
+    }
+
+    private void updateLyricsResultSelection() {
+        if (mLyricsSearchResults == null) return;
+        String[] labels = new String[mLyricsSearchResults.size()];
+        for (int i = 0; i < mLyricsSearchResults.size(); i++) labels[i] = getLyricsResultLabel(mLyricsSearchResults.get(i));
+        updateLyricsResultList(labels);
+    }
+
+    private int getLyricsSelectedIndex() {
+        if (TextUtils.isEmpty(mLyricsSelectedResultKey) || mLyricsSearchResults == null) return -1;
+        for (int i = 0; i < mLyricsSearchResults.size(); i++) {
+            if (TextUtils.equals(mLyricsSelectedResultKey, getLyricsResultKey(mLyricsSearchResults.get(i)))) return i;
+        }
+        return -1;
+    }
+
+    private String getLyricsResultLabel(LyricsResult result) {
+        String title = TextUtils.isEmpty(result.getTrackName()) ? getString(R.string.player_lyrics_unknown) : result.getTrackName();
+        String artist = TextUtils.isEmpty(result.getArtistName()) ? getString(R.string.player_lyrics_unknown) : result.getArtistName();
+        String type = result.hasWordTiming() ? getString(R.string.player_lyrics_word) : result.isSynced() ? getString(R.string.player_lyrics_synced) : getString(R.string.player_lyrics_plain);
+        return getString(R.string.player_lyrics_result_item, result.getSource(), type, result.getScore(), title, artist);
+    }
+
+    private String getLyricsResultKey(LyricsResult result) {
+        if (result == null) return "";
+        return TextUtils.join("|", new String[]{
+                String.valueOf(result.getSource()),
+                String.valueOf(result.getTrackName()),
+                String.valueOf(result.getArtistName()),
+                String.valueOf(Math.round(result.getDurationMs() / 1000.0)),
+                String.valueOf(result.hasWordTiming()),
+                String.valueOf(result.getLyrics() == null ? 0 : result.getLyrics().hashCode())
+        });
+    }
+
+    private void clearLyrics() {
+        if (mLyrics != null) mLyrics.clear();
+    }
+
+    private void clearKaraokeState() {
+        mKaraokeResultShown = false;
+        if (mKaraoke != null) mKaraoke.clear();
+    }
+
+    private void dismissLyricsResultDialog() {
+        if (mLyricsResultDialog == null) return;
+        if (mLyricsSearchDialog == mLyricsResultDialog) mLyricsSearchDialog = null;
+        mLyricsResultDialog.dismiss();
+        mLyricsResultDialog = null;
+        mLyricsResultList = null;
+        mLyricsSearchStatus = null;
+    }
+
+    private void setDetailLyrics(String text) {
+        mDetailLyrics = getTimedLyrics(text);
+        mInlineLyrics = mDetailLyrics;
+    }
+
+    private void setPlaybackLyrics(String text) {
+        String lyrics = getTimedLyrics(text);
+        if (!TextUtils.isEmpty(lyrics)) mInlineLyrics = lyrics;
+    }
+
+    private String getTimedLyrics(String text) {
+        return LyricsController.hasTimedLyrics(text) ? text : "";
+    }
+
+    private LinearLayout createKaraokeSheetHeader(BottomSheetDialog dialog, String title, Runnable backAction) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        TextView titleView = createAudioSheetTitle(title);
+        row.addView(titleView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        row.addView(createKaraokeHeaderButton(dialog, getString(R.string.player_karaoke_track_back), backAction), new LinearLayout.LayoutParams(ResUtil.dp2px(76), ResUtil.dp2px(32)));
+        return row;
+    }
+
+    private TextView createKaraokeHeaderButton(BottomSheetDialog dialog, String label, Runnable action) {
+        TextView view = createAudioSheetText(label, 14, true);
+        view.setGravity(Gravity.CENTER);
+        view.setSingleLine(true);
+        view.setTextColor(0xE6FFFFFF);
+        view.setBackground(audioSheetControlBackground(0x12FFFFFF, 0x24FFFFFF));
+        setAudioSheetFocusable(view);
+        view.setOnClickListener(v -> {
+            dialog.dismiss();
+            action.run();
+        });
+        return view;
+    }
+
+    private View createKaraokeModeHeader() {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        boolean enabled = PlayerSetting.isKaraokeMode();
+        LinearLayout text = new LinearLayout(this);
+        text.setOrientation(LinearLayout.HORIZONTAL);
+        text.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = createAudioSheetText(getString(R.string.player_karaoke_mode), 15, true);
+        TextView status = createAudioSheetText(getString(enabled ? R.string.player_karaoke_mode_enabled : R.string.player_karaoke_mode_disabled), 13, false);
+        title.setTextColor(Color.WHITE);
+        status.setTextColor(enabled ? SHEET_TEXT_SECONDARY : SHEET_TEXT_MUTED);
+        text.addView(title);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        statusParams.leftMargin = ResUtil.dp2px(10);
+        text.addView(status, statusParams);
+        row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        FrameLayout toggle = createKaraokeModeToggle(enabled);
+        row.setFocusable(true);
+        row.setBackground(audioSheetItemBackground(false));
+        row.setOnClickListener(v -> {
+            boolean next = !PlayerSetting.isKaraokeMode();
+            setKaraokeMode(next);
+            status.setText(getString(next ? R.string.player_karaoke_mode_enabled : R.string.player_karaoke_mode_disabled));
+            status.setTextColor(next ? SHEET_TEXT_SECONDARY : SHEET_TEXT_MUTED);
+            updateKaraokeModeToggle(toggle, next);
+        });
+        row.addView(toggle, new LinearLayout.LayoutParams(ResUtil.dp2px(50), ResUtil.dp2px(28)));
+        return row;
+    }
+
+    private FrameLayout createKaraokeModeToggle(boolean enabled) {
+        FrameLayout toggle = new FrameLayout(this);
+        updateKaraokeModeToggle(toggle, enabled);
+        return toggle;
+    }
+
+    private void updateKaraokeModeToggle(FrameLayout toggle, boolean enabled) {
+        toggle.removeAllViews();
+        toggle.setBackground(roundRect(enabled ? SHEET_CONTROL_BG_SELECTED : 0x18FFFFFF, 8, 1, enabled ? SHEET_CONTROL_STROKE_SELECTED : 0x2EFFFFFF));
+        View knob = new View(this);
+        knob.setBackground(roundRect(enabled ? SHEET_TEXT_PRIMARY : 0xFFE6E8EE, 6, 0, 0));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ResUtil.dp2px(22), ResUtil.dp2px(22), enabled ? Gravity.RIGHT | Gravity.CENTER_VERTICAL : Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        params.leftMargin = ResUtil.dp2px(3);
+        params.rightMargin = ResUtil.dp2px(3);
+        toggle.addView(knob, params);
+    }
+
+    private View createLyricsOffsetControl() {
+        return createLyricsStepControl(getString(R.string.player_lyrics_offset), formatLyricsOffset(PlayerSetting.getLyricsTimeOffsetMs()), "-0.5s", "0", "+0.5s",
+                PlayerSetting::putLyricsTimeOffsetMs, PlayerSetting::getLyricsTimeOffsetMs,
+                LYRICS_OFFSET_MIN_MS, LYRICS_OFFSET_MAX_MS, LYRICS_OFFSET_STEP_MS, this::applyLyricsRuntimeSettings);
+    }
+
+    private View createKaraokeDelayControl() {
+        return createLyricsStepControl(getString(R.string.player_karaoke_mic_delay), getKaraokeDelayText(), "-0.1s", "0", "+0.1s",
+                PlayerSetting::putKaraokeMicDelayMs, PlayerSetting::getKaraokeMicDelayMs,
+                KARAOKE_DELAY_MIN_MS, KARAOKE_DELAY_MAX_MS, KARAOKE_DELAY_STEP_MS, this::reloadKaraokeTrack);
+    }
+
+    private View createLyricsStepControl(String label, String valueText, String minus, String reset, String plus, LyricsLongSetter setter, LyricsLongGetter getter, long min, long max, long step, Runnable afterChange) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(ResUtil.dp2px(12), 0, ResUtil.dp2px(10), 0);
+        row.setBackground(roundRect(0x12FFFFFF, SHEET_BUTTON_RADIUS_DP, 1, 0x22FFFFFF));
+        TextView title = createAudioSheetText(label, 15, false);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        TextView value = createAudioSheetText(valueText, 13, true);
+        value.setTextColor(SHEET_TEXT_SECONDARY);
+        row.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.addView(createLyricsStepButton(minus, () -> applyLyricsLongSetting(setter, getter, min, max, -step, value, afterChange)), lyricsStepButtonParams(false));
+        buttons.addView(createLyricsStepButton(reset, () -> applyLyricsLongSetting(setter, () -> 0L, min, max, 0, value, afterChange)), lyricsStepButtonParams(true));
+        buttons.addView(createLyricsStepButton(plus, () -> applyLyricsLongSetting(setter, getter, min, max, step, value, afterChange)), lyricsStepButtonParams(true));
+        row.addView(buttons);
+        return row;
+    }
+
+    private void applyLyricsLongSetting(LyricsLongSetter setter, LyricsLongGetter getter, long min, long max, long delta, TextView value, Runnable afterChange) {
+        setter.set(Math.min(Math.max(getter.get() + delta, min), max));
+        value.setText(formatLyricsOffset(getter.get()));
+        if (afterChange != null) afterChange.run();
+    }
+
+    private TextView createLyricsStepButton(String label, Runnable action) {
+        TextView view = createAudioSheetText(label, 13, true);
+        view.setGravity(Gravity.CENTER);
+        view.setBackground(audioSheetControlBackground(0x16FFFFFF, 0x28FFFFFF));
+        setAudioSheetFocusable(view);
+        view.setOnClickListener(v -> action.run());
+        return view;
+    }
+
+    private LinearLayout.LayoutParams lyricsStepButtonParams(boolean margin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ResUtil.dp2px(52), ResUtil.dp2px(34));
+        if (margin) params.leftMargin = ResUtil.dp2px(6);
+        return params;
+    }
+
+    private TextView createLyricsChoiceItem(String label, boolean selected, Runnable action) {
+        TextView item = createAudioSheetText(label, 15, selected);
+        item.setGravity(Gravity.CENTER);
+        item.setSingleLine(true);
+        item.setTextColor(selected ? SHEET_TEXT_PRIMARY : SHEET_TEXT_SECONDARY);
+        item.setBackground(lyricsResultItemBackground(selected));
+        setAudioSheetFocusable(item);
+        item.setOnClickListener(v -> action.run());
+        return item;
+    }
+
+    private LinearLayout.LayoutParams lyricsSettingRowParams(int topDp, int heightDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(heightDp));
+        params.topMargin = ResUtil.dp2px(topDp);
+        return params;
+    }
+
+    private void openLyricsSearchFromSettings() {
+        if (!onLyricsSearch()) Notify.show(R.string.player_lyrics_not_found);
+    }
+
+    private void clearLyricsCacheFromSettings() {
+        LyricsRepository.clearCache();
+        Notify.show(R.string.player_lyrics_cache_cleared);
+    }
+
+    private void applyLyricsRuntimeSettings() {
+        if (service() == null || player().isEmpty()) return;
+        if (mLyrics != null) {
+            mLyrics.refreshStyle();
+            mLyrics.update(player());
+        }
+        syncKaraokePosition();
+        if (mKaraoke != null) mKaraoke.update(player(), mLyrics == null ? null : mLyrics.getLines());
+    }
+
+    private void setOpening(long opening) {
+        mHistory.setOpening(opening);
+        mBinding.control.action.opening.setText(opening <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
+        syncHistory();
+    }
+
+    private String lyricsSizeText() {
+        String[] items = ResUtil.getStringArray(R.array.select_lyrics_size);
+        return items[PlayerSetting.getLyricsTextSizeOption()];
+    }
+
+    private String lyricsSourceText() {
+        String[] items = ResUtil.getStringArray(R.array.select_lyrics_source);
+        return items[LyricsSetting.getSourceMode()];
+    }
+
+    private String karaokeDifficultyText() {
+        String[] items = ResUtil.getStringArray(R.array.select_karaoke_difficulty);
+        return items[PlayerSetting.getKaraokeDifficulty()];
+    }
+
+    private String getLyricsRowsText() {
+        return getString(R.string.player_lyrics_rows_value, PlayerSetting.getLyricsRows());
+    }
+
+    private void setEnding(long ending) {
+        mHistory.setEnding(ending);
+        mBinding.control.action.ending.setText(ending <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
+        mOsd.setEnding(ending);
+        syncHistory();
+    }
+
+    private void setSubHead(long head) {
+        mHistory.setSubHead(head);
+        mBinding.control.action.subHead.setText(head <= 0 ? getString(R.string.play_sub_head) : Util.timeMs(head));
+        syncHistory();
+    }
+
+    private void setSubTail(long tail) {
+        mHistory.setSubTail(tail);
+        mBinding.control.action.subTail.setText(tail <= 0 ? getString(R.string.play_sub_tail) : Util.timeMs(tail));
+        syncHistory();
+    }
+
+    private String getKaraokeDelayText() {
+        return formatLyricsOffset(PlayerSetting.getKaraokeMicDelayMs());
+    }
+
+    private String formatLyricsOffset(long valueMs) {
+        if (valueMs == 0) return "0s";
+        return String.format(Locale.getDefault(), "%+.1fs", valueMs / 1000f);
+    }
+
+    private interface LyricsLongSetter {
+        void set(long value);
+    }
+
+    private interface LyricsLongGetter {
+        long get();
+    }
+
+    private LinearLayout createKaraokeActionGrid(BottomSheetDialog dialog, boolean compact, String[] labels, Runnable[] actions, int columns) {
+        return createKaraokeActionGrid(dialog, compact, labels, actions, columns, true);
+    }
+
+    private LinearLayout createKaraokeActionGrid(BottomSheetDialog dialog, boolean compact, String[] labels, Runnable[] actions, int columns, boolean dismissOnClick) {
+        return createKaraokeActionGrid(dialog, compact, labels, actions, null, columns, dismissOnClick);
+    }
+
+    private LinearLayout createKaraokeActionGrid(BottomSheetDialog dialog, boolean compact, String[] labels, Runnable[] actions, boolean[] dismissOnClicks, int columns) {
+        return createKaraokeActionGrid(dialog, compact, labels, actions, dismissOnClicks, columns, true);
+    }
+
+    private LinearLayout createKaraokeActionGrid(BottomSheetDialog dialog, boolean compact, String[] labels, Runnable[] actions, @Nullable boolean[] dismissOnClicks, int columns, boolean dismissOnClick) {
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        int safeColumns = Math.max(1, columns);
+        for (int i = 0; i < labels.length; i += safeColumns) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            boolean fullRow = !compact && i + 1 == labels.length;
+            for (int j = 0; j < safeColumns; j++) {
+                int index = i + j;
+                if (index >= labels.length) break;
+                boolean dismiss = dismissOnClicks == null || index >= dismissOnClicks.length ? dismissOnClick : dismissOnClicks[index];
+                row.addView(createKaraokeActionButton(dialog, labels[index], actions[index], compact, dismiss), fullRow ? karaokeActionButtonFullParams() : karaokeActionButtonParams(j > 0));
+                if (fullRow) break;
+            }
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(compact ? 46 : 48));
+            if (i > 0) rowParams.topMargin = ResUtil.dp2px(8);
+            grid.addView(row, rowParams);
+        }
+        return grid;
+    }
+
+    private TextView createKaraokeActionButton(BottomSheetDialog dialog, String label, Runnable action, boolean compact, boolean dismissOnClick) {
+        TextView view = createAudioSheetText(label, compact ? 14 : 15, true);
+        view.setGravity(Gravity.CENTER);
+        view.setSingleLine(true);
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setPadding(ResUtil.dp2px(10), 0, ResUtil.dp2px(10), 0);
+        view.setTextColor(0xF2FFFFFF);
+        view.setBackground(audioSheetControlBackground(0x14FFFFFF, 0x22FFFFFF));
+        setAudioSheetFocusable(view);
+        view.setOnClickListener(v -> {
+            if (dismissOnClick) dialog.dismiss();
+            action.run();
+        });
+        return view;
+    }
+
+    private LinearLayout.LayoutParams karaokeActionGridParams(int topMarginDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = ResUtil.dp2px(topMarginDp);
+        return params;
+    }
+
+    private LinearLayout.LayoutParams karaokeActionButtonParams(boolean withStartMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
+        if (withStartMargin) params.leftMargin = ResUtil.dp2px(10);
+        return params;
+    }
+
+    private LinearLayout.LayoutParams karaokeActionButtonFullParams() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+    }
+
+    private BottomSheetDialog createAudioSheet() {
+        return new BottomSheetDialog(this);
+    }
+
+    private Dialog createAudioQueueDialog() {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+        return dialog;
+    }
+
+    private LinearLayout createAudioSheetRoot() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(ResUtil.dp2px(24), ResUtil.dp2px(10), ResUtil.dp2px(24), ResUtil.dp2px(18) + mEpisodeBottomInset);
+        root.setBackground(audioSheetGlassBackground());
+        View handle = new View(this);
+        handle.setBackground(roundRect(0x55FFFFFF, 2, 0, 0));
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(ResUtil.dp2px(38), ResUtil.dp2px(4));
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL;
+        handleParams.bottomMargin = ResUtil.dp2px(14);
+        root.addView(handle, handleParams);
+        if (isLandscapeAudioSheet()) styleAudioDrawerRoot(root);
+        return root;
+    }
+
+    private boolean isLandscapeAudioSheet() {
+        return mAudioStageVisible && ResUtil.isLand(this);
+    }
+
+    private void styleAudioDrawerRoot(LinearLayout root) {
+        root.setPadding(ResUtil.dp2px(22), ResUtil.dp2px(10), ResUtil.dp2px(22), ResUtil.dp2px(14));
+        int height = audioDrawerHeight();
+        root.setMinimumHeight(height);
+        root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height));
+        root.setBackground(audioDrawerBackground());
+    }
+
+    private void styleAudioQueueDrawerRoot(LinearLayout root) {
+        root.setPadding(ResUtil.dp2px(22), ResUtil.dp2px(10), ResUtil.dp2px(22), ResUtil.dp2px(14));
+        int height = audioQueueDrawerHeight();
+        root.setMinimumHeight(height);
+        root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height));
+        root.setBackground(audioDrawerBackground());
+    }
+
+    private TextView createAudioSheetTitle(String text) {
+        TextView title = createAudioSheetText(text, 17, true);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        return title;
+    }
+
+    private TextView createAudioSheetText(String text, int sizeSp, boolean bold) {
+        TextView view = new TextView(this);
+        view.setText(text);
+        view.setTextColor(Color.WHITE);
+        view.setTextSize(sizeSp);
+        view.setTypeface(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL);
+        return view;
+    }
+
+    private TextView createAudioSheetItem(String label, Runnable action) {
+        TextView view = createAudioSheetText(label, 15, false);
+        view.setGravity(Gravity.CENTER_VERTICAL);
+        view.setPadding(ResUtil.dp2px(12), 0, ResUtil.dp2px(12), 0);
+        view.setBackground(audioSheetItemBackground(false));
+        view.setSingleLine(false);
+        view.setMaxLines(2);
+        setAudioSheetFocusable(view);
+        view.setOnClickListener(v -> action.run());
+        return view;
+    }
+
+    private TextView createAudioSheetButton(String label, boolean primary, Runnable action) {
+        TextView view = createAudioSheetText(label, 15, true);
+        view.setGravity(Gravity.CENTER);
+        view.setSingleLine(true);
+        view.setTextColor(SHEET_TEXT_PRIMARY);
+        view.setBackground(audioSheetControlBackground(primary ? SHEET_CONTROL_BG_SELECTED : SHEET_CONTROL_BG, primary ? SHEET_CONTROL_STROKE_SELECTED : 0x32FFFFFF));
+        setAudioSheetFocusable(view);
+        view.setOnClickListener(v -> action.run());
+        return view;
+    }
+
+    private TextView createAudioSheetMiniButton(String label, boolean primary, Runnable action) {
+        TextView view = createAudioSheetText(label, 13, true);
+        view.setGravity(Gravity.CENTER);
+        view.setSingleLine(true);
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setTextColor(SHEET_TEXT_PRIMARY);
+        view.setBackground(audioSheetControlBackground(primary ? SHEET_CONTROL_BG_SELECTED : SHEET_CONTROL_BG, primary ? SHEET_CONTROL_STROKE_SELECTED : SHEET_CONTROL_STROKE));
+        setAudioSheetFocusable(view);
+        view.setOnClickListener(v -> action.run());
+        return view;
+    }
+
+    private ImageView createAudioSheetIconButton(int resId, Runnable action) {
+        ImageView view = new ImageView(this);
+        view.setImageResource(resId);
+        view.setColorFilter(SHEET_TEXT_SECONDARY);
+        view.setPadding(ResUtil.dp2px(12), ResUtil.dp2px(12), ResUtil.dp2px(12), ResUtil.dp2px(12));
+        view.setBackground(audioSheetControlBackground(0x16FFFFFF, 0x32FFFFFF));
+        setAudioSheetFocusable(view);
+        view.setOnClickListener(v -> action.run());
+        return view;
+    }
+
+    private ImageView createAudioSheetInlineIconButton(int resId, Runnable action) {
+        ImageView view = new ImageView(this);
+        view.setImageResource(resId);
+        view.setColorFilter(SHEET_TEXT_SECONDARY);
+        view.setPadding(ResUtil.dp2px(9), ResUtil.dp2px(9), ResUtil.dp2px(9), ResUtil.dp2px(9));
+        view.setBackground(audioSheetControlBackground(0x10FFFFFF, 0x22FFFFFF));
+        setAudioSheetFocusable(view);
+        view.setOnClickListener(v -> action.run());
+        return view;
+    }
+
+    private LinearLayout createSegmentedControl(String[] labels, int selectedIndex, SegmentClickHandler handler) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(ResUtil.dp2px(2), ResUtil.dp2px(2), ResUtil.dp2px(2), ResUtil.dp2px(2));
+        row.setBackground(roundRect(0x12FFFFFF, SHEET_BUTTON_RADIUS_DP, 1, 0x24FFFFFF));
+        for (int i = 0; i < labels.length; i++) {
+            final int index = i;
+            boolean selected = index == selectedIndex;
+            TextView item = createAudioSheetText(labels[i], 13, true);
+            item.setGravity(Gravity.CENTER);
+            item.setSingleLine(true);
+            item.setEllipsize(TextUtils.TruncateAt.END);
+            item.setPadding(ResUtil.dp2px(6), 0, ResUtil.dp2px(6), 0);
+            item.setTextColor(selected ? SHEET_TEXT_PRIMARY : 0xE6FFFFFF);
+            item.setBackground(audioSheetSegmentBackground(selected));
+            setAudioSheetFocusable(item);
+            item.setOnClickListener(v -> handler.onClick(index));
+            row.addView(item, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        }
+        return row;
+    }
+
+    private void setAudioSheetFocusable(View view) {
+        view.setFocusable(true);
+        view.setFocusableInTouchMode(false);
+    }
+
+    private interface SegmentClickHandler {
+        void onClick(int index);
+    }
+
+    private LinearLayout.LayoutParams audioSheetButtonParams(boolean withStartMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ResUtil.dp2px(108), ViewGroup.LayoutParams.MATCH_PARENT);
+        if (withStartMargin) params.leftMargin = ResUtil.dp2px(10);
+        return params;
+    }
+
+    private LinearLayout.LayoutParams audioSheetMiniButtonParams(int widthDp, boolean withStartMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ResUtil.dp2px(widthDp), ResUtil.dp2px(32));
+        if (withStartMargin) params.leftMargin = ResUtil.dp2px(6);
+        return params;
+    }
+
+    private Drawable audioSheetItemBackground(boolean selected) {
+        return audioSheetSelectableBackground(selected ? SHEET_CONTROL_BG_SELECTED : 0x00000000, selected ? SHEET_CONTROL_STROKE_SELECTED : 0, SHEET_CONTROL_BG_SELECTED, SHEET_CONTROL_STROKE_SELECTED, SHEET_BUTTON_RADIUS_DP);
+    }
+
+    private Drawable audioSheetControlBackground(int normalColor, int normalStroke) {
+        return audioSheetSelectableBackground(normalColor, normalStroke, 0x3DFFFFFF, 0x80FFFFFF, SHEET_BUTTON_RADIUS_DP);
+    }
+
+    private Drawable audioSheetSegmentBackground(boolean selected) {
+        return audioSheetSelectableBackground(selected ? SHEET_CONTROL_BG_SELECTED : 0x00000000, 0, selected ? SHEET_CONTROL_BG_SELECTED : 0x2AFFFFFF, selected ? SHEET_CONTROL_STROKE_SELECTED : 0x66FFFFFF, SHEET_SEGMENT_RADIUS_DP);
+    }
+
+    private Drawable audioSheetSelectableBackground(int normalColor, int normalStroke, int focusedColor, int focusedStroke, int radiusDp) {
+        android.graphics.drawable.StateListDrawable drawable = new android.graphics.drawable.StateListDrawable();
+        drawable.addState(new int[]{android.R.attr.state_pressed}, roundRect(focusedColor, radiusDp, 1, focusedStroke));
+        drawable.addState(new int[]{android.R.attr.state_focused}, roundRect(focusedColor, radiusDp, 1, focusedStroke));
+        drawable.addState(new int[]{android.R.attr.state_selected}, roundRect(focusedColor, radiusDp, 1, focusedStroke));
+        drawable.addState(new int[]{}, roundRect(normalColor, radiusDp, normalStroke == 0 ? 0 : 1, normalStroke));
+        return drawable;
+    }
+
+    private void styleAudioSheetInput(TextInputLayout layout, String hint) {
+        layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        layout.setBoxBackgroundColor(0x14FFFFFF);
+        layout.setBoxStrokeColor(0x66FFFFFF);
+        layout.setDefaultHintTextColor(ColorStateList.valueOf(0xA6FFFFFF));
+        layout.setHintTextColor(ColorStateList.valueOf(0xD9FFFFFF));
+        layout.setHint(hint);
+    }
+
+    private GradientDrawable roundRect(int color, int radiusDp, int strokeDp, int strokeColor) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(ResUtil.dp2px(radiusDp));
+        if (strokeDp > 0) drawable.setStroke(ResUtil.dp2px(strokeDp), strokeColor);
+        return drawable;
+    }
+
+    private GradientDrawable audioDrawerBackground() {
+        GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR, audioGlassColors());
+        drawable.setCornerRadius(ResUtil.dp2px(18));
+        drawable.setStroke(ResUtil.dp2px(1), 0x66FFFFFF);
+        return drawable;
+    }
+
+    private GradientDrawable audioSheetGlassBackground() {
+        GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR, audioGlassColors());
+        float radius = ResUtil.dp2px(22);
+        drawable.setCornerRadii(new float[]{radius, radius, radius, radius, 0, 0, 0, 0});
+        drawable.setStroke(ResUtil.dp2px(1), 0x66FFFFFF);
+        return drawable;
+    }
+
+    private int[] audioGlassColors() {
+        return new int[]{0xB22F315E, 0x96282955, 0x82303463};
+    }
+
+    private LinearLayout.LayoutParams audioSheetTopParams(int topDp, int heightDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(heightDp));
+        params.topMargin = ResUtil.dp2px(topDp);
+        return params;
+    }
+
+    private LinearLayout.LayoutParams audioSheetWrapTopParams(int topDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = ResUtil.dp2px(topDp);
+        return params;
+    }
+
+    private int audioQueueContentHeight(int tab) {
+        if (tab == AUDIO_QUEUE_TAB_SEARCH) {
+            int max = isLandscapeAudioSheet() ? audioDrawerListMaxHeight() : ResUtil.getScreenHeight(this) * (ResUtil.isLand(this) ? 32 : 28) / 100;
+            int desired = isLandscapeAudioSheet() ? 320 : ResUtil.isLand(this) ? 150 : 170;
+            return Math.max(ResUtil.dp2px(126), Math.min(ResUtil.dp2px(desired), max));
+        }
+        int max = isLandscapeAudioSheet() ? audioDrawerListMaxHeight() : ResUtil.getScreenHeight(this) * (ResUtil.isLand(this) ? 46 : 56) / 100;
+        if (isLandscapeAudioSheet()) return audioQueueDrawerListMaxHeight();
+        Flag flag = getFlag();
+        int count = flag == null ? 1 : Math.max(1, Math.min(isLandscapeAudioSheet() ? 12 : 8, flag.getEpisodes().size()));
+        int desired = 8 + count * 46;
+        return Math.max(ResUtil.dp2px(102), Math.min(ResUtil.dp2px(desired), max));
+    }
+
+    private int lyricsResultSheetHeight(int count) {
+        if (isLandscapeAudioSheet()) {
+            int rows = Math.max(1, Math.min(7, count));
+            return Math.max(ResUtil.dp2px(126), Math.min(ResUtil.dp2px(rows * 64 + 8), audioDrawerListMaxHeight()));
+        }
+        int rows = Math.max(1, Math.min(3, count));
+        return ResUtil.dp2px(rows * 64 + 8);
+    }
+
+    private LinearLayout.LayoutParams lyricsResultSheetParams(int count) {
+        if (isLandscapeAudioSheet()) return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1);
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, lyricsResultSheetHeight(count));
+    }
+
+    private int karaokeTrackResultSheetHeight(int count) {
+        if (isLandscapeAudioSheet()) {
+            int rows = Math.max(1, Math.min(5, count));
+            return Math.max(ResUtil.dp2px(160), Math.min(ResUtil.dp2px(rows * 82 + 8), audioDrawerListMaxHeight()));
+        }
+        int rows = Math.max(1, Math.min(3, count));
+        return ResUtil.dp2px(rows * 82 + 8);
+    }
+
+    private void showAudioSheet(BottomSheetDialog dialog) {
+        showAudioSheet(dialog, true);
+    }
+
+    private void showAudioSheet(BottomSheetDialog dialog, boolean draggable) {
+        showAudioSheet(dialog, draggable, false);
+    }
+
+    private void showAudioSheet(BottomSheetDialog dialog, boolean draggable, boolean drawerAtStart) {
+        if (isLandscapeAudioSheet()) {
+            showAudioDrawerSheet(dialog, drawerAtStart);
+            return;
+        }
+        dialog.setOnShowListener(d -> {
+            FrameLayout sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+            if (sheet == null) return;
+            sheet.setBackgroundColor(Color.TRANSPARENT);
+            BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(sheet);
+            behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+            behavior.setSkipCollapsed(true);
+            behavior.setDraggable(draggable);
+            hideSystemBarsForAudioSheet(dialog);
+        });
+        dialog.show();
+        applyAudioSheetWindowGlass(dialog);
+        hideSystemBarsForAudioSheet(dialog);
+        focusAudioSheetContent(dialog);
+    }
+
+    private void showCompactPlaybackSheet(BottomSheetDialog dialog) {
+        showCompactPlaybackSheet(dialog, true);
+    }
+
+    private void showCompactPlaybackSheet(BottomSheetDialog dialog, boolean draggable) {
+        showCompactPlaybackSheet(dialog, draggable, false);
+    }
+
+    private void showCompactPlaybackSheet(BottomSheetDialog dialog, boolean draggable, boolean drawerAtStart) {
+        showAudioSheet(dialog, draggable, drawerAtStart);
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        WindowManager.LayoutParams params = window.getAttributes();
+        params.dimAmount = 0f;
+        window.setAttributes(params);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+    }
+
+    private void showLyricsSearchSheetDialog(BottomSheetDialog dialog) {
+        if (!ResUtil.isLand(this)) {
+            showCompactPlaybackSheet(dialog);
+            return;
+        }
+        dialog.setOnShowListener(d -> {
+            FrameLayout sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+            if (sheet == null) return;
+            sheet.setBackgroundColor(Color.TRANSPARENT);
+            int height = audioDrawerHeight();
+            ViewGroup.LayoutParams params = sheet.getLayoutParams();
+            params.height = height;
+            sheet.setLayoutParams(params);
+            BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(sheet);
+            behavior.setFitToContents(false);
+            behavior.setExpandedOffset(Math.max(0, ResUtil.getScreenHeight(this) - height));
+            behavior.setPeekHeight(height);
+            behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+            behavior.setSkipCollapsed(true);
+            behavior.setDraggable(false);
+            hideSystemBarsForAudioSheet(dialog);
+        });
+        dialog.show();
+        applyAudioSheetWindowGlass(dialog);
+        hideSystemBarsForAudioSheet(dialog);
+        focusAudioSheetContent(dialog);
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        WindowManager.LayoutParams params = window.getAttributes();
+        params.dimAmount = 0f;
+        window.setAttributes(params);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+    }
+
+    private void showAudioDrawerSheet(BottomSheetDialog dialog, boolean atStart) {
+        dialog.setOnShowListener(d -> {
+            FrameLayout sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+            if (sheet == null) return;
+            sheet.setBackgroundColor(Color.TRANSPARENT);
+            int height = audioDrawerHeight();
+            int bottomMargin = audioDrawerBottomMargin();
+            ViewGroup.LayoutParams raw = sheet.getLayoutParams();
+            raw.width = audioDrawerWidth();
+            raw.height = height;
+            if (raw instanceof CoordinatorLayout.LayoutParams params) {
+                params.gravity = (atStart ? Gravity.START : Gravity.END) | Gravity.BOTTOM;
+                params.setMargins(atStart ? ResUtil.dp2px(16) : 0, mStatusBarInset + ResUtil.dp2px(16), atStart ? 0 : ResUtil.dp2px(16), bottomMargin);
+            } else if (raw instanceof ViewGroup.MarginLayoutParams params) {
+                params.setMargins(atStart ? ResUtil.dp2px(16) : 0, mStatusBarInset + ResUtil.dp2px(16), atStart ? 0 : ResUtil.dp2px(16), bottomMargin);
+            }
+            sheet.setLayoutParams(raw);
+            BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(sheet);
+            behavior.setFitToContents(false);
+            behavior.setExpandedOffset(Math.max(0, ResUtil.getScreenHeight(this) - height - bottomMargin));
+            behavior.setPeekHeight(height);
+            behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+            behavior.setSkipCollapsed(true);
+            behavior.setDraggable(false);
+            hideSystemBarsForAudioSheet(dialog);
+        });
+        dialog.show();
+        applyAudioSheetWindowGlass(dialog);
+        hideSystemBarsForAudioSheet(dialog);
+        focusAudioSheetContent(dialog);
+    }
+
+    private void showAudioQueueDrawerDialog(Dialog dialog) {
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        int height = audioQueueDrawerHeight();
+        int top = Math.max(0, audioQueueDrawerScreenHeight() - height - audioDrawerBottomMargin());
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        window.getDecorView().setPadding(0, 0, 0, 0);
+        WindowManager.LayoutParams params = window.getAttributes();
+        params.width = audioDrawerWidth();
+        params.height = height;
+        params.gravity = Gravity.TOP | Gravity.END;
+        params.x = ResUtil.dp2px(16);
+        params.y = top;
+        params.dimAmount = 0f;
+        params.windowAnimations = 0;
+        window.setAttributes(params);
+        window.setLayout(audioDrawerWidth(), height);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
+        hideSystemBarsForAudioDialog(dialog);
+        focusAudioQueueSelectedItem();
+    }
+
+    private void focusAudioSheetContent(BottomSheetDialog dialog) {
+        if (dialog == null) return;
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        View decor = window.getDecorView();
+        decor.post(() -> focusFirstChild(decor));
+        decor.postDelayed(() -> focusFirstChild(decor), 160);
+        decor.postDelayed(() -> focusFirstChild(decor), 360);
+    }
+
+    private void applyAudioSheetWindowGlass(BottomSheetDialog dialog) {
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        WindowManager.LayoutParams params = window.getAttributes();
+        params.dimAmount = 0f;
+        window.setAttributes(params);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
+    }
+
+    private void hideSystemBarsForAudioSheet(BottomSheetDialog dialog) {
+        Window window = dialog.getWindow();
+        if (window != null) {
+            Util.hideSystemUI(window);
+            window.getDecorView().post(() -> Util.hideSystemUI(window));
+        }
+        Util.hideSystemUI(this);
+        mBinding.getRoot().post(() -> Util.hideSystemUI(this));
+    }
+
+    private void hideSystemBarsForAudioDialog(Dialog dialog) {
+        Window window = dialog.getWindow();
+        if (window != null) {
+            Util.hideSystemUI(window);
+            window.getDecorView().post(() -> Util.hideSystemUI(window));
+        }
+        Util.hideSystemUI(this);
+        mBinding.getRoot().post(() -> Util.hideSystemUI(this));
+    }
+
+    private int audioDrawerWidth() {
+        return clamp(Math.round(ResUtil.getScreenWidth(this) * 0.42f), ResUtil.dp2px(380), ResUtil.dp2px(560));
+    }
+
+    private int audioDrawerHeight() {
+        int screenHeight = ResUtil.getScreenHeight(this);
+        int topMargin = mStatusBarInset + ResUtil.dp2px(16);
+        int bottomMargin = audioDrawerBottomMargin();
+        int max = Math.max(ResUtil.dp2px(320), screenHeight - topMargin - bottomMargin);
+        return clamp(Math.round(screenHeight * 0.84f), ResUtil.dp2px(320), max);
+    }
+
+    private int audioQueueDrawerHeight() {
+        int screenHeight = audioQueueDrawerScreenHeight();
+        int topMargin = mStatusBarInset + ResUtil.dp2px(16);
+        int bottomMargin = audioDrawerBottomMargin();
+        int max = Math.max(ResUtil.dp2px(320), screenHeight - topMargin - bottomMargin);
+        return clamp(Math.round(screenHeight * 0.84f), ResUtil.dp2px(320), max);
+    }
+
+    private int audioQueueDrawerScreenHeight() {
+        int height = ResUtil.getScreenHeight(this);
+        if (mBinding != null && mBinding.getRoot().getHeight() > 0) height = Math.max(height, mBinding.getRoot().getHeight());
+        android.view.Display.Mode mode = getWindowManager().getDefaultDisplay().getMode();
+        int modeHeight = ResUtil.isLand(this) ? Math.min(mode.getPhysicalWidth(), mode.getPhysicalHeight()) : Math.max(mode.getPhysicalWidth(), mode.getPhysicalHeight());
+        return Math.max(height, modeHeight);
+    }
+
+    private int audioDrawerBottomMargin() {
+        return ResUtil.dp2px(16) + mEpisodeBottomInset;
+    }
+
+    private int audioDrawerListMaxHeight() {
+        return Math.max(ResUtil.dp2px(126), audioDrawerHeight() - ResUtil.dp2px(88));
+    }
+
+    private int audioQueueDrawerListMaxHeight() {
+        return Math.max(ResUtil.dp2px(126), audioQueueDrawerHeight() - ResUtil.dp2px(88));
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private void showAudioBackgroundSheet(BottomSheetDialog dialog) {
+        showAudioSheet(dialog);
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        WindowManager.LayoutParams params = window.getAttributes();
+        params.dimAmount = 0f;
+        window.setAttributes(params);
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+    }
+
+    private void showLyricsSettingsSheet(BottomSheetDialog dialog) {
+        showCompactPlaybackSheet(dialog, false, true);
+    }
+
+    private void updateLyricsResultList(String[] labels) {
+        if (mLyricsResultList == null) return;
+        mLyricsResultList.removeAllViews();
+        if (mLyricsResultList.getParent() instanceof View scroll) scroll.setVisibility(labels.length == 0 ? View.GONE : View.VISIBLE);
+        int selected = getLyricsSelectedIndex();
+        for (int i = 0; i < labels.length; i++) {
+            final int index = i;
+            TextView item = createLyricsResultItem(labels[i], i == selected, () -> {
+                if (mLyricsSearchResults != null && index >= 0 && index < mLyricsSearchResults.size()) applyLyrics(mLyricsSearchResults.get(index));
+            });
+            mLyricsResultList.addView(item, lyricsResultItemParams(i == 0));
+        }
+    }
+
+    private void updateLyricsResultSheetHeight(int count) {
+        if (mLyricsResultList == null) return;
+        if (!(mLyricsResultList.getParent() instanceof View scroll)) return;
+        if (mLyricsSearchDialog == mLyricsResultDialog) return;
+        ViewGroup.LayoutParams params = scroll.getLayoutParams();
+        int height = isLandscapeAudioSheet() ? 0 : lyricsResultSheetHeight(count);
+        if (params != null && params.height != height) {
+            params.height = height;
+            scroll.setLayoutParams(params);
+        }
+        scroll.requestLayout();
+        mLyricsResultList.requestLayout();
+        if (mLyricsResultDialog == null) return;
+        FrameLayout sheet = mLyricsResultDialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+        if (sheet == null) return;
+        sheet.requestLayout();
+        sheet.post(() -> {
+            if (mLyricsResultDialog == null || !mLyricsResultDialog.isShowing()) return;
+            FrameLayout current = mLyricsResultDialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+            if (current == null) return;
+            BottomSheetBehavior.from(current).setState(BottomSheetBehavior.STATE_EXPANDED);
+        });
+    }
+
+    private TextView createLyricsResultItem(String label, boolean selected, Runnable action) {
+        TextView item = createAudioSheetText(label, 15, false);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(ResUtil.dp2px(14), 0, ResUtil.dp2px(14), 0);
+        item.setSingleLine(false);
+        item.setMaxLines(2);
+        item.setLineSpacing(ResUtil.dp2px(2), 1.0f);
+        item.setTextColor(selected ? SHEET_TEXT_PRIMARY : SHEET_TEXT_SECONDARY);
+        item.setBackground(lyricsResultItemBackground(selected));
+        setAudioSheetFocusable(item);
+        item.setOnClickListener(v -> action.run());
+        return item;
+    }
+
+    private LinearLayout.LayoutParams lyricsResultItemParams(boolean first) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(58));
+        params.topMargin = ResUtil.dp2px(first ? 8 : 6);
+        return params;
+    }
+
+    private TextView createKaraokeTrackResultItem(String label, Runnable action) {
+        TextView item = createAudioSheetText(label, 14, false);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(ResUtil.dp2px(14), 0, ResUtil.dp2px(14), 0);
+        item.setSingleLine(false);
+        item.setMaxLines(3);
+        item.setLineSpacing(ResUtil.dp2px(2), 1.0f);
+        item.setTextColor(Color.WHITE);
+        item.setBackground(lyricsResultItemBackground(false));
+        item.setOnClickListener(v -> action.run());
+        return item;
+    }
+
+    private Drawable lyricsResultItemBackground(boolean selected) {
+        return audioSheetSelectableBackground(selected ? SHEET_CONTROL_BG_SELECTED : SHEET_CONTROL_BG_SUBTLE, selected ? SHEET_CONTROL_STROKE_SELECTED : SHEET_CONTROL_STROKE, SHEET_CONTROL_BG_SELECTED, SHEET_CONTROL_STROKE_SELECTED, SHEET_BUTTON_RADIUS_DP);
+    }
+
+    private boolean showInlineLyrics() {
+        if (TextUtils.isEmpty(mInlineLyrics) || !LyricsController.hasTimedLyrics(mInlineLyrics)) return false;
+        Episode episode = getPlaybackEpisode();
+        String title = getAudioStageTitle();
+        String artist = getAudioStageArtist(title);
+        String signature = getHistoryKey() + "|" + audioQueueEpisodeKey(episode);
+        return mLyrics.setInlineLyrics(signature, title, artist, mInlineLyrics, player().getDuration(), player().getPosition());
+    }
+
+    private boolean isMusicLike() {
+        String flag = mFlagAdapter == null || mFlagAdapter.getItemCount() == 0 ? "" : getFlag().getShow();
+        Site site = getSite();
+        String text = (getKey() + " " + (site == null ? "" : site.getKey()) + " " + (site == null ? "" : site.getName()) + " " + flag + " " + getName());
+        return LyricsController.isMusicLikeText(text);
+    }
+
+    private String getLyricsArtist(String title) {
+        return getArtistFromEpisode(title, getEpisode().getName());
+    }
+
+    private String getArtistFromEpisode(String title, String episode) {
+        String name = Objects.toString(title, "").trim();
+        String value = Objects.toString(episode, "").trim();
+        if (name.isEmpty() || value.isEmpty() || TextUtils.equals(name, value)) return "";
+        for (String separator : new String[]{" - ", " – ", " — ", "-"}) {
+            if (value.startsWith(name + separator) && value.length() > name.length() + separator.length()) {
+                return value.substring(name.length() + separator.length()).trim();
+            }
+            if (value.endsWith(separator + name) && value.length() > name.length() + separator.length()) {
+                return value.substring(0, value.length() - name.length() - separator.length()).trim();
+            }
+        }
+        return value;
     }
 
     @Override
@@ -6727,7 +8777,7 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onError(String msg) {
-        invalidateShortDramaQueue("error");
+        if (isFinishing() || isDestroyed()) return;
         recordPlayHealth(false, msg);
         subtitlePlaybackSession.stop(this);
         Track.delete(player().getKey());
@@ -6753,7 +8803,7 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onReload(String msg) {
-        recordPlayHealth(false, msg);
+        if (isFinishing() || isDestroyed()) return;
         if (PlayerManager.RELOAD_LUT_WARMUP.equals(msg)) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("lut-ui", "auto refresh after lut warmup playback failure key=%s episode=%s", getKey(), getEpisode() == null ? null : getEpisode().getName());
             onRefresh();
@@ -6764,7 +8814,7 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onReclaim() {
-        if (!canApplyPlayerResult()) return;
+        if (isFinishing() || isDestroyed()) return;
         Result result = mViewModel.getPlayer().getValue();
         if (result != null) setPlayer(result);
     }
@@ -6776,6 +8826,7 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onStateChanged(int state) {
+        if (isFinishing() || isDestroyed()) return;
         switch (state) {
             case Player.STATE_BUFFERING:
                 showProgress();
@@ -6830,6 +8881,7 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
+        if (isFinishing() || isDestroyed()) return;
         syncKaraokePosition();
         checkAudioPlayImg(isPlaying);
         if (isPlaying) {
@@ -6842,13 +8894,17 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onSizeChanged(VideoSize size) {
+        if (isFinishing() || isDestroyed()) return;
         applyResizeMode(getScale());
+        applyVideoRotation();
         mBinding.widget.size.setText(player().getSizeText());
     }
 
     @Override
     protected void onSurfaceAttached() {
+        if (isFinishing() || isDestroyed()) return;
         applyResizeMode(getScale());
+        applyVideoRotation();
     }
 
     /**
@@ -6927,9 +8983,67 @@ private boolean runtimeSourceOnly;
     }
 
     @Override
+    public void onShooterClick() {
+        PlayerManager pm = service() == null ? null : player();
+        if (pm == null) return;
+        String url = pm.getUrl();
+        if (TextUtils.isEmpty(url)) return;
+        Notify.show("射手字幕：搜索中...");
+        Task.execute(() -> {
+            try {
+                List<ShooterSubtitleHelper.Candidate> items = ShooterSubtitleHelper.searchUrl(url);
+                App.post(() -> SubtitlePickerDialog.show(this, items, new SubtitlePickerDialog.Listener() {
+                    @Override public void onPick(ShooterSubtitleHelper.Candidate candidate) {
+                        applyShooterSubtitle(candidate);
+                    }
+                    @Override public void onEmpty() {
+                        Notify.show("射手字幕：未找到匹配字幕");
+                    }
+                }));
+            } catch (Exception e) {
+                SpiderDebug.log("ShooterSub", "search fail: " + e);
+                App.post(() -> Notify.show("射手字幕：搜索失败"));
+            }
+        });
+    }
+ 
+    private void applyShooterSubtitle(ShooterSubtitleHelper.Candidate candidate) {
+        Task.execute(() -> {
+            try {
+                File mediaFile = localFileFromPlayUrl(player().getUrl());
+                File destDir = mediaFile != null
+                        ? new File(mediaFile.getParent(), ".webhtv_subtitles")
+                        : new File(getCacheDir(), "shooter_subs");
+                File target = ShooterSubtitleHelper.download(candidate, destDir);
+                App.post(() -> {
+                    Sub sub = Sub.create(candidate.displayName, target.getAbsolutePath(), "zh", candidate.format);
+                    player().setSub(sub);
+                    Notify.show("射手字幕：已应用");
+                });
+            } catch (Exception e) {
+                SpiderDebug.log("ShooterSub", "download fail: " + e);
+                App.post(() -> Notify.show("射手字幕：下载失败"));
+            }
+        });
+    }
+ 
+    private File localFileFromPlayUrl(String url) {
+        if (TextUtils.isEmpty(url)) return null;
+        try {
+            String path = url;
+            if (path.startsWith("file://")) {
+                path = path.substring(7);
+                if (path.startsWith("//")) path = path.substring(1);
+                return new File(path);
+            }
+            return null;
+        } catch (Exception e) { return null; }
+    }
+ 
+    @Override
     public void onTimeChanged(long time) {
-        android.util.Log.d("VideoActivity", "onTimeChanged: isOwner=" + isOwner() + " mHistory=" + (mHistory != null));
-        if (!isOwner() || mHistory == null) return;
+        if (isFinishing() || isDestroyed()) return;
+        if (!isOwner()) return;
         long position, duration;
         mHistory.setCreateTime(time);
         if (hasDiscNavigationTimeline()) {
@@ -6949,11 +9063,14 @@ private boolean runtimeSourceOnly;
         if (mHistory.isEndingReached(position, duration)) {
             checkEnded(false);
         }
+        long subHead = mHistory.getSubHead(), subTail = mHistory.getSubTail();
+        if (subHead > 0 && subTail > subHead && position >= subHead && position < subTail) {
+            controller().seekTo(subTail);
+        }
     }
 
     private void updatePlaybackHistoryPosition() {
-        if (mHistory == null || tmdbHistoryResumePending) return;
-        if (hasDiscNavigationTimeline()) return;
+        if (mHistory == null || hasDiscNavigationTimeline()) return;
         long position = player().getPosition();
         long duration = player().getDuration();
         if (position > 0) mHistory.setPosition(position);
@@ -6963,6 +9080,7 @@ private boolean runtimeSourceOnly;
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onRefreshEvent(RefreshEvent event) {
+        if (isFinishing() || isDestroyed()) return;
         if (isRedirect()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail(true);
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
@@ -8516,33 +10634,9 @@ private boolean runtimeSourceOnly;
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onConfigEvent(ConfigEvent event) {
-        if (isRedirect() || !event.isVod()) return;
-        if (mTmdbUIAdapter != null) mTmdbUIAdapter.invalidateSubscription();
-        if (mParseAdapter != null) mParseAdapter.addAll(VodConfig.get().getParses());
-        if (player() != null) player().dropStaleBundleDanmaku();
-    }
-
-    /**
-     * 猫源开了内嵌设置页：这次点击的本意就是开网页，本页立刻退场。
-     *
-     * <p>不能等 detail 结果再判定——那份结果可能被主线程堵住好几秒，这段时间里按返回就会
-     * 落回本页（空白播放页）。用请求时刻和本次 detail 起始时间比，确认是自己触发的才退。
-     */
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onCatWebEvent(com.fongmi.android.tv.event.CatWebEvent event) {
-        if (isRedirect() || !event.after(detailStartTime)) return;
-        SpiderDebug.log("video-flow", "detail yield to cat webview (event) key=%s id=%s", getKey(), getId());
-        finish();
-    }
-
-    private boolean applyPendingResumeSeek() {
-        if (pendingResumeSeekMs == C.TIME_UNSET || controller() == null) return false;
-        long target = pendingResumeSeekMs;
-        pendingResumeSeekMs = C.TIME_UNSET;
-        tmdbHistoryResumePending = false;
-        if (Math.abs(player().getPosition() - target) < 1500) return false;
-        controller().seekTo(target);
-        return true;
+        if (isFinishing() || isDestroyed()) return;
+        if (isRedirect() || !event.isVod() || mParseAdapter == null) return;
+        mParseAdapter.addAll(VodConfig.get().getParses());
     }
 
     private void setPosition() {
@@ -8576,13 +10670,16 @@ private boolean runtimeSourceOnly;
         }
     }
 
-    private void setSpeed() {
-        if (mHistory == null) return;
-        mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
-    }
-
-    private float getPlaybackSpeed() {
-        return mHistory == null ? PlayerSetting.getDefaultSpeed() : mHistory.getPlaybackSpeed(PlayerSetting.getDefaultSpeed());
+    private long resolveInitialPlaybackPosition() {
+        if (mHistory == null) return C.TIME_UNSET;
+        applyCastHistory();
+        if (mHistory.isNearEnding()) {
+            SpiderDebug.log("video-flow", "reset near-end history position=%d duration=%d key=%s", mHistory.getPosition(), mHistory.getDuration(), getHistoryKey());
+            mHistory.resetPlaybackPosition();
+            syncHistory();
+        }
+        long position = Math.max(mHistory.getOpening(), mHistory.getPosition());
+        return position > 0 ? position : C.TIME_UNSET;
     }
 
     private void checkEnded(boolean notify) {
@@ -8654,6 +10751,13 @@ private boolean runtimeSourceOnly;
         mBinding.part.setTag(keyword);
     }
 
+    private void startCastSearch(String keyword) {
+        if (TextUtils.isEmpty(keyword)) { setEmpty(false); return; }
+        Notify.show(getString(R.string.play_switch_site, keyword));
+        mCastSearch = true;
+        initSearch(keyword, true);
+    }
+
     private boolean isPass(Site item) {
         if (isAutoMode() && !item.isChangeable()) return false;
         return item.isSearchable();
@@ -8671,11 +10775,13 @@ private boolean runtimeSourceOnly;
         updateFocus();
         List<Site> sites = new ArrayList<>();
         for (Site site : VodConfig.get().getSites()) if (isPass(site)) sites.add(site);
-        SiteHealthStore.sortSites(sites);
+        if (Setting.isSiteHealthSort()) SiteHealthStore.sortSites(sites);
+        else SiteOrderStore.sortSites(sites);
         mViewModel.searchContent(sites, keyword, true);
     }
 
     private void setSearch(Result result) {
+        if (isFinishing() || isDestroyed()) return;
         List<Vod> items = result.getList();
         items.removeIf(this::mismatch);
         mQuickAdapter.addAll(items);
@@ -8684,12 +10790,13 @@ private boolean runtimeSourceOnly;
         if (!isInitAuto() && !items.isEmpty()) {
             showQuickSearchDialog(items);
         }
-        if (isInitAuto() && PlayerSetting.isAutoChange()) nextSite();
+        if (isInitAuto() && (PlayerSetting.isAutoChange() || mCastSearch)) nextSite();
         if (items.isEmpty()) return;
         App.removeCallbacks(mR4);
     }
 
     private void setSearchProgress(SearchProgress progress) {
+        if (isFinishing() || isDestroyed()) return;
         if (progress == null || isInitAuto()) return;
         showQuickSearchDialog(new ArrayList<>());
         if (mQuickSearchDialog != null) mQuickSearchDialog.setProgress(progress.current(), progress.total(), progress.finished());
@@ -8942,6 +11049,12 @@ private boolean runtimeSourceOnly;
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (isVisible(mBinding.settingContainer)) {
+            View contentView = mBinding.settingContainer.findViewById(R.id.content);
+            if (contentView instanceof ViewGroup && FocusLoop.handleChildGrid((ViewGroup) contentView, 1, FocusLoop.Mode.VERTICAL, event)) {
+                return true;
+            }
+        }
         if (dispatchDiscMenuKey(event)) return true;
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event) && mBinding.lutQuick.hideIfVisible()) return true;
         if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {
@@ -8950,19 +11063,20 @@ private boolean runtimeSourceOnly;
             return true;
         }
         if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
-        if (isFullscreen() && KeyUtil.isMenuKey(event)) {
-            int menuKey = Setting.getFullscreenMenuKey();
-            if (menuKey == Setting.FULLSCREEN_MENU_KEY_EPISODES) onEpisodes();
-            else if (menuKey == Setting.FULLSCREEN_MENU_KEY_NEXT_EPISODE) onMenuNextEpisode();
-            else onToggle();
+        if (KeyUtil.isMenuKey(event)) {
+            if (isFullscreen()) {
+                if (isVisible(mBinding.control.getRoot())) {
+                    mWasPlayingBeforeSetting = player().isPlaying();
+                    showSettingPlayer();
+                }
+                else onToggle();
+            } else {
+                onContent();
+            }
         }
-        if (isVisible(mBinding.control.getRoot())) {
-            setR1Callback();
-            if (dispatchOpeningEndingAdjust(event)) return true;
-            if (dispatchSpeedAdjust(event)) return true;
-            if (PlayerControlFocusHelper.handleKey(mBinding.control.getRoot(), getFocus2(), event)) return true;
-            if (PlayerControlFocusHelper.containsFocus(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
-        }
+        if (isVisible(mBinding.control.getRoot())) setR1Callback();
+        if (isVisible(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
+        if (dispatchOpeningEndingAdjust(event)) return true;
         if (onEpisodeKey(event)) return true;
         if (handleEpisodeLongPress(event)) return true;
         if (mAudioStageVisible && isGone(mBinding.control.getRoot()) && dispatchAudioStageKey(event)) return true;
@@ -8970,6 +11084,125 @@ private boolean runtimeSourceOnly;
         if (KeyUtil.isMediaFastForward(event)) return onSeekForward();
         if (KeyUtil.isMediaRewind(event)) return onSeekBack();
         return super.dispatchKeyEvent(event);
+    }
+
+    private boolean dispatchAudioStageKey(KeyEvent event) {
+        if (!isAudioStageNavigationKey(event)) return false;
+        View focus = getCurrentFocus();
+        if (KeyUtil.isActionDown(event) && focus != null && isChildOf(mBinding.audioStage, focus)) showAudioStageFocusHighlight(focus);
+        if (KeyUtil.isEnterKey(event)) {
+            if (focus != null && isChildOf(mBinding.audioStage, focus) && focus.isEnabled() && focus.isClickable()) {
+                if (KeyUtil.isActionUp(event)) focus.performClick();
+                return true;
+            }
+            return false;
+        }
+        if (dispatchAudioSeekKey(focus, event)) return true;
+        if (!KeyUtil.isActionDown(event)) return true;
+        if (focus == null || !isChildOf(mBinding.audioStage, focus) || focus == mBinding.audioStage || focus == mBinding.video) return focusAudioStageDefault();
+        moveAudioStageFocus(focus, event);
+        return true;
+    }
+
+    private boolean dispatchAudioSeekKey(View focus, KeyEvent event) {
+        if (focus == null || !isChildOf(mBinding.audioSeek, focus)) return false;
+        if (!KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event)) return false;
+        if (KeyUtil.isActionUp(event)) {
+            finishAudioSeekPreview();
+            return true;
+        }
+        if (!KeyUtil.isActionDown(event)) return true;
+        previewAudioSeek(KeyUtil.isRightKey(event) ? 1 : -1, event.getRepeatCount());
+        return true;
+    }
+
+    private void previewAudioSeek(int direction, int repeatCount) {
+        if (service() == null || player().isEmpty()) return;
+        if (mAudioSeekPreviewDirection != direction) {
+            mAudioSeekPreviewOffset = 0;
+            mAudioSeekPreviewRepeat = 0;
+            mAudioSeekPreviewDirection = direction;
+        }
+        mAudioSeekPreviewing = true;
+        mAudioSeekPreviewRepeat = Math.max(mAudioSeekPreviewRepeat + 1, repeatCount + 1);
+        long current = player().getPosition();
+        long duration = Math.max(0, player().getDuration());
+        long next = current + mAudioSeekPreviewOffset + direction * getAudioSeekStep(mAudioSeekPreviewRepeat);
+        long target = duration > 0 ? Math.min(Math.max(0, next), duration) : Math.max(0, next);
+        mAudioSeekPreviewOffset = target - current;
+        mBinding.audioSeek.previewSeekPosition(target);
+        onSeeking(mAudioSeekPreviewOffset);
+    }
+
+    private long getAudioSeekStep(int repeat) {
+        if (repeat <= 2) return AUDIO_SEEK_STEP_FINE_MS;
+        if (repeat <= 6) return AUDIO_SEEK_STEP_NORMAL_MS;
+        if (repeat <= 12) return AUDIO_SEEK_STEP_FAST_MS;
+        return AUDIO_SEEK_STEP_MAX_MS;
+    }
+
+    private void finishAudioSeekPreview() {
+        if (!mAudioSeekPreviewing) return;
+        long offset = mAudioSeekPreviewOffset;
+        long current = service() == null || player().isEmpty() ? 0 : player().getPosition();
+        long duration = service() == null || player().isEmpty() ? 0 : Math.max(0, player().getDuration());
+        long target = duration > 0 ? Math.min(Math.max(0, current + offset), duration) : Math.max(0, current + offset);
+        mAudioSeekPreviewOffset = 0;
+        mAudioSeekPreviewDirection = 0;
+        mAudioSeekPreviewRepeat = 0;
+        mAudioSeekPreviewing = false;
+        if (offset != 0) onSeekEnd(offset);
+        mBinding.audioSeek.commitSeekPreview(target);
+    }
+
+    private boolean isAudioStageNavigationKey(KeyEvent event) {
+        return KeyUtil.isEnterKey(event) || KeyUtil.isUpKey(event) || KeyUtil.isDownKey(event) || KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event);
+    }
+
+    private boolean focusAudioStageDefault() {
+        if (isFinishing() || isDestroyed()) return false;
+        if (mBinding == null || !mAudioStageVisible) return false;
+        if (mBinding.audioPlay.isEnabled() && mBinding.audioPlay.requestFocus()) {
+            showAudioStageFocusHighlight(mBinding.audioPlay);
+            return true;
+        }
+        return focusFirstChild(mBinding.audioStage);
+    }
+
+    private boolean moveAudioStageFocus(View focus, KeyEvent event) {
+        List<View> focusables = new ArrayList<>();
+        collectAudioStageFocusables(mBinding.audioStage, focusables);
+        View target = findAudioStageFocusTarget(focus, focusables, event);
+        if (target == null || !target.requestFocus()) return false;
+        showAudioStageFocusHighlight(target);
+        return true;
+    }
+
+    private void collectAudioStageFocusables(View view, List<View> focusables) {
+        if (view == null || view.getVisibility() != View.VISIBLE || !view.isEnabled()) return;
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) collectAudioStageFocusables(group.getChildAt(i), focusables);
+            return;
+        }
+        if (view.isFocusable()) focusables.add(view);
+    }
+
+    private View findAudioStageFocusTarget(View focus, List<View> focusables, KeyEvent event) {
+        Rect current = new Rect();
+        if (focus == null || !focus.getGlobalVisibleRect(current)) return null;
+        View target = null;
+        long bestScore = Long.MAX_VALUE;
+        for (View item : focusables) {
+            if (item == focus) continue;
+            Rect candidate = new Rect();
+            if (!item.getGlobalVisibleRect(candidate) || !isLutQuickFocusCandidate(current, candidate, event)) continue;
+            long score = scoreLutQuickFocusCandidate(current, candidate, event);
+            if (score < bestScore) {
+                bestScore = score;
+                target = item;
+            }
+        }
+        return target;
     }
 
     private boolean dispatchLutQuickKey(KeyEvent event) {
@@ -9121,16 +11354,17 @@ private boolean runtimeSourceOnly;
     @Override
     public void onSpeedUp() {
         if (!player().isPlaying()) return;
+        mSpeedBeforeLongPress = player().getSpeed();
         mBinding.widget.speed.setVisibility(View.VISIBLE);
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
-        mBinding.control.action.speed.setText(player().setSpeed(PlayerSetting.getSpeed()));
+        player().setSpeed(PlayerSetting.getSpeed());
     }
 
     @Override
     public void onSpeedEnd() {
         mBinding.widget.speed.clearAnimation();
         mBinding.widget.speed.setVisibility(View.GONE);
-        mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
+        player().setSpeed(mSpeedBeforeLongPress);
     }
 
     @Override
@@ -9172,7 +11406,13 @@ private boolean runtimeSourceOnly;
 
     @Override
     public void onKeyDown() {
-        showControl(getFocus2());
+        if (mHistory.getSubHead() > 0 && mBinding.control.action.subTail.getVisibility() == View.VISIBLE && mHistory.getSubTail() <= 0) {
+            showControl(mBinding.control.action.subTail);
+        } else if (mBinding.control.action.subHead.getVisibility() == View.VISIBLE) {
+            showControl(mBinding.control.action.subHead);
+        } else {
+            showControl(getFocus2());
+        }
     }
 
     @Override
@@ -9357,17 +11597,23 @@ private boolean runtimeSourceOnly;
         super.onStart();
         republishPluginEpisodeContext();
         mClock.stop().start();
-        mPlayerUi.onStart();
+        if (isVisible(mBinding.control.getRoot())) hideControl();
+        if (mOsd != null) {
+            mOsd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics());
+            setPlayParamsState();
+            mOsd.start();
+        }
         if (service() != null) refreshLyrics();
-        setPlayParamsState();
+        if (mActionButtons != null) PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+        if (mWasPlaying && service() != null && !player().isPlaying() && !player().isEmpty()) onPlay();
     }
 
     @Override
     protected void onStop() {
         cancelTvTouch();
         super.onStop();
-        mKeyDown.releaseSpeed();
-        mPlayerUi.onStop();
+        mWasPlaying = service() != null && player().isPlaying();
+        if (mOsd != null) mOsd.stop();
         if (mKaraoke != null) mKaraoke.clear();
         stopAudioCoverRotation();
         if (PlayerSetting.isBackgroundOff()) mClock.stop();
@@ -9377,6 +11623,10 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onBackInvoked() {
+        if (isVisible(mBinding.settingContainer)) {
+            hideSettingPlayer();
+            return;
+        }
         if (mBinding.lutQuick.hideIfVisible()) {
             return;
         } else if (isVisible(mBinding.control.getRoot())) {
@@ -9390,6 +11640,39 @@ private boolean runtimeSourceOnly;
         }
     }
 
+    private void showSettingPlayer() {
+         if (isFinishing() || isDestroyed() || getSupportFragmentManager().isStateSaved()) {
+             return;
+         }
+        int wallColor = Setting.getWallColor();
+        int bgColor = android.graphics.Color.argb(220, android.graphics.Color.red(wallColor), android.graphics.Color.green(wallColor), android.graphics.Color.blue(wallColor));
+        mBinding.settingContainer.setBackgroundColor(bgColor);
+        mBinding.settingContainer.setVisibility(View.VISIBLE);
+        if (mWasPlayingBeforeSetting && player().isPlaying()) onPaused();
+        App.removeCallbacks(mR1);
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.settingContainer, SettingPlayerFragment.newInstance())
+                .commit();
+    }
+    
+    private void hideSettingPlayer() {
+         if (isFinishing() || isDestroyed() || getSupportFragmentManager().isStateSaved()) {
+             mBinding.settingContainer.setVisibility(View.GONE);
+             mWasPlayingBeforeSetting = false;
+             return;
+         }
+        androidx.fragment.app.Fragment fragment = getSupportFragmentManager().findFragmentById(R.id.settingContainer);
+        if (fragment != null) {
+            getSupportFragmentManager().beginTransaction().remove(fragment).commit();
+        }
+        mBinding.settingContainer.setVisibility(View.GONE);
+        if (mWasPlayingBeforeSetting && service() != null && !player().isPlaying() && !player().isEmpty()) {
+            onPlay();
+        }
+        mWasPlayingBeforeSetting = false;
+        if (isVisible(mBinding.control.getRoot())) setR1Callback();
+    }
+
     private void finishVideoPlayback() {
         if (isPlaybackExiting()) return;
         mViewModel.stopSearch();
@@ -9398,6 +11681,10 @@ private boolean runtimeSourceOnly;
         stopPlayback();
         if (isTaskRoot()) startActivity(new Intent(this, HomeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
         super.onBackInvoked();
+    }
+
+    public void finishVideoForCast() {
+        finishVideoPlaybackNow();
     }
 
     @Override
@@ -9414,12 +11701,6 @@ private boolean runtimeSourceOnly;
     }
     @Override
     protected void onDestroy() {
-        invalidateShortDramaQueue("destroy");
-        cancelPendingEpisodeGridFocus();
-        cancelPendingArrayFocus();
-        cancelTvTouch();
-        mIntroSkipPlayback.reset();
-        cancelAiSeasonAnalysis(false);
         if (mCustomButtonPlayer != null) {
             mCustomButtonPlayer.removeCustomButtonStateListener(mCustomButtonStateListener);
             mCustomButtonPlayer = null;

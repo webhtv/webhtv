@@ -1,23 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:fillViewport="true"
     android:scrollbars="none">
 
-    <LinearLayout
+    <com.fongmi.android.tv.ui.custom.PlayerFocusContainer
         android:id="@+id/container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        app:enableCircularHorizontal="true">
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/next"
             style="@style/Control"
             android:layout_marginEnd="8dp"
-            android:nextFocusLeft="@id/repeat"
             android:text="@string/play_next" />
 
         <com.google.android.material.textview.MaterialTextView
@@ -95,9 +96,7 @@
             style="@style/Control"
             android:layout_marginEnd="8dp"
             android:contentDescription="@string/pan_diagnostic_title"
-            android:text="@string/pan_diagnostic_entry"
-            android:visibility="gone"
-            tools:visibility="visible" />
+            android:text="@string/pan_diagnostic_entry" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/codecCapability"
@@ -117,6 +116,13 @@
             style="@style/Control"
             android:layout_marginEnd="8dp"
             android:text="@string/play_scale" />
+
+        <com.fongmi.android.tv.ui.custom.CustomUpDownView
+            android:id="@+id/rotate"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:fontFeatureSettings="tnum"
+            android:text="@string/play_rotate" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/actionQuality"
@@ -179,6 +185,18 @@
             android:layout_marginEnd="8dp"
             android:text="@string/play_ed" />
 
+        <com.fongmi.android.tv.ui.custom.CustomUpDownView
+            android:id="@+id/sub_head"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="@string/play_sub_head" />
+
+        <com.fongmi.android.tv.ui.custom.CustomUpDownView
+            android:id="@+id/sub_tail"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="@string/play_sub_tail" />
+
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/danmaku"
             style="@style/Control"
@@ -204,10 +222,16 @@
             tools:visibility="visible" />
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/setting"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="@string/play_setting" />
+
+        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/cast"
             style="@style/Control"
             android:layout_marginEnd="8dp"
-            android:text="@string/play_cast" />
+            android:text="@string/push" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/timer"
@@ -218,8 +242,9 @@
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/repeat"
             style="@style/Control"
-            android:nextFocusRight="@id/next"
+            android:layout_marginEnd="8dp"
             android:text="@string/play_repeat" />
 
-    </LinearLayout>
+    </com.fongmi.android.tv.ui.custom.PlayerFocusContainer>
+
 </HorizontalScrollView>

@@ -68,10 +68,6 @@ import com.fongmi.android.tv.player.PlaybackExperimentPolicy;
 import com.fongmi.android.tv.player.PlaybackSystemConditionCoordinator;
 import com.fongmi.android.tv.player.engine.PlaySpec;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
-import com.fongmi.android.tv.player.audio.PlaybackMediaAudioOutputProvider;
-import com.fongmi.android.tv.player.audio.PlaybackMediaAudioPipeline;
-import com.fongmi.android.tv.player.audio.PlaybackMediaClock;
-import com.fongmi.android.tv.player.audio.PlaybackMediaSignalHub;
 import com.fongmi.android.tv.player.exo.ass.AssInput;
 import com.fongmi.android.tv.player.exo.ass.ExoAssSession;
 import com.fongmi.android.tv.player.exo.subtitle.ExoSubtitleSession;
@@ -182,18 +178,8 @@ public class ExoUtil {
             ExoFrameSchedulingPlayerSettings frameSchedulingSettings,
             @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState,
             @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy) {
-        return buildPlayer(
-                decode,
-                listener,
-                tunnelingFallbackAttempted,
-                decoderRuntimeSession,
-                frameSchedulingSettings,
-                dolbyVisionPlaybackState,
-                compressedAudioDirectPolicy,
-                null,
-                null,
-                null,
-                null);
+        return buildPlayer(decode, listener, tunnelingFallbackAttempted, decoderRuntimeSession,
+                frameSchedulingSettings, dolbyVisionPlaybackState, compressedAudioDirectPolicy, null);
     }
 
     public static ExoPlayer buildPlayer(
@@ -219,56 +205,6 @@ public class ExoUtil {
             @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy,
             @Nullable ExoAssSession assSession,
             @Nullable ExoSubtitleSession subtitleSession) {
-        return buildPlayer(
-                decode,
-                listener,
-                tunnelingFallbackAttempted,
-                decoderRuntimeSession,
-                frameSchedulingSettings,
-                dolbyVisionPlaybackState,
-                compressedAudioDirectPolicy,
-                assSession,
-                subtitleSession,
-                null,
-                null);
-    }
-
-    public static ExoPlayer buildPlayer(
-            int decode,
-            Player.Listener listener,
-            boolean tunnelingFallbackAttempted,
-            @Nullable ExoDecoderRuntimeSession decoderRuntimeSession,
-            ExoFrameSchedulingPlayerSettings frameSchedulingSettings,
-            @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState,
-            @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy,
-            @Nullable PlaybackMediaSignalHub mediaSignals,
-            @Nullable PlaybackMediaClock mediaClock) {
-        return buildPlayer(
-                decode,
-                listener,
-                tunnelingFallbackAttempted,
-                decoderRuntimeSession,
-                frameSchedulingSettings,
-                dolbyVisionPlaybackState,
-                compressedAudioDirectPolicy,
-                null,
-                null,
-                mediaSignals,
-                mediaClock);
-    }
-
-    public static ExoPlayer buildPlayer(
-            int decode,
-            Player.Listener listener,
-            boolean tunnelingFallbackAttempted,
-            @Nullable ExoDecoderRuntimeSession decoderRuntimeSession,
-            ExoFrameSchedulingPlayerSettings frameSchedulingSettings,
-            @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState,
-            @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy,
-            @Nullable ExoAssSession assSession,
-            @Nullable ExoSubtitleSession subtitleSession,
-            @Nullable PlaybackMediaSignalHub mediaSignals,
-            @Nullable PlaybackMediaClock mediaClock) {
         ExoFrameSchedulingPlayerSettings schedulingSettings =
                 frameSchedulingSettings == null
                         ? ExoFrameSchedulingPlayerSettings.capture(decode)
@@ -400,61 +336,6 @@ public class ExoUtil {
 
     private static boolean isAudioPrefer(int decode) {
         return decode != PlayerEngine.SOFT && PlayerSetting.isAudioPrefer(PlayerSetting.EXO);
-    }
-
-    /**
-     * The one definition of "this decoder is the hardware path" for the video side, matching
-     * {@link ExoAudioCodecSelector}'s predicate. A decoder can report itself as
-     * hardware-accelerated while the platform still marks it software-only; treating that as
-     * hardware would leave the session on a software decoder while the OSD reports hard decode,
-     * which is exactly the state this whole check exists to detect.
-     */
-    static boolean isHardwareDecoder(MediaCodecInfo info) {
-        return info.hardwareAccelerated && !info.softwareOnly;
-    }
-
-    /**
-     * False only for the one state that proves hard decode has no hardware video
-     * path: the platform lists decoders for this mime and every one of them is
-     * software, so the session would silently run on a platform software decoder
-     * while the OSD still reports hard decode. Every other answer is "not proven",
-     * because the user-visible decode mode must never change on a guess:
-     *
-     * <ul>
-     *   <li>a null or non-video mime is not this check's business;
-     *   <li>a failed query keeps the current mode;
-     *   <li>an empty decoder list means the platform does not declare this mime at
-     *       all, which is exactly how the app's own renderers see a format they
-     *       handle by rewriting its mime: the DV5 GPU renderer and the Dolby Vision
-     *       HDR10 fallback both decode {@code video/dolby-vision} through the HEVC
-     *       decoder, and that mime has no platform decoder on a device without
-     *       native Dolby Vision. An empty list is therefore not evidence of a
-     *       software fallback.
-     * </ul>
-     */
-    public static boolean hasHardwareVideoDecoder(String mimeType) {
-        return hasHardwareVideoDecoder(MediaCodecSelector.DEFAULT, mimeType);
-    }
-
-    /**
-     * The same query against an explicit selector, so the predicate can be driven by the selector
-     * the MediaCodec renderers were built with and stays unit-testable without a device.
-     */
-    static boolean hasHardwareVideoDecoder(MediaCodecSelector selector, String mimeType) {
-        if (mimeType == null || !mimeType.startsWith("video/")) return true;
-        List<MediaCodecInfo> infos;
-        try {
-            infos = selector.getDecoderInfos(mimeType, false, false);
-        } catch (androidx.media3.exoplayer.mediacodec.MediaCodecUtil.DecoderQueryException e) {
-            // A failed query must never change the user-visible decode mode.
-            return true;
-        }
-        // No platform decoder for this mime: another renderer may still own the format.
-        if (infos.isEmpty()) return true;
-        for (MediaCodecInfo info : infos) {
-            if (isHardwareDecoder(info)) return true;
-        }
-        return false;
     }
 
     public static CaptionStyleCompat getCaptionStyle() {
@@ -840,9 +721,7 @@ public class ExoUtil {
             ExoFrameSchedulingPlayerSettings frameSchedulingSettings,
             @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState,
             @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy,
-            @Nullable ExoDiagnosticCollector diagnostics,
-            @Nullable PlaybackMediaSignalHub mediaSignals,
-            @Nullable PlaybackMediaClock mediaClock) {
+            ExoDiagnosticCollector diagnostics) {
         return buildRenderersFactory(
                 getAudioRenderMode(),
                 getVideoRenderMode(decode),
@@ -854,10 +733,7 @@ public class ExoUtil {
                 decoderOutput,
                 frameSchedulingSettings,
                 dolbyVisionPlaybackState,
-                compressedAudioDirectPolicy,
-                diagnostics,
-                mediaSignals,
-                mediaClock);
+                compressedAudioDirectPolicy, diagnostics);
     }
 
     static RenderersFactory buildRenderersFactory() {
@@ -882,8 +758,6 @@ public class ExoUtil {
                                         .CODEC_QUEUE_SYNC),
                         dynamicSchedulingEnabled,
                         codecQueueMode),
-                null,
-                null,
                 null,
                 null,
                 null);
@@ -923,10 +797,7 @@ public class ExoUtil {
                 return ExoUtil.buildAudioSink(
                         context, enableFloatOutput,
                         enableAudioOutputPlaybackParams,
-                        directPolicy,
-                        diagnostics,
-                        mediaSignals,
-                        mediaClock);
+                        directPolicy, diagnostics);
             }
 
             @Override
@@ -1014,9 +885,7 @@ public class ExoUtil {
             boolean enableFloatOutput,
             boolean enableAudioOutputPlaybackParams,
             @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy,
-            @Nullable ExoDiagnosticCollector diagnostics,
-            @Nullable PlaybackMediaSignalHub mediaSignals,
-            @Nullable PlaybackMediaClock mediaClock) {
+            @Nullable ExoDiagnosticCollector diagnostics) {
         boolean passthrough = PlayerSetting.isAudioPassThrough(PlayerSetting.EXO);
         if (SpiderDebug.isEnabled()) {
             // 这里曾经用 AudioCapabilities.getCapabilities(...) 探测硬件通道数 / AC3 支持，
@@ -1055,32 +924,14 @@ public class ExoUtil {
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioOutputPlaybackParameters(
                         enableAudioOutputPlaybackParams)
-                .setAudioOutputProvider(finalOutputProvider);
-        if (mediaPipeline != null) {
-            builder.setAudioProcessors(new AudioProcessor[]{mediaPipeline.audioProcessor()});
-        }
+                .setAudioOutputProvider(
+                        ExoDiagnosticAudioOutput.provider(directPolicy.wrapOutputProvider(outputProvider, diagnostics), diagnostics));
         return ExoDiagnosticAudioOutput.sink(builder.build(), diagnostics);
-    }
-
-    public static boolean supportsPlaylistPreload(Player player) {
-        return player instanceof ExoPlayer;
-    }
-
-    public static MediaSource.Factory buildMediaSourceFactory(
-            @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState) {
-        return buildMediaSourceFactory(dolbyVisionPlaybackState, null);
     }
 
     private static MediaSource.Factory buildMediaSourceFactory(
             @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState, @Nullable ExoAssSession assSession) {
         return new MediaSourceFactory(dolbyVisionPlaybackState, assSession);
-    }
-
-    /** Builds an item-scoped source for playlist append without touching the active player. */
-    public static MediaSource createMediaSource(
-            MediaItem mediaItem,
-            @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState) {
-        return buildMediaSourceFactory(dolbyVisionPlaybackState).createMediaSource(mediaItem);
     }
 
     private static MediaItem.RequestMetadata buildRequestMetadata(PlaySpec spec) {
@@ -1221,13 +1072,8 @@ public class ExoUtil {
                         dolbyVisionPlaybackState));
             } catch (Throwable ignored) {
             }
-            // Video decode mode is explicit for extension renderers: with 「解码器兜底」 on, hardware
-            // mode keeps the system MediaCodec renderers first and only appends FFmpeg afterwards,
-            // so a codec without any platform decoder (AVS2/AVS3, unsupported HEVC profiles) still
-            // gets a video path instead of being dropped as an unsupported subtype while audio keeps
-            // playing. With the switch off the mode stays OFF and no FFmpeg video renderer is added.
-            // getVideoCodecSelector narrows the MediaCodec list in hard mode, so the two must stay
-            // consistent. Audio has its own policy.
+            // Video decode mode is explicit: hardware mode must never register
+            // a software fallback, including for AVS3. Audio has its own policy.
             if (videoRenderMode == EXTENSION_RENDERER_MODE_OFF) return;
             try {
                 out.add(getExtensionRendererIndex(videoRenderMode, videoPrefer, out), buildFfmpegVideoRenderer(videoRenderMode, videoCodecSelector, allowedVideoJoiningTimeMs, eventHandler, eventListener));
