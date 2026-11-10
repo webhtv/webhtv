@@ -233,6 +233,7 @@ jobs:
       - name: Set up ORAS
         id: oras
         if: ${{ inputs.publish_oci }}
+        continue-on-error: true
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
         with:
           url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
@@ -241,6 +242,7 @@ jobs:
       - name: Publish APKs to OCI Registry
         id: oci
         if: ${{ inputs.publish_oci && steps.oras.outcome == 'success' }}
+        continue-on-error: true
         env:
           DIST_DIR: dist
           OCI_METADATA_FILE: build/oci-metadata.json
@@ -249,6 +251,10 @@ jobs:
           OCI_USERNAME: ${{ secrets.OCI_USERNAME }}
           OCI_TOKEN: ${{ secrets.OCI_TOKEN }}
         run: bash .github/scripts/publish-oci-apks.sh
+
+      - name: Report OCI publish failure
+        if: ${{ inputs.publish_oci && (steps.oras.outcome == 'failure' || steps.oci.outcome == 'failure') }}
+        run: echo "::warning title=OCI publish unavailable::GitHub release will continue without OCI metadata."
 
       - name: Prepare release notes input
         id: release_notes
