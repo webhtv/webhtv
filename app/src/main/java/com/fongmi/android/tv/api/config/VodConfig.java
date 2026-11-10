@@ -728,16 +728,15 @@ public class VodConfig extends BaseConfig {
         if (!dir.exists() || !dir.isDirectory()) return result;
         List<File> files = listSorted(dir);
         if (files.isEmpty()) return result;
-        String jar;
-        if (!TextUtils.isEmpty(globalSpider)
-                && globalSpider.toLowerCase().contains("xbpq")
-                && Path.local(globalSpider) != null
-                && Path.local(globalSpider).exists()) {
+        String jar = XBPQ_JAR;
+        File localJar = Path.local(XBPQ_JAR);
+        if ((localJar == null || !localJar.exists())
+                && !TextUtils.isEmpty(globalSpider)
+                && globalSpider.toLowerCase().contains("xbpq")) {
+            // 本地 ./jars/XBPQ.jar 不存在时才回退到全局 spider（可为 http，由 parseJar 下载）
             jar = globalSpider;
-        } else {
-            jar = XBPQ_JAR;
-            BaseLoader.get().parseJar(jar, true);
         }
+        BaseLoader.get().parseJar(jar, true);
         for (File file : files) {
             FileMeta meta = parseFileMeta(file.getName());
             if (meta.name.isEmpty()) continue;

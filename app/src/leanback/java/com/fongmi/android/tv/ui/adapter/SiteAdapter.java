@@ -54,6 +54,20 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         boolean onItemKeyHorizontal(int position, boolean left);
     }
 
+    public interface OnDeleteListener {
+
+        void onDelete(Site item);
+    }
+
+    public void removeSite(Site item) {
+        int position = mItems.indexOf(item);
+        if (position < 0) return;
+        mItems.remove(position);
+        allItems.remove(item);
+        notifyItemRemoved(position);
+        notifyItemRangeChanged(position, Math.max(0, getItemCount() - position));
+    }
+
     public void setType(int type) {
         int oldViewType = getViewType();
         this.type = type;
@@ -161,6 +175,10 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     }
 
     private boolean setLongListener(Site item) {
+        if (type == 0 && item.isFile() && listener instanceof OnDeleteListener) {
+            ((OnDeleteListener) listener).onDelete(item);
+            return true;
+        }
         if (type == 1) setEnable(!item.isSearchable());
         if (type == 2) setEnable(!item.isChangeable());
         return true;

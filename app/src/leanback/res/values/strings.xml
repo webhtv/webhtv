@@ -54,6 +54,7 @@
     <string name="setting_site_delete_title">Delete file site</string>
     <string name="setting_site_delete_message">Delete %1$s and its source file? This cannot be undone.</string>
     <string name="setting_site_delete_done">Deleted %1$s</string>
+    <string name="setting_site_delete_failed">Delete failed, the file may be in use</string>
  
     <!-- Live Program -->
     <string name="live_program_vertical">E\nP\nG</string>

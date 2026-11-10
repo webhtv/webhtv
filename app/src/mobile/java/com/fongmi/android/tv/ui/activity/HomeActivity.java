@@ -548,8 +548,9 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         } else if (mManager.isVisible(1)) {
             change(0);
         } else if (mManager.canBack(0)) {
-            // 根页面返回 = 真正退出（与 fish 一致）：后台线程同步备份后结束进程，退出前按设置自动清理缓存。
-            // 想进后台请用 Home 键，返回键即真正退出。
+            // 根页面返回 = 真正退出（与 fish 一致）：先销毁界面给出即时反馈，后台线程同步备份、
+            // 按开关做限时缓存清理后结束进程。想进后台请用 Home 键，返回键即真正退出。
+            finish();
             Task.execute(() -> {
                 AppDatabase.backupOnExitSync();
                 CacheScheduler.get().runExitCleanup();

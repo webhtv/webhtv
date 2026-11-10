@@ -84,7 +84,9 @@ public abstract class AppDatabase extends RoomDatabase {
 
     /**
      * 退出前同步备份（调用线程阻塞直到备份完成），供"返回键彻底退出"流程使用，
-     * 避免结束进程前异步备份未跑完导致备份丢失。自动备份只保留最近一份。
+     * 避免结束进程前异步备份未跑完导致备份丢失。自动备份只保留最近一份（AUTO_PREFIX
+     * 标识，bak-auto-*.zip），且走轻量备份：不打包共享存储目录等大文件，只保留
+     * 配置/数据库/主题壁纸/登录态，避免退出被大文件打包拖慢。
      */
     public static void backupOnExitSync() {
         synchronized (BACKUP_LOCK) {
@@ -92,7 +94,7 @@ public abstract class AppDatabase extends RoomDatabase {
                 cleanAutoOnly();
                 String timePart = AppBackup.fileName().substring(AppBackup.PREFIX.length());
                 File file = new File(Path.tv(), AUTO_PREFIX + timePart);
-                AppBackup.create(file, null);
+                AppBackup.createLightweight(file);
                 SpiderDebug.log("backup", "auto exit backup complete file=%s", file.getAbsolutePath());
             } catch (Exception e) {
                 SpiderDebug.log("backup", "auto exit backup failed error=%s", e.getMessage());

@@ -14,6 +14,7 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.event.CatWebEvent;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.utils.PushParser;
@@ -28,6 +29,8 @@ import com.github.catvod.utils.Prefers;
 import com.github.catvod.utils.Util;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -393,11 +396,40 @@ public class SiteApi {
         Vod vod = new Vod();
         vod.setId(id);
         vod.setName(push.getName());
-        vod.setPlayUrl(push.getUrl());
+        // 本地文件播放/推送到远程 app 时，把 file:/// 转成本机局域网代理地址，
+        // 否则远程设备拿到 file:/// 无法访问（会崩）。与 fish 的 buildPushVod 一致。
+        vod.setPlayUrl(push.getUrl().startsWith("file://") ? toLanHttpUrl(push.getUrl()) : push.getUrl());
         vod.setPlayFrom(ResUtil.getString(R.string.push));
         vod.setPic(ResUtil.getString(R.string.push_image));
         Source.get().parse(vod.setFlags());
         return Result.vod(vod);
+    }
+
+    /** 把 file:///绝对路径 转成本机 NanoHTTPD 的局域网 /file/ 代理地址。 */
+    static String toLanHttpUrl(String url) {
+        if (TextUtils.isEmpty(url) || !url.startsWith("file://")) return url;
+        String filePath = url.substring(7);
+        String relative = stripStorageRoot(filePath);
+        StringBuilder encodedPath = new StringBuilder();
+        for (String segment : relative.split("/")) {
+            if (segment.isEmpty()) {
+                encodedPath.append("/");
+            } else {
+                encodedPath.append("/").append(URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20"));
+            }
+        }
+        String lan = Server.get().getAddress(false);
+        if (lan.contains("http://:")) lan = Server.get().getAddress(true);
+        return lan + "/file" + encodedPath;
+    }
+
+    private static String stripStorageRoot(String path) {
+        String extRoot = com.github.catvod.utils.Path.rootPath();
+        if (path.startsWith(extRoot + "/")) return path.substring(extRoot.length() + 1);
+        if (path.startsWith("/sdcard/")) return path.substring(8);
+        if (path.startsWith(extRoot)) return path.substring(extRoot.length());
+        if (path.startsWith("/sdcard")) return path.substring(7);
+        return path;
     }
 
     @NonNull

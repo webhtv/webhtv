@@ -50,6 +50,12 @@
     <string name="dialog_delete_history">观看记录将会全部删除。</string>
     <string name="filter_reset">已重置筛选</string>
 
+    <!-- Site Delete -->
+    <string name="setting_site_delete_title">删除文件站点</string>
+    <string name="setting_site_delete_message">确定删除 %1$s 及其源文件？此操作不可恢复。</string>
+    <string name="setting_site_delete_done">已删除 %1$s</string>
+    <string name="setting_site_delete_failed">删除失败，文件可能被占用</string>
+
     <!-- Live Program -->
     <string name="live_program_vertical">节\n目\n单</string>
 </resources>

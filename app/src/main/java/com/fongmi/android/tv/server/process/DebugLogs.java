@@ -284,13 +284,13 @@ public class DebugLogs implements Process {
             @media(max-width:680px){.backtop{right:12px;bottom:calc(12px + env(safe-area-inset-bottom));height:36px;min-width:64px;padding:0 11px;font-size:13px}}
             @media(min-width:800px){.console-head{grid-template-columns:minmax(0,1fr) 260px auto;grid-template-areas:"brand search actions" "tabs tabs tabs"}.search-panel{padding:0}#search-hide{display:none}.tabs .chip{min-height:36px}.primary-actions button,.primary-actions a.action{min-height:40px}}
             @media(max-width:600px){.log-drawer{top:auto;right:0;bottom:0;left:0;width:100%;height:auto;max-height:88vh;max-height:88dvh;border-radius:16px 16px 0 0;box-shadow:0 -8px 32px #1f232826}.drawer-body{padding-bottom:20px;padding-bottom:max(20px,env(safe-area-inset-bottom))}.drawer-body button,.drawer-body a.action,.drawer-body select,.drawer-body input:not([type=checkbox]){min-height:44px}}
-            @media(max-width:480px){main{padding:0 4px 4px}.console-head{padding:4px 6px 0}.title{white-space:normal}.time{display:none}.entry{padding:7px 8px}.detail{font-size:13px}}
+            @media(max-width:480px){main{padding:0 4px 4px}.console-head{padding:4px 6px 0}.title{white-space:normal}.entry{padding:7px 8px}.detail{font-size:13px}}
             """;
     }
 
     private String scriptEnhanced() {
         return "const rawEl=document.getElementById('raw'),logs=document.getElementById('logs'),meta=document.getElementById('meta'),summary=document.getElementById('summary'),filter=document.getElementById('filter'),simple=document.getElementById('simple'),pause=document.getElementById('pause'),download=document.getElementById('download');"
-                + "let raw=rawEl.textContent,mode='all',paused=false,stick=true,lastVersion=Number(meta.dataset.version||0),lastSeq=-1,lastRun='',lastGeneration=-1;simple.checked=false;document.body.classList.remove('simple');addEventListener('scroll',()=>{if(toolsOpen())return;resetX();stick=(innerHeight+scrollY)>=(document.body.scrollHeight-80)},{passive:true});setInterval(resetX,500);"
+                + "let raw=rawEl.textContent,mode='all',paused=false,stick=true,lastVersion=Number(meta.dataset.version||0),lastSeq=-1,lastRun='',lastGeneration=-1;simple.checked=true;document.body.classList.add('simple');addEventListener('scroll',()=>{if(toolsOpen())return;resetX();stick=(innerHeight+scrollY)>=(document.body.scrollHeight-80)},{passive:true});setInterval(resetX,500);"
                 + "document.querySelectorAll('.chip').forEach(b=>{b.setAttribute('aria-pressed',b.classList.contains('on'));b.tabIndex=b.classList.contains('on')?0:-1;b.onclick=()=>selectCategory(b)});filter.oninput=()=>{render();updateFilterState()};simple.onchange=()=>{document.body.classList.toggle('simple',simple.checked);render();resetX()};pause.onclick=()=>{paused=!paused;pause.textContent=paused?'继续':'暂停';pause.classList.toggle('on',paused);pause.setAttribute('aria-pressed',paused)};"
                 + "download.onclick=()=>{paused=true;pause.textContent='继续';pause.classList.add('on');pause.setAttribute('aria-pressed','true')};"
                 + "function esc(s){return String(s||'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]))}"
@@ -347,7 +347,7 @@ public class DebugLogs implements Process {
                     <label class="field">链路<select id="diag-domain"><option value="">所有链路</option><option value="video">视频</option><option value="audio">音频</option></select></label>
                     <label class="field">优先级<select id="diag-priority"><option value="">所有优先级</option><option value="critical">关键事件</option><option value="error">错误</option></select></label>
                   </div><p class="hint">按播放记录和音视频链路缩小范围。</p><div class="action-row"><button id="filter-reset">重置筛选</button></div></div>
-                  <div class="form-section"><h3>显示方式</h3><label class="simple"><input id="simple" type="checkbox" autocomplete="off"><span>只看解释，隐藏原始行</span></label></div>
+                  <div class="form-section"><h3>显示方式</h3><label class="simple"><input id="simple" type="checkbox" autocomplete="off" checked><span>只看解释，隐藏原始行</span></label></div>
                 </section>
                 <section id="tool-panel-diagnostics" role="tabpanel" aria-labelledby="tool-tab-diagnostics" hidden>
                   <p id="diag-status" class="hint" role="status"></p>

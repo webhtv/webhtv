@@ -163,6 +163,7 @@ public final class DiagnosticLogBuffer implements AutoCloseable {
         long epoch = generation();
         long sourceSeq = sourceSequence.incrementAndGet();
         String safeTag = safeTag(tag);
+        if (safeTag.isEmpty()) return; // 诊断心跳/环境噪音（env.native、diag.session.begin）不入窗
         List<String> foundOrigins = raw == null ? List.of() : DiagnosticText.origins(raw);
         offer(safeTag, clean.text(), null, critical, false, captured, sourceSeq, clean.truncated(), foundOrigins, epoch);
     }
@@ -173,6 +174,8 @@ public final class DiagnosticLogBuffer implements AutoCloseable {
         String safe = DiagnosticText.sanitizeTag(tag == null ? "Debug" : tag);
         safe = safe.replace(':', '_').replace('[', '_').replace(']', '_');
         if (safe.length() > 64) safe = safe.substring(0, 64);
+        // 诊断心跳/环境噪音不进入日志窗口（与 fish 一致），避免刷屏。
+        if (safe.startsWith("env.native") || safe.startsWith("diag.session.begin")) return "";
         // Reserve the structured tag; arbitrary Spider/native text cannot impersonate events.
         if ("av-diag".equals(safe)) safe = "legacy-av-diag";
         return safe;
@@ -184,6 +187,8 @@ public final class DiagnosticLogBuffer implements AutoCloseable {
         long epoch = generation();
         long sourceSeq = sourceSequence.incrementAndGet();
         try {
+            String name = event.name();
+            if ("env.native".equals(name) || "env.device".equals(name) || "diag.session.begin".equals(name)) return;
             offer("av-diag", event.json(), event.pinKey(), event.critical(), true, captured, sourceSeq, event.truncated(), List.of(), epoch);
         } catch (RuntimeException error) {
             collectorFailure(); // Diagnostics cannot throw into a player callback.

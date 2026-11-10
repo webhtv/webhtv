@@ -962,11 +962,13 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     /**
-     * 返回键直接退出（与 fish 一致，不弹确认框）：后台线程同步完成退出备份，
-     * 退出前按设置自动清理缓存，然后彻底结束进程，避免进程残留（外挂 jar 悬浮窗、播放服务等仍存活）。
+     * 返回键直接退出（与 fish 一致，不弹确认框）：先销毁界面给出即时反馈，
+     * 后台线程同步完成退出备份、按开关做限时缓存清理，然后彻底结束进程，
+     * 避免进程残留（外挂 jar 悬浮窗、播放服务等仍存活）。
      * 想进后台请用 Home 键，返回键即真正退出。
      */
     private void confirmExitHome() {
+        finish();
         Task.execute(() -> {
             AppDatabase.backupOnExitSync();
             CacheScheduler.get().runExitCleanup();
