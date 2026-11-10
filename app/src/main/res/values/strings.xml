@@ -1054,7 +1054,9 @@
     <string name="cache_retention_forever">Forever</string>
     <string name="cache_total_limit_button">Total limit</string>
     <string name="cache_total_limit_title">Total cache limit</string>
-    <string name="cache_total_limit_summary">Total: %1$s</string>
+    <string name="cache_total_limit_summary">Total limit: %1$s</string>
+    <string name="cache_limit_title_exo">Playback cache limit</string>
+    <string name="cache_management_playback_budget">Playback cache %1$s (shrinks to %2$s once playback ends)</string>
     <string name="cache_cleanup_confirm_title">Clean cache?</string>
     <string name="cache_cleanup_confirm_light">Remove expired EPG, temporary, and legacy cache data?</string>
     <string name="cache_cleanup_confirm_standard">Clean rebuildable modules such as images, lyrics, karaoke, and WebHome cache?\n\nFavorites, history, and settings are not affected.</string>
@@ -2388,6 +2390,7 @@
     <string name="detail_expand">Read more</string>
     <string name="detail_collapse">Collapse</string>
     <string name="detail_flag">Line</string>
+    <string name="detail_plugin">Plugins</string>
     <string name="detail_quality">Quality</string>
     <string name="detail_play_now">Play now</string>
     <string name="detail_play_resume">Resume - %1$s</string>
@@ -3067,7 +3070,7 @@
     <string name="plugin_manager_entry_meta">v%1$s · %2$s · %3$s</string>
     <string name="plugin_manager_params">Parameters</string>
     <string name="plugin_manager_params_title">Parameters for %1$s</string>
-    <string name="plugin_manager_params_hint">JSON object, e.g. {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
+    <string name="plugin_manager_params_hint">JSON object, e.g. {\&quot;DOUBAN_TOKEN\&quot;:\&quot;abc\&quot;}</string>
     <string name="plugin_manager_params_invalid">Parameters must be a JSON object</string>
     <string name="plugin_manager_params_too_large">Parameters are too large to save</string>
     <string name="plugin_manager_remote_import">Import from URL</string>

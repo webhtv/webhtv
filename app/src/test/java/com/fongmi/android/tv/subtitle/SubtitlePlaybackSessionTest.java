@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -161,6 +162,81 @@ public class SubtitlePlaybackSessionTest {
         controller.emit(current, SubtitleMatchResult.matched(null, asset, Collections.emptyList()));
         assertEquals(1, applier.applied.size());
         assertEquals(1, notifier.statuses.size());
+    }
+
+    @Test
+    public void onSubtitleResult_reportsAppliedWhenSelectionIsConfirmed() {
+        FakeController controller = new FakeController();
+        FakeRequestFactory requestFactory = new FakeRequestFactory();
+        FakeResultApplier applier = new FakeResultApplier();
+        FakeResultNotifier notifier = new FakeResultNotifier();
+        FakeHost host = new FakeHost();
+        SubtitlePlaybackSession session = new SubtitlePlaybackSession(host, controller, requestFactory, new SubtitleInjector(), applier, notifier);
+        SubtitleAsset asset = new SubtitleAsset("file:///subtitle.srt", "/tmp/subtitle.srt", "匹配字幕", "zh-Hans", "application/x-subrip", 0, false, 0L);
+
+        session.onPlaybackStarted(host, result("https://play/1.m3u8"));
+        SubtitleRequest current = controller.playbackStarted.get(0);
+        controller.emit(current, SubtitleMatchResult.matched(null, asset, Collections.emptyList()));
+
+        // 自动匹配必须走「期望选中」通道；播放器回报「已选中」时才允许提示命中
+        assertEquals(List.of(true), applier.expected);
+        assertEquals(List.of(true), notifier.applied);
+    }
+
+    @Test
+    public void onSubtitleResult_notifiesNotAppliedWhenPlayerFailsToConfirmSelection() {
+        FakeController controller = new FakeController();
+        FakeRequestFactory requestFactory = new FakeRequestFactory();
+        FakeResultApplier applier = new FakeResultApplier();
+        applier.applyResult = false;
+        FakeResultNotifier notifier = new FakeResultNotifier();
+        FakeHost host = new FakeHost();
+        SubtitlePlaybackSession session = new SubtitlePlaybackSession(host, controller, requestFactory, new SubtitleInjector(), applier, notifier);
+        SubtitleAsset asset = new SubtitleAsset("file:///subtitle.srt", "/tmp/subtitle.srt", "匹配字幕", "zh-Hans", "application/x-subrip", 0, false, 0L);
+
+        session.onPlaybackStarted(host, result("https://play/1.m3u8"));
+        SubtitleRequest current = controller.playbackStarted.get(0);
+        controller.emit(current, SubtitleMatchResult.matched(null, asset, Collections.emptyList()));
+
+        // 播放器回报「没选上」时，提示必须是 hit_not_applied，而不是「已自动匹配字幕」
+        assertEquals(List.of(false), applier.expected);
+        assertEquals(List.of(SubtitleMatchStatus.MATCHED), notifier.statuses);
+        assertEquals(List.of(false), notifier.applied);
+    }
+
+    @Test
+    public void onSubtitleResult_normalizesProviderLanguageBeforeInjection() {
+        FakeController controller = new FakeController();
+        FakeRequestFactory requestFactory = new FakeRequestFactory();
+        FakeResultApplier applier = new FakeResultApplier();
+        FakeResultNotifier notifier = new FakeResultNotifier();
+        FakeHost host = new FakeHost();
+        SubtitlePlaybackSession session = new SubtitlePlaybackSession(host, controller, requestFactory, new SubtitleInjector(), applier, notifier);
+        SubtitleAsset asset = new SubtitleAsset("file:///subtitle.srt", "/tmp/subtitle.srt", "匹配字幕", "简体中文", "application/x-subrip", 0, false, 0L);
+
+        session.onPlaybackStarted(host, result("https://play/1.m3u8"));
+        SubtitleRequest current = controller.playbackStarted.get(0);
+        controller.emit(current, SubtitleMatchResult.matched(null, asset, Collections.emptyList()));
+
+        // 「简体中文」进不了 Media3 的语言匹配，注入前必须收敛成 zh-Hans
+        assertEquals("zh-Hans", applier.applied.get(0).getLang());
+    }
+
+    @Test
+    public void onSubtitleResult_keepsUnrecognizedProviderLanguageInsteadOfErasingIt() {
+        FakeController controller = new FakeController();
+        FakeRequestFactory requestFactory = new FakeRequestFactory();
+        FakeResultApplier applier = new FakeResultApplier();
+        FakeResultNotifier notifier = new FakeResultNotifier();
+        FakeHost host = new FakeHost();
+        SubtitlePlaybackSession session = new SubtitlePlaybackSession(host, controller, requestFactory, new SubtitleInjector(), applier, notifier);
+        SubtitleAsset asset = new SubtitleAsset("file:///subtitle.srt", "/tmp/subtitle.srt", "匹配字幕", "unknown", "application/x-subrip", 0, false, 0L);
+
+        session.onPlaybackStarted(host, result("https://play/1.m3u8"));
+        SubtitleRequest current = controller.playbackStarted.get(0);
+        controller.emit(current, SubtitleMatchResult.matched(null, asset, Collections.emptyList()));
+
+        assertEquals("识别不了时不能把语言抹成空串", "unknown", applier.applied.get(0).getLang());
     }
 
     @Test
@@ -368,12 +444,20 @@ public class SubtitlePlaybackSessionTest {
     private static final class FakeResultApplier implements SubtitlePlaybackSession.ResultApplier {
 
         private final List<Sub> applied = new ArrayList<>();
+        private final List<Boolean> expected = new ArrayList<>();
         private boolean applyResult = true;
 
         @Override
         public boolean apply(SubtitlePlaybackSession.Host host, Sub sub) {
             applied.add(sub);
             return applyResult;
+        }
+
+        @Override
+        public void applyExpected(SubtitlePlaybackSession.Host host, Sub sub, Consumer<Boolean> callback) {
+            expected.add(applyResult);
+            applied.add(sub);
+            callback.accept(applyResult);
         }
     }
 

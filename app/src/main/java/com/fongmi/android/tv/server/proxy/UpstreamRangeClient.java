@@ -36,8 +36,17 @@ public final class UpstreamRangeClient implements AutoCloseable {
     private static final int PROBE_BODY_LIMIT = 2;
     private static final int MAX_REDIRECTS = 10;
 
+    /** Lets one transfer cancel exactly the calls it started, without any shared registry. */
+    public interface CallTracker {
+
+        void onCallStarted(Call call);
+
+        void onCallEnded(Call call);
+    }
+
     private final OkHttpClient client;
     private final ProxyRuntimeConfig config;
+    private final UpstreamUrlGuard guard;
     private final Object lifecycleLock = new Object();
     private final Set<Call> activeCalls = new HashSet<>();
     private boolean closed;
@@ -47,9 +56,14 @@ public final class UpstreamRangeClient implements AutoCloseable {
     }
 
     UpstreamRangeClient(OkHttpClient baseClient, ProxyRuntimeConfig config) {
+        this(baseClient, config, null);
+    }
+
+    UpstreamRangeClient(OkHttpClient baseClient, ProxyRuntimeConfig config, UpstreamUrlGuard guard) {
         Objects.requireNonNull(baseClient, "baseClient");
         ProxyRuntimeConfigValidator.requireValid(config);
         this.config = config;
+        this.guard = guard;
         this.client = baseClient.newBuilder()
                 .connectTimeout(config.connectTimeoutMillis(), TimeUnit.MILLISECONDS)
                 .readTimeout(config.readTimeoutMillis(), TimeUnit.MILLISECONDS)
@@ -59,8 +73,15 @@ public final class UpstreamRangeClient implements AutoCloseable {
     }
 
     public ProbeResult probe(String url, Map<String, String> requestHeaders) throws IOException {
+        return probe(url, requestHeaders, null);
+    }
+
+    ProbeResult probe(
+            String url,
+            Map<String, String> requestHeaders,
+            CallTracker tracker) throws IOException {
         Request request = buildProbeRequest(url, requestHeaders);
-        try (RedirectResponse redirect = executeRedirecting(request, requestHeaders, null)) {
+        try (RedirectResponse redirect = executeRedirecting(request, requestHeaders, null, tracker)) {
             Response response = redirect.response();
             String finalUrl = response.request().url().toString();
             UpstreamResourceValidator validator = UpstreamResourceValidator.select(
@@ -167,6 +188,16 @@ public final class UpstreamRangeClient implements AutoCloseable {
             RangePlanner.Shard shard,
             long totalLength,
             UpstreamResourceValidator validator) throws IOException {
+        return fetchShard(url, requestHeaders, shard, totalLength, validator, null);
+    }
+
+    byte[] fetchShard(
+            String url,
+            Map<String, String> requestHeaders,
+            RangePlanner.Shard shard,
+            long totalLength,
+            UpstreamResourceValidator validator,
+            CallTracker tracker) throws IOException {
         Objects.requireNonNull(shard, "shard");
         Objects.requireNonNull(validator, "validator");
         HttpByteRange requested = new HttpByteRange(
@@ -179,7 +210,7 @@ public final class UpstreamRangeClient implements AutoCloseable {
         }
 
         Request request = buildShardRequest(url, requestHeaders, requested, validator);
-        try (RedirectResponse redirect = executeRedirecting(request, requestHeaders, null)) {
+        try (RedirectResponse redirect = executeRedirecting(request, requestHeaders, null, tracker)) {
             Response response = redirect.response();
             RangeResponseValidator.Result metadata = RangeResponseValidator.validate(
                     requested,
@@ -212,6 +243,15 @@ public final class UpstreamRangeClient implements AutoCloseable {
             Map<String, String> requestHeaders,
             String rangeHeader,
             boolean head) {
+        return singleRequest(url, requestHeaders, rangeHeader, head, null);
+    }
+
+    SingleRequest singleRequest(
+            String url,
+            Map<String, String> requestHeaders,
+            String rangeHeader,
+            boolean head,
+            CallTracker tracker) {
         requireHttpUrl(url);
         Request.Builder builder = new Request.Builder()
                 .url(url)
@@ -220,24 +260,34 @@ public final class UpstreamRangeClient implements AutoCloseable {
         copyAllowedHeaders(builder, requestHeaders);
         boolean ranged = rangeHeader != null && !rangeHeader.isBlank();
         if (ranged) builder.header(HEADER_RANGE, rangeHeader);
-        return new SingleRequest(this, builder.build(), requestHeaders, ranged);
+        return new SingleRequest(this, builder.build(), requestHeaders, ranged, tracker);
     }
 
     private RedirectResponse executeRedirecting(
             Request initialRequest,
             Map<String, String> requestHeaders,
-            Consumer<Call> callObserver) throws IOException {
+            Consumer<Call> callObserver,
+            CallTracker tracker) throws IOException {
         Map<String, String> originalHeaders = UpstreamHeaderPolicy.sanitize(requestHeaders);
         Map<String, String> forwardHeaders = originalHeaders;
         Request request = initialRequest;
         for (int redirects = 0; ; redirects++) {
+            if (guard != null) {
+                try {
+                    requireHttpUrl(request.url().toString());
+                    guard.check(request.url());
+                } catch (IOException | IllegalArgumentException e) {
+                    throw new IOException("blocked upstream target");
+                }
+            }
             Call call = track(client.newCall(request));
             if (callObserver != null) callObserver.accept(call);
+            if (tracker != null) tracker.onCallStarted(call);
             Response response = null;
             try {
                 response = call.execute();
                 if (!response.isRedirect()) {
-                    return new RedirectResponse(this, call, response, forwardHeaders);
+                    return new RedirectResponse(this, call, response, forwardHeaders, tracker);
                 }
                 if (redirects >= MAX_REDIRECTS) {
                     throw new IOException("too many upstream redirects");
@@ -245,6 +295,9 @@ public final class UpstreamRangeClient implements AutoCloseable {
                 String location = response.header("Location");
                 HttpUrl nextUrl = location == null ? null : response.request().url().resolve(location);
                 if (nextUrl == null) throw new IOException("invalid upstream redirect location");
+                if (guard != null && request.url().isHttps() && !nextUrl.isHttps()) {
+                    throw new IOException("blocked upstream target");
+                }
                 boolean crossOrigin = !sameOrigin(response.request().url(), nextUrl);
                 forwardHeaders = UpstreamHeaderPolicy.sanitizeForRedirect(forwardHeaders, crossOrigin);
                 Request.Builder next = response.request().newBuilder().url(nextUrl);
@@ -255,7 +308,7 @@ public final class UpstreamRangeClient implements AutoCloseable {
                 request = next.build();
             } finally {
                 if (response != null && response.isRedirect()) response.close();
-                if (response == null || response.isRedirect()) release(call);
+                if (response == null || response.isRedirect()) release(call, tracker);
             }
         }
     }
@@ -280,6 +333,11 @@ public final class UpstreamRangeClient implements AutoCloseable {
         synchronized (lifecycleLock) {
             activeCalls.remove(call);
         }
+    }
+
+    private void release(Call call, CallTracker tracker) {
+        release(call);
+        if (tracker != null) tracker.onCallEnded(call);
     }
 
     @Override
@@ -415,6 +473,7 @@ public final class UpstreamRangeClient implements AutoCloseable {
         private final Call call;
         private final Response response;
         private final Map<String, String> forwardHeaders;
+        private final CallTracker tracker;
         private boolean handedOff;
         private boolean closed;
 
@@ -422,11 +481,17 @@ public final class UpstreamRangeClient implements AutoCloseable {
                 UpstreamRangeClient owner,
                 Call call,
                 Response response,
-                Map<String, String> forwardHeaders) {
+                Map<String, String> forwardHeaders,
+                CallTracker tracker) {
             this.owner = owner;
             this.call = call;
             this.response = response;
             this.forwardHeaders = Map.copyOf(forwardHeaders);
+            this.tracker = tracker;
+        }
+
+        private CallTracker tracker() {
+            return tracker;
         }
 
         private Response response() {
@@ -450,7 +515,7 @@ public final class UpstreamRangeClient implements AutoCloseable {
             try {
                 response.close();
             } finally {
-                owner.release(call);
+                owner.release(call, tracker);
             }
         }
     }
@@ -460,6 +525,7 @@ public final class UpstreamRangeClient implements AutoCloseable {
         private final Request request;
         private final Map<String, String> requestHeaders;
         private final boolean ranged;
+        private final CallTracker tracker;
         private final AtomicBoolean executed = new AtomicBoolean();
         private volatile Call activeCall;
         private volatile boolean cancelled;
@@ -468,11 +534,13 @@ public final class UpstreamRangeClient implements AutoCloseable {
                 UpstreamRangeClient owner,
                 Request request,
                 Map<String, String> requestHeaders,
-                boolean ranged) {
+                boolean ranged,
+                CallTracker tracker) {
             this.owner = owner;
             this.request = request;
             this.requestHeaders = UpstreamHeaderPolicy.sanitize(requestHeaders);
             this.ranged = ranged;
+            this.tracker = tracker;
         }
 
         public SingleResponse execute() throws IOException {
@@ -484,12 +552,13 @@ public final class UpstreamRangeClient implements AutoCloseable {
                     call -> {
                         activeCall = call;
                         if (cancelled) call.cancel();
-                    })) {
+                    },
+                    tracker)) {
                 Response response = redirect.response();
                 if (ranged && !isIdentity(response.header(HEADER_CONTENT_ENCODING))) {
                     throw new IOException("encoded upstream range response is not safe to relay");
                 }
-                return new SingleResponse(owner, activeCall, redirect.handOff());
+                return new SingleResponse(owner, activeCall, redirect.handOff(), redirect.tracker());
             }
         }
 
@@ -498,7 +567,7 @@ public final class UpstreamRangeClient implements AutoCloseable {
             Call call = activeCall;
             if (call != null) {
                 call.cancel();
-                owner.release(call);
+                owner.release(call, tracker);
             }
         }
     }
@@ -509,13 +578,19 @@ public final class UpstreamRangeClient implements AutoCloseable {
         private final Call call;
         private final Response response;
         private final ResponseBody body;
+        private final CallTracker tracker;
         private final AtomicBoolean closed = new AtomicBoolean();
 
-        private SingleResponse(UpstreamRangeClient owner, Call call, Response response) {
+        private SingleResponse(
+                UpstreamRangeClient owner,
+                Call call,
+                Response response,
+                CallTracker tracker) {
             this.owner = owner;
             this.call = call;
             this.response = response;
             this.body = response.body();
+            this.tracker = tracker;
         }
 
         public int statusCode() {
@@ -552,7 +627,7 @@ public final class UpstreamRangeClient implements AutoCloseable {
             try {
                 response.close();
             } finally {
-                owner.release(call);
+                owner.release(call, tracker);
             }
         }
     }

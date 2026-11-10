@@ -672,7 +672,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         // 此前是硬编码 16dp，而 webhtv_size_tv_card_gap 只声明、从未被引用。
         int tvCardGap = ResUtil.dpOf(R.dimen.webhtv_size_tv_card_gap);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap), VodPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap), FuncPresenter.class);
+        // 功能区按钮少且默认就溢出一屏，左右到头环绕才能连续换焦；点播/历史行是长列表，
+        // 环绕会把滚动位置甩回另一端，所以只有这一行开启。
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap).setWrapFocus(true), FuncPresenter.class);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap, FocusHighlight.ZOOM_FACTOR_SMALL, HorizontalGridView.FOCUS_SCROLL_ALIGNED), HistoryPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));

@@ -38,9 +38,23 @@
             app:tint="@color/fixed_light_focus_icon" />
     </androidx.appcompat.widget.LinearLayoutCompat>
 
-    <WebView
-        android:id="@+id/pluginPanelWeb"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1">
+
+        <WebView
+            android:id="@+id/pluginPanelWeb"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ProgressBar
+            android:id="@+id/pluginPanelLoading"
+            style="?android:attr/progressBarStyle"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:visibility="gone" />
+    </FrameLayout>
 </androidx.appcompat.widget.LinearLayoutCompat>

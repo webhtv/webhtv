@@ -271,7 +271,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class VideoActivity extends PlaybackActivity implements Clock.Callback, CustomKeyDown.Listener, TrackDialog.Listener, ControlDialog.Listener, DanmakuDialog.Host, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, EpisodeGroupAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener, SubtitlePlaybackSession.Host, com.fongmi.android.tv.ui.novel.NovelReaderHost {
+public class VideoActivity extends PlaybackActivity implements Clock.Callback, CustomKeyDown.Listener, TrackDialog.Listener, ControlDialog.Listener, DanmakuDialog.Host, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, EpisodeGroupAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, CastDialog.Listener, InfoDialog.Listener, SubtitlePlaybackSession.Host, com.fongmi.android.tv.ui.novel.NovelReaderHost, com.fongmi.android.tv.plugin.PluginSurface.ImmersiveAware {
     /**
      * 用户拖拽 seek 时加载圈的最小可见时长。
      *
@@ -461,8 +461,122 @@ private int mAudioBackgroundRandomNonce;
     private View mNightModeOverlay;
     private int mNightModeLevel = PlayerSetting.NIGHT_MODE_OFF;
     private List<String> mBroken;
+    private final String mDanmakuOwnerTag = "auto-danmaku-" + java.util.UUID.randomUUID();
+    private AutoDanmakuToken mAutoDanmaku;
+    private DanmakuApi.OwnedSearch mAutoDanmakuCall;
+    private AutoDanmakuToken mDecodeRestoreToken;
+    private Object mDecodeRestoreOwner;
+    private boolean mDanmakuRetired;
+
+    private static final class AutoDanmakuToken {
+        final PlaybackService binding;
+        final PlayerManager manager;
+        final Result result;
+        final String trace, key, url, episodeName, episodeUrl, flag, name;
+
+        AutoDanmakuToken(PlaybackService binding, PlayerManager manager, Result result,
+                         String key, Episode episode, String flag, String name) {
+            this.binding = binding;
+            this.manager = manager;
+            this.result = result;
+            this.trace = manager.getPlaybackTraceId();
+            this.key = key;
+            this.url = result.getRealUrl();
+            this.episodeName = episode.getName();
+            this.episodeUrl = episode.getUrl();
+            this.flag = flag;
+            this.name = name;
+        }
+    }
+
+    private void invalidateAutoDanmaku() {
+        DanmakuApi.cancel(mDanmakuOwnerTag);
+        mAutoDanmaku = null;
+        mDecodeRestoreToken = null;
+        mDecodeRestoreOwner = null;
+        if (mAutoDanmakuCall != null) mAutoDanmakuCall.cancel();
+        mAutoDanmakuCall = null;
+    }
+
+    private boolean ownsAutoDanmaku(AutoDanmakuToken token) {
+        Episode episode = getEpisode();
+        if (episode == null) return false;
+        return token != null && token == mAutoDanmaku && !mDanmakuRetired
+                && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect()
+                && service() == token.binding && service() != null && player() == token.manager && isOwner()
+                && TextUtils.equals(token.key, getHistoryKey())
+                && TextUtils.equals(token.url, token.result.getRealUrl())
+                && TextUtils.equals(token.episodeName, episode.getName())
+                && TextUtils.equals(token.episodeUrl, episode.getUrl())
+                && TextUtils.equals(token.flag, getEpisodePlayFlag(getFlag(), episode));
+    }
+
+    private void searchAutoDanmaku(Result result, PlayerManager manager, String beforeTrace) {
+        if (mAutoDanmakuCall != null) invalidateAutoDanmaku();
+        if (service() == null || player() != manager || mDanmakuRetired || isRedirect() || isPlaybackExiting()
+                || !isOwner() || isFinishing() || isDestroyed()) return;
+        Episode episode = getEpisode();
+        if (episode == null) return;
+        String trace = manager.getPlaybackTraceId();
+        if (com.fongmi.android.tv.player.PlaybackTrace.NONE.equals(trace) || TextUtils.equals(beforeTrace, trace)
+                || !DanmakuApi.canAutoSearch(result.getDanmaku())) return;
+        AutoDanmakuToken token = new AutoDanmakuToken(service(), manager, result, getHistoryKey(), episode,
+                getEpisodePlayFlag(getFlag(), episode), mHistory.getVodName());
+        mAutoDanmaku = token;
+        mAutoDanmakuCall = DanmakuApi.searchOwned(MediaTitleRequest.builder()
+                .siteKey(getKey()).vodId(getId()).rawTitle(token.name)
+                .rawRemarks(mHistory.getVodRemarks()).episodeName(token.episodeName)
+                .tmdbId(danmakuTmdbId()).tmdbSeasonNumber(danmakuTmdbSeasonNumber())
+                .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO).allowAi(true).build(), mDanmakuOwnerTag, item -> {
+            if (ownsAutoDanmaku(token) && TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) {
+                if (DanmakuSetting.isSpiderFirst() && !token.result.getDanmaku().isEmpty()) token.manager.addDanmaku(item);
+                else token.manager.setDanmaku(item);
+                refreshDanmakuControls();
+            }
+        });
+    }
+
+    private void finishDecodeRestore(Object owner, boolean restoreCurrent) {
+        if (mDecodeRestoreOwner != owner) return;
+        AutoDanmakuToken pending = mDecodeRestoreToken;
+        mDecodeRestoreOwner = null;
+        mDecodeRestoreToken = null;
+        if (restoreCurrent && mAutoDanmaku == null) mAutoDanmaku = pending;
+    }
+
+    private void renewAutoDanmaku() {
+        AutoDanmakuToken token = mAutoDanmaku;
+        if (!ownsAutoDanmaku(token)) return;
+        String beforeTrace = token.trace;
+        if (TextUtils.equals(beforeTrace, token.manager.getPlaybackTraceId())) {
+            if (mAutoDanmakuCall != null && !mAutoDanmakuCall.canRetry()) return;
+            beforeTrace = com.fongmi.android.tv.player.PlaybackTrace.NONE;
+        }
+        invalidateAutoDanmaku();
+        searchAutoDanmaku(token.result, token.manager, beforeTrace);
+    }
+
+    @Override
+    protected void startPlayer(String key, Result result, boolean useParse, long timeout,
+                               MediaMetadata metadata, long startPositionMs) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
+        super.startPlayer(key, result, useParse, timeout, metadata, startPositionMs);
+    }
     private History mHistory;
     private boolean fullscreen;
+    /**
+     * 本页当前的画中画状态。
+     *
+     * <p>两个写点，各有分工：{@code onPictureInPictureModeChanged} 用形参写（回调是唯一能保证
+     * 事件顺序的地方），{@code initView} 用 {@code isInPictureInPictureMode()} 写初值——进程在
+     * 画中画中被回收后恢复不会再走一次回调，字段停在 {@code false} 会把恢复中的小窗当全屏。
+     *
+     * <p><b>为什么消费侧读字段而不是现场问平台。</b>不是为了绕开回调时序（平台在派发前已写好
+     * 该状态，回调里问也是新值），而是为了让"这一次形态变更"只有一个快照：判据在重算入口与
+     * 发事件之间必须看到同一个值，现场再问一次就可能取到别的时点。
+     */
+    private boolean inPip;
     private boolean initAuto;
     private boolean autoMode;
     private boolean revealManualSearch;
@@ -1603,6 +1717,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         initializeRuntimeDetailMode();
         mTmdbDetailTimeout = this::showTmdbDetailFallback;
         super.initView(savedInstanceState);
+        // 初始值必须来自平台真实状态：进程在画中画里被回收后重建时不会再走一次回调，
+        // 字段留在默认 false 就会把恢复中的 PiP 短暂当成全屏。
+        inPip = isInPictureInPictureMode();
         applyPlaybackOverlay();
         mRestoringConfigurationPlayback = savedInstanceState != null;
         ViewCompat.setOnApplyWindowInsetsListener(mBinding.getRoot(), (v, insets) -> setStatusBar(insets));
@@ -2430,6 +2547,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void getDetail(boolean refresh) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
         detailStartTime = System.currentTimeMillis();
         detailHealthRecorded = false;
         cancelTmdbDetailFallback();
@@ -2449,6 +2568,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void getDetail(Vod item) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
         revealManualSearch = false;
         if (!isAutoMode()) mViewModel.stopSearch();
         saveHistory();
@@ -2834,6 +2955,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void getPlayer(Flag flag, Episode episode) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
         publishPluginEpisodeContext(episode);
         mBinding.control.title.setText(getPlaybackControlTitle(episode));
         playerStartTime = System.currentTimeMillis();
@@ -3103,7 +3226,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         List<Danmaku> siteDanmakus = result.getDanmaku();
         player().setDanmaku(siteDanmakus.isEmpty() ? Danmaku.empty() : siteDanmakus.get(0));
         subtitlePlaybackSession.onPlaybackStarted(this, result);
-        DanmakuApi.cancel();
+        invalidateAutoDanmaku();
         if (DanmakuApi.canAutoSearch(siteDanmakus)) searchShortDramaDanmaku(current, siteDanmakus);
         loadTmdbRelatedVideosForCurrentEpisode();
         mShortDramaQueuedSpec = null;
@@ -3116,18 +3239,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void searchShortDramaDanmaku(Episode episode, List<Danmaku> siteDanmakus) {
-        String episodeUrl = episode == null ? "" : episode.getUrl();
-        DanmakuApi.search(MediaTitleRequest.builder()
-                .siteKey(getKey()).vodId(getId()).rawTitle(mHistory.getVodName())
-                .rawRemarks(mHistory.getVodRemarks()).episodeName(episode == null ? "" : episode.getName())
-                .tmdbId(danmakuTmdbId()).tmdbSeasonNumber(danmakuTmdbSeasonNumber())
-                .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO).allowAi(true).build(), danmaku -> {
-            Episode active = getEpisode();
-            if (player() == null || active == null || !TextUtils.equals(active.getUrl(), episodeUrl)) return;
-            if (DanmakuSetting.isSpiderFirst() && !siteDanmakus.isEmpty()) player().addDanmaku(danmaku);
-            else player().setDanmaku(danmaku);
-            refreshDanmakuControls();
-        });
+        searchAutoDanmaku(mAppliedPlayerResult, player(), com.fongmi.android.tv.player.PlaybackTrace.NONE);
     }
 
     private Episode getEpisodeByIndex(int index) {
@@ -3148,6 +3260,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         // Commit changes the manager's current PlaySpec, so close the previous
         // episode's playback event before switching to the queued item.
         if (service() != null) PlaybackEventCollector.get().onStop(player());
+        invalidateAutoDanmaku();
         if (spec == null || result == null || current == null || !player().commitPlaylistTransition(spec)) {
             fallbackShortDramaQueued();
             return;
@@ -3252,6 +3365,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void setPlayer(Result result) {
+        invalidateAutoDanmaku();
         if (result == null || isFinishing() || isDestroyed()) return;
         if (service() == null) {
             mPendingPlayerResult = result;
@@ -3279,24 +3393,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mInitialPlaybackPosition = resolveInitialPlaybackPosition();
         SpiderDebug.log("video-flow", "startPlayer dispatch initialPosition=%d music=%s ijk=%s", mInitialPlaybackPosition, isMusicLike(), service() != null && player().isIjk());
         if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
+        PlayerManager danmakuManager = player();
+        String beforeTrace = danmakuManager.getPlaybackTraceId();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
         subtitlePlaybackSession.onPlaybackStarted(this, result);
-        if (DanmakuApi.canAutoSearch(siteDanmakus)) DanmakuApi.search(MediaTitleRequest.builder()
-                .siteKey(getKey())
-                .vodId(getId())
-                .rawTitle(mHistory.getVodName())
-                .rawRemarks(mHistory.getVodRemarks())
-                .episodeName(getEpisode().getName())
-                .tmdbId(danmakuTmdbId())
-                .tmdbSeasonNumber(danmakuTmdbSeasonNumber())
-                .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO)
-                .allowAi(true)
-                .build(), danmaku -> {
-            if (player() == null) return;
-            if (DanmakuSetting.isSpiderFirst() && !siteDanmakus.isEmpty()) player().addDanmaku(danmaku);
-            else player().setDanmaku(danmaku);
-            refreshDanmakuControls();
-        });
+        searchAutoDanmaku(result, danmakuManager, beforeTrace);
     }
 
     private boolean redirectToAudioIfNeeded(Result result) {
@@ -3425,11 +3526,14 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     public void onItemClick(Result result) {
         invalidateShortDramaQueue("quality");
         updateActionQuality(result);
+        PlayerManager manager = service() != null ? player() : null;
+        String beforeTrace = manager != null ? manager.getPlaybackTraceId() : null;
         beginPlayHealth();
         // 切清晰度也会重建 spec，字幕列表跟着重置，所以这里同样要恢复一次。
         if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
         subtitlePlaybackSession.onPlaybackStarted(this, result);
+        if (manager != null) searchAutoDanmaku(result, manager, beforeTrace);
     }
 
     @Override
@@ -3447,6 +3551,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void setParse(Parse item) {
+        invalidateAutoDanmaku();
+        mPendingPlayerResult = null;
         VodConfig.get().setParse(item);
         notifyItemChanged(mBinding.control.parse, mParseAdapter);
     }
@@ -5333,9 +5439,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     private boolean refreshAndSwitchDecode() {
         if (decodeSwitchRefreshing) return true;
         if (getFlag() == null || getEpisode() == null) return false;
-        long position = player().getPosition();
-        float speed = player().getSpeed();
-        boolean repeat = player().isRepeatOne();
+        PlaybackService binding = service();
+        PlayerManager manager = player();
+        long position = manager.getPosition();
+        float speed = manager.getSpeed();
+        boolean repeat = manager.isRepeatOne();
         String key = getKey();
         String flag = getFlag().getFlag();
         String episode = getEpisode().getUrl();
@@ -5343,6 +5451,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         int requestId = ++decodeSwitchRequestId;
         int generation = beginPlayerContentSwitch(requestId, key, flag, episode);
         decodeSwitchRefreshing = true;
+        AutoDanmakuToken restore = mAutoDanmaku;
+        invalidateAutoDanmaku();
+        Object owner = new Object();
+        mDecodeRestoreOwner = owner;
+        mDecodeRestoreToken = restore;
         setNextDecodeText();
         setDecodeSwitchPending(true);
         mClock.setCallback(null);
@@ -5350,11 +5463,14 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         Task.execute(() -> {
             try {
                 Result result = SiteApi.playerContent(key, flag, episode);
-                App.post(() -> switchDecodeWithResult(requestId, generation, key, flag, episode, result, position, speed, repeat, metadata));
+                App.post(() -> switchDecodeWithResult(owner, binding, manager, requestId, generation, key, flag, episode, result, position, speed, repeat, metadata));
             } catch (Throwable e) {
                 App.post(() -> {
-                    if (!isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
+                    if (service() != binding || player() != manager
+                            || mDecodeRestoreOwner != owner || requestId != decodeSwitchRequestId
+                            || !canApplyPlayerContentRequest(requestId, generation, key, flag, episode)) return;
                     decodeSwitchRefreshing = false;
+                    finishDecodeRestore(owner, true);
                     setDecodeSwitchPending(false);
                     setDecode();
                     Notify.show(e.getMessage());
@@ -5364,17 +5480,22 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         return true;
     }
 
-    private void switchDecodeWithResult(int requestId, int generation, String key, String flag, String episode,
+    private void switchDecodeWithResult(Object owner, PlaybackService binding, PlayerManager manager, int requestId, int generation, String key, String flag, String episode,
                                         Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
-        if (requestId != decodeSwitchRequestId
-                || !isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
+        if (service() != binding || player() != manager
+                || mDecodeRestoreOwner != owner || requestId != decodeSwitchRequestId
+                || !canApplyPlayerContentRequest(requestId, generation, key, flag, episode)) return;
         decodeSwitchRefreshing = false;
         setDecodeSwitchPending(false);
-        if (!canApplyPlayerContentRequest(requestId, generation, key, flag, episode)) return;
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
+            finishDecodeRestore(owner, true);
             player().toggleDecode();
         } else {
+            finishDecodeRestore(owner, false);
+            PlayerManager danmakuManager = player();
+            String beforeTrace = danmakuManager.getPlaybackTraceId();
             player().switchDecode(result, activePlaybackKey(), metadata, isUseParse(), position, speed, repeat);
+            searchAutoDanmaku(result, danmakuManager, beforeTrace);
         }
         setR1Callback();
         setDecode();
@@ -5517,6 +5638,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         String episode = currentEpisode.getUrl();
         MediaMetadata metadata = buildMetadata();
         int generation = beginPlayerContentSwitch(requestId, key, flag, episode);
+        invalidateAutoDanmaku();
         mClock.setCallback(null);
         SpiderDebug.log("video-flow", "switch player refresh start type=%d key=%s flag=%s episode=%s", nextType, key, flag, episode);
         Task.execute(() -> {
@@ -5545,8 +5667,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
             Notify.show(result != null && result.hasMsg() ? result.getMsg() : getString(R.string.error_play_url));
         } else {
+            PlayerManager danmakuManager = player();
+            String beforeTrace = danmakuManager.getPlaybackTraceId();
             player().switchPlayer(type, result, activePlaybackKey(), metadata, isUseParse(), position, speed, repeat);
             rememberPlayerKernel(type);
+            searchAutoDanmaku(result, danmakuManager, beforeTrace);
         }
         setPlayerKernel();
         setDecode();
@@ -7993,6 +8118,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     @Override
     protected void onStateChanged(int state) {
+        if (state == Player.STATE_READY) renewAutoDanmaku();
         switch (state) {
             case Player.STATE_BUFFERING:
                 // 播放器缓冲时始终显示加载动画（转圈+流量），不管 TMDB 内容是否加载完成
@@ -8209,6 +8335,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         else if (event.getType() == RefreshEvent.Type.HISTORY) refreshPersonalRecommendationsForHistory();
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
         else if (event.getType() == RefreshEvent.Type.DANMAKU) {
+            invalidateAutoDanmaku();
             player().reloadDanmaku(Danmaku.from(event.getPath()));
             refreshDanmakuControls();
         }
@@ -8610,6 +8737,40 @@ private void checkOrientation() {
     private void setFullscreen(boolean fullscreen) {
         Util.toggleFullscreen(this, this.fullscreen = fullscreen);
         updateFusionThemeButtonVisibility();
+        notifyPluginFullscreen();
+    }
+
+    /**
+     * 页面自报沉浸态：本页是否处于全屏播放。
+     *
+     * <p>画中画不算：PiP 下用户仍在与本页交互，入口该留着。判断读 {@link #inPip} 这个快照，
+     * 让"重算入口"与"广播事件"看到同一份形态，而不是各自去问一次平台。
+     */
+    @Override
+    public boolean isImmersive() {
+        return fullscreen && !inPip;
+    }
+
+    /**
+     * 全屏形态变化后通知插件层：先重算入口可见性，再把新形态广播给订阅者。
+     *
+     * <p>挂在这里而不是 {@code enterFullscreen} / {@code exitFullscreen} 上：那两条只是入口，
+     * 短剧、旋转、PiP 恢复各自还有自己的路径，只有 {@code setFullscreen} 与 PiP 回调是所有变化的收口。
+     *
+     * <p>广播值取 {@link #isImmersive()} 而不是裸 {@code fullscreen}：入口的隐藏判据就是它。
+     * 两处取不同值会让画中画期间事件报「全屏」而入口仍然可见，声明与行为脱钩。
+     */
+    private void notifyPluginFullscreen() {
+        try {
+            com.fongmi.android.tv.plugin.PluginController.get().refreshRender(this);
+        } catch (Throwable ignored) {
+            // 插件入口是可选增强：重算失败不该影响播放页。
+        }
+        try {
+            com.fongmi.android.tv.plugin.PluginHostEvents.playbackFullscreen(this, isImmersive());
+        } catch (Throwable ignored) {
+            // 事件是可选增强：广播失败同样不该影响播放页。
+        }
     }
 
     private boolean isShortDramaSource() {
@@ -8854,7 +9015,7 @@ private void checkOrientation() {
     }
 
     private void cycleFusionTheme() {
-        int theme = isFusionLightTheme() ? 2 : 1;
+        int theme = isFusionLightTheme() ? 1 : 2;
         Setting.putTmdbDetailTheme(theme);
         getIntent().putExtra(EXTRA_TMDB_DETAIL_THEME, theme);
         applyFusionThemeSurface();
@@ -10022,6 +10183,9 @@ private void checkOrientation() {
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        inPip = isInPictureInPictureMode;
+        // 判据已随形参翻转：本页只依赖 fullscreen 与 inPip，这里一次重算就够。
+        notifyPluginFullscreen();
         updateFusionThemeButtonVisibility();
         if (!isFullscreen()) setVideoView(isInPictureInPictureMode);
         if (isInPictureInPictureMode) {
@@ -10165,6 +10329,8 @@ private void checkOrientation() {
     }
     @Override
     protected void onDestroy() {
+        mDanmakuRetired = true;
+        invalidateAutoDanmaku();
         if (mCustomButtonPlayer != null) {
             mCustomButtonPlayer.removeCustomButtonStateListener(mCustomButtonStateListener);
             mCustomButtonPlayer = null;
@@ -10194,7 +10360,7 @@ private void checkOrientation() {
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
         saveHistory(true);
         Timer.get().reset();
-        DanmakuApi.cancel();
+        DanmakuApi.cancel(mDanmakuOwnerTag);
         RefreshEvent.keep();
         App.removeCallbacks(mR1, mR2, mR3, mR4, mSeekProgressFallback, mTmdbDetailTimeout);
         mViewModel.getResult().removeObserver(mObserveDetail);

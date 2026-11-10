@@ -1050,7 +1050,9 @@
     <string name="cache_retention_forever">永久</string>
     <string name="cache_total_limit_button">总上限</string>
     <string name="cache_total_limit_title">总缓存上限</string>
-    <string name="cache_total_limit_summary">总计：%1$s</string>
+    <string name="cache_total_limit_summary">总上限：%1$s</string>
+    <string name="cache_limit_title_exo">播放缓存上限</string>
+    <string name="cache_management_playback_budget">播放缓存 %1$s（退出播放后收至 %2$s）</string>
     <string name="cache_cleanup_confirm_title">确认清理缓存？</string>
     <string name="cache_cleanup_confirm_light">清理过期节目单、临时文件和遗留缓存？</string>
     <string name="cache_cleanup_confirm_standard">清理图片、歌词、K 歌和 WebHome 等可重建缓存？\n\n收藏、历史和设置不会受影响。</string>
@@ -2337,6 +2339,7 @@
     <string name="detail_expand">展开</string>
     <string name="detail_collapse">收起</string>
     <string name="detail_flag">线路</string>
+    <string name="detail_plugin">插件</string>
     <string name="detail_quality">画质</string>
     <string name="detail_play_now">立即播放</string>
     <string name="detail_play_resume">继续播放 - %1$s</string>
@@ -3060,7 +3063,7 @@
     <string name="plugin_manager_entry_meta">版本 %1$s · 运行时 %2$s · %3$s</string>
     <string name="plugin_manager_params">参数</string>
     <string name="plugin_manager_params_title">“%1$s”的参数</string>
-    <string name="plugin_manager_params_hint">JSON 对象，例如 {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
+    <string name="plugin_manager_params_hint">JSON 对象，例如 {\&quot;DOUBAN_TOKEN\&quot;:\&quot;abc\&quot;}</string>
     <string name="plugin_manager_params_invalid">参数必须是 JSON 对象</string>
     <string name="plugin_manager_params_too_large">参数量超出保存上限</string>
     <string name="plugin_manager_remote_import">从地址导入</string>

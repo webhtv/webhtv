@@ -29,6 +29,8 @@ public final class SubtitleRequest {
     private final TmdbEpisode tmdbEpisode;
     private final int seasonNumber;
     private final int episodeNumber;
+    private final long durationMs;
+    private final DurationSource durationSource;
 
     private SubtitleRequest(Builder builder) {
         this.playbackKey = builder.playbackKey;
@@ -49,6 +51,8 @@ public final class SubtitleRequest {
         this.tmdbEpisode = builder.tmdbEpisode;
         this.seasonNumber = builder.seasonNumber;
         this.episodeNumber = builder.episodeNumber;
+        this.durationMs = builder.durationMs;
+        this.durationSource = builder.durationSource;
     }
 
     public static Builder builder() {
@@ -129,6 +133,68 @@ public final class SubtitleRequest {
         return episodeNumber;
     }
 
+    /** 当前播放影片时长；0 表示未知。 */
+    public long getDurationMs() {
+        return durationMs;
+    }
+
+    /**
+     * 搜索/排序时再取一次时长。
+     *
+     * <p>时长在起播瞬间往往还没就绪（Media3 返回 {@code TIME_UNSET}），而请求一旦构造就
+     * 带着当时的 0 走到底，时长维度会永远是 0 分。这里允许在真正建 context 时补取：
+     * 已知值优先，未知时问一次来源；来源为空或返回非正数按未知处理。
+     */
+    public long resolveDurationMs() {
+        if (durationMs > 0 || durationSource == null) return durationMs;
+        long current = durationSource.resolve();
+        return current > 0 ? current : 0L;
+    }
+
+    public SubtitleRequest withDurationSource(DurationSource durationSource) {
+        Builder builder = toBuilder().durationSource(durationSource);
+        return new SubtitleRequest(builder);
+    }
+
+    /** 时长来源。实现必须已经拿到值（例如读主线程缓存的已知时长），不得在后台线程读播放器。 */
+    public interface DurationSource {
+        long resolve();
+    }
+
+    /**
+     * 补上影片时长。
+     *
+     * <p>时长只有播放器知道，而请求由可覆写的工厂方法构造，所以走一次复制，
+     * 不把时长塞进每个构造点。
+     */
+    public SubtitleRequest withDurationMs(long durationMs) {
+        return new SubtitleRequest(toBuilder().durationMs(durationMs));
+    }
+
+    private Builder toBuilder() {
+        return builder()
+                .playbackKey(playbackKey)
+                .siteKey(siteKey)
+                .siteName(siteName)
+                .vodId(vodId)
+                .vodName(vodName)
+                .vodRemarks(vodRemarks)
+                .vodYear(vodYear)
+                .episodeName(episodeName)
+                .playUrl(playUrl)
+                .playHeaders(playHeaders)
+                .preferredLanguage(preferredLanguage)
+                .trigger(trigger)
+                .allowTmdbLookup(allowTmdbLookup)
+                .manualOnly(manualOnly)
+                .tmdbItem(tmdbItem)
+                .tmdbEpisode(tmdbEpisode)
+                .seasonNumber(seasonNumber)
+                .episodeNumber(episodeNumber)
+                .durationMs(durationMs)
+                .durationSource(durationSource);
+    }
+
     public static final class Builder {
 
         private String playbackKey = "";
@@ -149,6 +215,8 @@ public final class SubtitleRequest {
         private TmdbEpisode tmdbEpisode;
         private int seasonNumber = -1;
         private int episodeNumber = -1;
+        private long durationMs;
+        private DurationSource durationSource;
 
         public Builder playbackKey(String playbackKey) {
             this.playbackKey = playbackKey == null ? "" : playbackKey;
@@ -237,6 +305,16 @@ public final class SubtitleRequest {
 
         public Builder episodeNumber(int episodeNumber) {
             this.episodeNumber = episodeNumber;
+            return this;
+        }
+
+        public Builder durationSource(DurationSource durationSource) {
+            this.durationSource = durationSource;
+            return this;
+        }
+
+        public Builder durationMs(long durationMs) {
+            this.durationMs = Math.max(0L, durationMs);
             return this;
         }
 

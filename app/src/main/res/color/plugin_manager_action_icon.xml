@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:alpha="0.38" android:color="?attr/colorOnSurfaceVariant" />
+    <item android:state_focused="true" android:color="#174EA6" />
+    <item android:state_pressed="true" android:color="#174EA6" />
+    <item android:color="?attr/colorOnSurface" />
+</selector>

@@ -36,6 +36,8 @@
 | P2 子阶段 | `P2-4` | MPV/native/App | Android BL 硬解 + EL 软解 + GPU FEL 重建，新增手动选择项 | 日志33否决9.20的整体性能收益；9.22完成跨项目/二进制复核，推荐先修正重复建链，再做绑定类型/外部图像对照；新方案未实施，电视实时性能未验收 | [P2-4-mpv-android-fel.md](P2-4-mpv-android-fel.md) |
 | 38 | `P9-MPV-BLURAY-MENU` | MPV/native/App | HDMV Blu-ray 菜单画面、按钮高亮、方向/确认/返回/Popup、菜单跳转与 still frame；BD-J 无提示回退现状 | 2026-09-11父菜单未命中修复已实现，定向验证及构建通过，用户测试确认并要求tag | [P9-MPV-BLURAY-MENU.md](P9-MPV-BLURAY-MENU.md) |
 
+| 上游同步 | `C123` | common / 上游同步 | 完整合并 `webhtv/webhtv:Silent1566@fbe5fe91db9ba41fd380929ebc039a699dba463b` 至 `dev1`，保留本地播放/字幕/爬虫保护 | 已实现、验证与两轴复审闭合：15提交、29上游路径、7文件36冲突；双端Java/mobile测试Java通过，18类186测试0失败/错误/跳过；服务实例与无Call重试回归红绿闭合。原子合并提交由 `Task-Guard: C123` 定位、恢复标签为 `recovery/C123/`；仅本地，不推送。SDK27测试路径不代表SDK28或真机渲染，旧清理模块诊断缺陷经用户选择不扩范围 | [C123-upstream-sync-silent1566.md](C123-upstream-sync-silent1566.md) |
+
 新增产品需求（不改变既有上游提交的实施顺序）：
 
 | 任务 ID | 类别 | 功能/能力 | 状态 | 唯一文档 |
@@ -5098,3 +5100,38 @@ C3 的触发来源主要是 media `990abc2368fd74779f525ee345734470659f3d53`（`
 - 验证：`app` 双 flavor arm64 Debug Java 编译 `BUILD SUCCESSFUL`；定向单测 633 例 / 1 skipped / 0 失败；全量 leanback 单测 4492 例 / 3 skipped / 8 失败，8 例在合并前基线独立 worktree 中逐条复现（失败名 `diff` 无差异）⇒ 0 新增失败；`git diff --check` 与冲突标记扫描为空。
 - 未执行：设备端 `exo-frame` / `exo-frame-timing` / 输入侧计数读数（X7 Ultra 未连接）。
 - 下一动作：PR #478 合并后，下一轮任务开头合并 `origin/beta` 的最新 tip（已前进到 `d72134c5aa`，与本轮 0 路径交集）。
+
+## 检查点 65：2026-11-07 C120 dev2 合并上游播放缓存上限（Silent1566）
+
+- 基线：`dev2@85afd14593`（已快进 `origin/dev2`，含 PR #531 的 lab 焦点链修复）；目标：`webhtv/webhtv:Silent1566@47454687f5`，merge-base `15e8f6af48`（C93 已合并的上游 tip）。增量 4 个提交 / 12 路径 `+396 −33`，`git cherry` 四行全 `+` 且 `PlaybackCacheBudget.java` 在 dev2 不存在 ⇒ 确属新代码，非重复。
+- 内容：`ff960e1072` 播放缓存受总上限约束并修正面板「Total:」误导文案；`2303a8b9bc` 总量上限仅在播放结束后生效；`900e58341c` MPV HLS 缓存空闲收敛；`47454687f5` 上限接入 EXO 容量计算并修正评审缺陷（`PlaybackCacheBudget.ceilingBytes` 作为预加载设置之上的额外天花板，默认不限故老用户行为不变）。
+- 冲突 1 处：`CacheManagementDialog.java` 双方同位置插入（上游新增 `applyPlaybackLimit()` / 本地 `applyFocusRing()` 实测因果注释），解决为两侧全保留，本地语义描边通道不回退到已删除的 `selector_cache_button_focus`；其余 8 路径自动合并。
+- 验证：`:app:testMobileArm64_v8aDebugUnitTest --tests "com.fongmi.android.tv.cache.*"` 88 例 / 0 失败（16 suite 含 `PlaybackCacheBudgetTest`）；`:app:compileLeanbackArm64_v8aDebugJavaWithJavac` BUILD SUCCESSFUL；冲突标记扫描为空；三语 `cache_management_playback_budget` 占位符一致。
+- 未执行：设备端实测（面板播放缓存行文案、退出播放后 EXO 目录实际收缩、选上限后即时收敛），本机无连接设备。
+- 下一动作：本任务闭环；`dev2` 仅落本地未推送。下一轮任务开头先合并 `origin/beta` / `origin/dev2` 最新 tip。
+
+## 检查点 66：2026-11-07 C120 dev2 合并 origin/beta 并三轮复评插件全屏/电视插件行/面板加载壳
+
+- 合并：dev2@cd3643faab ← `origin/beta@f375e7019d`（PR #533），0 冲突，双父 `--no-ff`，合并提交 `52cd03beb2`。相对 parent1 净差异 23 路径全为 beta 带入；相对 parent2 净差异 14 路径全为 C120 自有 ⇒ 两块互不覆盖，无 evil merge、无删除、无键丢失（三语键集合 HEAD ⊇ 两父）。
+- 评审（三轮）：第一轮两轴（正确性/生命周期、规格/接线）必修 0，18 条契约全兑现；第二轮对抗性证伪推翻"0 必修"的三个预设靶子均不成立（12h 兜底门控、refresh 丢弃、zh-rTW 缺 detail_plugin），但发现 1 条遗漏必修 N1；第三轮复审修复本身四条裁决全通过，必修 0。
+- 必修 N1：`CacheManagementDialog.chooseTotalLimit()` 只做 `putTotalLimitBytes` + `updatePolicyButtons()`，而摘要行"退出播放后收至 Y"由 `render()` 现算（`targetCapacityBytes()` → `desiredCapacityBytes(IDLE)` → `getTotalLimitBytes()`），改总上限后不重绘 ⇒ 显示已不成立的承诺值。修复：回调补 `applyPlaybackLimit()`，与 EXO 单项上限复用同一路径；新增 `CacheTotalLimitApplyContractTest`（2 例）钉住两条上限入口一致性。
+- 验证：双 flavor Java 编译 BUILD SUCCESSFUL；mobile 511 tests / 0 失败（cache.* + plugin.* + 契约测试 + TmdbDetailActivityLayoutTest）；leanback 391 tests / 0 失败；变异探针（删 `applyPlaybackLimit()` 行）契约测试转红、还原转绿。
+- 记录不修：`CacheScheduler` 12h 兜底受自动清理开关门控（该兜底在活会话下本就不可能生效）；`values-zh-rTW` 缺 95 键（beta 侧既有系统性滞后）；`SCHEMA_VERSION` 未递增（无行为缺陷）；`targetCapacityBytes()` 的 UI 持锁窗口（EXO 单项上限路径早已存在）。
+- 未执行：设备端实测（面板 X/Y 实际数值、退出播放后 EXO 目录收缩、PiP 下插件 chip 闪烁），本机无连接设备。
+- 下一动作：提交推送 `dev2` 并向 `beta` 提 PR，随后拉取远端最新。
+
+## C123：本机公共多线程代理接口（2026-11-09）
+
+- 任务记录：[C123-public-proxy-api.md](C123-public-proxy-api.md)。用户已批准实施；复用现有控制栏多线程引擎，新增本机免 Token /proxy 与请求级 thread/shards/chunkSize(KiB)，应用后台服务期间自动监听但播放器自动代理默认不变。
+- 范围：App Java代理模块及测试；不引入Go/JNI，不修改native/播放器依赖。原实施阶段不推送；用户本次已允许dev4 push、中文PR到beta及最终pull，当前尚未执行。
+- 当前状态：原公共接口任务已提交 `b60a3952d26df2b2786c026a1df1c469dd17cdd6`，annotated标签 `recovery/C123-public-proxy-api/20261110012924-b60a3952d26d`，原guard已闭环。当前beta合并MERGE_HEAD `bf0f23c9326de676812334ad4b96d9b5e52c0335`、HEAD未变，guard `C123-beta-review-dev4-20261110`活跃，合并未提交；文档冲突双方已保留，现仅文档收口。
+- 本次评审/验证：Standards硬违规0、Spec必修0；冻结tree `5c9217207b75d142835ef2e0e4b0eae40b2e0304`，双端arm64 Debug Java编译与测试真实执行，leanback353/mobile297 tests均0失败/错误/跳过。QuickJS编译缓存及native/assemble/设备/真实TLS/吞吐未验边界，详见 [C123-public-proxy-api.md](C123-public-proxy-api.md) 当前记录；与dev1同步任务 [C123-upstream-sync-silent1566.md](C123-upstream-sync-silent1566.md) 区分。
+- 当前下一动作：仅等待协调者独立文档复审；通过后由协调者执行当前guard finish、dev4 push、中文PR到beta及最终pull；不重开原公共接口guard、不重复已成功构建/测试、不预填新交付坐标。
+
+## 检查点 67：2026-11-09 C123 dev1 合并 Silent1566 最新窄修复
+
+- 恢复锚点：唯一任务记录 [C123-upstream-sync-silent1566.md](C123-upstream-sync-silent1566.md)；本地原基线 `e00f1e862dfd4aef0051190cccc723377999ecc9`，共同祖先 `47454687f504955775b398905ba09d73aeb9f20c`；目标 `webhtv/webhtv:Silent1566@fbe5fe91db9ba41fd380929ebc039a699dba463b`。
+- 完整15提交已列唯一记录，29上游路径与2本地任务文档同一C123 guard；7文件36文本冲突按上游窄修复与本地namespace/标题匹配/字幕/短剧/loading/owner并集闭合，禁止复活9个本地历史删除路径，当前波18新增路径无丢失。
+- 独立两轴run1发现2项必修；同执行者run2补原service/manager实例校验、无Call同trace恢复与取消状态；8条业务反例先红后绿。最终双端生产Java及mobile unit Java成功，同19过滤实际18类186项测试0失败/错误/跳过，两轴run2最终增量新增必修0。最终source tree `0faa7a140468d0b0e3bb0994cd25cd1400a64719`；mobile SHA256 `824072dd842ed55d3b4635321a3226fbc05cde2bf3ed6847b129c31c172bdd96` 与实际XML一致。
+- 风险处置：旧SpiderCleanup diagnostic自身异常经用户明确不扩范围；SDK28 ImageDecoder资源布局通道0×0为测试环境未解边界，SDK27仍真实Activity/PlayerView，未改生产PNG/依赖/native。未做真机Exo/MPV、真实Python/QuickJS生命周期、SDK28图像、完整mobile UI或APK安装，不以单测冒称设备验收。
+- 下一步：本地C123原子双父合并提交和recovery/C123标签交付，由Task-Guard记录定位；不push、不发布。回滚对本次合并提交使用git revert -m 1，禁止reset --hard。

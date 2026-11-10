@@ -66,6 +66,8 @@ public final class SubtitleContextBuilder {
                 .canonicalTitle(canonicalTitle)
                 .originalTitle(originalTitle)
                 .year(year)
+                // 到这里才取时长：起播瞬间可能还是未知，搜索/排序时通常已经就绪。
+                .durationMs(request.resolveDurationMs())
                 .seasonNumber(seasonNumber)
                 .episodeNumber(episodeNumber)
                 .episodeTitle(episodeTitle)

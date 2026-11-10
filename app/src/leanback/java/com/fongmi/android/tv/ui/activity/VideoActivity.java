@@ -431,6 +431,95 @@ private boolean runtimeSourceOnly;
     private long mTvTouchSeek;
     private SiteViewModel mViewModel;
     private List<String> mBroken;
+    private final String mDanmakuOwnerTag = "auto-danmaku-" + java.util.UUID.randomUUID();
+    private AutoDanmakuToken mAutoDanmaku;
+    private DanmakuApi.OwnedSearch mAutoDanmakuCall;
+    private boolean mDanmakuRetired;
+
+    private static final class AutoDanmakuToken {
+        final PlaybackService binding;
+        final PlayerManager manager;
+        final Result result;
+        final String trace, key, url, episodeName, episodeUrl, flag, name;
+
+        AutoDanmakuToken(PlaybackService binding, PlayerManager manager, Result result,
+                         String key, Episode episode, String flag, String name) {
+            this.binding = binding;
+            this.manager = manager;
+            this.result = result;
+            this.trace = manager.getPlaybackTraceId();
+            this.key = key;
+            this.url = result.getRealUrl();
+            this.episodeName = episode.getName();
+            this.episodeUrl = episode.getUrl();
+            this.flag = flag;
+            this.name = name;
+        }
+    }
+
+    private void invalidateAutoDanmaku() {
+        DanmakuApi.cancel(mDanmakuOwnerTag);
+        mAutoDanmaku = null;
+        if (mAutoDanmakuCall != null) mAutoDanmakuCall.cancel();
+        mAutoDanmakuCall = null;
+    }
+
+    private boolean ownsAutoDanmaku(AutoDanmakuToken token) {
+        Episode episode = getEpisode();
+        if (episode == null) return false;
+        return token != null && token == mAutoDanmaku && !mDanmakuRetired
+                && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect()
+                && service() == token.binding && service() != null && player() == token.manager && isOwner()
+                && TextUtils.equals(token.key, getHistoryKey())
+                && TextUtils.equals(token.url, token.result.getRealUrl())
+                && TextUtils.equals(token.episodeName, episode.getName())
+                && TextUtils.equals(token.episodeUrl, episode.getUrl())
+                && TextUtils.equals(token.flag, getEpisodePlayFlag(getFlag(), episode));
+    }
+
+    private void searchAutoDanmaku(Result result, PlayerManager manager, String beforeTrace) {
+        if (mAutoDanmakuCall != null) invalidateAutoDanmaku();
+        if (service() == null || player() != manager || mDanmakuRetired || isRedirect() || isPlaybackExiting()
+                || !isOwner() || isFinishing() || isDestroyed()) return;
+        Episode episode = getEpisode();
+        if (episode == null) return;
+        String trace = manager.getPlaybackTraceId();
+        if (com.fongmi.android.tv.player.PlaybackTrace.NONE.equals(trace) || TextUtils.equals(beforeTrace, trace)
+                || !DanmakuApi.canAutoSearch(result.getDanmaku())) return;
+        AutoDanmakuToken token = new AutoDanmakuToken(service(), manager, result, getHistoryKey(), episode,
+                getEpisodePlayFlag(getFlag(), episode), mHistory.getVodName());
+        mAutoDanmaku = token;
+        mAutoDanmakuCall = DanmakuApi.searchOwned(MediaTitleRequest.builder()
+                .siteKey(getKey()).vodId(getId()).rawTitle(token.name)
+                .rawRemarks(mHistory.getVodRemarks()).episodeName(token.episodeName)
+                .tmdbId(danmakuTmdbId()).tmdbSeasonNumber(danmakuTmdbSeasonNumber())
+                .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO).allowAi(true).build(), mDanmakuOwnerTag, item -> {
+            if (ownsAutoDanmaku(token) && TextUtils.equals(token.trace, token.manager.getPlaybackTraceId())) {
+                if (DanmakuSetting.isSpiderFirst() && !token.result.getDanmaku().isEmpty()) token.manager.addDanmaku(item);
+                else token.manager.setDanmaku(item);
+            }
+        });
+    }
+
+    private void renewAutoDanmaku() {
+        AutoDanmakuToken token = mAutoDanmaku;
+        if (!ownsAutoDanmaku(token)) return;
+        String beforeTrace = token.trace;
+        if (TextUtils.equals(beforeTrace, token.manager.getPlaybackTraceId())) {
+            if (mAutoDanmakuCall != null && !mAutoDanmakuCall.canRetry()) return;
+            beforeTrace = com.fongmi.android.tv.player.PlaybackTrace.NONE;
+        }
+        invalidateAutoDanmaku();
+        searchAutoDanmaku(token.result, token.manager, beforeTrace);
+    }
+
+    @Override
+    protected void startPlayer(String key, Result result, boolean useParse, long timeout,
+                               MediaMetadata metadata, long startPositionMs) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        super.startPlayer(key, result, useParse, timeout, metadata, startPositionMs);
+    }
     private History mHistory;
     private boolean fullscreen;
     private boolean initAuto;
@@ -2860,6 +2949,9 @@ private boolean runtimeSourceOnly;
     }
 
     private void getDetail(boolean refresh) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        cancelKeySeek();
         detailStartTime = System.currentTimeMillis();
         detailHealthRecorded = false;
         SpiderDebug.log("video-flow", "detail start key=%s id=%s name=%s refresh=%s", getKey(), getId(), getName(), refresh);
@@ -2875,6 +2967,9 @@ private boolean runtimeSourceOnly;
     }
 
     private void getDetail(Vod item) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        cancelKeySeek();
         revealManualSearch = false;
         if (!isAutoMode()) mViewModel.stopSearch();
         saveHistory();
@@ -3331,6 +3426,9 @@ private boolean runtimeSourceOnly;
     }
 
     private void getPlayer(Flag flag, Episode episode) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        cancelKeySeek();
         publishPluginEpisodeContext(episode);
         mBinding.widget.title.setText(getPlaybackControlTitle(episode));
         playerStartTime = System.currentTimeMillis();
@@ -3397,6 +3495,8 @@ private boolean runtimeSourceOnly;
     }
 
     private void setPlayer(Result result) {
+        invalidateAutoDanmaku();
+        cancelKeySeek();
         // null 结果表示这次取流请求已被作废（SiteViewModel.cancelPlayerContent 会向 PLAYER
         // LiveData 写入 null），不会再有结果回调来收圈。守卫若留在这里，onStateChanged 与
         // hidePlaybackProgressIfStale 两条清除路径会永久被挡下，圈再无任何清除路径。
@@ -3460,24 +3560,12 @@ private boolean runtimeSourceOnly;
         long start = System.currentTimeMillis();
         if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         mPlaybackPlayerStarted = true;
+        PlayerManager danmakuManager = player();
+        String beforeTrace = danmakuManager.getPlaybackTraceId();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
         SpiderDebug.log("video-flow", "startPlayer return cost=%dms sincePlayerStart=%dms", System.currentTimeMillis() - start, System.currentTimeMillis() - playerStartTime);
         subtitlePlaybackSession.onPlaybackStarted(this, result);
-        if (DanmakuApi.canAutoSearch(siteDanmakus)) DanmakuApi.search(MediaTitleRequest.builder()
-                .siteKey(getKey())
-                .vodId(getId())
-                .rawTitle(mHistory.getVodName())
-                .rawRemarks(mHistory.getVodRemarks())
-                .episodeName(getEpisode().getName())
-                .tmdbId(danmakuTmdbId())
-                .tmdbSeasonNumber(danmakuTmdbSeasonNumber())
-                .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO)
-                .allowAi(true)
-                .build(), danmaku -> {
-            if (player() == null) return;
-            if (DanmakuSetting.isSpiderFirst() && !siteDanmakus.isEmpty()) player().addDanmaku(danmaku);
-            else player().setDanmaku(danmaku);
-        });
+        searchAutoDanmaku(result, danmakuManager, beforeTrace);
     }
 
     private boolean redirectToContentHandler(Result result) {
@@ -3719,7 +3807,7 @@ private boolean runtimeSourceOnly;
         List<Danmaku> siteDanmakus = result.getDanmaku();
         player().setDanmaku(siteDanmakus.isEmpty() ? Danmaku.empty() : siteDanmakus.get(0));
         subtitlePlaybackSession.onPlaybackStarted(this, result);
-        DanmakuApi.cancel();
+        invalidateAutoDanmaku();
         if (DanmakuApi.canAutoSearch(siteDanmakus)) searchShortDramaDanmaku(current, siteDanmakus);
         loadTmdbRelatedVideosForCurrentEpisode();
         mShortDramaQueuedSpec = null;
@@ -3732,17 +3820,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void searchShortDramaDanmaku(Episode episode, List<Danmaku> siteDanmakus) {
-        String episodeUrl = episode == null ? "" : episode.getUrl();
-        DanmakuApi.search(MediaTitleRequest.builder()
-                .siteKey(getKey()).vodId(getId()).rawTitle(mHistory.getVodName())
-                .rawRemarks(mHistory.getVodRemarks()).episodeName(episode == null ? "" : episode.getName())
-                .tmdbId(danmakuTmdbId()).tmdbSeasonNumber(danmakuTmdbSeasonNumber())
-                .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO).allowAi(true).build(), danmaku -> {
-            Episode active = getEpisode();
-            if (player() == null || active == null || !TextUtils.equals(active.getUrl(), episodeUrl)) return;
-            if (DanmakuSetting.isSpiderFirst() && !siteDanmakus.isEmpty()) player().addDanmaku(danmaku);
-            else player().setDanmaku(danmaku);
-        });
+        searchAutoDanmaku(mAppliedPlayerResult, player(), com.fongmi.android.tv.player.PlaybackTrace.NONE);
     }
 
     private Episode getEpisodeByIndex(int index) {
@@ -3763,6 +3841,8 @@ private boolean runtimeSourceOnly;
         // Commit changes the manager's current PlaySpec, so close the previous
         // episode's playback event before switching to the queued item.
         if (service() != null) PlaybackEventCollector.get().onStop(player());
+        cancelKeySeek();
+        invalidateAutoDanmaku();
         if (spec == null || result == null || current == null || !player().commitPlaylistTransition(spec)) {
             fallbackShortDramaQueued();
             return;
@@ -4189,11 +4269,15 @@ private boolean runtimeSourceOnly;
     public void onItemClick(Result result) {
         invalidateShortDramaQueue("quality");
         updateActionQuality(result);
+        PlayerManager manager = service() != null ? player() : null;
+        String beforeTrace = manager != null ? manager.getPlaybackTraceId() : null;
+        cancelKeySeek();
         beginPlayHealth();
         // 切清晰度也会重建 spec，字幕列表跟着重置，所以这里同样要恢复一次。
         if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
         subtitlePlaybackSession.onPlaybackStarted(this, result);
+        if (manager != null) searchAutoDanmaku(result, manager, beforeTrace);
     }
 
     private void reverseEpisode(boolean scroll) {
@@ -4413,6 +4497,9 @@ private boolean runtimeSourceOnly;
     }
 
     private void setParse(Parse item) {
+        invalidateAutoDanmaku();
+        mPendingPlayer = null;
+        cancelKeySeek();
         VodConfig.get().setParse(item);
         notifyItemChanged(mBinding.control.parse, mParseAdapter);
     }
@@ -4999,6 +5086,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void exitFullscreen() {
+        cancelKeySeek();
         if (mAudioStageVisible) {
             mBinding.video.setForeground(null);
             mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
@@ -5214,6 +5302,7 @@ private boolean runtimeSourceOnly;
     }
 
     private boolean onNext(boolean notify) {
+        cancelKeySeek();
         Episode item = getAdjacentEpisode(1);
         if (!item.isSelected()) {
             onItemClick(item);
@@ -5224,6 +5313,7 @@ private boolean runtimeSourceOnly;
     }
 
     private boolean onPrev(boolean notify) {
+        cancelKeySeek();
         Episode item = getAdjacentEpisode(-1);
         if (!item.isSelected()) {
             onItemClick(item);
@@ -5406,12 +5496,14 @@ private boolean runtimeSourceOnly;
     }
 
     private void onReplay() {
+        cancelKeySeek();
         mHistory.setPosition(C.TIME_UNSET);
         if (player().isEmpty()) onRefresh();
         else player().setMediaItem();
     }
 
     private void onRefresh() {
+        cancelKeySeek();
         saveHistory();
         // 「切换线路不自动播放」：线路点击只换线路/选集列表，旧流继续播。
         // 抑制必须先于拆流，否则用户还没点具体集数，正在看的视频就先被停掉了；
@@ -5535,6 +5627,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void switchPlayerKernel(int type) {
+        cancelKeySeek();
         if (refreshAndSwitchPlayerKernel(type)) return;
         mClock.setCallback(null);
         clearLyrics();
@@ -5564,6 +5657,7 @@ private boolean runtimeSourceOnly;
         MediaMetadata metadata = buildMetadata();
         int requestId = ++playerKernelSwitchRequestId;
         int generation = beginPlayerContentSwitch(requestId, key, flag, episode);
+        invalidateAutoDanmaku();
         playerKernelSwitchRefreshing = true;
         mClock.setCallback(null);
         clearLyrics();
@@ -5594,8 +5688,12 @@ private boolean runtimeSourceOnly;
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
             Notify.show(result != null && result.hasMsg() ? result.getMsg() : getString(R.string.error_play_url));
         } else {
+            cancelKeySeek();
+            PlayerManager danmakuManager = player();
+            String beforeTrace = danmakuManager.getPlaybackTraceId();
             player().switchPlayer(type, result, activePlaybackKey(), metadata, isUseParse(), position, speed, repeat);
             rememberPlayerKernel(type);
+            searchAutoDanmaku(result, danmakuManager, beforeTrace);
         }
         setPlayerKernel();
         setDecode();
@@ -5603,6 +5701,7 @@ private boolean runtimeSourceOnly;
 
     private void onDecode() {
         invalidateShortDramaQueue("decode");
+        cancelKeySeek();
         mClock.setCallback(null);
         player().toggleDecode();
         setDecode();
@@ -5742,6 +5841,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void onToggle() {
+        cancelKeySeek();
         if (isVisible(mBinding.control.getRoot())) hideControl();
         else showControl(getFocus2());
     }
@@ -5813,6 +5913,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void showControl(View view) {
+        cancelKeySeek();
         showTopInfo();
         setPlayParamsState();
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
@@ -5823,6 +5924,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void hideControl() {
+        cancelKeySeek();
         mBinding.control.getRoot().setVisibility(View.GONE);
         updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(false);
@@ -6746,6 +6848,7 @@ private boolean runtimeSourceOnly;
         updateVideoCover();
         player().resetTrack();
         player().reset();
+        cancelKeySeek();
         player().stop();
         // Automatic line fallback continues in the same failed playback session.
         // Keep the remembered kernel, but recreate its engine so the next line cannot
@@ -6769,6 +6872,7 @@ private boolean runtimeSourceOnly;
     @Override
     protected void onReclaim() {
         if (!canApplyPlayerResult()) return;
+        cancelKeySeek();
         Result result = mViewModel.getPlayer().getValue();
         if (result != null) setPlayer(result);
     }
@@ -6780,6 +6884,7 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onStateChanged(int state) {
+        if (state == Player.STATE_READY) renewAutoDanmaku();
         switch (state) {
             case Player.STATE_BUFFERING:
                 showProgress();
@@ -6834,6 +6939,7 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
+        if (!isPlaying && isPaused()) cancelKeySeek();
         syncKaraokePosition();
         checkAudioPlayImg(isPlaying);
         if (isPlaying) {
@@ -6998,7 +7104,10 @@ private boolean runtimeSourceOnly;
             refreshTmdbRelatedVideos();
         }
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
-        else if (event.getType() == RefreshEvent.Type.DANMAKU) player().reloadDanmaku(Danmaku.from(event.getPath()));
+        else if (event.getType() == RefreshEvent.Type.DANMAKU) {
+            invalidateAutoDanmaku();
+            player().reloadDanmaku(Danmaku.from(event.getPath()));
+        }
         else if (event.getType() == RefreshEvent.Type.HISTORY) refreshPersonalRecommendationsForHistory();
     }
 
@@ -8763,21 +8872,25 @@ private boolean runtimeSourceOnly;
     }
 
     private void onPaused() {
+        cancelKeySeek();
         controller().pause();
     }
 
     private void onPlay() {
+        cancelKeySeek();
         if (mHistory != null && isEnded()) controller().seekTo(mHistory.getOpening());
         if (!player().isEmpty() && isIdle()) controller().prepare();
         controller().play();
     }
 
     private boolean onSeekBack() {
+        cancelKeySeek();
         controller().seekBack();
         return true;
     }
 
     private boolean onSeekForward() {
+        cancelKeySeek();
         controller().seekForward();
         return true;
     }
@@ -8946,7 +9059,16 @@ private boolean runtimeSourceOnly;
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (dispatchDiscMenuKey(event)) return true;
+        if (KeyUtil.isActionDown(event) && (!isFullscreen() || isVisible(mBinding.control.getRoot()) || isVisible(mBinding.lutQuick) || (!KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event) && !KeyUtil.isBackKey(event)))) cancelKeySeek();
+        if (KeyUtil.isActionDown(event) && KeyUtil.isBackKey(event)) {
+            boolean preview = isVisible(mBinding.widget.center);
+            cancelKeySeek();
+            if (preview) mBinding.widget.center.setVisibility(View.VISIBLE);
+        }
+        if (dispatchDiscMenuKey(event)) {
+            cancelKeySeek();
+            return true;
+        }
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event) && mBinding.lutQuick.hideIfVisible()) return true;
         if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {
             mKeyDown.releaseSpeed();
@@ -8955,6 +9077,7 @@ private boolean runtimeSourceOnly;
         }
         if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
         if (isFullscreen() && KeyUtil.isMenuKey(event)) {
+            cancelKeySeek();
             int menuKey = Setting.getFullscreenMenuKey();
             if (menuKey == Setting.FULLSCREEN_MENU_KEY_EPISODES) onEpisodes();
             else if (menuKey == Setting.FULLSCREEN_MENU_KEY_NEXT_EPISODE) onMenuNextEpisode();
@@ -8962,14 +9085,14 @@ private boolean runtimeSourceOnly;
         }
         if (isVisible(mBinding.control.getRoot())) {
             setR1Callback();
-            if (dispatchOpeningEndingAdjust(event)) return true;
-            if (dispatchSpeedAdjust(event)) return true;
-            if (PlayerControlFocusHelper.handleKey(mBinding.control.getRoot(), getFocus2(), event)) return true;
+            if (dispatchOpeningEndingAdjust(event)) { cancelKeySeek(); return true; }
+            if (dispatchSpeedAdjust(event)) { cancelKeySeek(); return true; }
+            if (PlayerControlFocusHelper.handleKey(mBinding.control.getRoot(), getFocus2(), event)) { cancelKeySeek(); return true; }
             if (PlayerControlFocusHelper.containsFocus(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
         }
-        if (onEpisodeKey(event)) return true;
-        if (handleEpisodeLongPress(event)) return true;
-        if (mAudioStageVisible && isGone(mBinding.control.getRoot()) && dispatchAudioStageKey(event)) return true;
+        if (onEpisodeKey(event)) { cancelKeySeek(); return true; }
+        if (handleEpisodeLongPress(event)) { cancelKeySeek(); return true; }
+        if (mAudioStageVisible && isGone(mBinding.control.getRoot()) && dispatchAudioStageKey(event)) { cancelKeySeek(); return true; }
         if (isFullscreen() && isGone(mBinding.control.getRoot()) && mKeyDown.hasEvent(event) && service() != null) return mKeyDown.onKeyDown(event);
         if (KeyUtil.isMediaFastForward(event)) return onSeekForward();
         if (KeyUtil.isMediaRewind(event)) return onSeekBack();
@@ -9105,6 +9228,26 @@ private boolean runtimeSourceOnly;
         }
         if (focus != null && isChildOf(mBinding.lutQuick, focus) && focus.isEnabled()) focus.performClick();
         return true;
+    }
+
+    private void cancelKeySeek() {
+        if (mKeyDown != null) mKeyDown.cancelSeek();
+    }
+
+    @Override
+    public boolean canSeek() {
+        return service() != null && !isFinishing() && !isDestroyed() && !isPlaybackExiting() && !isRedirect() && isOwner()
+                && !player().isEmpty();
+    }
+
+    @Override
+    public String getSeekSession() {
+        return service() == null ? com.fongmi.android.tv.player.PlaybackTrace.NONE : player().getPlaybackTraceId();
+    }
+
+    @Override
+    public void onSeekCancel() {
+        hideCenter();
     }
 
     @Override
@@ -9369,6 +9512,7 @@ private boolean runtimeSourceOnly;
     @Override
     protected void onStop() {
         cancelTvTouch();
+        cancelKeySeek();
         super.onStop();
         mKeyDown.releaseSpeed();
         mPlayerUi.onStop();
@@ -9386,6 +9530,7 @@ private boolean runtimeSourceOnly;
         } else if (isVisible(mBinding.control.getRoot())) {
             hideControl();
         } else if (isVisible(mBinding.widget.center)) {
+            cancelKeySeek();
             hideCenter();
         } else if (isFullscreen()) {
             exitFullscreen();
@@ -9424,6 +9569,9 @@ private boolean runtimeSourceOnly;
         cancelTvTouch();
         mIntroSkipPlayback.reset();
         cancelAiSeasonAnalysis(false);
+        mDanmakuRetired = true;
+        invalidateAutoDanmaku();
+        cancelKeySeek();
         if (mCustomButtonPlayer != null) {
             mCustomButtonPlayer.removeCustomButtonStateListener(mCustomButtonStateListener);
             mCustomButtonPlayer = null;
@@ -9445,7 +9593,7 @@ private boolean runtimeSourceOnly;
         if (mTmdbHeaderView != null) mTmdbHeaderView.onDestroy();
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
         saveHistory(true);
-        DanmakuApi.cancel();
+        DanmakuApi.cancel(mDanmakuOwnerTag);
         stopBackdropAutoScroll();
         dismissQuickSearchDialog();
         RefreshEvent.keep();
@@ -12910,6 +13058,7 @@ private View findAudioStageFocusTarget(View focus, List<View> focusables, KeyEve
     }
 
 public void onCasted() {
+        cancelKeySeek();
         clearLyrics();
         clearKaraokeState();
         player().stop();

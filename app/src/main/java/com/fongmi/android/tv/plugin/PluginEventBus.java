@@ -68,6 +68,17 @@ public final class PluginEventBus {
     /** 播放页 {@code onResume}：用户回到了播放页。语义同 {@link #EVENT_PLAYBACK_PAUSE}。 */
     public static final String EVENT_PLAYBACK_RESUME = "playback.resume";
     /**
+     * 全屏播放态翻转，payload 带 {@link #KEY_FULLSCREEN}。
+     *
+     * <p><b>为什么单独立一个事件而不是复用 {@code playback.state}。</b>全屏与播放状态是两条
+     * 独立的轴：可以暂停在全屏、也可以播放着退出全屏。把两者混进同一个事件后，订阅者再也
+     * 分不出"状态机变了"和"用户切了显示形态"，而这正是全屏类插件唯一关心的信号。
+     *
+     * <p>进入与退出各广播一次，进全屏为 {@code "true"}、退出为 {@code "false"}。
+     * 只有手机端内嵌播放器有这个形态；电视端没有"全屏 vs 非全屏"之分，不会发这个事件。
+     */
+    public static final String EVENT_PLAYBACK_FULLSCREEN = "playback.fullscreen";
+    /**
      * 播放页认领的剧集身份变了。
      *
      * <p>payload 带 {@link #KEY_EPISODE}，内容就是同一时刻发布到
@@ -82,6 +93,8 @@ public final class PluginEventBus {
     public static final String KEY_PLAYING = "playing";
     /** payload 中承载引擎状态机整数的键，取值是 {@code Player.STATE_*} 的十进制字符串。 */
     public static final String KEY_STATE = "state";
+    /** payload 中承载全屏布尔值的键，取值只有 {@code "true"}/{@code "false"}。 */
+    public static final String KEY_FULLSCREEN = "fullscreen";
     /** payload 中承载剧集上下文 JSON 的键，与 {@link PluginEpisodeContext} 的同一份快照同源。 */
     public static final String KEY_EPISODE = "episode";
 

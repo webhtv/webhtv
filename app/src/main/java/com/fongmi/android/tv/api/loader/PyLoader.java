@@ -6,7 +6,6 @@ import com.fongmi.android.tv.App;
 import com.fongmi.chaquo.Loader;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
-import com.github.catvod.crawler.SpiderNull;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -60,13 +59,11 @@ public class PyLoader {
      * 否则 A、B 两个配置的同名站点会互相串源。空命名空间等于原来的行为。
      */
     public Spider getSpider(String namespace, String key, String api, String ext) {
-        return spiders.computeIfAbsent(BaseLoader.slot(namespace, key), k -> {
-            try {
-                Spider spider = loader.spider(api);
+        return SpiderInit.load(spiders, BaseLoader.slot(namespace, key),
+                () -> loader.spider(api), spider -> {
                 spider.siteKey = key;
                 spider.init(App.get(), normalizeExt(ext));
-                return spider;
-            } catch (Throwable e) {
+                }, e -> {
                 // A failed bridge init is otherwise hard to attribute: SpiderNull then
                 // returns "" for every method, so home/category/search just render empty.
                 // Record it under the python-spider tag (already routed to the NETWORK
@@ -80,9 +77,7 @@ public class PyLoader {
                 // that explains an all-empty site.  Keep the unconditional channel too, as
                 // the sibling JsLoader does for its own init failure.
                 e.printStackTrace();
-                return new SpiderNull();
-            }
-        });
+                });
     }
 
     private String normalizeExt(String ext) {

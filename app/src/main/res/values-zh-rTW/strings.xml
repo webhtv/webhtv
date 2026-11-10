@@ -1005,7 +1005,9 @@
     <string name="cache_retention_forever">永久</string>
     <string name="cache_total_limit_button">總上限</string>
     <string name="cache_total_limit_title">總暫存上限</string>
-    <string name="cache_total_limit_summary">總計：%1$s</string>
+    <string name="cache_total_limit_summary">總上限：%1$s</string>
+    <string name="cache_limit_title_exo">播放暫存上限</string>
+    <string name="cache_management_playback_budget">播放暫存 %1$s（退出播放後收至 %2$s）</string>
     <string name="cache_cleanup_confirm_title">確認清理暫存？</string>
     <string name="cache_cleanup_confirm_light">清理過期節目表、暫存檔與遺留暫存？</string>
     <string name="cache_cleanup_confirm_standard">清理圖片、歌詞、K 歌與 WebHome 等可重建暫存？\n\n收藏、歷史與設定不會受到影響。</string>
@@ -3000,7 +3002,7 @@
     <string name="plugin_manager_entry_meta">版本 %1$s · 執行環境 %2$s · %3$s</string>
     <string name="plugin_manager_params">參數</string>
     <string name="plugin_manager_params_title">「%1$s」的參數</string>
-    <string name="plugin_manager_params_hint">JSON 物件，例如 {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
+    <string name="plugin_manager_params_hint">JSON 物件，例如 {\&quot;DOUBAN_TOKEN\&quot;:\&quot;abc\&quot;}</string>
     <string name="plugin_manager_params_invalid">參數必須是 JSON 物件</string>
     <string name="plugin_manager_params_too_large">參數量超出儲存上限</string>
     <string name="plugin_panel_title">外掛面板</string>

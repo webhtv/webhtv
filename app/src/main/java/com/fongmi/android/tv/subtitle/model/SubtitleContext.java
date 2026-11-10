@@ -15,6 +15,7 @@ public final class SubtitleContext {
     private final String originalTitle;
     private final List<String> aliases;
     private final int year;
+    private final long durationMs;
     private final int seasonNumber;
     private final int episodeNumber;
     private final String episodeTitle;
@@ -34,6 +35,7 @@ public final class SubtitleContext {
         this.originalTitle = builder.originalTitle;
         this.aliases = Collections.unmodifiableList(new ArrayList<>(builder.aliases));
         this.year = builder.year;
+        this.durationMs = builder.durationMs;
         this.seasonNumber = builder.seasonNumber;
         this.episodeNumber = builder.episodeNumber;
         this.episodeTitle = builder.episodeTitle;
@@ -84,6 +86,11 @@ public final class SubtitleContext {
         return year;
     }
 
+    /** 当前播放影片的时长；0 表示未知。用于和候选字幕标注的时长比对。 */
+    public long getDurationMs() {
+        return durationMs;
+    }
+
     public int getSeasonNumber() {
         return seasonNumber;
     }
@@ -120,6 +127,15 @@ public final class SubtitleContext {
         return identity != null && identity.hasTmdbIdentity();
     }
 
+    public SubtitleContext withDurationMs(long durationMs) {
+        return builder().playbackKey(playbackKey).siteKey(siteKey).vodId(vodId)
+                .mediaType(mediaType).mediaPath(mediaPath).canonicalTitle(canonicalTitle)
+                .originalTitle(originalTitle).aliases(aliases).year(year).durationMs(durationMs)
+                .seasonNumber(seasonNumber).episodeNumber(episodeNumber).episodeTitle(episodeTitle)
+                .preferredLanguage(preferredLanguage).originalLanguage(originalLanguage)
+                .originCountry(originCountry).networkStream(networkStream).identity(identity).build();
+    }
+
     public static final class Builder {
 
         private String playbackKey = "";
@@ -131,6 +147,7 @@ public final class SubtitleContext {
         private String originalTitle = "";
         private final List<String> aliases = new ArrayList<>();
         private int year;
+        private long durationMs;
         private int seasonNumber = -1;
         private int episodeNumber = -1;
         private String episodeTitle = "";
@@ -188,6 +205,11 @@ public final class SubtitleContext {
 
         public Builder year(int year) {
             this.year = year;
+            return this;
+        }
+
+        public Builder durationMs(long durationMs) {
+            this.durationMs = Math.max(0L, durationMs);
             return this;
         }
 

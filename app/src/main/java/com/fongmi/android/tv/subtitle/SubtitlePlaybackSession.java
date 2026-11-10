@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.subtitle;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Result;
@@ -19,6 +20,7 @@ import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 public final class SubtitlePlaybackSession {
 
@@ -49,6 +51,17 @@ public final class SubtitlePlaybackSession {
 
     interface ResultApplier {
         boolean apply(Host host, Sub sub);
+
+        /**
+         * 应用一条「必须真正成为当前选中轨」的字幕。
+         *
+         * <p>与 {@link #apply} 的区别只在结果语义：应用成功不等于字幕会被显示，
+         * 播放器需要在轨道就绪后确认一次。默认实现退化到 {@link #apply}，
+         * 真实实现由播放器回报确认结果。
+         */
+        default void applyExpected(Host host, Sub sub, Consumer<Boolean> callback) {
+            callback.accept(apply(host, sub));
+        }
     }
 
     interface ResultNotifier {
@@ -115,7 +128,7 @@ public final class SubtitlePlaybackSession {
         if (SubtitleStrings.isEmpty(playbackKey)) return;
 
         SubtitleTrigger trigger = resolveTrigger(host);
-        SubtitleRequest request = requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), result, host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), trigger);
+        SubtitleRequest request = withDurationSource(requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), result, host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), trigger, playbackDurationMs(host)), host);
         if (request == null || SubtitleStrings.isEmpty(request.getPlayUrl())) {
             stop(host);
             return;
@@ -192,8 +205,37 @@ public final class SubtitlePlaybackSession {
             return;
         }
 
-        boolean applied = applyMatchedSubtitle(host, result);
-        resultNotifier.notify(host, request, result, applied);
+        applyAutoMatchedSubtitle(host, request, result);
+    }
+
+    /**
+     * 自动匹配命中后必须确认字幕真的被选中，再决定提示哪一种结果。
+     *
+     * <p>过去这里只判断 setSub 有没有被调用，就提示「已自动匹配字幕」，而用户的反馈
+     * 正是「提示匹配到了，画面没有字幕」。选中结果现在由播放器在轨道就绪后回报。
+     */
+    private void applyAutoMatchedSubtitle(Host host, SubtitleRequest request, SubtitleMatchResult result) {
+        Sub sub = injector.toSub(withNormalizedLanguage(result.getAsset()));
+        if (sub == null) {
+            resultNotifier.notify(host, request, result, false);
+            return;
+        }
+        resultApplier.applyExpected(host, sub, applied -> {
+            if (request != currentRequest || !host.isSubtitleHostActive()) return;
+            resultNotifier.notify(host, request, result, applied);
+        });
+    }
+
+    /**
+     * 字幕源给的是「简体中文」这类自然语言描述，而 Media3 只认 BCP-47 标签。
+     * 不转换的话，这条字幕在选轨时等于「语言未知」，用户设置的简体中文偏好
+     * 无法命中它。
+     */
+    private SubtitleAsset withNormalizedLanguage(SubtitleAsset asset) {
+        if (asset == null) return null;
+        String normalized = SubtitleRanker.normalizeLanguageTag(asset.getLanguage());
+        if (SubtitleStrings.isEmpty(normalized) || SubtitleStrings.equals(normalized, asset.getLanguage())) return asset;
+        return new SubtitleAsset(asset.getUri(), asset.getLocalPath(), asset.getDisplayName(), normalized, asset.getMimeType(), asset.getSelectionFlag(), asset.isFromCache(), asset.getExpireAt());
     }
 
     private boolean applyMatchedSubtitle(Host host, SubtitleMatchResult result) {
@@ -212,6 +254,30 @@ public final class SubtitlePlaybackSession {
         return SubtitleStrings.equals(currentEpisodeMarker, episodeMarker(host.getSubtitleEpisode())) ? SubtitleTrigger.SOURCE_SWITCH : SubtitleTrigger.EPISODE_SWITCH;
     }
 
+    /**
+     * 让请求在真正排序时还能补取时长。
+     *
+     * <p>来源只读播放器在主线程缓存的已知时长（{@code getLastKnownDurationMs} 是 volatile
+     * 字段，后台线程读取安全），不在 worker 里调用 {@code getDuration()} 触碰 Media3。
+     */
+    private SubtitleRequest withDurationSource(SubtitleRequest request, Host host) {
+        if (request == null) return null;
+        return request.withDurationSource(() -> knownDurationMs(host));
+    }
+
+    private long knownDurationMs(Host host) {
+        PlayerManager player = host.getSubtitlePlayer();
+        if (player == null || player.isReleased()) return 0L;
+        return player.getLastKnownDurationMs();
+    }
+
+    /** 播放器已知的影片时长；未知或播放器不可用时返回 0，由排序逻辑跳过时长维度。 */
+    private long playbackDurationMs(Host host) {
+        PlayerManager player = host.getSubtitlePlayer();
+        if (player == null || player.isReleased()) return 0L;
+        return player.getLastKnownDurationMs();
+    }
+
     private boolean hasProvidedSubtitle(Result result) {
         if (result == null) return false;
         List<Sub> subs = result.getSubs();
@@ -224,7 +290,7 @@ public final class SubtitlePlaybackSession {
         if (active && currentRequest != null) return currentRequest;
         String playbackKey = host.getSubtitlePlaybackKey();
         if (SubtitleStrings.isEmpty(playbackKey)) return null;
-        return requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), host.getSubtitlePlaybackResult(), host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), SubtitleTrigger.MANUAL_SEARCH);
+        return withDurationSource(requestFactory.create(playbackKey, host.getSubtitleSite(), host.getSubtitleVod(), host.getSubtitleEpisode(), host.getSubtitlePlaybackResult(), host.getSubtitleTmdbItem(), host.getSubtitleTmdbEpisode(), SubtitleTrigger.MANUAL_SEARCH, playbackDurationMs(host)), host);
     }
 
     // 补建的请求需要登记为当前请求，回调里的 request == currentRequest 时效校验才能通过
@@ -327,6 +393,28 @@ public final class SubtitlePlaybackSession {
             if (player == null || player.isReleased()) return false;
             player.setSub(sub);
             return true;
+        }
+
+        /**
+         * 自动匹配专用：重启后由播放器确认这条字幕真的成了当前选中轨。
+         *
+         * <p>过去这里与 {@link #apply} 同语义，「调用过 setSub」被当成「已生效」，
+         * 于是界面提示「已自动匹配字幕」而画面没有字幕。确认结果通过回调返回，
+         * 提示语据此选择 hit / hit_not_applied。
+         */
+        @Override
+        public void applyExpected(Host host, Sub sub, Consumer<Boolean> callback) {
+            if (host == null || sub == null) {
+                callback.accept(false);
+                return;
+            }
+            PlayerManager player = host.getSubtitlePlayer();
+            if (player == null || player.isReleased()) {
+                callback.accept(false);
+                return;
+            }
+            player.setSubtitleApplyListener(applied -> App.post(() -> callback.accept(applied)));
+            player.setSub(sub, true);
         }
     }
 

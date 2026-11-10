@@ -5,7 +5,6 @@ import com.fongmi.quickjs.crawler.Loader;
 import com.fongmi.quickjs.utils.Module;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
-import com.github.catvod.crawler.SpiderNull;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -59,19 +58,15 @@ public class JsLoader {
      * 否则 A、B 两个配置的同名站点会互相串源。空命名空间等于原来的行为。
      */
     public Spider getSpider(String namespace, String key, String api, String ext, String jar) {
-        return spiders.computeIfAbsent(BaseLoader.slot(namespace, key), k -> {
-            try {
-                Spider spider = loader.spider(api, BaseLoader.get().dex(jar));
+        return SpiderInit.load(spiders, BaseLoader.slot(namespace, key),
+                () -> loader.spider(api, BaseLoader.get().dex(jar)), spider -> {
                 spider.siteKey = key;
                 spider.init(App.get(), ext);
-                return spider;
-            } catch (Throwable e) {
+                }, e -> {
                 SpiderDebug.log("JsLoader", "JS spider init failed: key=%s api=%s", key, api);
                 SpiderDebug.log("JsLoader", e);
                 e.printStackTrace();
-                return new SpiderNull();
-            }
-        });
+                });
     }
 
     public Object[] proxy(Map<String, String> params) throws Exception {

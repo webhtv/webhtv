@@ -100,6 +100,20 @@ public final class PluginHostEvents {
     }
 
     /**
+     * 全屏态翻转的埋点。
+     *
+     * <p>进入与退出各发一次，进为 {@code "true"}、退为 {@code "false"}。与
+     * {@link #playbackPlaying} 同一套字符串编码：总线 payload 类型是 {@code String -> String}，
+     * 不为一个布尔值引入第二套解析约定。
+     *
+     * <p>只有手机端内嵌播放器有全屏形态；电视端没有这个维度，不会走到这里。
+     */
+    public static void playbackFullscreen(@Nullable Activity activity, boolean fullscreen) {
+        emitWithKey(PluginEventBus.EVENT_PLAYBACK_FULLSCREEN, activity, PluginEventBus.KEY_FULLSCREEN,
+                Boolean.toString(fullscreen));
+    }
+
+    /**
      * 播放页剧集身份变化的埋点。
      *
      * <p>payload 只放宿主已经发布到 {@link PluginEpisodeContext} 的那份 JSON，由调用方传入

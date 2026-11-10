@@ -228,13 +228,15 @@ import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.TmdbEpisodeSorter;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.TmdbImageSaver;
-import com.fongmi.android.tv.utils.Traffic;
 import com.fongmi.android.tv.utils.Util;
 import com.fongmi.android.tv.utils.WebViewUtil;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.player.lut.LutPreset;
 import com.fongmi.android.tv.player.lut.LutStore;
+import com.fongmi.android.tv.plugin.PluginController;
+import com.fongmi.android.tv.plugin.PluginHostEvents;
+import com.fongmi.android.tv.plugin.PluginSurface;
 import com.fongmi.android.tv.web.WebHomeInlineVodStore;
 import com.google.android.flexbox.FlexboxLayout;
 import com.google.android.material.button.MaterialButton;
@@ -281,7 +283,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.Listener, Clock.Callback, PlayerGesture.Listener, SubtitlePlaybackSession.Host, TmdbDetailHost {
+public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.Listener, Clock.Callback, PlayerGesture.Listener, SubtitlePlaybackSession.Host, TmdbDetailHost, PluginSurface.ImmersiveAware {
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault());
     private static final int CHIP_STROKE_DP = 1;
@@ -431,6 +433,18 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean autoPlayed;
     private boolean defaultPlaybackLaunchPending;
     private boolean inlineFullscreen;
+    /**
+     * 本页当前的画中画状态。
+     *
+     * <p>两个写点，各有分工：{@code onPictureInPictureModeChanged} 用形参写（回调是唯一能保证
+     * 事件顺序的地方），{@code initView} 用 {@code isInPictureInPictureMode()} 写初值——进程在
+     * 画中画中被回收后恢复不会再走一次回调，字段停在 {@code false} 会把恢复中的小窗当全屏。
+     *
+     * <p><b>为什么消费侧读字段而不是现场问平台。</b>不是为了绕开回调时序（平台在派发前已写好
+     * 该状态，回调里问也是新值），而是为了让"这一次形态变更"只有一个快照：本页 PiP 回调里
+     * 还要先翻转内嵌布局再重算入口，中途现场再问一次就会与已算过的值分叉。
+     */
+    private boolean inPip;
     private boolean inlineShortDramaMode;
     /**
      * 用户在内嵌全屏里显式选过的方向（旋转按钮）。非 {@code UNSPECIFIED} 表示用户已表态：
@@ -759,6 +773,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inflateMobileInlineControl();
         initModeController();
         super.initView(savedInstanceState);
+        // 初始值必须来自平台真实状态：进程在画中画里被回收后重建时不会再走一次回调，
+        // 字段留在默认 false 就会把恢复中的 PiP 短暂当成全屏。
+        inPip = isInPictureInPictureMode();
         tmdbConfig = TmdbConfig.effectiveCurrent();
         tmdbCredentialScope = SubscriptionTmdbCredentialStore.currentScope();
         initialTmdbItem = getIntentTmdbItem();
@@ -2476,6 +2493,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void tintTextTree(View view, ThemeColors colors) {
         if (view instanceof RecyclerView) return;
         if (view.getId() == R.id.loading) return;
+        // 加载中的网速文字固定压在黑色播放面板上，必须与同屏 spinner 一样是白色；
+        // 跟随主题色在浅色主题下会变成深色（0xFF12202D），在黑底上几乎不可见。
+        if (view.getId() == R.id.playerLoading) return;
         if (view instanceof TextView textView && !(view instanceof MaterialButton)) {
             textView.setTextColor(colors.primary);
         }
@@ -8663,6 +8683,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerLoading.removeCallbacks(inlineLoadingSpeedRefresh);
         binding.playerLoading.setVisibility(loading ? View.VISIBLE : View.GONE);
         if (loading && inlinePauseInfo) hideInlinePauseInfo();
+        // 加载中只留转圈和网速，中心播放/暂停按钮会压在转圈上——影视原生模式同屏也只有一个加载圈。
+        updateMobileInlinePlayVisibility(!loading);
         if (!loading) {
             binding.playerLoadingTraffic.setText("");
             binding.playerLoadingTraffic.setVisibility(View.GONE);
@@ -8673,9 +8695,14 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void updateInlineLoadingSpeed() {
-        String traffic = inlineOsd == null ? "" : inlineOsd.sampleSpeedText();
+        String traffic = inlineOsd == null ? "" : inlineOsd.sampleSpeedTextNow();
         binding.playerLoadingTraffic.setText(traffic);
         binding.playerLoadingTraffic.setVisibility(TextUtils.isEmpty(traffic) ? View.GONE : View.VISIBLE);
+    }
+
+    private void updateMobileInlinePlayVisibility(boolean visible) {
+        if (!Util.isMobile() || detailControlRoot == null) return;
+        detailControlView(R.id.play, View.class).setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 
     private void setButtonEnabled(View button, boolean enabled) {
@@ -10403,9 +10430,51 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         scheduleMobileInlineSideControlMarginUpdate();
     }
 
+    /**
+     * 页面自报沉浸态：本页是否处于全屏播放。
+     *
+     * <p>只认本页自己的 {@code inlineFullscreen} 字段——{@code Util.isFullscreen} 在电视端
+     * 恒为 true，拿它当判据会让 TV 上的插件入口永久消失。
+     *
+     * <p><b>电视端一律不算沉浸。</b>本页手机与电视共用，而电视上"播放页"本身就是全屏常态，
+     * 把内嵌播放器算成沉浸态会让插件入口在电视上永远不可用——那是把功能拿掉，不是沉浸。
+     * 手机才有"内嵌小窗 ⇄ 全屏"这个切换，隐藏的逻辑只对它成立。
+     *
+     * <p>画中画不算沉浸：{@code inlinePiPLayout} 与系统 PiP 下本页仍在内嵌形态与用户
+     * 交互，入口该留着。PiP 判断读 {@link #inPip} 这个快照——本页 PiP 回调要先把内嵌布局
+     * 翻转再重算入口，判据若现场问平台，两次取值可能落在翻转前后不同的时点。
+     */
+    @Override
+    public boolean isImmersive() {
+        if (Util.isLeanback()) return false;
+        return inlineFullscreen && !inlinePiPLayout && !inPip;
+    }
+
+    /**
+     * 页面形态变化后让插件入口重算一次，并把新形态广播给订阅者。
+     *
+     * <p>广播值取 {@link #isImmersive()} 而不是裸 {@code inlineFullscreen}：入口隐藏判据就是它，
+     * 两处取不同值会让画中画期间事件报「全屏」而入口仍可见。
+     */
+    private void refreshPluginEntrances() {
+        try {
+            PluginController.get().refreshRender(this);
+        } catch (Throwable ignored) {
+            // 插件入口是可选增强：重算失败不该影响播放页。
+        }
+        if (Util.isLeanback()) return;
+        try {
+            PluginHostEvents.playbackFullscreen(this, isImmersive());
+        } catch (Throwable ignored) {
+            // 事件是可选增强：广播失败同样不该影响播放页。
+        }
+    }
+
     private void enterInlineFullscreen() {
         if (inlineFullscreen || inlinePiPLayout || isInPictureInPictureMode()) return;
         inlineFullscreen = true;
+        // 进全屏后插件入口要整批消失：先重算再继续铺布局，避免芯片在全屏布局上闪一帧。
+        refreshPluginEntrances();
         updateDetailThemeButtonVisibility();
         requestedOrientation = getRequestedOrientation();
         // 每次进全屏都重建自动方向基线，手动旋转的覆盖到此为止。
@@ -10717,6 +10786,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         boolean suppressDisplay = suppressInlineDisplayForLeanbackFusionExit();
         prepareInlinePlayerTransition();
         inlineFullscreen = false;
+        // 退全屏后把插件入口装回来。必须在 inlineFullscreen 置回 false 之后调，否则
+        // attach 仍会认为处于沉浸态而继续不挂。
+        refreshPluginEntrances();
         setInlineLock(false);
         // 恢复 root 层内嵌尺寸，不再 reparent
         applyInlinePlayerEmbeddedLayout();
@@ -11471,17 +11543,26 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        inPip = isInPictureInPictureMode;
         updateDetailThemeButtonVisibility();
-        if (!isInlinePlayerMode()) return;
+        if (!isInlinePlayerMode()) {
+            // 非内嵌形态没有布局翻转，判据只随 inPip 变：这里算一次即可。
+            refreshPluginEntrances();
+            return;
+        }
         if (isInPictureInPictureMode) {
             hideInlineControls();
             hideInlineGestureOverlays();
             // 内嵌卡片状态进入 PiP（含 Android 12+ autoEnter / 手势回桌面）必须铺满窗口，
             // 否则小窗里显示的是整页缩放（卡片圆角、描边、背景图都露出来）。全屏时布局已铺满，enterInlinePiPLayout 内部自带 guard。
             enterInlinePiPLayout();
+            // 布局翻转之后才重算：isImmersive() 读 inlinePiPLayout，早算会拿到旧形态。
+            refreshPluginEntrances();
             return;
         }
         exitInlinePiPLayout();
+        // 同上：先把内嵌布局还回去，再让插件入口按终态重算。
+        refreshPluginEntrances();
         updateInlineButtons(service() != null && player() != null && !player().isEmpty() && player().isPlaying());
         updateInlineDisplayPanel();
         updateDetailThemeButtonVisibility();

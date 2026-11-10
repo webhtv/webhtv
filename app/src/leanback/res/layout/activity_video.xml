@@ -904,6 +904,51 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!--
+                插件入口。电视端详情页就是本布局（VideoActivity），不是手机那份
+                activity_tmdb_detail.xml——这一点曾经导致插件行加错了文件、电视上永远不出现。
+                没有已装载插件时整行 GONE，不留空白标题。
+            -->
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/pluginHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/pluginTitle"
+                    style="@style/Shadow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/detail_plugin"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <HorizontalScrollView
+                android:id="@+id/pluginScroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:clipToPadding="false"
+                android:scrollbars="none"
+                android:visibility="gone">
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:id="@+id/pluginRow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingStart="24dp"
+                    android:paddingEnd="24dp" />
+            </HorizontalScrollView>
+
             <!-- 线路选择 -->
             <androidx.leanback.widget.HorizontalGridView
                 android:id="@+id/flag"
