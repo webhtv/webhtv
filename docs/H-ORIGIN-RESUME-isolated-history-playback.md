@@ -430,3 +430,35 @@ SiteApi、ParseJob、BaseLoader、JS/Py/Jar、Chaquo/QuickJS/nodejs 原生模块
 4. 原源模式下旋转/重建依赖 `PlaybackService.originLease()` + `matchesHistory` 复用同一租约；若期间进度被别处改写导致 `matchesHistory` 为 false，会新开租约并得到 `ISOLATION_ERROR`（BLOCKED 明确报错），未做自动重试。
 5. 电视端（leanback）只做编译与源级断言验证，**未跑 TV 设备用例**（本轮设备仅手机 APK）。
 6. 本次文档未提交、未建 tag（守卫生成由父处理）。
+## 14. 返工 2：起播前失败继续全局历史续播，且原因可见
+
+### 14.1 用户实测问题与根因
+
+1. 跨源历史原源匹配成功但取流/解析/worker 失败时，旧实现只 `Notify.show` 一句然后停在原页（旧的 `OriginPlaybackActivity` 还会直接退出），用户既看不清原因也没有后续。
+2. 更关键的是 `HistoryResumeCoordinator` 的既有链路被页面寿命打断：`resolveAuto` 完成后用 `isCurrent(...)→!activity.isFinishing()` 保护，旧实现先 `finish()` 再调 `fallbackToCurrent`，异步结果回来时页面已在结束中，自动匹配被静默丢弃。只有 `search` 模式因为同步 `startActivity` 才看起来"能用"。
+
+### 14.2 改动
+
+* `OriginSessionContract.shouldResumeGlobally(resultDelivered, status, reason)`（新增纯函数，纯 JVM 可测）：`UNAVAILABLE` 仍只认五个业务 reason；`BLOCKED` 只在**尚未把任何 Result 交给播放器**时转全局续播；`resultDelivered=true` 时任何状态都不回落（既有"起播后不接管"契约不变）。
+* `OriginHistoryPlayback`：新增 `resultDelivered` 边界，唯一置位点是 `deliverResult(...)`（真正调用 `listener.onOriginResult` 之前）。`onUnavailable`/`onBlocked`/`consume(...)` 的"取流结果不可直接播放 / `hasMsg` / 详情选集无效 / 快照异常"统一走 `handleFailure(status, reason, detail)`：按上面的策略决定 `onOriginFallback(history, reason)` 还是 `onOriginError(reason)`，并先 `release()` 释放租约。`markPlaybackStarted()`/`holdOriginLease(...)` 从 `apply(...)` 移到 `deliverResult(...)`，避免"仅解析了详情就当成已起播"。
+* `Listener.onOriginFallback(History history, String reason)`（签名变更，内部 API）：两个 flavor 的 `VideoActivity` 实现先 `showOriginError("原源播放失败：<reason>，将按全局历史续播设置匹配当前源")`，可见后 `App.post(... , 2000)` 再调 `HistoryResumeCoordinator.fallbackToCurrent(activity, history, onLaunched)`。`onLaunched` 里才 `markPlaybackExiting()` + `finish()`。
+* 原源失败不再走原生 `onError(...)`（它会 `startFlow()→checkFlag()→nextFlag()`，在无线路时 `FlagAdapter.get` 越界）。`VideoActivity.onError` 增加 `if (mOrigin != null)` 早退到纯展示的 `showOriginError(...)`。
+* `HistoryResumeCoordinator`：`fallbackToCurrent(activity, history, onLaunching)` 新增重载；`global_history_mode = OFF` 时不再静默（提示"全局历史续播已关闭，未进行当前源匹配"并留在原页）；`AUTO` 的 `resolveAuto(...)` 透传 `onLaunching`，仅在**目标正常播放页真的被启动**（含 `NovelRouter` 回调、`showSearchFallback` 里用户点"搜索"）后才回调；`SEARCH` 在 `directFromHistory` 后立即回调。`VideoActivity.onStop` 只在 `mOriginFallbackPending` 时收尾，避免异步等待期间页面被提前回收。
+* 设备用例新增 `testPrePlayerFailureUsesGlobalAutoSearchAndOff`：受控失败由夹具 `/player` 对 bob 返回不可播 scheme（真实 worker 的 `relayResult` 因此抛 `ISOLATION_ERROR`，`played=false` → `BLOCKED`），逐个设置 `AUTO`/`SEARCH`/`OFF` 三种全局设置，断言：失败文案在原正常外壳上可见且带 `ISOLATION_ERROR`、匹配开始前不 finish、`AUTO` 真的搜索到当前源并启动目标播放页、`SEARCH` 启动带 `historyResumeCid/Key/TargetCid` 的搜索页、`OFF` 既不搜索也不离开原页并提示已关闭、主要状态不变量（配置/站点/非原源历史/偏好/`:node`/`Proxy.port`）保持不变。
+* 单测新增 `OriginPrePlaybackFallbackTest`（纯 JVM，直接调 `shouldResumeGlobally`）：起播前 BLOCKED 各 reason 必须续播、已交付 Result 后任何状态都不回落、UNAVAILABLE 仍恰为五个业务 reason、READY/PLAY_READY/CANCELLED/STALE 与空值不得触发。
+
+### 14.3 验证（本轮实际输出）
+
+* 先红后绿：新策略测试在实现前 `4 tests completed, 4 failed`（`s3-unit-red.log`，缺失 `shouldResumeGlobally`），实现后 `0 failures`。
+* 定向单测：`OriginFallbackPolicyTest` 4、`OriginPrePlaybackFallbackTest` 4、`GlobalHistoryResumeSourceTest` 32、`HistoryResumeCoordinatorTest` 4 = 44 项 0 失败（`s3-unit-1.log`）。
+* 编译：`assembleMobileArm64_v8aDebug` + `assembleLeanbackArm64_v8aDebug` + `assembleMobileArm64_v8aDebugAndroidTest` → `BUILD SUCCESSFUL`（`s3-build-1.log`）；修复后重编 `s3-build-2.log`/`s3-build-3.log` 同样 SUCCESSFUL。
+* 设备 emulator-5554：`OK (9 tests)`（`s3-device-5.log`）。新用例单跑 `OK (1 test)`，实际打印 `ORIGIN_PREPLAYER_FALLBACK_OK mode=1 searches=1`、`mode=2 searches=1`、`mode=0 searches=0`（`s3-device-6.log` + logcat），即 AUTO/SEARCH 都真的接上了全局续播，OFF 不搜索。
+* 既有真实播放断言仍通过：`ORIGIN_FIRST_FRAME jar position=1653 frameCallbacks=2`、`ORIGIN_RUNTIME_OK jar cid=197`、原 cid 进度写回 `OriginProgress: cid=197 key=origin_fixture@@@origin-vod@@@197 position=2500 duration=32268`。
+* 过程记录（真实排障，不是通过）：两次"Process crashed"均为 `adb install -r -t <通配符匹配到两个 apk>` 导致主包未装上、device 仍在跑旧 dex，栈 `FlagAdapter.get IndexOutOfBoundsException`；改为显式 debug APK 路径安装后新守护生效，用例通过。
+
+### 14.4 仍未覆盖
+
+1. `AUTO` 模式若全局搜索也匹配不到目标，会给既有 `history_source_not_found` 对话框（带"去搜索"），未新增设备断言。
+2. 阅读器（小说/漫画）路由下的起播前失败只按代码路径复用同一 `onLaunching`，未做设备验证。
+3. 起播后（已交付 Result）的失败仍完全不接管——本轮只做了策略级断言，未新增设备注入。
+4. Node 运行时租约、API 24–27、TV 真机仍与 §13.3 相同，未验证。

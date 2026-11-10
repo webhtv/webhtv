@@ -562,6 +562,7 @@ private int mAudioBackgroundRandomNonce;
     }
     private History mHistory;
     private OriginHistoryPlayback mOrigin;
+    private boolean mOriginFallbackPending;
     private boolean fullscreen;
     /**
      * 本页当前的画中画状态。
@@ -6902,15 +6903,21 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             mOrigin = OriginHistoryPlayback.open(this, getIntent(), new OriginHistoryPlayback.Listener() {
                 @Override public void onOriginDetail(Vod vod) { setDetail(vod); }
                 @Override public void onOriginResult(Result result) { setPlayer(result); }
-                @Override public void onOriginFallback(History history) {
-                    markPlaybackExiting();
-                    HistoryResumeCoordinator.fallbackToCurrent(VideoActivity.this, history);
-                    finish();
+                @Override public void onOriginFallback(History history, String reason) {
+                    mOriginFallbackPending = Setting.isGlobalHistoryEnabled();
+                    showOriginError("原源播放失败：" + reason + (mOriginFallbackPending
+                            ? "，将按全局历史续播设置匹配当前源" : "，全局历史续播已关闭"));
+                    App.post(() -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        HistoryResumeCoordinator.fallbackToCurrent(VideoActivity.this, history, () -> {
+                            mOriginFallbackPending = false;
+                            markPlaybackExiting();
+                            finish();
+                        });
+                    }, 2000);
                 }
                 @Override public void onOriginError(String message) {
-                    Notify.show(message);
-                    onError(message);
-                    mBinding.progressLayout.showEmpty();
+                    showOriginError(message);
                 }
             });
             if (mOrigin == null) {
@@ -6919,6 +6926,16 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             }
         }
         return mOrigin;
+    }
+
+    /** 原源失败使用纯展示错误：不能复用原生 onError 的换线/换源流程。 */
+    private void showOriginError(String message) {
+        Notify.show(message);
+        try {
+            mBinding.progressLayout.showContent();
+        } catch (RuntimeException ignored) {
+        }
+        showError(message);
     }
 
     private boolean isOriginSession() {
@@ -8113,6 +8130,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     @Override
     protected void onError(String msg) {
+        if (mOrigin != null) {
+            showOriginError(msg);
+            return;
+        }
         invalidateShortDramaQueue("error");
         recordPlayHealth(false, msg);
         subtitlePlaybackSession.stop(this);
@@ -10327,6 +10348,7 @@ private void checkOrientation() {
         if (PlayerSetting.isBackgroundOff()) mClock.stop();
         if (!isAudioOnly()) setStop(true);
         updateDiscMenuTools();
+        if (mOriginFallbackPending && !isChangingConfigurations()) finish();
     }
 
     @Override

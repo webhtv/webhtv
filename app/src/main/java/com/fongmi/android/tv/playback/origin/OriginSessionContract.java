@@ -26,6 +26,11 @@ public final class OriginSessionContract {
                 || DETAIL_FAILED.equals(reason) || EPISODE_MISSING.equals(reason);
     }
 
+    /** Worker UNAVAILABLE stays business-only; BLOCKED may resume globally only before setPlayer. */
+    public static boolean shouldResumeGlobally(boolean resultDelivered, String status, String reason) {
+        return !resultDelivered && (BLOCKED.equals(status) || UNAVAILABLE.equals(status) && shouldFallback(reason));
+    }
+
     public static void validate(Bundle message) {
         if (message == null || message.getInt("version") != VERSION) throw new IllegalArgumentException(SNAPSHOT_INVALID);
         Parcel parcel = Parcel.obtain();

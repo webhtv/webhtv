@@ -35,7 +35,7 @@ public final class OriginHistoryPlayback {
 
         void onOriginResult(Result result);
 
-        void onOriginFallback(History history);
+        void onOriginFallback(History history, String reason);
 
         void onOriginError(String message);
     }
@@ -47,7 +47,7 @@ public final class OriginHistoryPlayback {
     private Vod vod;
     private String siteName = "";
     private String pendingEpisodeUrl = "";
-    private boolean detailDelivered, released;
+    private boolean detailDelivered, resultDelivered, released;
 
     private final OriginSessionClient.Callback callback = new OriginSessionClient.Callback() {
         @Override public void onReady(String lease, Bundle envelope) {
@@ -61,17 +61,11 @@ public final class OriginHistoryPlayback {
         }
 
         @Override public void onUnavailable(String lease, String reason) {
-            if (released) return;
-            released = true;
-            client = null;
-            listener.onOriginFallback(history.copy());
+            handleFailure(OriginSessionContract.UNAVAILABLE, reason, "");
         }
 
         @Override public void onBlocked(String lease, String reason, String detail) {
-            if (released) return;
-            released = true;
-            client = null;
-            listener.onOriginError((reason == null ? "" : reason) + (TextUtils.isEmpty(detail) ? "" : ": " + detail));
+            handleFailure(OriginSessionContract.BLOCKED, reason, detail);
         }
     };
 
@@ -104,7 +98,8 @@ public final class OriginHistoryPlayback {
         if (held != null && !held.isClosed() && held.matchesHistory(restored)) {
             entry.client = held;
             held.setCallback(owner, entry.callback);
-            if (held.playback() != null) entry.consume(held.playback());
+            entry.resultDelivered = true;
+            if (held.playback() != null) com.fongmi.android.tv.App.post(() -> entry.consume(held.playback()));
             return entry;
         }
         entry.client = OriginSessionClient.open(owner, restored, entry.callback);
@@ -147,7 +142,7 @@ public final class OriginHistoryPlayback {
         if (episode == null || !isActive()) return false;
         Result cached = resolved.get(episode.getUrl());
         if (cached != null) {
-            listener.onOriginResult(cached);
+            deliverResult(cached);
             return true;
         }
         String stableFlagKey = flag == null ? "" : Flag.stableKey(flag, vod == null ? 0 : vod.getFlags().indexOf(flag));
@@ -174,21 +169,49 @@ public final class OriginHistoryPlayback {
     }
 
     private void consume(OriginSessionClient.Playback playback) {
-        Result result = Result.fromJson(playback.result);
-        if (result.needParse() || TextUtils.isEmpty(result.getRealUrl())) {
-            listener.onOriginError("原源取流结果不可直接播放");
-            return;
+        if (released) return;
+        try {
+            Result result = Result.fromJson(playback.result);
+            if (result.hasMsg() || result.needParse() || TextUtils.isEmpty(result.getRealUrl())) {
+                handleFailure(OriginSessionContract.BLOCKED, OriginSessionContract.PLAYER_FAILED,
+                        result.hasMsg() ? result.getMsg() : "原源取流结果不可直接播放");
+                return;
+            }
+            apply(playback);
+            if (vod == null || vod.getFlags().isEmpty()) {
+                handleFailure(OriginSessionContract.BLOCKED, OriginSessionContract.SNAPSHOT_INVALID, "原源详情或选集数据无效");
+                return;
+            }
+            resolved.put(resolvedEpisodeUrl(playback), result);
+            if (!detailDelivered) {
+                detailDelivered = true;
+                listener.onOriginDetail(vod);
+            }
+            if (!pendingEpisodeUrl.isEmpty() && pendingEpisodeUrl.equals(resolvedEpisodeUrl(playback))) {
+                pendingEpisodeUrl = "";
+                deliverResult(result);
+            }
+        } catch (RuntimeException failure) {
+            handleFailure(OriginSessionContract.BLOCKED, OriginSessionContract.SNAPSHOT_INVALID, failure.toString());
         }
-        apply(playback);
-        resolved.put(resolvedEpisodeUrl(playback), result);
-        if (!detailDelivered && vod != null) {
-            detailDelivered = true;
-            listener.onOriginDetail(vod);
-        }
-        if (!pendingEpisodeUrl.isEmpty() && pendingEpisodeUrl.equals(resolvedEpisodeUrl(playback))) {
-            pendingEpisodeUrl = "";
-            listener.onOriginResult(result);
-        }
+    }
+
+    private void deliverResult(Result result) {
+        if (!isActive()) return;
+        resultDelivered = true;
+        client.markPlaybackStarted();
+        PlaybackService.holdOriginLease(client, history.copy());
+        listener.onOriginResult(result);
+    }
+
+    private void handleFailure(String status, String reason, String detail) {
+        if (released) return;
+        boolean fallback = OriginSessionContract.shouldResumeGlobally(resultDelivered, status, reason);
+        String message = (TextUtils.isEmpty(reason) ? OriginSessionContract.ISOLATION_ERROR : reason)
+                + (TextUtils.isEmpty(detail) ? "" : ": " + detail);
+        release();
+        if (fallback) listener.onOriginFallback(history.copy(), message);
+        else listener.onOriginError(message);
     }
 
     private void apply(OriginSessionClient.Playback playback) {
@@ -206,10 +229,7 @@ public final class OriginHistoryPlayback {
         }
         if (playback.positionMs > 0) history.setPosition(playback.positionMs);
         if (playback.durationMs > 0) history.setDuration(playback.durationMs);
-        if (client != null) {
-            client.markPlaybackStarted();
-            PlaybackService.holdOriginLease(client, history.copy());
-        }
+
     }
 
     private String resolvedEpisodeUrl(OriginSessionClient.Playback playback) {

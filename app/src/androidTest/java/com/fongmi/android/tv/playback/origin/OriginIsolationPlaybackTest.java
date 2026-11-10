@@ -35,6 +35,9 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.node.NodeRuntime;
+import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.ui.activity.VideoActivity;
+import com.fongmi.android.tv.ui.activity.SearchActivity;
 import com.github.catvod.Proxy;
 import com.github.catvod.utils.Prefers;
 
@@ -190,6 +193,72 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
             upstream.assertNoAliceOnBobResources();
             assertEquals(currentInstance, identity(runtime));
             System.out.println("ORIGIN_RUNTIME_OK " + runtime + " cid=" + b.getId());
+        }
+    }
+
+    public void testPrePlayerFailureUsesGlobalAutoSearchAndOff() throws Exception {
+        Config a = config("jar", "alice"), b = config("jar", "bob");
+        load(a);
+        History h = history(b, "/episode/2");
+        String targetKey = KEY + AppDatabase.SYMBOL + VOD + AppDatabase.SYMBOL + a.getId();
+        ownedHistory.add(h.forPlaybackKey(targetKey, a.getId()));
+        upstream.blockBobPlayer = true;
+        upstream.matchCurrent = true;
+        for (int mode : new int[]{Setting.GLOBAL_HISTORY_AUTO, Setting.GLOBAL_HISTORY_SEARCH, Setting.GLOBAL_HISTORY_OFF}) {
+            Setting.putGlobalHistoryMode(mode);
+            upstream.searches.set(0);
+            upstream.alicePlays.set(0);
+            MainState before = new MainState(h);
+            Activity originPage = getInstrumentation().startActivitySync(
+                    VideoActivity.originHistoryIntent(context, h).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            activity = originPage;
+            String targetClass = mode == Setting.GLOBAL_HISTORY_SEARCH ? SearchActivity.class.getName() : VideoActivity.class.getName();
+            Instrumentation.ActivityMonitor monitor = new Instrumentation.ActivityMonitor(targetClass, null, false);
+            getInstrumentation().addMonitor(monitor);
+            try {
+                AtomicReference<String> message = new AtomicReference<>("");
+                waitUntil(() -> {
+                    main(() -> message.set(allText(originPage)));
+                    return message.get().contains("原源播放失败") && message.get().contains("ISOLATION_ERROR");
+                }, 15000, "the pre-player worker failure must remain visibly explained on the normal shell");
+                assertFalse("do not finish the origin page before global matching has launched", originPage.isFinishing());
+                assertEquals("the explanation must appear before matching begins", 0, upstream.searches.get());
+                before.assertUnchanged(h);
+                if (mode == Setting.GLOBAL_HISTORY_OFF) {
+                    long visibleSince = SystemClock.elapsedRealtime();
+                    waitUntil(() -> SystemClock.elapsedRealtime() - visibleSince >= 2500, 4000, "observe the disabled-mode decision");
+                    assertFalse("global resume OFF must stay on the explained origin failure", originPage.isFinishing());
+                    assertEquals(0, upstream.searches.get());
+                    main(() -> message.set(allText(originPage)));
+                    assertTrue(message.get().contains("全局历史续播已关闭"));
+                    before.assertUnchanged(h);
+                } else {
+                    Activity target = monitor.waitForActivityWithTimeout(30000);
+                    assertNotNull("pre-player failure must launch the configured global-resume entry, mode=" + mode, target);
+                    activity = target;
+                    assertFalse("the target must no longer carry an origin-session intent", OriginHistoryPlayback.hasPayload(target.getIntent()));
+                    assertEquals("the main configuration never switches", a.getId(), VodConfig.getCid());
+                    waitUntil(() -> upstream.searches.get() > 0, 15000, "both global modes must actually search current sources");
+                    if (mode == Setting.GLOBAL_HISTORY_AUTO) {
+                        waitUntil(() -> upstream.alicePlays.get() > 0, 15000, "auto matching must reach the current-source player, not discard its async result");
+                        assertEquals(b.getId(), target.getIntent().getIntExtra("resume_history_cid", -1));
+                    } else {
+                        assertEquals(b.getId(), target.getIntent().getIntExtra("historyResumeCid", -1));
+                        assertEquals(a.getId(), target.getIntent().getIntExtra("historyResumeTargetCid", -1));
+                        assertEquals(h.getKey(), target.getIntent().getStringExtra("historyResumeKey"));
+                    }
+                    main(target::finish);
+                    waitUntil(originPage::isFinishing, 10000, "finish the failed origin shell only after a target is launched");
+                }
+                main(originPage::finish);
+                getInstrumentation().waitForIdleSync();
+                awaitWorkerGone();
+                activity = null;
+                System.out.println("ORIGIN_PREPLAYER_FALLBACK_OK mode=" + mode + " searches=" + upstream.searches.get());
+            } finally {
+                getInstrumentation().removeMonitor(monitor);
+                main(originPage::finish);
+            }
         }
     }
 
@@ -561,7 +630,7 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
     }
     private static final class HttpData {final int status;final byte[] body;final String range;HttpData(int s,byte[] b,String r){status=s;body=b;range=r==null?"":r;}String text(){return new String(body,StandardCharsets.UTF_8);}}
     private final class FixtureServer extends NanoHTTPD {
-        final File files;final List<Map<String,String>> requests=new CopyOnWriteArrayList<>();final AtomicInteger searches=new AtomicInteger(),failedSegments=new AtomicInteger();volatile boolean failSegments;
+        final File files;final List<Map<String,String>> requests=new CopyOnWriteArrayList<>();final AtomicInteger searches=new AtomicInteger(),failedSegments=new AtomicInteger(),alicePlays=new AtomicInteger();volatile boolean failSegments,blockBobPlayer,matchCurrent;
         FixtureServer(File root){super("127.0.0.1",0);files=root;}
         String base(){return "http://127.0.0.1:"+getListeningPort();}
         @Override public Response serve(IHTTPSession request){try{
@@ -570,9 +639,9 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
             boolean protectedPath=uri.startsWith("/media-fixture/")||uri.equals("/detail")||uri.equals("/player")||uri.equals("/search");
             String account=request.getParms().getOrDefault("account","bob");
             if(protectedPath){Map<String,String> expected=headers(account);if(!expected.get("Authorization").equals(request.getHeaders().get("authorization"))||!expected.get("Cookie").equals(request.getHeaders().get("cookie"))||!expected.get("Referer").equals(request.getHeaders().get("referer")))return newFixedLengthResponse(Response.Status.UNAUTHORIZED,"text/plain","wrong account");}
-            if(uri.equals("/search")){searches.incrementAndGet();return json(new JSONObject().put("list",new JSONArray()));}
-            if(uri.equals("/detail")){String runtime=request.getParms().getOrDefault("runtime","fixture");return json(new JSONObject().put("list",new JSONArray().put(new JSONObject().put("vod_id",VOD).put("vod_name",account+":"+runtime).put("vod_play_from","origin-line").put("vod_play_url","第1集$/episode/1#第2集$/episode/2"))));}
-            if(uri.equals("/player")){if(!"/episode/2".equals(request.getParms().get("episode")))return newFixedLengthResponse(Response.Status.NOT_FOUND,"text/plain","wrong episode");return json(new JSONObject().put("parse",0).put("url",base()+"/redirect").put("header",new JSONObject(headers(account))));}
+            if(uri.equals("/search")){searches.incrementAndGet();return json(new JSONObject().put("list",matchCurrent?new JSONArray().put(new JSONObject().put("vod_id",VOD).put("vod_name","bob:fixture")):new JSONArray()));}
+            if(uri.equals("/detail")){String runtime=request.getParms().getOrDefault("runtime","fixture");return json(new JSONObject().put("list",new JSONArray().put(new JSONObject().put("vod_id",VOD).put("vod_name",matchCurrent?"bob:fixture":account+":"+runtime).put("vod_play_from","origin-line").put("vod_play_url","第1集$/episode/1#第2集$/episode/2"))));}
+            if(uri.equals("/player")){if(!"/episode/2".equals(request.getParms().get("episode")))return newFixedLengthResponse(Response.Status.NOT_FOUND,"text/plain","wrong episode");if(account.equals("alice"))alicePlays.incrementAndGet();return json(new JSONObject().put("parse",0).put("url",blockBobPlayer&&account.equals("bob")?"unsupported-origin://unplayable":base()+"/redirect").put("header",new JSONObject(headers(account))));}
             if(failSegments&&uri.contains("seg-")&&!uri.endsWith("seg-0.m4s")){failedSegments.incrementAndGet();return newFixedLengthResponse(Response.Status.NOT_FOUND,"text/plain","injected segment404 after start");}
             File f=new File(files,uri.substring(1));if(!f.getCanonicalPath().startsWith(files.getCanonicalPath()+File.separator)||!f.isFile())return newFixedLengthResponse(Response.Status.NOT_FOUND,"text/plain","missing fixture");
             byte[] data=Files.readAllBytes(f.toPath());String mime=uri.endsWith("m3u8")?"application/vnd.apple.mpegurl":uri.endsWith("json")?"application/json":"application/octet-stream";
