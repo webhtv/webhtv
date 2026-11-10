@@ -37,8 +37,8 @@ public class SearchResultLayoutTest {
                 source.contains("return Product.getColumn();"));
         assertTrue("Landscape layout should keep the normal poster card ratio while using the wider result area",
                 source.contains("SEARCH_CARD_RATIO"));
-        assertTrue("Changing the layout setting should rebuild the result grid",
-                source.contains("updateRecyclerLayout();"));
+        assertTrue("Changing the display mode should rebuild the result grid",
+                source.contains("applyMode();"));
     }
 
     @Test
@@ -156,26 +156,22 @@ public class SearchResultLayoutTest {
     }
 
     @Test
-    public void listModeUsesCompactSearchRowsInsteadOfPosterHeight() throws Exception {
+    public void searchModesCycleThroughGridListText() throws Exception {
         Path collectPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "CollectActivity.java"));
         String collect = read(collectPath);
         Path adapterPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "SearchAdapter.java"));
         String adapter = read(adapterPath);
-        Path listLayoutPath = findLeanbackResPath().resolve(Path.of("layout", "adapter_search_list.xml"));
-        String listLayout = read(listLayoutPath);
+        Path textLayoutPath = findLeanbackResPath().resolve(Path.of("layout", "adapter_search_text_tv.xml"));
 
-        assertTrue("TV list mode should have a fixed compact row height",
-                collect.contains("SEARCH_LIST_ROW_HEIGHT_DP"));
-        assertTrue("TV list mode must not calculate height from full-width poster ratio",
-                collect.contains("return isListMode(count) ? ResUtil.dp2px(SEARCH_LIST_ROW_HEIGHT_DP) : (int) (getItemWidth(count) / SEARCH_CARD_RATIO);"));
-        assertTrue("Search adapter must receive whether it is rendering compact list rows",
-                collect.contains("new SearchAdapter(this, getItemWidth(count), getItemHeight(count), isListMode(count))"));
-        assertTrue("TV search adapter should inflate a dedicated list row layout",
-                adapter.contains("AdapterSearchListBinding"));
-        assertTrue("Compact list row should keep a modest fixed XML preview height",
-                listLayout.contains("android:layout_height=\"116dp\""));
-        assertTrue("Compact list row should use a side poster instead of a full-width image",
-                listLayout.contains("android:layout_toEndOf=\"@+id/image\""));
+        assertTrue("TV search must cycle grid/list/text modes",
+                collect.contains("Setting.putSearchColumn(Setting.getSearchColumn() % 3 + 1);"));
+        assertTrue("TV search adapter must expose a text-only mode",
+                adapter.contains("MODE_TEXT = 3"));
+        assertTrue("TV search adapter must inflate the text row layout",
+                adapter.contains("AdapterSearchTextTvBinding"));
+        assertTrue("TV search adapter must inflate the detail row layout",
+                adapter.contains("AdapterSearchDetailBinding"));
+        assertTrue("Text row layout must exist", java.nio.file.Files.exists(textLayoutPath));
     }
 
     @Test

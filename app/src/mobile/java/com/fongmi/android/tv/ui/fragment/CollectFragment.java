@@ -308,13 +308,11 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private int getCount() {
-        int column = Setting.getSearchColumn();
-        if (column == 0) return (ResUtil.isPad() || ResUtil.isLand(requireActivity())) ? 2 : 1;
-        return Math.max(1, Math.min(column, 2));
+        return Setting.getSearchColumn();
     }
 
     private boolean isGrid() {
-        return getCount() == 2;
+        return getCount() == SearchAdapter.MODE_GRID;
     }
 
     private int getSpanCount() {
@@ -349,7 +347,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         setResultPadding();
         int span = getSpanCount();
         ((GridLayoutManager) (mBinding.recycler.getLayoutManager())).setSpanCount(span);
-        mSearchAdapter.setGrid(isGrid(), getGridSize());
+        mSearchAdapter.setMode(getCount(), getGridSize());
         if (scrollTop) mBinding.recycler.scrollToPosition(0);
     }
 
@@ -359,7 +357,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private void onColumnToggle() {
-        Setting.putSearchColumn(Setting.getSearchColumn() == 1 ? 2 : 1);
+        Setting.putSearchColumn(getCount() % 3 + 1);
         setResultLayout(true);
         requireActivity().invalidateOptionsMenu();
     }
@@ -458,6 +456,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     @Override
     public void onItemClick(int position, Collect item) {
         mCollectAdapter.setSelected(position);
+        mSearchAdapter.setAllMode("all".equals(item.getSite().getKey()));
         restoreScroller(item.getSite().getKey());
         mSearchAdapter.setItems(new ArrayList<>(item.getList()), () -> {
             if (!item.getSite().getKey().equals(getActiveSiteKey())) return;
@@ -526,7 +525,13 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         if (similarity != null) similarity.setTitle(getSimilarityFilterTitle());
         MenuItem item = menu.findItem(R.id.action_column);
         if (item == null) return;
-        Drawable icon = ContextCompat.getDrawable(requireContext(), getCount() == 1 ? R.drawable.ic_site_double_column : R.drawable.ic_site_single_column);
+        int iconRes;
+        switch (getCount()) {
+            case SearchAdapter.MODE_LIST: iconRes = R.drawable.ic_site_detail; break;
+            case SearchAdapter.MODE_TEXT: iconRes = R.drawable.ic_site_single_column; break;
+            default: iconRes = R.drawable.ic_site_double_column; break;
+        }
+        Drawable icon = ContextCompat.getDrawable(requireContext(), iconRes);
         if (icon == null) return;
         icon = icon.mutate();
         icon.setTint(Color.WHITE);

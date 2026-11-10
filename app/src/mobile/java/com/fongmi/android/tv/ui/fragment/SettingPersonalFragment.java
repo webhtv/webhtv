@@ -113,8 +113,8 @@ public class SettingPersonalFragment extends BaseFragment {
     private String getSearchColumnText() {
         searchColumn = getResources().getStringArray(R.array.select_search_column);
         int column = Setting.getSearchColumn();
-        if (column >= 0 && column < searchColumn.length) {
-            return searchColumn[column];
+        if (column >= 1 && column <= searchColumn.length) {
+            return searchColumn[column - 1];
         }
         return searchColumn[0];
     }
@@ -208,7 +208,7 @@ public class SettingPersonalFragment extends BaseFragment {
 
     private void setSearchColumn(View view) {
         int current = Setting.getSearchColumn();
-        int next = (current + 1) % searchColumn.length;
+        int next = current % searchColumn.length + 1;
         Setting.putSearchColumn(next);
         setText();
     }

@@ -293,7 +293,7 @@
     <string name="config_delete_title">删除播放源？</string>
     <string name="config_delete_message">确定删除“%1$s”吗？相关播放历史也可能丢失，此操作无法撤销。</string>
     <string name="config_current_delete_message">当前接口正在使用中，请先切换到其他接口再删除。</string>
-    <string name="setting_home_history">首页最近观看</string>
+    <string name="setting_home_history">首页历史</string>
     <string name="setting_personal_recommendation">个性推荐</string>
     <string name="setting_recommendation_feedback">不感兴趣管理</string>
     <string name="setting_recommendation_feedback_count">%1$d 项 · 90 天后自动恢复</string>
@@ -2001,9 +2001,9 @@
     </string-array>
 
     <string-array name="select_search_column">
-        <item>自适应</item>
-        <item>1个</item>
-        <item>2个</item>
+        <item>海报</item>
+        <item>列表</item>
+        <item>文字</item>
     </string-array>
 
     <string-array name="select_tmdb_match_mode">

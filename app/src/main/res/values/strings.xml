@@ -296,7 +296,7 @@
     <string name="config_delete_title">Delete source?</string>
     <string name="config_delete_message">Delete “%1$s”? Related playback history may also be lost. This cannot be undone.</string>
     <string name="config_current_delete_message">This interface is currently in use. Switch to another interface before deleting it.</string>
-    <string name="setting_home_history">Home recent history</string>
+    <string name="setting_home_history">Home history</string>
     <string name="setting_personal_recommendation">Personal recommendations</string>
     <string name="setting_recommendation_feedback">Not interested management</string>
     <string name="setting_recommendation_feedback_count">%1$d items · auto-restore after 90 days</string>
@@ -2052,9 +2052,9 @@
     </string-array>
 
     <string-array name="select_search_column">
-        <item>Auto</item>
-        <item>1 item</item>
-        <item>2 items</item>
+        <item>Grid</item>
+        <item>List</item>
+        <item>Text</item>
     </string-array>
 
     <string-array name="select_tmdb_match_mode">

@@ -1749,15 +1749,11 @@ public class Setting {
     }
 
     public static int getSearchColumn() {
-        return clampSearchColumn(Prefers.getInt("search_column", 0));
+        return Math.min(Math.max(Prefers.getInt("search_column", 1), 1), 3);
     }
 
     public static void putSearchColumn(int column) {
-        Prefers.put("search_column", clampSearchColumn(column));
-    }
-
-    private static int clampSearchColumn(int column) {
-        return column < 0 || column > 2 ? 0 : column;
+        Prefers.put("search_column", column == 2 ? 2 : (column == 3 ? 3 : 1));
     }
 
     public static int getSearchResultSort() {
