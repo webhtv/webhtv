@@ -18,7 +18,7 @@ public class GlobalHistoryResumeSourceTest {
         int end = source.indexOf("public static void fallbackToCurrent", start);
         assertTrue("shared history entry must retain its explicit original record", start >= 0 && end > start);
         String open = source.substring(start, end);
-        int origin = open.indexOf("VideoActivity.startFromOriginHistory(activity, history)");
+        int origin = open.indexOf("routeOriginHistory(activity, history)");
         int fallback = open.lastIndexOf("fallbackToCurrent(activity, history)");
         assertFalse("the origin route must not be gated by the system version; only parsing that needs WebView is",
                 open.contains("android.os.Build.VERSION.SDK_INT < 28"));

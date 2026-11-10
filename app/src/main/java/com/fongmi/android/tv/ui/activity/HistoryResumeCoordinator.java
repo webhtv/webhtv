@@ -36,6 +36,28 @@ public final class HistoryResumeCoordinator {
     private HistoryResumeCoordinator() {
     }
 
+    /**
+     * 与当前源历史完全同一套分流：详情页模式是独立 TMDB 详情且该历史有 TMDB 身份时进详情页，
+     * 否则直接播放。退化原因必须留痕，不静默改变用户可见的入口。
+     */
+    public static void routeOriginHistory(Activity activity, History history) {
+        String route = com.fongmi.android.tv.playback.origin.OriginHistoryRoute.describe(
+                Setting.isTmdbDetailModeConfigured(),
+                Setting.isStandaloneTmdbDetailMode(Setting.getDetailOpenMode()),
+                history.getTmdbId(),
+                history.getMediaType());
+        com.github.catvod.crawler.SpiderDebug.log("origin-route", "cid=%d key=%s mode=%d route=%s tmdb=%d/%s",
+                history.getCid(), history.getKey(), Setting.getDetailOpenMode(), route, history.getTmdbId(), history.getMediaType());
+        if (com.fongmi.android.tv.playback.origin.OriginHistoryRoute.isTmdbDetail(route)) {
+            TmdbDetailActivity.startFromOriginHistory(activity, history);
+            return;
+        }
+        // 炫彩模式却没有 TMDB 身份是用户可见的意外退化，必须提示，不能当成正常直接播放。
+        if (com.fongmi.android.tv.playback.origin.OriginHistoryRoute.DIRECT_IDENTITY.equals(route)) {
+            Notify.show("这条历史没有 TMDB 身份，直接进入播放（详情页模式无法用于原源）");
+        }
+        VideoActivity.startFromOriginHistory(activity, history);
+    }
     public static void open(Activity activity, History history) {
         if (activity == null || history == null) return;
         REQUESTS.incrementAndGet();
@@ -48,7 +70,7 @@ public final class HistoryResumeCoordinator {
         // 跨配置历史：原源在先，原源不可用或起播前失败才按全局历史续播设置回落。
         // 系统版本不是门槛：低版本同样尝试原源，只有“需要 WebView 嗅探”的那次解析才会明确报隔离不足。
         if (com.fongmi.android.tv.bean.Config.find(history.getCid()) != null) {
-            VideoActivity.startFromOriginHistory(activity, history);
+            routeOriginHistory(activity, history);
             return;
         }
         fallbackToCurrent(activity, history);

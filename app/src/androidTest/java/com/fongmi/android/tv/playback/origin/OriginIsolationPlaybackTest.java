@@ -38,6 +38,7 @@ import com.fongmi.android.tv.node.NodeRuntime;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.activity.SearchActivity;
+import com.fongmi.android.tv.ui.activity.TmdbDetailActivity;
 import com.github.catvod.Proxy;
 import com.github.catvod.utils.Prefers;
 
@@ -193,6 +194,69 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
             upstream.assertNoAliceOnBobResources();
             assertEquals(currentInstance, identity(runtime));
             System.out.println("ORIGIN_RUNTIME_OK " + runtime + " cid=" + b.getId());
+        }
+    }
+
+    public void testTmdbDetailModeRoutesCrossSourceHistoryIntoTmdbDetailOnOriginLines() throws Exception {
+        Config a = config("jar", "alice"), b = config("jar", "bob");
+        load(a);
+        History h = history(b, "/episode/2");
+        h.setTmdbId(603);
+        h.setMediaType("tv");
+        AppDatabase.get().getHistoryDao().insertOrUpdate(h);
+        int originalMode = Setting.getDetailOpenMode();
+        try {
+            // 分流谓词必须按真实设置给出"进 TMDB 详情页"，并带上原历史的 TMDB 身份。
+            Setting.putDetailOpenMode(Setting.DETAIL_OPEN_ENHANCED);
+            // 基线必须在本用例自己的设置改动之后取：改详情页模式本身就是本用例的动作，不是产品污染。
+            MainState baseline = new MainState(h);
+            assertEquals("TMDB 详情模式下跨源历史必须走详情页",
+                    OriginHistoryRoute.TMDB_DETAIL,
+                    OriginHistoryRoute.describe(Setting.isTmdbDetailModeConfigured(),
+                            Setting.isStandaloneTmdbDetailMode(Setting.getDetailOpenMode()), h.getTmdbId(), h.getMediaType()));
+            assertEquals("非 TMDB 模式必须退化为直接播放",
+                    OriginHistoryRoute.DIRECT_MODE,
+                    OriginHistoryRoute.describe(Setting.isTmdbDetailModeConfigured(), false, h.getTmdbId(), h.getMediaType()));
+            assertEquals("没有 TMDB 身份必须退化",
+                    OriginHistoryRoute.DIRECT_IDENTITY,
+                    OriginHistoryRoute.describe(true, true, 0, ""));
+
+            upstream.failSegments = false;
+            Intent intent = TmdbDetailActivity.originHistoryIntent(context, h).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity = getInstrumentation().startActivitySync(intent);
+            assertEquals("跨源历史在炫彩详情模式下必须进入 TMDB 详情页", TmdbDetailActivity.class.getName(), activity.getClass().getName());
+            // 详情页的线路/集数来自原配置 worker：外壳必须显示 bob 的第 2 集，而不是当前配置 alice 的内容。
+            AtomicReference<String> shell = new AtomicReference<>("");
+            waitUntil(() -> { main(() -> shell.set(allText(activity))); return shell.get().contains("bob") && shell.get().contains("第2集"); },
+                    30000, "TMDB detail must render the original source lines/episodes, got: " + shell.get());
+            assertFalse("原源详情页不得混入当前配置的站源 chip，got: " + shell.get(), shell.get().contains("alice"));
+            assertEquals(b.getId(), h.getCid());
+            baseline.assertUnchanged(h);
+
+            // 点播放：取流来自原配置 worker 的 relay，仍由同一个内联播放器真实起播。
+            int playId = context.getResources().getIdentifier("play", "id", context.getPackageName());
+            assertTrue("the TMDB detail page has a play control", playId != 0);
+            main(() -> activity.findViewById(playId).performClick());
+            AtomicReference<Player> player = new AtomicReference<>();
+            waitUntil(() -> { main(() -> { PlayerView view = activity.findViewById(R.id.exo); if (view != null) player.set(view.getPlayer()); }); return player.get() != null; },
+                    60000, "the inline player must attach after the original-source play request");
+            waitUntil(() -> { AtomicBoolean good = new AtomicBoolean(); main(() -> good.set(player.get().getVideoSize().width > 0 && player.get().getCurrentPosition() > 0)); return good.get(); },
+                    45000, "original-source TMDB playback must render a real first frame");
+            AtomicReference<Bitmap> frame = new AtomicReference<>();
+            waitUntil(() -> { Bitmap shot = getInstrumentation().getUiAutomation().takeScreenshot(); if (shot == null) return false; frame.set(shot); return coversVideoCenter(shot); }, 15000, "TMDB inline playback must show decoded pixels");
+            if (frame.get() != null) frame.get().recycle();
+            baseline.assertUnchanged(h);
+            main(activity::finish);
+            waitUntil(() -> processId(context.getPackageName() + ":origin") <= 0, 20000, "leaving the TMDB detail page must release the origin lease");
+            History saved = History.find(b.getId(), h.getKey());
+            assertNotNull(saved);
+            assertEquals(b.getId(), saved.getCid());
+            assertTrue("origin progress must be written back to the original cid", saved.getPosition() > 0);
+            assertNull("no current-config record may be created", History.find(a.getId(), h.getKey()));
+            activity = null;
+            System.out.println("ORIGIN_TMDB_DETAIL_OK cid=" + b.getId() + " saved=" + saved.getPosition());
+        } finally {
+            Setting.putDetailOpenMode(originalMode);
         }
     }
 
@@ -574,10 +638,11 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
     /**
      * 主进程自己随任何一次正常播放页播放都会写的运行时统计：广告统计、解码器学习缓存、
      * 原站协议健康度（SiteHealthStore.recordParse/recordPlay，按 site key 记）与音频歌单激活项
-     * （AudioPlaylistStore.setActive）。这几个键与"切不切配置"无关，正常当前源播放同样会写，
+     * （AudioPlaylistStore.setActive）、后台缓存盘点耗时（CacheCenter.java:59 的 CacheScheduler 指标）。
+     * 这几个键与"切不切配置"无关，正常当前源播放/详情页同样会写，
      * 因此只允许它们变化；账号、配置、解析器、插件等其它偏好必须逐字不变。
      */
-    private static final Set<String> PLAYBACK_OWNED_KEYS = new TreeSet<>(Arrays.asList("ad_block_stats", "perf_exo_decoder_runtime_v1", "site_health", "audio_playlist_active"));
+    private static final Set<String> PLAYBACK_OWNED_KEYS = new TreeSet<>(Arrays.asList("ad_block_stats", "perf_exo_decoder_runtime_v1", "site_health", "audio_playlist_active", "cache_mgmt_inventory_duration_ms"));
     private static Map<String,Object> stablePreferences(android.content.SharedPreferences preferences){Map<String,Object> result=copyPreferences(preferences);result.keySet().removeAll(PLAYBACK_OWNED_KEYS);return result;}
     /** 偏好摘要：断言失败只暴露键名，绝不把账号/密钥值写进日志。 */
     private static String digest(Map<String,Object> values){try{java.security.MessageDigest md=java.security.MessageDigest.getInstance("SHA-256");StringBuilder text=new StringBuilder();for(Map.Entry<String,Object> entry:new TreeMap<>(values).entrySet())text.append(entry.getKey()).append('=').append(entry.getValue()).append('\n');return Base64.getEncoder().encodeToString(md.digest(text.toString().getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new AssertionError("digest unavailable");}}

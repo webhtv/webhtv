@@ -122,6 +122,7 @@ import com.fongmi.android.tv.ui.detail.TmdbDetailModeController;
 import com.fongmi.android.tv.ui.host.TmdbDetailHost;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
+import com.fongmi.android.tv.playback.origin.OriginHistoryPlayback;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
 import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
@@ -379,6 +380,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private Vod vod;
     private String sourceVodName;
     private History history;
+    private OriginHistoryPlayback mOrigin;
+    private TmdbBundle originBundle;
+    private boolean originFallbackPending;
     @androidx.annotation.Keep
     private History mHistory;
     private TmdbConfig tmdbConfig;
@@ -620,6 +624,34 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         start(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(), null, Setting.getDetailOpenMode(), false, item, item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl());
     }
 
+    /** 跨源历史的原源模式：详情/线路/集数来自原配置 worker，TMDB 元数据用该历史的身份。 */
+    public static void startFromOriginHistory(Activity activity, History item) {
+        if (activity == null || item == null) return;
+        activity.startActivity(originHistoryIntent(activity, item));
+    }
+
+    public static Intent originHistoryIntent(Context context, History item) {
+        Intent intent = new Intent(context, TmdbDetailActivity.class);
+        int detailMode = Setting.getDetailOpenMode();
+        boolean cinemaStyle = detailMode == Setting.DETAIL_OPEN_CINEMA;
+        intent.putExtra("detail_mode", cinemaStyle ? Setting.DETAIL_OPEN_CINEMA : normalizeDetailMode(detailMode));
+        intent.putExtra("fusion", detailMode == Setting.DETAIL_OPEN_FUSION);
+        intent.putExtra("auto_play", false);
+        intent.putExtra("key", item.getSiteKey());
+        intent.putExtra("id", item.getVodId());
+        intent.putExtra("name", item.getVodName());
+        intent.putExtra("pic", item.getVodPic());
+        intent.putExtra("mark", item.getVodRemarks());
+        intent.putExtra("tmdb_id", item.getTmdbId());
+        intent.putExtra("tmdb_media_type", item.getMediaType());
+        intent.putExtra("tmdb_title", item.getVodName());
+        intent.putExtra(EXTRA_RESUME_FROM_HISTORY, true);
+        intent.putExtra(EXTRA_RESUME_HISTORY_CID, item.getCid());
+        intent.putExtra(EXTRA_RESUME_HISTORY_KEY, HistoryResumePayload.encode(item));
+        putIntentPlaybackSelection(intent, item.getVodFlag(), item.getSourceBindingKey(), item.getVodRemarks(), item.getEpisodeUrl());
+        OriginHistoryPlayback.putExtras(intent, item);
+        return intent;
+    }
     public static void startFromResolvedHistory(Activity activity, History source, Vod target, Flag flag, Episode episode) {
         if (source == null || target == null || flag == null || episode == null) return;
         int flagIndex = TmdbUIAdapter.flagIndex(target.getFlags(), flag);
@@ -760,12 +792,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     @Override
     protected String getPlaybackKey() {
-        return getHistoryKey();
+        return isOriginSession() ? mOrigin.playbackKey() : getHistoryKey();
     }
 
     @Override
     protected boolean shouldBindPlaybackService() {
-        return modeController.shouldBindPlaybackService();
+        return isOriginSession() || modeController.shouldBindPlaybackService();
     }
 
     @Override
@@ -1027,6 +1059,71 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.root.post(this::applyDetailTheme);
     }
 
+    /** 原源会话内核：普通（当前源）历史永远没有 payload，因此永远走原逻辑。 */
+    private OriginHistoryPlayback origin() {
+        if (mOrigin == null && OriginHistoryPlayback.hasPayload(getIntent())) {
+            mOrigin = OriginHistoryPlayback.open(this, getIntent(), new OriginHistoryPlayback.Listener() {
+                @Override public void onOriginDetail(Vod vod) { applyLoaded(vod, originBundle, new ArrayList<>(), "", false); }
+                @Override public void onOriginResult(Result result) { startInlinePlayer(result); }
+                @Override public void onOriginFallback(History item, String reason) {
+                    originFallbackPending = Setting.isGlobalHistoryEnabled();
+                    showOriginError("原源播放失败：" + reason + (originFallbackPending
+                            ? "，将按全局历史续播设置匹配当前源" : "，全局历史续播已关闭"));
+                    App.post(() -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        HistoryResumeCoordinator.fallbackToCurrent(TmdbDetailActivity.this, item, () -> {
+                            originFallbackPending = false;
+                            finish();
+                        });
+                    }, 2000);
+                }
+                @Override public void onOriginError(String message) { showOriginError(message); }
+            });
+        }
+        return mOrigin;
+    }
+
+    private boolean isOriginSession() {
+        return origin() != null;
+    }
+
+    /** 原源模式只搭一条原源通道：不用当前配置的 SiteApi 取详情，只补该历史的 TMDB 元数据。 */
+    private void loadOriginContent() {
+        int generation = ++loadGeneration;
+        tmdbConfig = TmdbConfig.effectiveCurrent();
+        TmdbItem item = initialTmdbItem;
+        detailTasks.submit(() -> {
+            TmdbBundle bundle = null;
+            if (item != null && tmdbConfig != null && tmdbConfig.isReady()) {
+                try {
+                    bundle = loadTmdbBundle(item);
+                } catch (Throwable ignored) {
+                }
+            }
+            TmdbBundle loaded = bundle;
+            runOnAliveUi(() -> {
+                if (generation != loadGeneration) return;
+                originBundle = loaded;
+                Vod vod = mOrigin == null ? null : mOrigin.vod();
+                if (vod != null) applyLoaded(vod, loaded, new ArrayList<>(), "", false);
+                else mOrigin.requestDetail();
+            });
+        });
+    }
+
+    private void showOriginError(String message) {
+        if (isInlinePlayerMode()) showInlineError(message);
+        else Notify.show(message);
+    }
+
+    /** 原源进度按原 cid/key 写回，绝不落成当前配置记录。 */
+    private void persistOriginProgress(boolean exit) {
+        if (mOrigin == null || history == null || Setting.isIncognito()) return;
+        if (service() != null && isOwner() && player() != null && !player().isEmpty()) {
+            mOrigin.writeProgress(history, player().getPosition(), player().getDuration());
+        }
+        if (exit && isFinishing() && !isChangingConfigurations()) mOrigin.release();
+    }
     private void initModeController() {
         // Phase 3: 三种模式全部接入 Controller（准备删除旧逻辑）
         DetailModeHost host = new DetailModeHost() {
@@ -2494,6 +2591,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void loadContent(@Nullable TmdbBundle reusableBundle) {
+        if (isOriginSession()) { loadOriginContent(); return; }
         int generation = ++loadGeneration;
         tmdbCredentialScope = SubscriptionTmdbCredentialStore.currentScope();
         detailTasks.cancelAll();
@@ -5037,6 +5135,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void bindSeasonSourceRoutes(int routeGeneration) {
+        // 原源模式只显示原源线路：混入当前配置的站源 chip 会误导用户更换来源。
+        if (isOriginSession()) return;
         TmdbItem item = matchedTmdbItem != null ? matchedTmdbItem : initialTmdbItem;
         int seasonNumber = currentSeasonSourceScope();
         if (item == null || !item.isTv() || item.getTmdbId() <= 0 || seasonNumber < 0) return;
@@ -6816,6 +6916,14 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void initHistory() {
+        // 原源模式的历史由会话内核持有（原 cid/key 已核对过），不再走 intent payload 复原：
+        // 复原链在季进度快照缺失时会返回 null，那会让整页静默变空。
+        if (isOriginSession()) {
+            history = mOrigin.history();
+            syncDanmakuCompatHistory();
+            updatePlayLabel();
+            return;
+        }
         History resumeHistory = getIntentResumeHistory();
         if (isResumeFromHistory() && resumeHistory == null) {
             Notify.show(R.string.history_record_missing);
@@ -6828,7 +6936,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (history == null) {
             history = new History();
             history.setKey(getHistoryKey());
-            history.setCid(VodConfig.getCid());
+            history.setCid(isOriginSession() ? mOrigin.history().getCid() : VodConfig.getCid());
             history.setVodName(vod.getName());
             history.findEpisode(vod.getFlags());
         }
@@ -6871,6 +6979,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (enterInlineFullscreenIfCurrentInlinePlayback(selectedEpisode)) return;
         saveInlineHistory();
         updateInlineHistory(selectedEpisode);
+        if (isOriginSession()) { playDetailFullscreen(); return; }
         modeController.play();
     }
 
@@ -7897,6 +8006,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         String flag = selectedFlag.getFlag();
         String episodeUrl = selectedEpisode.getUrl();
         int playerKernel = inlineHistoryPlayerKernel();
+        if (isOriginSession()) {
+            // 原源模式：取流由原配置 worker 完成，结果经 relay 回环交给同一个内联播放器。
+            mOrigin.requestPlay(selectedFlag, selectedEpisode);
+            return;
+        }
         updateInlineDisplayPanel();
         detailTasks.submit(() -> {
             try {
@@ -11550,6 +11664,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     @Override
     protected void onError(String msg) {
+        if (isOriginSession()) { showOriginError(msg); return; }
         recordInlinePlayHealth(false, msg);
         if (!isInlinePlayerMode() || !inlineStarted || !isOwner()) return;
         showInlineError(msg);
@@ -11656,6 +11771,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     @Override
     protected void onDestroy() {
+        persistOriginProgress(true);
         clearRenderChunks();
         introSkipPlayback.reset();
         loadGeneration++;
@@ -11748,6 +11864,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void saveInlineHistory() {
+        if (isOriginSession()) { persistOriginProgress(false); return; }
         if (!isInlinePlayerMode() || !inlineStarted || !isOwner() || history == null) return;
 
         // 保存当前集的播放位置到缓存
@@ -11782,6 +11899,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void syncInlineHistory() {
+        if (isOriginSession()) { persistOriginProgress(false); return; }
         updateInlineHistoryProgress();
         if (history != null && !Setting.isIncognito()) Task.execute(() -> history.save());
     }
@@ -12021,7 +12139,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (history == null) {
             history = new History();
             history.setKey(getHistoryKey());
-            history.setCid(VodConfig.getCid());
+            history.setCid(isOriginSession() ? mOrigin.history().getCid() : VodConfig.getCid());
         }
         boolean sameEpisode = isHistoryEpisode(item, history);
         boolean sameFlag = TextUtils.equals(history.getVodFlag(), selectedFlag.getFlag());
@@ -12066,7 +12184,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
         }
 
-        history.setCid(VodConfig.getCid());
+        history.setCid(isOriginSession() ? mOrigin.history().getCid() : VodConfig.getCid());
         history.setVodName(playbackHistoryName());
         history.setVodFlag(selectedFlag.getFlag());
         history.setSourceBindingKey(selectedSeasonFlagKey());
@@ -12328,6 +12446,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void changeSource() {
+        if (isOriginSession()) { Notify.show("原源详情不切换到当前配置的站源"); return; }
         if (vod == null) return;
         String keyword = getSourceSearchKeyword();
         int generation = loadGeneration;
@@ -12357,6 +12476,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void tryAutoChangeSource() {
+        if (isOriginSession()) return;
         brokenSources.add(getKeyText());
         String keyword = getSourceSearchKeyword();
         int generation = loadGeneration;
@@ -13911,6 +14031,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private Site getCurrentSite() {
+        if (isOriginSession()) return mOrigin.site();
         Site site = vod != null ? vod.getSite() : null;
         if (site != null && !site.isEmpty()) return site;
         Site fallback = VodConfig.get().getSite(getKeyText());
@@ -13933,6 +14054,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private String getHistoryKey() {
+        if (isOriginSession()) return mOrigin.historyKey();
         return getKeyText() + AppDatabase.SYMBOL + getIdText() + AppDatabase.SYMBOL + VodConfig.getCid();
     }
 

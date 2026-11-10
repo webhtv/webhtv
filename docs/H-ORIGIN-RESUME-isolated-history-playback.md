@@ -462,3 +462,29 @@ SiteApi、ParseJob、BaseLoader、JS/Py/Jar、Chaquo/QuickJS/nodejs 原生模块
 2. 阅读器（小说/漫画）路由下的起播前失败只按代码路径复用同一 `onLaunching`，未做设备验证。
 3. 起播后（已交付 Result）的失败仍完全不接管——本轮只做了策略级断言，未新增设备注入。
 4. Node 运行时租约、API 24–27、TV 真机仍与 §13.3 相同，未验证。
+## 15. 返工 3：炫彩/独立 TMDB 详情模式下的跨源历史进详情页
+
+### 15.1 根因
+
+当前源历史在 `VideoActivity.startFromHistory` 先用 `shouldOpenLegacyTmdbDetail(key,id)` 判断是否进 `TmdbDetailActivity`；跨源历史走 `HistoryResumeCoordinator` 后直接调 `VideoActivity.startFromOriginHistory`，绕过了这一判断，于是"详情页模式=炫彩详情"时也直接进播放器。
+
+### 15.2 改动
+
+* 新增纯函数 `playback/origin/OriginHistoryRoute.describe(tmdbDetailModeConfigured, standaloneTmdbMode, tmdbId, mediaType)`：有 TMDB 身份且命中独立 TMDB 详情模式 → `tmdb_detail`；否则返回带原因的退化码 `direct:detail_mode_not_tmdb` / `direct:history_without_tmdb_identity`（JVM 可直接断言）。
+* `HistoryResumeCoordinator.routeOriginHistory(...)`：与当前源历史同一判据分流到 `TmdbDetailActivity.startFromOriginHistory` 或 `VideoActivity.startFromOriginHistory`；`SpiderDebug.log("origin-route", ...)` 记录每次分流与退化原因；仅"TMDB 模式但历史无 TMDB 身份"这一用户可见意外才 `Notify.show`（字面提示），非 TMDB 模式按用户设置静默直放（与当前源历史一致）。`open()` 跨源分支改为调用它。
+* `TmdbDetailActivity` 原源模式（改动点）：`startFromOriginHistory`/`originHistoryIntent`（入口）、`origin()`/`isOriginSession()`（会话内核）、`loadOriginContent()`（**不调用 SiteApi.detailContent**，只按历史 tmdbId/mediaType 补 TMDB 元数据后 `applyLoaded`）、`initHistory()`（原源历史取自会话内核，不再走 intent payload 复原）、`playInline(...)`（改用 `mOrigin.requestPlay`）、`onPlay()`（原源进入内联全屏播放）、`saveInlineHistory()`/`syncInlineHistory()`/`onDestroy()`（`mOrigin.writeProgress` 按原 cid/key 写回，退出释放租约）、`playbackCid`（`history.setCid` 三处改为原配置 cid）、`getHistoryKey()`/`getPlaybackKey()`/`getCurrentSite()`（原源身份）、`bindSeasonSourceRoutes()`（原源模式直接返回，线路行不混入当前配置站源 chip）、`changeSource()`/`tryAutoChangeSource()`（原源模式禁止换到当前配置站源）、`onError()`（原源失败不走原生换源，改 `showOriginError`）。
+* 起播前失败沿用上一轮策略：先提示原因，2s 后 `HistoryResumeCoordinator.fallbackToCurrent(..., onLaunched)`；已起播后失败不接管。
+
+### 15.3 验证
+
+* 单测：`OriginHistoryRouteTest` 4 项全绿（TMDB 模式选详情页 / 非 TMDB 模式选直放 / 无身份退化 / 退化码可区分）。
+* 编译：`assembleMobileArm64_v8aDebug`、`assembleLeanbackArm64_v8aDebug`、`assembleMobileArm64_v8aDebugAndroidTest` 均 `BUILD SUCCESSFUL`（`s4-build-3.log`）。
+* 设备 emulator-5554：新增 `testTmdbDetailModeRoutesCrossSourceHistoryIntoTmdbDetailOnOriginLines`，断言 `Setting.putDetailOpenMode(DETAIL_OPEN_ENHANCED)` 下跨源历史打开的是 `TmdbDetailActivity`、外壳显示原配置 bob 的第 2 集且不含当前配置 alice 的站源 chip、点播放后经原源 relay 真实起播（首帧 + 非黑截图）、原 cid 进度写回、无当前配置记录、退出释放 worker。全量 `OK (10 tests)`（`s4-device-6.log`），logcat `ORIGIN_TMDB_DETAIL_OK cid=265 saved=1200`。
+* 过程记录：两次失败均按证据修正——(a) 用例自身改设置导致偏好摘要失败 → 基线改在设置之后取；(b) 全量运行时原源详情页空白，定位到 `initHistory()` 的 intent payload 复原在季进度快照缺失时返回 null，改为原源模式直接用会话内核历史（产品修复，非放宽断言）。另将 `cache_mgmt_inventory_duration_ms`（`CacheCenter.java:59` 的后台缓存盘点耗时）加入运行时统计白名单，理由同 §13.2 的 `site_health`/`audio_playlist_active`：任何详情页/播放页都会写，与切不切配置无关。
+
+### 15.4 仍未覆盖
+
+1. `app/src/test/java/com/fongmi/android/tv/history/GlobalHistoryResumeSourceTest.java:21` 的源码文本断言仍指向 `VideoActivity.startFromOriginHistory`，本轮 `open()` 改调 `routeOriginHistory` 后该断言失败（1 failed / 58）。语义需改为搜索 `routeOriginHistory(activity, history)`；该文件不在本轮 scope，已报父等待授权，未自行修改。
+2. TMDB 元数据未在设备上联网验证（无可用 TMDB 凭据），只验证了 tmdbId/mediaType 传入且失败时不影响原源线路渲染。
+3. 阅读器（小说/漫画）路由下的原源详情/起播未验证；TV（leanback）只做编译验证。
+4. 原源模式旋转重建复用租约的行为仍与 §13.3-4 相同，未新增验证。
