@@ -62,7 +62,22 @@ public final class ProxyDomainRuleSet {
 
     public ProxyRuntimeConfig resolve(String url, ProxyRuntimeConfig global) {
         Objects.requireNonNull(global, "global");
-        if (!global.enabled() || rules.isEmpty()) return global;
+        if (!global.enabled()) return global;
+        return resolveRule(url, global);
+    }
+
+    /**
+     * The explicit public endpoint is requested by the user for that exact URL, so it applies the
+     * per-domain plan even while automatic proxying is switched off; the resolved config keeps the
+     * caller's enabled flag untouched.
+     */
+    public ProxyRuntimeConfig resolveForPublic(String url, ProxyRuntimeConfig global) {
+        Objects.requireNonNull(global, "global");
+        return resolveRule(url, global);
+    }
+
+    private ProxyRuntimeConfig resolveRule(String url, ProxyRuntimeConfig global) {
+        if (rules.isEmpty()) return global;
         String host = host(url);
         if (host == null) return global;
         for (Rule rule : rules) {

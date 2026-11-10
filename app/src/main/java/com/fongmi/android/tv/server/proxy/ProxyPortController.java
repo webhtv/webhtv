@@ -31,7 +31,6 @@ public final class ProxyPortController implements AutoCloseable {
             ProxyDomainRuleSet rules) throws IOException {
         ProxyRuntimeConfigValidator.requireValid(config);
         rules = rules == null ? ProxyDomainRuleSet.EMPTY : rules;
-        if (!config.enabled()) return disable(config, rules);
         if (config.equals(activeConfig)
                 && rules.equals(activeRules)
                 && server != null
@@ -131,14 +130,6 @@ public final class ProxyPortController implements AutoCloseable {
                 && config.configuredPort() == server.actualPort();
     }
 
-    private Snapshot disable(ProxyRuntimeConfig config, ProxyDomainRuleSet rules) {
-        MultiThreadProxyServer previous = server;
-        server = null;
-        updateActive(config, rules);
-        Snapshot published = snapshot();
-        if (previous != null) previous.close();
-        return published;
-    }
 
     private long revisionFor(ProxyRuntimeConfig config, ProxyDomainRuleSet rules) {
         return config.equals(activeConfig) && rules.equals(activeRules)

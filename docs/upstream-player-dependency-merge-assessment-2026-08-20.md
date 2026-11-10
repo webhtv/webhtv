@@ -5117,3 +5117,9 @@ C3 的触发来源主要是 media `990abc2368fd74779f525ee345734470659f3d53`（`
 - 记录不修：`CacheScheduler` 12h 兜底受自动清理开关门控（该兜底在活会话下本就不可能生效）；`values-zh-rTW` 缺 95 键（beta 侧既有系统性滞后）；`SCHEMA_VERSION` 未递增（无行为缺陷）；`targetCapacityBytes()` 的 UI 持锁窗口（EXO 单项上限路径早已存在）。
 - 未执行：设备端实测（面板 X/Y 实际数值、退出播放后 EXO 目录收缩、PiP 下插件 chip 闪烁），本机无连接设备。
 - 下一动作：提交推送 `dev2` 并向 `beta` 提 PR，随后拉取远端最新。
+
+## C123：本机公共多线程代理接口（2026-11-09）
+
+- 任务记录：[C123-public-proxy-api.md](C123-public-proxy-api.md)。用户已批准实施；复用现有控制栏多线程引擎，新增本机免 Token /proxy 与请求级 thread/shards/chunkSize(KiB)，应用后台服务期间自动监听但播放器自动代理默认不变。
+- 范围：App Java 代理模块及测试；不引入 Go/JNI，不修改 native/播放器依赖，不推送。
+- 当前状态：实现与验收完成（两次proxy包160/0/0、双flavor Java编译），已修取消/域规则审查项；本地guard提交/恢复标签待闭环，不推送。

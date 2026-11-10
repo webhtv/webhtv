@@ -20,9 +20,14 @@ public final class ProxySessionRegistry implements AutoCloseable {
         this.maxSessions = maxSessions;
     }
 
-    public synchronized Optional<Lease> tryAcquire(Runnable cancellation) {
+    public Optional<Lease> tryAcquire(Runnable cancellation) {
+        return tryAcquire(cancellation, 0);
+    }
+
+    public synchronized Optional<Lease> tryAcquire(Runnable cancellation, int reservedSlots) {
         Objects.requireNonNull(cancellation, "cancellation");
-        if (closed || active.size() >= maxSessions) return Optional.empty();
+        if (reservedSlots < 0) throw new IllegalArgumentException("reservedSlots must not be negative");
+        if (closed || (long) active.size() + reservedSlots >= maxSessions) return Optional.empty();
         Lease lease = new Lease(this, nextId++, cancellation);
         active.add(lease);
         return Optional.of(lease);
