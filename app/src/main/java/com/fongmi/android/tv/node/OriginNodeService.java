@@ -86,7 +86,8 @@ public final class OriginNodeService extends Service {
     @Override public void onDestroy() { shutdown(); super.onDestroy(); }
 
     private boolean isOwnProcess() {
-        return Build.VERSION.SDK_INT >= 28 && (getPackageName() + ":origin_node").equals(Application.getProcessName());
+        // 低版本没有 Application.getProcessName()：统一走 /proc 兜底，否则 Node 进程不会自毁。
+        return (getPackageName() + ":origin_node").equals(com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.processName());
     }
 
     private boolean matches(Bundle data) {

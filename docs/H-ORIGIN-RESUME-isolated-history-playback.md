@@ -377,3 +377,26 @@ SiteApi、ParseJob、BaseLoader、JS/Py/Jar、Chaquo/QuickJS/nodejs 原生模块
 2. 阶段 2：WebHome 历史身份透传、手机/TV 完整入口与既有播放页融合。
 3. 旧系统（API<28）仅有策略级保留，无设备验证。
 4. 起播后 URL 失败明确不接管，未做跨配置回退。
+## 12. 版本门槛下调（用户要求：手机版/电视版低版本也能用）
+
+### 12.1 结论
+
+原实现用“系统版本 < 28 就拒绝原源”做门槛。实际情况是：`WebView.setDataDirectorySuffix()` 从 API 28 才有，而 WebView 只被 `ParseJob`（嗅探/解析）使用；直链原源根本不需要 WebView。因此门槛改为**能力**而不是版本：
+
+- `OriginSessionBootstrap.install` 不再因低版本抛错：私有文件/偏好/数据库/代理/Node 在 minSdk 24 起照常隔离；`canIsolateWebView()` 只在能设置独立 WebView 目录时为 true。
+- `OriginSessionService` 在 `result.needParse()` 分支前检查 `canIsolateWebView()`：低版本遇到“需要 WebView 嗅探”的原源，明确 `ISOLATION_ERROR`（BLOCKED），不伪装成原源不可用去匹配当前源。
+- `HistoryResumeCoordinator` 移除版本分支：任何版本都先尝试原源。
+- `OriginSessionBootstrap.processName()` 统一 API 28+ 的 `Application.getProcessName()` 与低版本 `/proc/self/cmdline` 兜底；`OriginNodeService.isOwnProcess()` 与 WebView 目录 suffix 都改用它，避免低版本 Node 进程无法自毁。
+- 依据 `minSdk = 24`、`coreLibraryDesugaring(desugar_jdk_libs_nio 2.1.5)`：`Map.of`/`Stream.toList`/`java.nio.file` 在基线已可用（现有代码 553 处 `Map.of`、47 处 `toList()`），无需为本功能抬高门槛。
+
+### 12.2 验证
+
+- `assembleMobileArm64_v8aDebug` + `assembleMobileArm64_v8aDebugAndroidTest` + 定向单测：BUILD SUCCESSFUL；50 项单测 0 失败（`lowapi-build-2.log`）。
+- emulator-5554（SDK 28）Jar 原源完整流程复跑：`OK (1 test)`（`lowapi-device-jar.log`），确认门槛下调没有回归。
+- **未在 API 24–27 真机/模拟器验证**：本机只有 API 28 设备，且不为验收下载系统镜像。低版本结论目前是代码级（无 28+ API 调用、进程名兜底、WebView 分支受控）。
+
+### 12.3 仍未覆盖
+
+1. 需要 WebView 嗅探的原源在 API < 28 明确不支持（BLOCKED），这是平台限制而非本次疏漏。
+2. WebHome 与二期三端融合仍未做（用户允许先忽略 WebHome）。
+3. Node 租约真实双 bundle 并存仍未验证（缺 libnode，不隐式下载）。

@@ -147,7 +147,14 @@ public class OriginSessionService extends Service {
                 return com.fongmi.android.tv.api.loader.BaseLoader.get().proxy(params);
             });
             Result result = resolved.result;
-            if (result.needParse()) result = parse(result);
+            if (result.needParse()) {
+                // 低版本没有独立的 WebView 数据目录：不能在这个 worker 里创建 WebView，
+                // 必须明确报隔离不足，而不是伪造成原源不可用去匹配当前源。
+                if (!OriginSessionBootstrap.canIsolateWebView())
+                    throw OriginHistoryResolver.failure(OriginSessionContract.ISOLATION_ERROR,
+                            "origin source needs WebView sniffing; a private WebView directory needs Android 9+");
+                result = parse(result);
+            }
             if (closing.get()) return;
             result = relayResult(result);
             String flagKey = Flag.stableKey(resolved.flag, detail.getFlags().indexOf(resolved.flag));

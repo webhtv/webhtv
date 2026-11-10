@@ -45,12 +45,8 @@ public final class HistoryResumeCoordinator {
             VideoActivity.startFromHistory(activity, history);
             return;
         }
-        if (android.os.Build.VERSION.SDK_INT < 28) {
-            Notify.show("当前系统暂不支持原源隔离，保留原有当前源匹配策略");
-            fallbackToCurrent(activity, history);
-            return;
-        }
         // 跨配置历史：原源在先，走租约单入口；只有五个业务 reason 才回到当前配置匹配。
+        // 系统版本不是门槛：低版本同样尝试原源，只有“需要 WebView 嗅探”的那次解析才会明确报隔离不足。
         if (com.fongmi.android.tv.bean.Config.find(history.getCid()) != null) {
             OriginPlaybackActivity.start(activity, history);
             return;

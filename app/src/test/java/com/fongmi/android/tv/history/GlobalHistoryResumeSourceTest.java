@@ -20,8 +20,9 @@ public class GlobalHistoryResumeSourceTest {
         String open = source.substring(start, end);
         int origin = open.indexOf("OriginPlaybackActivity.start(activity, history)");
         int fallback = open.lastIndexOf("fallbackToCurrent(activity, history)");
-        assertTrue("unsupported older systems retain an explicit legacy route", open.contains("android.os.Build.VERSION.SDK_INT < 28"));
-        assertTrue("the legacy route is announced, not disguised as an unavailable origin", open.contains("保留原有当前源匹配策略"));
+        assertFalse("the origin route must not be gated by the system version; only parsing that needs WebView is",
+                open.contains("android.os.Build.VERSION.SDK_INT < 28"));
+        assertFalse("older systems must not silently degrade to current-source matching", open.contains("保留原有当前源匹配策略"));
         assertTrue("supported-platform original source attempt precedes business-failure matching", origin >= 0 && fallback > origin);
         assertTrue("launching original playback returns before current matching", open.substring(origin, fallback).contains("return;"));
         assertFalse("the coordinator must not temporarily switch the current config", open.contains("VodConfig.selectConfig("));
