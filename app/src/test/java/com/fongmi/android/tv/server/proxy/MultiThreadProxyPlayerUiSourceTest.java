@@ -49,11 +49,12 @@ public class MultiThreadProxyPlayerUiSourceTest {
 
         assertTrue("多线程按钮必须在默认清单中标记为不显示",
                 catalog.contains("new Item(MULTI_THREAD_PROXY, R.string.multi_thread_proxy_button, false)"));
-        assertTrue("首次运行必须把默认不显示项写入隐藏偏好",
-                catalog.contains("Prefers.put(HIDDEN, join(hidden));"));
-        assertTrue("默认隐藏只能注入一次，之后以用户选择为准",
-                catalog.contains("if (Prefers.getBoolean(HIDDEN_SEEDED)) return hidden;")
-                        && catalog.contains("Prefers.put(HIDDEN_SEEDED, true);"));
+        assertTrue("默认隐藏集必须包含多线程按钮",
+                catalog.contains("MULTI_THREAD_PROXY, QUALITY, KARAOKE, AD_FEEDBACK"));
+        assertTrue("无自定义时必须套用默认隐藏集（fish 语义）",
+                catalog.contains("hidden.addAll(getDefaultHiddenIds());"));
+        assertTrue("旧版播种标记必须一次性清除以让新默认生效",
+                catalog.contains("Prefers.remove(HIDDEN_SEEDED);"));
         assertTrue("重置播放器按钮必须同时清除默认隐藏注入标记", catalog.contains("Prefers.remove(HIDDEN_SEEDED);"));
         assertTrue("用户仍可通过 putVisible 打开该按钮", catalog.contains("public static void putVisible(String id, boolean visible)"));
     }
