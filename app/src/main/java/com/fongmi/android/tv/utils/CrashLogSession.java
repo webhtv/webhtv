@@ -36,14 +36,13 @@ public final class CrashLogSession {
         try {
             boolean temporary = DebugLogStore.beginCrashSession();
             String history = PreviousProcessCrashRecovery.getRecoveryDetails(intentOf(context));
+            int historyPid = historyPid(history);
             String report = CrashReport.readRecent(context);
             int reportPid = CrashLogText.reportPid(report);
-            int deadPid = reportPid;
-            int historyPid = historyPid(history);
-            // A report left by a different death must never be presented as this entry's evidence.
-            if (historyPid > 0) report = null;
-            if (historyPid > 0) deadPid = historyPid;
-            List<String> logcat = logcatTail(deadPid);
+            // A report written by a Java fatal handler is only this entry's evidence when the entry
+            // itself is that Java death; a platform recovery has no report of its own.
+            if (discardReport(history, report)) report = null;
+            List<String> logcat = logcatTail(historyPid > 0 ? historyPid : reportPid);
             String body = withHistory(CrashLogText.composeSession(report, logcat, logcat != null && !logcat.isEmpty(), report != null, !temporary), history);
             for (String line : body.split("\n", -1)) {
                 if (!line.isEmpty()) DebugLogStore.appendCrashContext(line);
@@ -62,6 +61,30 @@ public final class CrashLogSession {
         return context instanceof Activity ? ((Activity) context).getIntent() : null;
     }
 
+    /**
+     * Whether the recent report belongs to a different death than this entry.
+     *
+     * <p>A Java fatal handoff keeps a report only when its reliable event identity matches. A
+     * platform recovery (CRASH/CRASH_NATIVE/ANR) produced no Java report at all: a report left by an
+     * older Java death must not be presented as its evidence even when the pid was reused, and an
+     * unprovable identity is never mixed in. Without a history the recent report stays as before.
+     */
+    static boolean discardReport(String history,String report) {
+        if(history==null || history.isEmpty() || report==null || report.isEmpty()) return false;
+        String event=metadata(history,"event");
+        return !"JAVA_FATAL".equals(metadata(history,"reason")) || event.isEmpty()
+                || !event.equals(metadata(report,"event"))
+                || !metadata(history,"process").equals(metadata(report,"process"));
+    }
+
+    private static String metadata(String text,String key) {
+        for(String line:text.split("\n")) {
+            if(line.startsWith("---")) break;
+            if(line.startsWith(key+"=")) return line.substring(key.length()+1);
+            if(line.startsWith("reason=")) break;
+        }
+        return "";
+    }
     private static int historyPid(String history) {
         if (history == null) return -1;
         for (String line : history.split("\n")) {

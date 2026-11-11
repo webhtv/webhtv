@@ -7,6 +7,11 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class PreviousProcessCrashRecoveryTest {
+
+    private static CrashRecoveryState.Exit exit(String process, int pid, long timestamp, int reason, String runId) {
+        return new CrashRecoveryState.Exit(process, pid, timestamp, reason, 0, "record", runId);
+    }
+
     @Test
     public void selectsLatestActualMainThenClassifiesOnlyConfirmedDeaths() {
         CrashRecoveryState.Exit crash = new CrashRecoveryState.Exit("actual.main", 42, 100, 4, 0, "fatal", "run1");
@@ -18,5 +23,17 @@ public class PreviousProcessCrashRecoveryTest {
         assertSame(normal, CrashRecoveryState.latestMain(List.of(crash, normal, errorProcess), "actual.main"));
         assertFalse(CrashRecoveryState.confirmed(CrashRecoveryState.latestMain(List.of(crash, normal), "actual.main").reason()));
         assertNull(CrashRecoveryState.latestMain(List.of(errorProcess), "actual.main"));
+    }
+
+    @Test
+    public void onlyAPublishedRunIdCanProveThePlatformRecordIsTheJavaDeath() {
+        assertTrue(CrashRecoveryState.sameProcessRun(exit("actual.main", 10, 100, 4, "run-1"), "run-1"));
+        assertFalse("no summary: the death has no provable identity",
+                CrashRecoveryState.sameProcessRun(exit("actual.main", 10, 100, 4, ""), "run-1"));
+        assertFalse(CrashRecoveryState.sameProcessRun(exit("actual.main", 10, 100, 4, null), "run-1"));
+        assertFalse("a different run is a different death",
+                CrashRecoveryState.sameProcessRun(exit("actual.main", 10, 100, 4, "run-2"), "run-1"));
+        assertFalse("a missing java run cannot be identified either",
+                CrashRecoveryState.sameProcessRun(exit("actual.main", 10, 100, 4, "run-1"), null));
     }
 }

@@ -1620,6 +1620,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     protected void onDestroy() {
+        PreviousProcessCrashRecovery.release(this);
         invalidatePendingFocusRequests();
         if (mFolder != null) mFolder.clearContentFocusRequest();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);

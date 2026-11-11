@@ -132,7 +132,7 @@ public final class CrashReport {
         if (directory == null) return false;
         String report;
         try {
-            report = CrashLogText.format(facts(thread, error));
+            report = withIdentity(CrashLogText.format(facts(thread, error)), PreviousProcessCrashRecovery.javaEvent(context));
         } catch (Throwable ignored) {
             return false;
         }
@@ -156,6 +156,10 @@ public final class CrashReport {
         return true;
     }
 
+    static String withIdentity(String report,String event) {
+        int newline=report.indexOf('\n');
+        return report.substring(0,newline+1)+"event="+event+"\n"+report.substring(newline+1);
+    }
     /** Newest report written by the just-crashed process, or null when absent/stale/unreadable. */
     public static String readRecent(Context context) {
         File[] files = reports(context);

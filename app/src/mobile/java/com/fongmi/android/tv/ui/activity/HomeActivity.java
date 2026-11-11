@@ -539,6 +539,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
 
     @Override
     protected void onDestroy() {
+        PreviousProcessCrashRecovery.release(this);
         if (mChrome != null) mChrome.destroy();
         LiveConfig.get().clear();
         VodConfig.get().clear("mobile-home-destroy");

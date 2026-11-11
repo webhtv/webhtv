@@ -22,8 +22,10 @@ public class CrashActivityIsolationTest {
         assertTrue("error process must be recognized before business initialization", attach.contains("CrashReport.isErrorProcess(base)"));
         assertTrue("lightweight processes must exit before WebView initialization", attach.indexOf("if (lightweightProcess)") < attach.indexOf("WebViewDataDirectoryGuard.clearStaleLock"));
         String resources = section(app, "public Resources getResources()", "private boolean shouldRetryResourcesApply");
-        assertTrue("error resources must not read broken preferences", resources.indexOf("if (lightweightProcess) return super.getResources()") >= 0);
-        assertTrue(resources.indexOf("if (lightweightProcess)") < resources.indexOf("Setting.getLanguage()"));
+        assertTrue("error resources must not read broken preferences", resources.indexOf("if (crashPageProcess) return super.getResources()") >= 0);
+        assertTrue(resources.indexOf("if (crashPageProcess)") < resources.indexOf("Setting.getLanguage()"));
+        assertTrue("only the crash page process may skip the language override",
+                attach.contains("crashPageProcess = errorProcess"));
         String create = section(app, "public void onCreate()", "private void warmSubtitleProviders");
         assertTrue(create.indexOf("if (lightweightProcess) return") < create.indexOf("PlaybackMemoryMonitor.process().initialize"));
     }

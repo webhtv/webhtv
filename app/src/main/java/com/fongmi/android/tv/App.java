@@ -61,6 +61,8 @@ public class App extends Application implements Application.ActivityLifecycleCal
     private volatile int foregroundActivities;
     private Hook hook;
     private volatile boolean lightweightProcess = true;
+    /** Only the crash page process skips language resources; recovery helpers keep the old path. */
+    private volatile boolean crashPageProcess;
 
     /** 同一语言上语言更新连续失败的次数上限，超过后放弃该语言，避免热路径无限重试。 */
     private static final int MAX_RESOURCES_APPLY_ATTEMPTS = 3;
@@ -124,6 +126,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         boolean errorProcess = CrashReport.isErrorProcess(base);
+        crashPageProcess = errorProcess;
         lightweightProcess = errorProcess || PlaybackRecoveryMonitor.isRecoveryProcess(base);
         if (lightweightProcess) {
             if (errorProcess) Init.set(base);
@@ -297,7 +300,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     @SuppressWarnings("deprecation")
     public Resources getResources() {
-        if (lightweightProcess) return super.getResources();
+        if (crashPageProcess) return super.getResources();
         int language = Setting.getLanguage();
         Resources cached = resources;
         if (cached != null && resourcesLanguage == language) return cached;
