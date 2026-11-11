@@ -215,11 +215,18 @@ jobs:
         run: |
           chmod +x ./gradlew
           rm -rf Release/apk
+          # 标准 runner 内存有限：4 个变体全并行时 R8 与打包 worker 会被系统 OOM
+          # 杀掉，表现为无任何堆栈的 IncrementalSplitterRunnable 失败。分两批、
+          # 每批限 2 个 worker，牺牲少量时间换取构建稳定。
           ./gradlew \
             :app:assembleMobileArm64_v8aRelease \
-            :app:assembleMobileArmeabi_v7aRelease \
             :app:assembleLeanbackArm64_v8aRelease \
+            --max-workers=2 \
+            --no-daemon
+          ./gradlew \
+            :app:assembleMobileArmeabi_v7aRelease \
             :app:assembleLeanbackArmeabi_v7aRelease \
+            --max-workers=2 \
             --no-daemon
 
       - name: Collect artifacts
