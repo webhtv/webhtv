@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -105,19 +106,7 @@ public final class AppBackup {
         return create(target, null);
     }
 
-    public static CreateResult createLightweight(File target) throws IOException {
-        return create(target, null, true);
-    }
-
     public static synchronized CreateResult create(File target, Progress progress) throws IOException {
-        return create(target, progress, false);
-    }
-
-    /**
-     * @param lightweight 轻量备份（退出自动备份用）：跳过共享存储目录（TV/TVBox/TVData 等
-     *                    用户存储文件，可能很大），只保留配置/数据库/主题壁纸/登录态。
-     */
-    private static synchronized CreateResult create(File target, Progress progress, boolean lightweight) throws IOException {
         SyncFiles.Archive shared = null;
         LoginStateSync.Archive login = null;
         try {
@@ -127,20 +116,22 @@ public final class AppBackup {
             StringBuilder warning = new StringBuilder();
             int customCspSourceFiles = 0;
             int customCspFiles = 0;
-            if (!lightweight) {
-                notifyProgress(progress, "整理共享数据文件", 15, 0, 0);
-                try {
-                    customCspSourceFiles = SyncFiles.countFiles(SyncFiles.CUSTOM_CSP_PATH);
-                    shared = SyncFiles.createArchive(SyncFiles.getPaths(SyncFiles.DEFAULT_PATHS));
-                    customCspFiles = SyncFiles.countArchiveFiles(shared == null ? null : shared.getFile(), SyncFiles.CUSTOM_CSP_PATH);
-                    if (customCspFiles < customCspSourceFiles) appendWarning(warning, "站点注入文件未完整写入备份");
-                } catch (Throwable e) {
-                    if (shared != null) shared.delete();
-                    shared = null;
-                    appendWarning(warning, "共享数据文件未写入备份");
-                    SpiderDebug.log("backup", "shared archive warning error=%s", e.getMessage());
-                    SpiderDebug.log("backup", e);
-                }
+            // 备份只带走配置性质的数据：数据库/设置/主题壁纸/登录态 + 站点注入小文件。
+            // TV/TVBox/TVData 整个共享存储不扫描、不打包——里面是用户媒体与下载的大文件，
+            // 枚举加压缩会把备份界面卡在"整理共享数据文件"几分钟起步。customCsp
+            // （TV/CustomCsp）是站点注入的配置文件，体量小，保留。
+            notifyProgress(progress, "整理共享数据文件", 15, 0, 0);
+            try {
+                customCspSourceFiles = SyncFiles.countFiles(SyncFiles.CUSTOM_CSP_PATH);
+                shared = SyncFiles.createArchive(List.of(SyncFiles.CUSTOM_CSP_PATH));
+                customCspFiles = SyncFiles.countArchiveFiles(shared == null ? null : shared.getFile(), SyncFiles.CUSTOM_CSP_PATH);
+                if (customCspFiles < customCspSourceFiles) appendWarning(warning, "站点注入文件未完整写入备份");
+            } catch (Throwable e) {
+                if (shared != null) shared.delete();
+                shared = null;
+                appendWarning(warning, "共享数据文件未写入备份");
+                SpiderDebug.log("backup", "shared archive warning error=%s", e.getMessage());
+                SpiderDebug.log("backup", e);
             }
             notifyProgress(progress, "整理登录态和云盘凭据", 30, shared == null ? 0 : shared.getZipSize(), 0);
             try {

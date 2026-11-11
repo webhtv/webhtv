@@ -131,10 +131,11 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     public void onCreate() {
         super.onCreate();
-        if (PlaybackRecoveryMonitor.isRecoveryProcess(this)) return;
-        // 与 fish 一致：第一时间启动本地代理服务。./ 与 clan:// 链接经 UrlUtil.convert 转成
-        // http://127.0.0.1:<port>/...，服务未起时端口是 -1，PQ 源 jar/ext 会拿到坏地址加载失败。
+        // 与 fish 完全一致的第一行：先起本地代理服务。./ 与 clan:// 链接经 UrlUtil.convert
+        // 转成 http://127.0.0.1:<port>/...，端口无效时 PQ 源 jar/ext 会拿到坏地址加载失败。
+        // 连恢复进程也起服务（fish 如此），且 getAddress 侧另有端口无效自愈兜底。
         Server.get().start();
+        if (PlaybackRecoveryMonitor.isRecoveryProcess(this)) return;
         PlaybackMemoryMonitor.process().initialize(this);
         PlaybackSystemConditionMonitor.process().initialize(this);
         Setting.applyLanguage();
