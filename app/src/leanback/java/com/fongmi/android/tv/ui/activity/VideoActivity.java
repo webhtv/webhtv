@@ -3501,8 +3501,15 @@ private boolean runtimeSourceOnly;
         if (shouldUseImmersiveAudio()) setAudioStageVisible(true);
         beginPlayerContentRequest(getKey(), playFlag, episode.getUrl());
         mPlaybackFlagKey = playbackFlagKey(flag);
-        if (isOriginSession()) mOrigin.requestPlay(flag, episode);
-        else mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
+        if (isOriginSession()) {
+            if (!mOrigin.requestPlay(flag, episode)) {
+                invalidatePlayerContent();
+                mPlaybackRequestActive = false;
+                mPlaybackPlayerStarted = false;
+                showOriginError("原源会话已结束，请返回后重新打开");
+                return;
+            }
+        } else mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
         mBinding.widget.title.setSelected(true);
         updateHistory(episode);
         showProgress();

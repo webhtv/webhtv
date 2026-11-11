@@ -398,6 +398,83 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
         }
     }
 
+    public void testNormalVideoReleasedOriginRejectsRetryAndEpisodeWithoutLoading() throws Exception {
+        Config a = config("jar", "alice"), b = config("jar", "bob");
+        load(a);
+        assertFalse(SiteApi.detailContent(KEY, VOD).getVod().getName().isEmpty());
+        History h = history(b, "/episode/2");
+        Setting.putDetailOpenMode(Setting.DETAIL_OPEN_DIRECT);
+        Setting.putGlobalHistoryMode(Setting.GLOBAL_HISTORY_AUTO);
+        MainState baseline = new MainState(h);
+        activity = getInstrumentation().startActivitySync(VideoActivity.originHistoryIntent(context, h).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        AtomicReference<Player> player = new AtomicReference<>();
+        AtomicReference<OriginHistoryPlayback> origin = new AtomicReference<>();
+        waitUntil(() -> {
+            AtomicBoolean ready = new AtomicBoolean();
+            main(() -> {
+                PlayerView view = activity.findViewById(R.id.exo);
+                if (view != null) player.set(view.getPlayer());
+                origin.set((OriginHistoryPlayback) videoField("mOrigin"));
+                ready.set(player.get() != null && player.get().getVideoSize().width > 0 && origin.get() != null && origin.get().isActive());
+            });
+            return ready.get();
+        }, 90000, "normal origin VideoActivity must really render before release/retry");
+        int requests = (int) upstream.requests.stream().filter(r -> "/player".equals(r.get("path"))).count();
+        main(() -> {
+            player.get().pause();
+            com.fongmi.android.tv.bean.Flag flag = origin.get().vod().getFlags().get(0);
+            origin.get().release();
+            assertFalse(origin.get().isActive());
+            invokeVideo("onRefresh");
+            assertVideoRejection("retry");
+            Object retryEpisodeKey = videoField("mPlaybackEpisodeKey");
+            ((VideoActivity) activity).onItemClick(flag.getEpisodes().get(0));
+            assertFalse("episode callback must really enter getPlayer for the other episode, not reuse the retry error",
+                    Objects.equals(retryEpisodeKey, videoField("mPlaybackEpisodeKey")));
+            assertVideoRejection("episode");
+        });
+        getInstrumentation().waitForIdleSync();
+        awaitWorkerGone();
+        assertEquals(requests, (int) upstream.requests.stream().filter(r -> "/player".equals(r.get("path"))).count());
+        assertEquals(0, upstream.searches.get());
+        assertEquals(0, upstream.alicePlays.get());
+        baseline.assertUnchanged(h);
+        main(activity::finish);
+        activity = null;
+        System.out.println("ORIGIN_NORMAL_RELEASED_REJECTION_OK retry=true episode=true loading=false searches=0 alicePlays=0");
+    }
+
+    private Object videoField(String name) {
+        try {
+            java.lang.reflect.Field field = VideoActivity.class.getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(activity);
+        } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
+    }
+
+    private void invokeVideo(String name) {
+        try {
+            java.lang.reflect.Method method = VideoActivity.class.getDeclaredMethod(name);
+            method.setAccessible(true);
+            method.invoke(activity);
+        } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
+    }
+
+    private void assertVideoRejection(String action) {
+        TextView error = activity.findViewById(R.id.errorText);
+        assertNotNull(error);
+        assertTrue(action + " must show a visible ended-session failure", error.isShown());
+        assertTrue(error.getText().toString().contains("原源会话已结束"));
+        try {
+            Object binding = videoField("mBinding");
+            Object progress = binding.getClass().getField("progress").get(binding);
+            android.view.View root = (android.view.View) progress.getClass().getMethod("getRoot").invoke(progress);
+            assertFalse(action + " rejection must not leave the actual loading view visible", root.isShown());
+        } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
+        assertFalse(activity.isFinishing());
+        System.out.println("ORIGIN_NORMAL_REJECTION action=" + action + " error=" + error.getText() + " loading=false");
+    }
+
     public void testTmdbReleasedOriginRejectsPlayWithoutPendingOrCurrentTakeover() throws Exception {
         Config a = config("jar", "alice"), b = config("jar", "bob");
         load(a);

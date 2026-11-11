@@ -295,19 +295,47 @@ public final class OriginMediaRelay {
     private static NanoHTTPD.Response localFile(Session session, Target target, String url, NanoHTTPD.IHTTPSession request) throws Exception {
         File file = new File(URI.create(url));
         if (!file.isFile()) return error(404, "origin file missing");
-        long start = 0, end = file.length() - 1;
-        String range = request.getHeaders().get("range");
-        if (range != null && range.startsWith("bytes=")) {
-            String[] parts = range.substring(6).split("-", 2);
-            if (!parts[0].isEmpty()) start = Long.parseLong(parts[0]);
-            if (parts.length > 1 && !parts[1].isEmpty()) end = Math.min(end, Long.parseLong(parts[1]));
+        String path = file.getName().toLowerCase(Locale.ROOT);
+        if (path.endsWith(".m3u8") || path.endsWith(".mpd")) {
+            String mime = path.endsWith(".mpd") ? "application/dash+xml" : "application/vnd.apple.mpegurl";
+            String text = readText(localStream(session, file, 0));
+            return NanoHTTPD.newFixedLengthResponse(status(200), mime, rewrite(text, url, session.id, target.headers));
         }
-        if (start < 0 || start > end) return error(416, "bad range");
-        FileInputStream input = new FileInputStream(file); input.getChannel().position(start);
+        long length = file.length(), start = 0, end = length - 1;
+        String range = request.getHeaders().get("range");
+        if (range != null) {
+            Matcher match = Pattern.compile("bytes=([0-9]*)-([0-9]*)").matcher(range);
+            if (!match.matches() || match.group(1).isEmpty() && match.group(2).isEmpty()) return error(416, "bad range");
+            try {
+                if (match.group(1).isEmpty()) {
+                    long suffix = Long.parseLong(match.group(2));
+                    if (suffix == 0) return error(416, "bad range");
+                    start = Math.max(0, length - suffix);
+                } else {
+                    start = Long.parseLong(match.group(1));
+                    if (!match.group(2).isEmpty()) end = Math.min(end, Long.parseLong(match.group(2)));
+                }
+            } catch (NumberFormatException e) { return error(416, "bad range"); }
+            if (start > end) return error(416, "bad range");
+        }
+        InputStream input = localStream(session, file, start);
         NanoHTTPD.Response reply = NanoHTTPD.newFixedLengthResponse(status(range == null ? 200 : 206), "application/octet-stream", input, end - start + 1);
         reply.addHeader("Accept-Ranges", "bytes");
-        if (range != null) reply.addHeader("Content-Range", "bytes " + start + "-" + end + "/" + file.length());
+        if (range != null) reply.addHeader("Content-Range", "bytes " + start + "-" + end + "/" + length);
         return reply;
+    }
+    private static InputStream localStream(Session session, File file, long position) throws IOException {
+        FileInputStream input = new FileInputStream(file);
+        try { input.getChannel().position(position); }
+        catch (IOException e) { input.close(); throw e; }
+        InputStream stream = new FilterInputStream(input) {
+            @Override public void close() throws IOException {
+                try { super.close(); } finally { session.streams.remove(this); }
+            }
+        };
+        session.streams.add(stream);
+        if (session.closed) { stream.close(); throw new IOException("origin session closed"); }
+        return stream;
     }
     private static NanoHTTPD.Response spiderProxy(Session session, Target target, URI uri, NanoHTTPD.IHTTPSession request) throws Exception {
         Map<String, String> params = new LinkedHashMap<>();

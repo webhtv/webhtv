@@ -3024,8 +3024,13 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (shouldUseImmersiveAudio()) setAudioStageVisible(true);
         beginPlayerContentRequest(getKey(), playFlag, episode.getUrl());
         mPlaybackFlagKey = playbackFlagKey(flag);
-        if (isOriginSession()) mOrigin.requestPlay(flag, episode);
-        else mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
+        if (isOriginSession()) {
+            if (!mOrigin.requestPlay(flag, episode)) {
+                invalidatePlayerContent();
+                showOriginError("原源会话已结束，请返回后重新打开");
+                return;
+            }
+        } else mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
         mBinding.control.title.setSelected(true);
         updateHistory(episode);
         showProgress();

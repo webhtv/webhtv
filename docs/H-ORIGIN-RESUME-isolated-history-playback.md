@@ -656,3 +656,44 @@ SiteApi、ParseJob、BaseLoader、JS/Py/Jar、Chaquo/QuickJS/nodejs 原生模块
 - 结果：`OK (1 test)` 54.685s；logcat `ORIGIN_ENHANCED_NORMAL_OK episode=/episode/3 position=365 returned=true`、`ORIGIN_TMDB_DETAIL_OK cid=102 saved=460`（证据目录 `app/build/origin-isolation/ehp-5556-dispatch/`）。即炫彩详情页点播放已进入正常播放页、按原源取流并起播选中的第 3 集、返回详情页仍可用；与执行者 5554 `ehp-r2-device.log`（`saved=914 cid=416`）互相独立。
 - 代码复核：`onPlay` 不再短路原源；`playDefaultPlayback` 原源分支按 `originHistoryIntent(context, history, flag, episode)` 启动正常播放页并在启动前 `mOrigin.release()`；`restoreOriginAfterExternalPlayback` 只在无有效 service lease 时按原 cid/key 重建；`persistOriginProgress` 增加 `isActive()` 门；融合/播放器详情控制器未改。
 - 裁决：本任务（炫彩模式下跨源历史点播放落点）通过。遗留不属本任务：`Vod.objectFrom` 对未带 urls 的旧 flags 二次 `setFlags` 可能追加空集；租约私有目录清理；TV/Fusion 设备运行、Node/API 24–27、阅读器、无痕实机未验。
+
+## 22. H-ORIGIN-POST-MERGE-20261111：合并后原源播放回归修复（2026-11-11，执行 1/3）
+
+### 22.1 本轮边界、根因与已取得红证据
+
+- 基线 `dev2` / `9f63ddaff60acb8b4f4200822af8ea7f9a591888`，初始工作树干净。原 `H-ORIGIN-FILE-MANIFEST` 未提交守卫已安全 abort；父调度者在同轮明确扩为五类真实缺陷，当前守卫 `H-ORIGIN-POST-MERGE-20261111`，仅九个授权路径，adopt 只接纳执行者自己的改动。Node 实际路径为 `node/OriginNodeService.java`，Robolectric 只属 testLeanback，新增测试实际路径为 `testLeanback/.../OriginPostMergeRegressionTest.java`；这两处事实修正均由父调度者确认。
+- file 清单：`respond` 在 HTTP 清单检测前直达 `localFile`，旧分支一律 octet-stream 原样返回；绝对 HTTP URI 逃出帐号隔离，relative 失去原 file 基准。真实监听器红 `relay-red.log` / `relay-red.xml`：11 项、4 failures、0 errors，HLS master 回环资源 `4→0`、DASH `3→0`；超 8 MiB 清单期望 500 却 200。
+- suffix Range：旧解析把 `bytes=-500` 当成 `[0,500]`；同一红例在 1024 字节 A/B 夹具返回前 501 个 A，而非末 500 个 B。普通 `bytes=2-5`、open-ended `bytes=7-` 同轮已通过。
+- 正常播放页拒绝：双 flavor `getPlayer` 不看 `requestPlay=false`，继续 `updateHistory/showProgress`，覆盖错误并等一个永不来的回调。未改这两份生产代码先构建红包 `video-red-build.log` exit 0（3m4s，跳过 native 构建），5554 保数据安装后 `video-red-device.log`：1 项/1 failure，47.231s，精确失败 `retry must show a visible ended-session failure`，已越过真实视频首帧、原源 lease 激活与 release。
+- Node API24/25：`foreground` 的双参数 `Notification.Builder` 仅 API26 可用，通知路径先于 libnode 准备。`postmerge-red2.log` / `postmerge-red.xml` 的 SDK24、25 实际通知构造均 `NoSuchMethodError`。第一次 `postmerge-red.log` 是 `Shadows.shadowOf` 重载触及裁剪 FingerprintManager 的测试编译错误，不冒充业务红；用 `Shadow.extract` 修正，不改依赖。最终生产只将 builder 换成 NotificationCompat，CHANNEL/9533/前台类型保持。
+- 无痕：服务 ticker 绕过 Activity 的 Incognito 门，直接写原进度并无条件 `progressCommitted`。上述有效红共 3 项/3 failures/0 errors，无痕真实 Room 原记录在实际 ticker 后从 123 变成 5432。生产只给写入调用加 Incognito 门，并仅在 writer 返回成功时 `progressCommitted`；租约替换检查、退出释放和 5 秒重排未跳过。红运行 4m22s；一次 jstack 定位主要慢点为 Robolectric NativeSQLite 初始化解压 fonts，不是应用 native 重建或 Node 启动，证据 `red-worker-stack.log:248-270`。
+
+### 22.2 最终自验与恢复锚（12:43 完成；待独立复审）
+
+- 最终联合命令：`G:\Git\bin\bash.exe ./gradlew --offline :app:compileMobileArm64_v8aDebugJavaWithJavac :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:testMobileArm64_v8aDebugUnitTest --tests '*Origin*Test' --tests '*HistoryResumeCoordinatorTest' :app:testLeanbackArm64_v8aDebugUnitTest --tests '*Origin*Test' --tests '*HistoryResumeCoordinatorTest' :app:assembleMobileArm64_v8aDebug :app:assembleMobileArm64_v8aDebugAndroidTest -x :app:externalNativeBuildMobileArm64_v8aDebug`。`final-green-build.log` **exit 0 / BUILD SUCCESSFUL in 8m34s**，204 tasks（30 executed/174 up-to-date）；mobile/leanback Java 两任务均实际执行，不把 UP-TO-DATE 算编译，不跑全 ABI/native 矩阵。
+- XML 实读：mobile 7 类 **42 tests/0 failures/0 errors**，leanback 8 类 **45/0/0**。两端均为 OriginFallbackPolicy 4、OriginHistoryRoute 4、OriginPrePlaybackFallback 4、OriginRelayTarget 11、OriginSessionContract 4、ProxyClientOriginPolicy 11、HistoryResumeCoordinator 4；leanback 另 OriginPostMergeRegression 3（Node SDK24/25、无痕 SDK28）。这不是历史 58 项口径，不把未选中的 GlobalHistoryResumeSource 算本轮通过；完整 XML 已复制到报告目录。
+- 新增 relay 五例全绿：真实 file HLS master 的绝对 HTTP URI/KEY/MAP 和 relative local 子清单全登记本 lease，原 file 解析结果/sourceUrl/bob headers 均相等，真实子清单/媒体请求 200；真实 DASH BaseURL/SegmentList init/segment 和 BaseURL 续接请求可用、MIME 正确；suffix -500 返回末500 B/206/`bytes 524-1023/1024`，超长 suffix 全文件，-0 为416；普通 closed/open-ended 保留；8MiB+1 清单500，未返回未隔离原文。
+- Node/无痕 3 例全绿：SDK24/25 在不启动 Node/libnode 的情况下实际构造 foreground 通知（9533、标题/正文/ongoing）；SDK28 实际 ticker + Room 在无痕开时原进度123不变、不虚构 progressCommitted、lease 未关且继续重排；关时写5432，正常退出 client 关闭/static lease 清空。
+- mobile 新增真实绿例：最终两包 `adb -s emulator-5554 install -r` 均 Success；`video-green-device.log` **ADB exit 0 / OK (1 test), 54.586s**。`video-green-markers.log`（PID21394）12:43:28 的 retry/episode 均错误 `原源会话已结束，请返回后重新打开`、loading=false；选集另外验证 `mPlaybackEpisodeKey` 真变化而非旧错误伪绿。12:43:29 `ORIGIN_NORMAL_RELEASED_REJECTION_OK retry=true episode=true loading=false searches=0 alicePlays=0`，`ORIGIN_FIXTURE_PREFS_RESTORED existed=true`。红/绿均验证实际正常播放页与首帧，不只测纯函数或开关。
+- 修改位置：OriginMediaRelay `localFile:295` / `localStream:327`；node/OriginNodeService `foreground:231-236`；PlaybackService `originProgressTicker:105-115`；mobile/VideoActivity false 门 `3028`、leanback 对应 `3505`。测试：OriginRelayTargetTest `182/212/236/252/265`；OriginPostMergeRegressionTest `63/78`；OriginIsolationPlaybackTest `401`。
+- 完整报告、红/绿命令、XML、源码/test 散列与最终 Git/guard 输出仅在 ignored `app/build/origin-isolation/file-manifest-review/report.md` / `final-evidence.log`；文档只追加本节，未改旧历史。
+- 预算说明：初始10分钟目标在父明确扩界后改为约12:38；实际12:43自验结束，主要成本为有效红 NativeSQLite初始化4m22s、红包3m4s、最终双端Java/D8/定向测试/包8m34s，停止可选调查、未削验收门。执行仍1/3，同假设未重复失败重试；有效红未重跑。
+- 未验边界：TV设备、完整API24–27原源播放、Node runtime/libnode、阅读器/TMDB联网、无痕真实设备、租约目录清理、旧flags空集、多Range/新协议功能未扩验，不用局部通知/Room证明这些全通过。报告不再以旧文档“file未实现”作本轮末态。
+- 恢复锚：HEAD仍 `9f63ddaff60acb8b4f4200822af8ea7f9a591888` / dev2；九授权文件已自验且冻结，guard `H-ORIGIN-POST-MERGE-20261111` 保持 active。未提交、未标签、未推送，未删除用户数据或改配置依赖；工作树留给复审，不在本轮关闭守卫。
+- **唯一下一步：收取两轴独立复审。**
+
+**复审返工 run 2/3（TV 等待态补齐，2026-11-11）**
+
+- 父调度者复审并独立实读确认：TV `beginPlayerContentRequest` 置 `mPlaybackRequestActive=true` / `mPlaybackPlayerStarted=false`，原 false 拒绝分支只 invalidate+error，未清两字段；spinner 已被真实 hideProgress 收起，但等待态残留会挡 READY/陈旧进度收口。mobile 无这两字段，本轮不动 mobile 或全局 invalidate 语义。
+- 在既有 testLeanback/OriginPostMergeRegressionTest 新增真实 VideoActivity/getPlayer 拒绝用例（复用仓库实际 Activity 构建夹具，只隔离无关 artwork/surface；状态、requestPlay(false)、错误/收圈均执行生产方法）。首次 SDK28 在 PlayerView 的 `exo_icon_vr.png` ImageDecoder `(0,0)` 失败，记录 `tv-pending-red.log/xml`，未到拒绝分支、不算业务红；改为原夹具既定 SDK27。
+- 有效红命令：`G:\Git\bin\bash.exe ./gradlew --offline :app:testLeanbackArm64_v8aDebugUnitTest --tests '*OriginPostMergeRegressionTest.tvReleasedOriginRejectionClearsWaitingFlagsAndShowsError'`。`tv-pending-red2.log` exit1 / 44s，`tv-pending-red2.xml` **1 test/1 failure/0 errors**：错误 view VISIBLE、进度 GONE 的断言已过，实际 `ORIGIN_TV_REJECTION_STATE active=true started=false error=原源会话已结束，请返回后重新打开 progress=8`，准确失败于 TV rejected request must clear the real in-flight flag。
+- 最小产品修复只有 TV false 分支增加 `mPlaybackRequestActive=false`、`mPlaybackPlayerStarted=false` 两行，置于 showOriginError 前；其后 showError→hideProgress 仍为最终可见态。不抽新 helper，不改任何其他产品路径；其他六份已冻结生产/测试内容保持不变。
+- 绿命令：`G:\Git\bin\bash.exe ./gradlew --offline :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:testLeanbackArm64_v8aDebugUnitTest --tests '*OriginPostMergeRegressionTest.tvReleasedOriginRejectionClearsWaitingFlagsAndShowsError'`。`tv-pending-green.log` **exit0 / BUILD SUCCESSFUL in40s**，leanback Java任务实际执行；`tv-pending-green.xml` **1/0/0**，真实 `active=false started=false`、错误 view VISIBLE、同文案、进度 GONE(8)。只重跑受影响单例，未重跑已绿 mobile42/leanback45、未重编 mobile、未构建 APK/跑设备；原3个 Node/无痕case的先前冻结绿XML保留，不冒称本轮新跑4个case。
+- 本轮仅 TV/testLeanback 两文件与本段追加；新 hash/Git状态/guard证据 `app/build/origin-isolation/file-manifest-review/tv-pending-final-evidence.log`，前后XML及详细报告留同 ignored 目录。原13:08预计延后，真实 Activity 的 SDK28 图片解码环境绕行后已用 SDK27 收敛，未降低门槛、未无限补案例。剩余未验边界仍为 TV真机/完整原源设备播放等旧边界，不把 Robolectric view 状态说成 TV设备验证。guard 保持 active，HEAD/branch 不变，无 stage/commit/tag/push。
+- **当前唯一下一步：收取两轴独立复审。**
+
+### 最终复审通过与待发布状态（2026-11-11）
+
+最终 Standards 与 Spec 两轴 run3 PASS（记录：`app/build/beta-review-dev2-20261111-standards-run3.md`、`app/build/beta-review-dev2-20261111-spec-run3.md`），调度者已实际读取并独立核实修复控制流、XML 与 mobile 真实绿；首审五类缺陷及后续 TV 标志残余均已修复闭环，无未处理新增实质问题。已有实际执行证据：mobile42/leanback45 联合单测全部 0 failure/error/skip，双端 Java 确实执行；TV1 Robolectric 拒绝状态红转绿、active/started 复位且错误可见、progress GONE；device1（5554）真实首帧、release→retry 与另一集错误可见、loading=false，无 current 搜索/取流。既有 merge 91 与调度者 mobile 38 验证保留，不将测试执行次数混称唯一用例数。本次仅记录既有验收证据，不重复构建、测试或复审。
+
+代码已最终验收，当前处于本地闭合、待推送/待 PR 发布状态；本段不宣称已推送或已发布，实际提交、恢复标签、推送、beta PR 与最终远端同步结果由 PR 和最终输出承接。合并审查已覆盖旧本地 7 提交、beta 22 与 merge 共 30 提交、105 净路径（PR 54 路径）及历史 140 映射；beta 51 路径记录与正式提交 blob 等价已由调度者五组 git diff exit 0 核实，App 冲突保留双方 origin 分流与崩溃恢复语义。TV 真机、完整 API24–27、Node libnode、无痕实机、阅读器与 TMDB 联网未验；目录清理及旧 flags 空集已另立任务，不宣称全平台全部通过。

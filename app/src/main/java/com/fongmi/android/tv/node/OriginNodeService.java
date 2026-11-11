@@ -229,7 +229,7 @@ public final class OriginNodeService extends Service {
     }
 
     private void foreground(String text) {
-        Notification notification = new Notification.Builder(this, CHANNEL)
+        Notification notification = new androidx.core.app.NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_launcher_foreground).setContentTitle("原源 Node")
                 .setContentText(text).setOnlyAlertOnce(true).setOngoing(true).build();
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
