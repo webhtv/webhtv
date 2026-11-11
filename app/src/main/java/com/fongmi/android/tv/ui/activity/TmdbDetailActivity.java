@@ -384,6 +384,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private TmdbBundle originBundle;
     private List<TmdbItem> originSearchItems = new ArrayList<>();
     private boolean originFallbackPending;
+    private boolean originPlaybackHandoff;
     @androidx.annotation.Keep
     private History mHistory;
     private TmdbConfig tmdbConfig;
@@ -1122,8 +1123,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     /** 原源进度按原 cid/key 写回，绝不落成当前配置记录。 */
     private void persistOriginProgress(boolean exit) {
-        if (mOrigin == null || history == null || Setting.isIncognito()) return;
-        if (service() != null && isOwner() && player() != null && !player().isEmpty()) {
+        if (mOrigin == null || !mOrigin.isActive()) return;
+        if (history != null && !Setting.isIncognito() && service() != null && isOwner() && player() != null && !player().isEmpty()) {
             mOrigin.writeProgress(history, player().getPosition(), player().getDuration());
         }
         if (exit && isFinishing() && !isChangingConfigurations()) mOrigin.release();
@@ -6991,7 +6992,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (enterInlineFullscreenIfCurrentInlinePlayback(selectedEpisode)) return;
         saveInlineHistory();
         updateInlineHistory(selectedEpisode);
-        if (isOriginSession()) { playDetailFullscreen(); return; }
+
         modeController.play();
     }
 
@@ -7001,6 +7002,19 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         ActivityLaunch.postOnAnimation(this, () -> {
             defaultPlaybackLaunchPending = false;
             if (isFinishing() || isDestroyed()) return;
+            if (isOriginSession()) {
+                Episode episode = playbackEpisode();
+                if (history == null || selectedFlag == null || episode == null) return;
+                // 先保存已选集的现有历史快照，再关闭本页租约；payload 仍按原 cid/key 恢复。
+                if (!Setting.isIncognito()) mOrigin.writeProgress(history, Math.max(0, history.getPosition()), history.getDuration());
+                Intent intent = VideoActivity.originHistoryIntent(this, history, selectedFlag, episode);
+                originPlaybackHandoff = true;
+                loadGeneration++;
+                mOrigin.release();
+                // 保留已释放对象直到真正返回，避免后台查询 origin() 时重新抢租约。
+                startActivity(intent);
+                return;
+            }
             long start = System.currentTimeMillis();
             logTmdbMatch("原生增强播放标题：raw=%s，缓存标题=%s，详情标题=%s，播放标题=%s", getTmdbRawTitle(), matchedTmdbItem == null ? "" : matchedTmdbItem.getTitle(), tmdbDetailTitle(matchedTmdbItem, matchedTmdbDetail), playbackHistoryName());
             TmdbItem item = playbackTmdbItem();
@@ -11750,13 +11764,35 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         // PluginEpisodeContext 是全局单槽：播放页发布后本页的快照已被覆盖，而返回本页
         // 不触发任何重新装载。不在这里认领，用户走过一次「详情页 → 播放页 → 返回详情页」，
         // 本页的插件 chip 此后永远读不到剧集上下文。
+        restoreOriginAfterExternalPlayback();
         republishPluginEpisodeContext();
         refreshSelectionAfterExternalPlayback();
         if (vod != null && binding.loading.getVisibility() != View.VISIBLE) revealDefaultPlaybackLoadingPage();
         scheduleBackdropSlide(BACKDROP_SLIDE_DELAY_MS);
     }
 
+    private void restoreOriginAfterExternalPlayback() {
+        if (!originPlaybackHandoff) return;
+        com.fongmi.android.tv.playback.origin.OriginSessionClient held = PlaybackService.originLease();
+        if (held != null && !held.isClosed()) return;
+        originPlaybackHandoff = false;
+        History resumed = OriginHistoryPlayback.restore(getIntent());
+        if (resumed == null) {
+            Notify.show(R.string.history_record_missing);
+            finish();
+            return;
+        }
+        history = resumed;
+        OriginHistoryPlayback.putExtras(getIntent(), resumed);
+        getIntent().putExtra(EXTRA_RESUME_HISTORY_CID, resumed.getCid());
+        getIntent().putExtra(EXTRA_RESUME_HISTORY_KEY, HistoryResumePayload.encode(resumed));
+        putIntentPlaybackSelection(getIntent(), resumed.getVodFlag(), resumed.getSourceBindingKey(), resumed.getVodRemarks(), resumed.getEpisodeUrl());
+        mOrigin = null;
+        origin();
+    }
+
     private void refreshSelectionAfterExternalPlayback() {
+        if (OriginHistoryPlayback.hasPayload(getIntent())) return;
         if (playbackSelectionTouched || vod == null || vod.getFlags() == null || vod.getFlags().isEmpty()) return;
         try {
             history = History.findPlayback(getHistoryKey(), List.of(vod.getName(), getNameText()),

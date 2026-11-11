@@ -200,6 +200,7 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
     }
 
     public void testTmdbDetailModeRoutesCrossSourceHistoryIntoTmdbDetailOnOriginLines() throws Exception {
+        upstream.allowThirdEpisode = true;
         Config a = config("jar", "alice"), b = config("jar", "bob");
         load(a);
         // 关键：历史里不存任何 TMDB 身份，与用户实测的设备状态一致。
@@ -269,32 +270,127 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
             assertFalse("原源详情页不得混入当前配置的站源 chip，got: " + shell.get(), shell.get().contains("alice"));
             baseline.assertUnchanged(h);
 
-            // 点播放：取流来自原配置 worker 的 relay，仍由同一个内联播放器真实起播。
-            int playId = context.getResources().getIdentifier("play", "id", context.getPackageName());
-            assertTrue("the TMDB detail page has a play control", playId != 0);
-            main(() -> activity.findViewById(playId).performClick());
-            AtomicReference<Player> player = new AtomicReference<>();
-            waitUntil(() -> { main(() -> { PlayerView view = activity.findViewById(R.id.exo); if (view != null) player.set(view.getPlayer()); }); return player.get() != null; },
-                    60000, "the inline player must attach after the original-source play request");
-            waitUntil(() -> { AtomicBoolean good = new AtomicBoolean(); main(() -> good.set(player.get().getVideoSize().width > 0 && player.get().getCurrentPosition() > 0)); return good.get(); },
-                    45000, "original-source TMDB playback must render a real first frame");
-            AtomicReference<Bitmap> frame = new AtomicReference<>();
-            waitUntil(() -> { Bitmap shot = getInstrumentation().getUiAutomation().takeScreenshot(); if (shot == null) return false; frame.set(shot); return coversVideoCenter(shot); }, 15000, "TMDB inline playback must show decoded pixels");
-            if (frame.get() != null) frame.get().recycle();
-            // 交付集身份：worker 的真实取流必须精确命中历史里的 /episode/2（夹具对其它集返回 404）。
-            assertTrue("the origin worker must fetch exactly the bob history episode /episode/2",
-                    upstream.requests.subList(originRequestStart, upstream.requests.size()).stream().anyMatch(r ->
-                            "/player".equals(r.get("path")) && "/episode/2".equals(r.get("episode"))
-                                    && "bob".equals(r.get("account"))
-                                    && headers("bob").get("Authorization").equals(r.get("authorization"))));
-            baseline.assertUnchanged(h);
-            main(activity::finish);
-            waitUntil(() -> processId(context.getPackageName() + ":origin") <= 0, 20000, "leaving the TMDB detail page must release the origin lease");
+            Activity detail = activity;
+            upstream.allowThirdEpisode = true;
+            for (String episodeUrl : new String[]{"/episode/2", "/episode/3"}) {
+                AtomicReference<OriginHistoryPlayback> previous = new AtomicReference<>();
+                main(() -> previous.set((OriginHistoryPlayback) activityField(detail, "mOrigin")));
+                assertTrue("detail must own a usable lease before handoff", previous.get().isActive());
+                int requestsBeforeLaunch = upstream.requests.size();
+                Instrumentation.ActivityMonitor monitor = new Instrumentation.ActivityMonitor(VideoActivity.class.getName(), null, false);
+                getInstrumentation().addMonitor(monitor);
+                Activity playback;
+                try {
+                    main(() -> {
+                        if ("/episode/2".equals(episodeUrl)) {
+                            int playId = context.getResources().getIdentifier("play", "id", context.getPackageName());
+                            assertTrue(detail.findViewById(playId).performClick());
+                        } else {
+                            int episodeId = context.getResources().getIdentifier("episodeContainer", "id", context.getPackageName());
+                            androidx.recyclerview.widget.RecyclerView list = detail.findViewById(episodeId);
+                            com.fongmi.android.tv.bean.Flag flag = (com.fongmi.android.tv.bean.Flag) activityField(detail, "selectedFlag");
+                            com.fongmi.android.tv.bean.Episode thirdEpisode = flag.getEpisodes().stream().filter(e -> "/episode/3".equals(e.getUrl())).findFirst().orElse(null);
+                            assertNotNull("the original line must contain episode /episode/3", thirdEpisode);
+                            com.fongmi.android.tv.ui.adapter.TmdbEpisodeAdapter adapter = (com.fongmi.android.tv.ui.adapter.TmdbEpisodeAdapter) list.getAdapter();
+                            int thirdPosition = adapter.getPosition(thirdEpisode);
+                            assertTrue("the third origin episode must be in the rendered adapter", thirdPosition >= 0);
+                            androidx.recyclerview.widget.RecyclerView.ViewHolder third = list.findViewHolderForAdapterPosition(thirdPosition);
+                            assertNotNull("the third episode must have a real clickable card", third);
+                            StringBuilder cardText = new StringBuilder();
+                            collectText(third.itemView, cardText);
+                            System.out.println("ORIGIN_THIRD_CLICK generation=" + activityField(detail, "loadGeneration")
+                                    + " position=" + thirdPosition + " modelUrl=" + thirdEpisode.getUrl() + " card=" + cardText);
+                            assertTrue("the bound card must display episode 3 before clicking", cardText.toString().contains("3"));
+                            assertTrue(third.itemView.performClick());
+                            com.fongmi.android.tv.bean.Episode selected = (com.fongmi.android.tv.bean.Episode) activityField(detail, "selectedEpisode");
+                            assertEquals("the clicked card must select the third origin episode", "/episode/3", selected.getUrl());
+                        }
+                    });
+                    playback = monitor.waitForActivityWithTimeout(30000);
+                    assertNotNull("enhanced origin play must launch the normal VideoActivity, not detail fullscreen", playback);
+                } finally {
+                    getInstrumentation().removeMonitor(monitor);
+                }
+                activity = playback;
+                assertFalse("handoff must release the detail's old lease before normal playback", previous.get().isActive());
+                assertTrue("normal playback must carry origin identity", OriginHistoryPlayback.hasPayload(playback.getIntent()));
+                History requested = OriginHistoryPlayback.restore(playback.getIntent());
+                assertNotNull(requested);
+                assertEquals(b.getId(), requested.getCid());
+                assertEquals(episodeUrl, requested.getEpisodeUrl());
+                AtomicReference<Player> player = new AtomicReference<>();
+                waitUntil(() -> { main(() -> { PlayerView view = playback.findViewById(R.id.exo); if (view != null) player.set(view.getPlayer()); }); return player.get() != null; },
+                        60000, "the normal playback page must attach its player");
+                long resumePosition = "/episode/2".equals(episodeUrl) ? h.getPosition() : 0;
+                waitUntil(() -> { AtomicBoolean good = new AtomicBoolean(); main(() -> good.set(player.get().getVideoSize().width > 0 && player.get().getCurrentPosition() >= Math.max(1, resumePosition))); return good.get(); },
+                        45000, "normal origin playback must render a real first frame and resume the selected episode");
+                AtomicReference<Bitmap> frame = new AtomicReference<>();
+                waitUntil(() -> { Bitmap shot = getInstrumentation().getUiAutomation().takeScreenshot(); if (shot == null) return false; frame.set(shot); return coversVideoCenter(shot); },
+                        15000, "normal origin playback must show decoded pixels");
+                if (frame.get() != null) frame.get().recycle();
+                AtomicLong position = new AtomicLong();
+                main(() -> position.set(player.get().getCurrentPosition()));
+                assertTrue("selected episode progress must not inherit another episode", Math.abs(position.get() - resumePosition) < 3500);
+                assertTrue("normal page must fetch exactly the selected authenticated bob episode",
+                        upstream.requests.subList(requestsBeforeLaunch, upstream.requests.size()).stream().anyMatch(r ->
+                                "/player".equals(r.get("path")) && episodeUrl.equals(r.get("episode")) && "bob".equals(r.get("account"))
+                                        && headers("bob").get("Authorization").equals(r.get("authorization"))));
+                baseline.assertUnchanged(h);
+                main(playback::finish);
+                activity = detail;
+                AtomicReference<String> returnState = new AtomicReference<>("");
+                waitUntil(() -> {
+                    AtomicBoolean ready = new AtomicBoolean();
+                    main(() -> {
+                        OriginHistoryPlayback reopened = (OriginHistoryPlayback) activityField(detail, "mOrigin");
+                        com.fongmi.android.tv.bean.Episode selected = (com.fongmi.android.tv.bean.Episode) activityField(detail, "selectedEpisode");
+                        int[] current = originDetailCounts(detail, context);
+                        com.fongmi.android.tv.bean.Flag flag = (com.fongmi.android.tv.bean.Flag) activityField(detail, "selectedFlag");
+                        int episodeId = context.getResources().getIdentifier("episodeContainer", "id", context.getPackageName());
+                        androidx.recyclerview.widget.RecyclerView list = detail.findViewById(episodeId);
+                        boolean newVod = reopened != null && reopened.vod() != null;
+                        boolean flagFromOrigin = flag != null && newVod && reopened.vod().getFlags().stream().anyMatch(f -> f == flag);
+                        boolean adapterFromFlag = flag != null && adapterEpisodes(list).stream().map(e -> e.getUrl() + " => " + e.getName()).sorted().toList()
+                                .equals(flag.getEpisodes().stream().map(e -> e.getUrl() + " => " + e.getName()).sorted().toList());
+                        boolean sameVod = newVod && activityField(detail, "vod") == reopened.vod();
+                        String state = "generation=" + activityField(detail, "loadGeneration") + " focus=" + detail.hasWindowFocus()
+                                + " listShown=" + list.isShown() + " active=" + (reopened != null && reopened.isActive())
+                                + " newLease=" + (reopened != previous.get()) + " originVod=" + newVod + " sameVod=" + sameVod
+                                + " flagFromOrigin=" + flagFromOrigin + " adapterFromFlag=" + adapterFromFlag
+                                + " selected=" + (selected == null ? "null" : selected.getUrl()) + " expected=" + episodeUrl
+                                + " counts=" + Arrays.toString(current);
+                        if (!state.equals(returnState.get())) {
+                            returnState.set(state);
+                            System.out.println("ORIGIN_RETURN_STATE " + state);
+                            List<com.fongmi.android.tv.bean.Episode> rendered = adapterEpisodes(list);
+                            for (int index = 0; index < rendered.size(); index++) {
+                                androidx.recyclerview.widget.RecyclerView.ViewHolder card = list.findViewHolderForAdapterPosition(index);
+                                StringBuilder text = new StringBuilder();
+                                if (card != null) collectText(card.itemView, text);
+                                System.out.println("ORIGIN_RETURN_CARD position=" + index + " url=" + rendered.get(index).getUrl()
+                                        + " bound=" + (card != null) + " text=" + text);
+                            }
+                        }
+                        ready.set(list.isShown() && reopened != null && reopened != previous.get() && reopened.isActive()
+                                && sameVod && flagFromOrigin && adapterFromFlag
+                                && selected != null && episodeUrl.equals(selected.getUrl()) && current[0] == 1 && current[1] == 3 && current[2] == 0);
+                    });
+                    return ready.get();
+                }, 60000, "return must rebuild only the original lease and keep selected lines/episode usable");
+                main(() -> assertFalse("return must not show an ended-session error", allText(detail).contains("原源会话已结束")));
+                baseline.assertUnchanged(h);
+                System.out.println("ORIGIN_ENHANCED_NORMAL_OK episode=" + episodeUrl + " position=" + position.get() + " returned=true");
+            }
+            main(detail::finish);
+            waitUntil(() -> processId(context.getPackageName() + ":origin") <= 0, 20000, "leaving the detail must release its reopened lease");
             History saved = History.find(b.getId(), h.getKey());
             assertNotNull(saved);
             assertEquals(b.getId(), saved.getCid());
+            assertEquals("/episode/3", saved.getEpisodeUrl());
             assertTrue("origin progress must be written back to the original cid", saved.getPosition() > 0);
             assertNull("no current-config record may be created", History.find(a.getId(), h.getKey()));
+            assertEquals("origin playback must never search current sources", 0, upstream.searches.get());
+            assertEquals("origin playback must never use alice", 0, upstream.alicePlays.get());
             activity = null;
             System.out.println("ORIGIN_TMDB_DETAIL_OK cid=" + b.getId() + " saved=" + saved.getPosition());
         } finally {
@@ -306,7 +402,7 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
         Config a = config("jar", "alice"), b = config("jar", "bob");
         load(a);
         History h = history(b, "/episode/2");
-        Setting.putDetailOpenMode(Setting.DETAIL_OPEN_ENHANCED);
+        Setting.putDetailOpenMode(Setting.DETAIL_OPEN_PLAYER);
         Setting.putGlobalHistoryMode(Setting.GLOBAL_HISTORY_AUTO);
         assertEquals("alice", SiteApi.detailContent(KEY, VOD).getVod().getName().split(":")[0]);
         MainState baseline = new MainState(h);
@@ -364,6 +460,17 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
         main(activity::finish);
         activity = null;
         System.out.println("ORIGIN_RELEASED_REJECTION_OK cid=" + b.getId() + " episode=/episode/2 pending=false searches=0 alicePlays=0");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<com.fongmi.android.tv.bean.Episode> adapterEpisodes(androidx.recyclerview.widget.RecyclerView list) {
+        try {
+            java.lang.reflect.Field field = com.fongmi.android.tv.ui.adapter.TmdbEpisodeAdapter.class.getDeclaredField("items");
+            field.setAccessible(true);
+            return (List<com.fongmi.android.tv.bean.Episode>) field.get(list.getAdapter());
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError(failure);
+        }
     }
 
     private static Object activityField(Activity activity, String name) {
@@ -867,7 +974,7 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
     }
     private static final class HttpData {final int status;final byte[] body;final String range;HttpData(int s,byte[] b,String r){status=s;body=b;range=r==null?"":r;}String text(){return new String(body,StandardCharsets.UTF_8);}}
     private final class FixtureServer extends NanoHTTPD {
-        final File files;final List<Map<String,String>> requests=new CopyOnWriteArrayList<>();final AtomicInteger searches=new AtomicInteger(),failedSegments=new AtomicInteger(),alicePlays=new AtomicInteger();volatile boolean failSegments,blockBobPlayer,matchCurrent;
+        final File files;final List<Map<String,String>> requests=new CopyOnWriteArrayList<>();final AtomicInteger searches=new AtomicInteger(),failedSegments=new AtomicInteger(),alicePlays=new AtomicInteger();volatile boolean failSegments,blockBobPlayer,matchCurrent,allowThirdEpisode;
         FixtureServer(File root){super("127.0.0.1",0);files=root;}
         String base(){return "http://127.0.0.1:"+getListeningPort();}
         @Override public Response serve(IHTTPSession request){try{
@@ -877,8 +984,16 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
             String account=request.getParms().getOrDefault("account","bob");
             if(protectedPath){Map<String,String> expected=headers(account);if(!expected.get("Authorization").equals(request.getHeaders().get("authorization"))||!expected.get("Cookie").equals(request.getHeaders().get("cookie"))||!expected.get("Referer").equals(request.getHeaders().get("referer")))return newFixedLengthResponse(Response.Status.UNAUTHORIZED,"text/plain","wrong account");}
             if(uri.equals("/search")){searches.incrementAndGet();return json(new JSONObject().put("list",matchCurrent?new JSONArray().put(new JSONObject().put("vod_id",VOD).put("vod_name","bob:fixture")):new JSONArray()));}
-            if(uri.equals("/detail")){String runtime=request.getParms().getOrDefault("runtime","fixture");return json(new JSONObject().put("list",new JSONArray().put(new JSONObject().put("vod_id",VOD).put("vod_name",matchCurrent?"bob:fixture":account+":"+runtime).put("vod_play_from","origin-line").put("vod_play_url","第1集$/episode/1#第2集$/episode/2"))));}
-            if(uri.equals("/player")){if(!"/episode/2".equals(request.getParms().get("episode")))return newFixedLengthResponse(Response.Status.NOT_FOUND,"text/plain","wrong episode");if(account.equals("alice"))alicePlays.incrementAndGet();return json(new JSONObject().put("parse",0).put("url",blockBobPlayer&&account.equals("bob")?"unsupported-origin://unplayable":base()+"/redirect").put("header",new JSONObject(headers(account))));}
+            if(uri.equals("/detail")){
+                String runtime=request.getParms().getOrDefault("runtime","fixture");
+                String episodes="第1集$/episode/1#第2集$/episode/2" + (allowThirdEpisode ? "#第3集$/episode/3" : "");
+                JSONObject vod=new JSONObject().put("vod_id",VOD).put("vod_name",matchCurrent?"bob:fixture":account+":"+runtime)
+                        .put("vod_play_from","origin-line").put("vod_play_url",episodes);
+                if(allowThirdEpisode) vod.put("vodFlags",new JSONArray().put(new JSONObject().put("flag","origin-line")
+                        .put("urls",episodes).put("episodes",new JSONArray())));
+                return json(new JSONObject().put("list",new JSONArray().put(vod)));
+            }
+            if(uri.equals("/player")){if(!"/episode/2".equals(request.getParms().get("episode")) && !(allowThirdEpisode && "/episode/3".equals(request.getParms().get("episode"))))return newFixedLengthResponse(Response.Status.NOT_FOUND,"text/plain","wrong episode");if(account.equals("alice"))alicePlays.incrementAndGet();return json(new JSONObject().put("parse",0).put("url",blockBobPlayer&&account.equals("bob")?"unsupported-origin://unplayable":base()+"/redirect").put("header",new JSONObject(headers(account))));}
             if(failSegments&&uri.contains("seg-")&&!uri.endsWith("seg-0.m4s")){failedSegments.incrementAndGet();return newFixedLengthResponse(Response.Status.NOT_FOUND,"text/plain","injected segment404 after start");}
             File f=new File(files,uri.substring(1));if(!f.getCanonicalPath().startsWith(files.getCanonicalPath()+File.separator)||!f.isFile())return newFixedLengthResponse(Response.Status.NOT_FOUND,"text/plain","missing fixture");
             byte[] data=Files.readAllBytes(f.toPath());String mime=uri.endsWith("m3u8")?"application/vnd.apple.mpegurl":uri.endsWith("json")?"application/json":"application/octet-stream";

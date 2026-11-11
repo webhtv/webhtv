@@ -911,6 +911,29 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         return intent;
     }
 
+    public static Intent originHistoryIntent(Context context, History origin, Flag flag, Episode episode) {
+        History selected = origin.copy();
+        if (flag != null) {
+            if (!TextUtils.equals(selected.getVodFlag(), flag.getFlag())) selected.setSourceBindingKey("");
+            selected.setVodFlag(flag.getFlag());
+        }
+        if (episode != null) {
+            if (!TextUtils.equals(selected.getEpisodeUrl(), episode.getUrl())) {
+                selected.setPosition(0);
+                selected.setDuration(0);
+            }
+            selected.setEpisodeUrl(episode.getUrl());
+            selected.setVodRemarks(episode.getName());
+            selected.setTmdbEpisodePosition(episode);
+        }
+        return originHistoryIntent(context, selected);
+    }
+
+    public static void startFromOriginHistory(Activity activity, History origin, Flag flag, Episode episode) {
+        if (activity == null || origin == null) return;
+        activity.startActivity(originHistoryIntent(activity, origin, flag, episode));
+    }
+
     public static void startFromOriginHistory(Activity activity, History origin) {
         if (activity == null || origin == null) return;
         activity.startActivity(originHistoryIntent(activity, origin));
@@ -6955,8 +6978,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void persistOriginProgress(boolean exit) {
-        if (mOrigin == null || mHistory == null || Setting.isIncognito()) return;
-        if (service() != null && isOwner() && !player().isEmpty()) {
+        if (mOrigin == null || !mOrigin.isActive()) return;
+        if (mHistory != null && !Setting.isIncognito() && service() != null && isOwner() && !player().isEmpty()) {
             mOrigin.writeProgress(mHistory, player().getPosition(), player().getDuration());
         }
         if (exit && service() != null) PlaybackEventCollector.get().onStop(player());
@@ -10394,6 +10417,12 @@ private void checkOrientation() {
         if (mTmdbHeaderView != null) mTmdbHeaderView.onDestroy();
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
     }
+    @Override
+    protected void onPause() {
+        if (isFinishing() && !isChangingConfigurations()) persistOriginProgress(true);
+        super.onPause();
+    }
+
     @Override
     protected void onDestroy() {
         mDanmakuRetired = true;

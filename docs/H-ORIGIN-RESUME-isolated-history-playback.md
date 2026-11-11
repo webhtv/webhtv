@@ -612,3 +612,47 @@ SiteApi、ParseJob、BaseLoader、JS/Py/Jar、Chaquo/QuickJS/nodejs 原生模块
 ### 20.4 回滚
 
 本次为单一守卫单位：回滚该提交即恢复“跨源历史只走当前源匹配”的旧行为；不涉及主数据库迁移，不删除用户配置/历史，不改设备数据清理策略。
+## 21. H-ORIGIN-ENHANCED-PLAY：炫彩原源历史播放页修复（2026-11-11，执行 run 1 + 返工 1）
+
+### 21.1 本次范围与实现
+
+- BASE `2604ace9ff547c1cce6c5191680b926adfa0657b`，`dev2`；初始工作区干净，守卫 `H-ORIGIN-ENHANCED-PLAY` 由调度者预先启动；只改三份 Activity、既有 OriginIsolationPlaybackTest 与本文件追加节，不提交/打标签。
+- 原 `TmdbDetailActivity.onPlay:6994` 把所有原源硬编码成 `playDetailFullscreen`。删除该短路交回模式控制器：Enhanced 的 `playDefaultPlayback` 对原源启动既有正常 VideoActivity；Fusion/Player 分别继续 `playInline`/`playDetailFullscreen`。
+- 两 flavor 加 Flag/Episode originHistoryIntent/startFromOriginHistory 重载；沿用 `saveInlineHistory`/`updateInlineHistory` 后，用现有 `mOrigin.writeProgress` 保存当前选集快照再释放租约。HistoryResumePayload 是原 cid/key/季引用，不是完整 History JSON，因此仅改 Intent 选集不足以改变新 worker 首次预解析的集。
+- 启动前显式 release，已释放 mOrigin 暂留，后台不会因 null 自动重开；进度保存加 active 门，不让已交接的旧对象写回/影响新页。release 自身已有 client 身份比较与幂等性，不新增全局无条件释放。
+- VideoActivity 两端 finishing 的 onPause 调用既有 persistOriginProgress(true)，非 finishing 不释放；返回详情且 service 无有效 lease 时按原 payload/cid/key 更新历史/选集并走 origin() 重建，不走当前源 History.findPlayback。
+
+### 21.2 已取得与未取得的证据
+
+- 红：5554 对未改生产代码的增强用例 `ehp-red-device.log`，40.559s、1/1 failure，准确失败在未启动 VideoActivity。
+- 离线统一构建 `ehp-green-build.log`：BUILD SUCCESSFUL in 3m7s，实际执行 mobile+leanback Java 编译；定向 7 类 58 项 0 failures/0 errors。
+- 第一次设备绿尝试 `ehp-green-device.log`：PLAYER 拒绝终态通过；增强用例第2集真实正常播放、原源请求、首次返回基础判据通过，但固定 adapter position=2 点击后 selectedEpisode 仍为 /episode/2，未证明第3集。
+- 加入新 Vod/Flag/adapter 对象同次渲染检查并按真实 URL 定位后，`ehp-green2-device.log` 91.888s 失败于返回 ready；日志显示旧 worker 死亡、新 PID4199 READY→PLAY_READY→applyLoaded 原源1线3集，但旧日志不能区分哪个 ready 子条件不成立。**不宣称增强全链路验收完成。**
+- 调度者授权返工1：测试重编1次、仅增强设备1次，必要时产品修复 mobile 编译1次；不重复已绿 PLAYER/58单测。诊断加入 windowFocus/listShown/源对象身份/选中URL/adapter卡片文字/loadGeneration 实值；以可见真实选集控件代替窗口焦点作为操作就绪必要条件，仍保留同源对象、原集URL、第3集真点击、原源请求与真实起播断言。日志 `ehp-r1-*`，最终结论见执行报告。
+
+### Recovery anchor（H-ORIGIN-ENHANCED-PLAY）
+
+- 当前：四源码/测试文件已改；报告 `app/build/origin-isolation/ehp-fix-report.md`；首轮APK main SHA256 `D7CB24FD0446AE73404B2E7A3FFA0232A9DFD1634BEC315CE2C0C16A9BD68F87`，诊断前 test `232495ED3D1ADF84D5A8F2BEF351CEA40B9ED5D5AC422CD0732CB40245D107B7`。
+- 未过：返回真正可用并换第3集再正常起播；两台设备/TV设备运行未做；既有 Node/API24–27/阅读器边界不扩展。
+- 唯一下一步：收取 `ehp-r1-device.log` 与对应 `ORIGIN_RETURN_STATE/CARD/THIRD_CLICK` 实测值，定位必要条件或产品缺陷；到额度仍未验收则如实向父调度者交回，不盲试、不提交。
+### 21.3 最后返工与本任务最终自验结论（11:20收口）
+
+- 最后返工2经调度者授权仅测试重编1次/增强设备1次；`ehp-r2-build.log`成功19s，`ehp-r2-device.log` **OK (1 test), 56.632s**。没有重复已绿PLAYER拒绝与58单测；产品源码首轮后未改。
+- 诊断已确证：返回新worker/Vod/Flag与窗口焦点均正常，仅adapter对象引用不同；TmdbEpisodeAdapter按Episode.equals去重导致旧对象合法保留。最终改用精确URL/名称列表匹配，仍保loadGeneration/新Vod/原Flag/selectedURL/真实卡片绑定与第3集请求、起播。
+- 默认夹具原/detail仅两真实集；Vod.objectFrom二次setFlags对未带urls的旧flags追加空集，才有“3项”。增强夹具现提供明确三集及vodFlags.urls，默认其他用例响应保持原样。既有通用空集行为已向调度者路由，不在本次边界外修生产解析器。
+- 两循环通过：同一原源详情→正常VideoActivity第2集续播→返回→按URL真点第3集→正常VideoActivity原源取流/真实视频→再次返回可用；完整MainState不变量、原cid进度写回均实际执行。最终日志 `ORIGIN_ENHANCED_NORMAL_OK episode=/episode/3 position=1322 returned=true`，selected=/episode/3、三卡片URL=/episode/1,/episode/2,/episode/3、counts=[1,3,0]、全部必要返回状态true；`ORIGIN_TMDB_DETAIL_OK cid=416 saved=914`。
+- 自验结论：本任务要求通过，待调度者独立复核；mobile/leanback编译与7类58项/0失败沿用同一产品字节，PLAYER拒绝用例通过，Fusion控制器仍playInline、Player仍playDetailFullscreen。TV/Fusion设备、第二台、Node/API24–27/阅读器/无痕实机未新增验证，不冒充通过。
+- 全部证据见 `app/build/origin-isolation/ehp-fix-report.md` 与ehp-*日志。最终main SHA256 `D7CB24FD0446AE73404B2E7A3FFA0232A9DFD1634BEC315CE2C0C16A9BD68F87`；test `AAE1A41170956362F008EA3228435E33A05163879B7B3CD9537C8FA037056075`；源码散列见ehp-final-hashes.log。
+- 如实修正预算：mobile Java任务实际执行5次（此前误把未改生产当成UP-TO-DATE），leanback1次、单测1次、设备5次调用/6用例执行；3次测试补编/后两次设备为调度者后续明确授权，日志全保留。不声称原mobile两次cap未超。guard check PASS，dirty恰5授权路径；不提交/打标签，guard保持active。
+
+### Recovery anchor（H-ORIGIN-ENHANCED-PLAY最终）
+
+- 状态：执行者自验完成；代码和最终APK冻结，报告已写；BASE/HEAD未变、5路径未提交。
+- 已路由：后台租约/退出旧对象/返回进度问题已修并验证；测试引用判据/三集夹具已按父授权修正；通用空集、租约目录清理及既有未验边界留后续任务，不扩大本轮。
+- 唯一下一步：调度者独立复核末轮增强OK、PLAYER拒绝OK、58单测/双端编译与最终散列，给交付裁决；不再为补系统缓冲里已丢的早期标记重复设备测试。
+### 21.4 调度者独立复核与裁决（最终）
+
+- 复核方式：不复用 5554 结果，改在 emulator-5556 上冻结执行者给出的最终 main `D7CB24FD…8F87` / test `AAE1A411…6075`（复制前后 SHA 一致），保数据安装后只跑 `testTmdbDetailModeRoutesCrossSourceHistoryIntoTmdbDetailOnOriginLines` 一次。
+- 结果：`OK (1 test)` 54.685s；logcat `ORIGIN_ENHANCED_NORMAL_OK episode=/episode/3 position=365 returned=true`、`ORIGIN_TMDB_DETAIL_OK cid=102 saved=460`（证据目录 `app/build/origin-isolation/ehp-5556-dispatch/`）。即炫彩详情页点播放已进入正常播放页、按原源取流并起播选中的第 3 集、返回详情页仍可用；与执行者 5554 `ehp-r2-device.log`（`saved=914 cid=416`）互相独立。
+- 代码复核：`onPlay` 不再短路原源；`playDefaultPlayback` 原源分支按 `originHistoryIntent(context, history, flag, episode)` 启动正常播放页并在启动前 `mOrigin.release()`；`restoreOriginAfterExternalPlayback` 只在无有效 service lease 时按原 cid/key 重建；`persistOriginProgress` 增加 `isActive()` 门；融合/播放器详情控制器未改。
+- 裁决：本任务（炫彩模式下跨源历史点播放落点）通过。遗留不属本任务：`Vod.objectFrom` 对未带 urls 的旧 flags 二次 `setFlags` 可能追加空集；租约私有目录清理；TV/Fusion 设备运行、Node/API 24–27、阅读器、无痕实机未验。
