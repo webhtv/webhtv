@@ -8,9 +8,6 @@ package com.fongmi.android.tv.cache;
  */
 public final class PlaybackCacheBudget {
 
-    /** Keeps a disk cache constructible when the other modules already exceed the total limit. */
-    public static final long MIN_BUDGET_BYTES = 64L * 1024L * 1024L;
-
     private PlaybackCacheBudget() {
     }
 
@@ -19,7 +16,7 @@ public final class PlaybackCacheBudget {
      *
      * <p>Playback is deliberately not bounded by the total limit: shrinking the cache while a
      * player reads it trades buffering headroom, seek range and re-buffering risk for disk savings
-     * the user cannot see until playback stops. The total limit applies while nothing plays, which
+     * the user cannot see until playback stops. The total limit applies once nothing plays, which
      * is also when the panel reports the number.</p>
      */
     public static long capacityBytes(boolean playing, long totalLimitBytes, long preloadBytes, long othersBytes) {
@@ -34,9 +31,19 @@ public final class PlaybackCacheBudget {
      * larger cache just because the total limit was raised above it. A zero total limit means
      * "unlimited" and leaves that configured size untouched, which keeps the previous behaviour for
      * every user who never opened the cache panel.</p>
+     *
+     * <p>The shared budget is never exceeded on behalf of this module: when the other modules
+     * already fill the total limit the playback cache converges to zero and stops writing, because
+     * the total limit is the user's statement about the whole cache directory, not a hint that the
+     * playback cache may still keep a minimum of its own. Playback stays exempt while it runs, so
+     * the user-visible cost of a tight limit is a cold cache on the next play, never a cut buffer.</p>
      */
     public static long capacityBytes(long totalLimitBytes, long preloadBytes, long othersBytes) {
-        return capacityBytes(totalLimitBytes, preloadBytes, othersBytes, MIN_BUDGET_BYTES);
+        long preload = Math.max(0, preloadBytes);
+        long total = Math.max(0, totalLimitBytes);
+        if (total <= 0) return preload;
+        long remaining = total - Math.max(0, othersBytes);
+        return Math.min(preload, Math.max(0, remaining));
     }
 
     /**
@@ -50,13 +57,5 @@ public final class PlaybackCacheBudget {
         long preload = Math.max(0, preloadBytes);
         long limit = Math.max(0, userLimitBytes);
         return limit > 0 ? Math.min(preload, limit) : preload;
-    }
-
-    static long capacityBytes(long totalLimitBytes, long preloadBytes, long othersBytes, long floorBytes) {
-        long preload = Math.max(0, preloadBytes);
-        long total = Math.max(0, totalLimitBytes);
-        if (total <= 0) return preload;
-        long remaining = total - Math.max(0, othersBytes);
-        return Math.min(preload, Math.max(Math.max(0, floorBytes), remaining));
     }
 }
