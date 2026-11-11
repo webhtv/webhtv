@@ -23,6 +23,13 @@ public final class PlaybackRouteRegistry {
         return entry == null ? null : entry.owner();
     }
 
+    /** 原源租约回环端口归属：按 App 侧媒体代理登记，避免被当成外部地址二次代理。 */
+    public static final AppOwner ORIGIN_SESSION = AppOwner.HLS_PROXY;
+
+    public static Registration registerOriginSession(int port) {
+        return registerAppService(port, ORIGIN_SESSION);
+    }
+
     public enum AppOwner {
         MAIN_SERVER("app-main-server"),
         HLS_PROXY("app-hls-proxy"),

@@ -243,6 +243,23 @@ public final class NodeBundle {
         return dir;
     }
 
+    public static File originDir(Context context, String leaseId) throws IOException {
+        if (!(context instanceof com.fongmi.android.tv.playback.origin.OriginStorageContext)) {
+            throw new IOException("ISOLATION_ERROR: Node requires lease Context");
+        }
+        java.util.UUID.fromString(leaseId);
+        com.fongmi.android.tv.playback.origin.OriginStorageContext storage =
+                (com.fongmi.android.tv.playback.origin.OriginStorageContext) context;
+        File root = storage.root().getCanonicalFile();
+        if (!root.getName().equals(leaseId) || context.getApplicationContext() != context) {
+            throw new IOException("ISOLATION_ERROR: Node lease root mismatch");
+        }
+        File directory = dir(context).getCanonicalFile();
+        File expected = new File(root, "files/node/bundle").getCanonicalFile();
+        if (!directory.equals(expected)) throw new IOException("ISOLATION_ERROR: Node directory escaped lease");
+        return directory;
+    }
+
     public static File file(Context context) {
         return file(dir(context));
     }

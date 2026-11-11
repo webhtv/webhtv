@@ -199,6 +199,19 @@
             android:stopWithTask="false" />
 
         <service
+            android:name=".playback.origin.OriginSessionService"
+            android:exported="false"
+            android:process=":origin"
+            android:stopWithTask="false" />
+
+        <service
+            android:name=".node.OriginNodeService"
+            android:exported="false"
+            android:process=":origin_node"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false" />
+
+        <service
             android:name=".cache.CacheCleanupJobService"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />

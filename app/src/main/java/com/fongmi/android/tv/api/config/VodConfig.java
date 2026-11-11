@@ -173,12 +173,42 @@ public class VodConfig extends BaseConfig {
     @Override
     protected void load(Config config) throws Throwable {
         // 猫源填的是 bundle 地址（.js.md5），要先在本机把 Node 服务跑起来，再读它的 /config
-        String url = CatSource.isBundle(config.getUrl()) ? CatSource.serve(config.getUrl()) : UrlUtil.convert(config.getUrl());
-        String json = Decoder.getJson(url, TAG);
+        String url;
+        String json;
+        if (isOriginPrivateLoad() && !CatSource.isBundle(config.getUrl()) && isLocalConfig(config.getUrl())) {
+            // 原源 worker 禁主 Server，file:// 不能经 Server 转 HTTP：直接在私有进程内只读原文件。
+            java.io.File file;
+            try { file = new java.io.File(java.net.URI.create(config.getUrl())); }
+            catch (IllegalArgumentException legacy) { file = com.github.catvod.utils.Path.local(config.getUrl()); }
+            if (!file.isFile()) throw new java.io.FileNotFoundException(config.getUrl());
+            url = file.toURI().toString();
+            json = com.github.catvod.utils.Path.read(file);
+        } else {
+            url = CatSource.isBundle(config.getUrl()) ? CatSource.serve(config.getUrl()) : UrlUtil.convert(config.getUrl());
+            json = Decoder.getJson(url, TAG);
+        }
         TmdbSourceCredentialIngress.Ingress ingress = TmdbSourceCredentialIngress.extractRootAndStrip(json);
         checkJson(config, CatSource.normalize(url, Json.parse(ingress.getSanitizedJson())));
         if (!isLoaded()) throw new Exception("VOD sites is empty");
         acceptSubscriptionCredential(ingress.getCandidateKey(), config);
+    }
+
+    public void loadOriginConfig(Config origin) throws Throwable {
+        if (!com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()
+                || com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.storage() == null) {
+            throw new IllegalStateException("ISOLATION_ERROR: private origin context required");
+        }
+        setOriginPrivateLoad(true);
+        config(origin);
+        beforeLoad();
+        load(origin);
+    }
+
+    private static boolean isLocalConfig(String value) {
+        if (TextUtils.isEmpty(value)) return false;
+        String trimmed = value.trim();
+        if (trimmed.startsWith("file:")) return true;
+        return !trimmed.contains("://");
     }
 
     private static void acceptSubscriptionCredential(String candidateApiKey, Config config) {
@@ -216,6 +246,15 @@ public class VodConfig extends BaseConfig {
         return !getSites().isEmpty();
     }
 
+    /** 原源 worker 专用：私有加载模式，禁主 Server／失败切换／主进程副作用。 */
+    public static void setOriginPrivateLoad(boolean enabled) {
+        BaseConfig.setOriginPrivateLoad(enabled);
+    }
+
+    public static boolean isOriginPrivateLoad() {
+        return BaseConfig.isOriginPrivateLoad();
+    }
+
     @Override
     protected void beforeLoad() {
         CspWarmup.reset();
@@ -223,6 +262,7 @@ public class VodConfig extends BaseConfig {
 
     @Override
     protected void onLoadSuccess() {
+        if (isOriginPrivateLoad()) return;
         CspWarmup.schedule("vod-config-loaded");
         InterfaceAdRuleLearningService.schedule(getConfig().getDesc(), getConfig().getUrl(), getAds(), getRules());
     }
@@ -262,6 +302,11 @@ public class VodConfig extends BaseConfig {
     void onConfigFailure(Config config, Callback callback, Throwable error) {
         FailoverRound current = failoverRound;
         String message = Notify.getError(R.string.error_config_get, error);
+        // 原源私有加载绝不接管当前配置的失败切换：加载失败就是 CONFIG_LOAD_FAILED。
+        if (isOriginPrivateLoad()) {
+            App.post(() -> callback.error(message));
+            return;
+        }
         if (current != null && callback == current.attemptCallback) {
             current.lastError = message;
             App.post(() -> onAttemptFailure(current));

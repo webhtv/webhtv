@@ -34,8 +34,16 @@ public class Path {
         return file != null && file.exists() && file.length() > 0;
     }
 
+    private static volatile File rootOverride;
+
+    /** 仅原源 worker 在租约内设置：私有根；默认 Environment 根路径保持不变。 */
+    public static void setRootOverride(File root) {
+        rootOverride = root;
+    }
+
     public static File root() {
-        return Environment.getExternalStorageDirectory();
+        File override = rootOverride;
+        return override != null ? override : Environment.getExternalStorageDirectory();
     }
 
     public static File cache() {
