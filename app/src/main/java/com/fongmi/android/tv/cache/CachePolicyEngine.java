@@ -51,6 +51,10 @@ public final class CachePolicyEngine {
         return ids;
     }
 
+    /** Modules no unattended pass may clear, whatever the registry says about manual cleanup. */
+    private static final Set<CacheModuleId> AUTOMATIC_EXCLUDED =
+            EnumSet.of(CacheModuleId.PLUGIN_AUDIT, CacheModuleId.PLUGIN_HTTP_CACHE);
+
     private CachePolicyEngine() {
     }
 
@@ -61,6 +65,39 @@ public final class CachePolicyEngine {
 
     public static CacheCleanupPlan module(CacheModuleId id) {
         return new CacheCleanupPlan(CacheCleanupMode.MODULE, id == null ? List.of() : List.of(id));
+    }
+
+    /**
+     * The plan that brings the whole cache directory under the configured total limit.
+     *
+     * <p>Read from the registry instead of a hand-written list: every module a user may clean by
+     * hand participates, which is what makes the total limit reach the playback caches - the
+     * largest single consumer - once nothing plays. What stays out is exactly what the registry
+     * forbids: plugin scripts that no site can re-download mid-use and the unclassified cache whose
+     * owner is unknown. When those two alone exceed the limit the pass stops there: it does not
+     * delete the modules it could have cleaned, and the panel reports the protected remainder
+     * instead of claiming success.</p>
+     *
+     * <p>Module order follows the enum so a run is deterministic and the progress line stays
+     * stable across attempts.</p>
+     *
+     * <p>The plugin audit trail and the plugin HTTP cache are excluded even though the panel may
+     * clear both by hand: their registry entries declare "never evicted on its own", which is the
+     * same contract {@link #deepModules()} honours. An unattended pass at startup, every twelve
+     * hours, or at playback end must not erase the audit evidence trail or turn a cached plugin
+     * response back into a network call the user never asked for.</p>
+     */
+    public static CacheCleanupPlan convergencePlan(java.io.File cache) {
+        if (cache == null) return new CacheCleanupPlan(CacheCleanupMode.CONVERGE, List.of());
+        ArrayList<CacheModuleId> ids = new ArrayList<>();
+        for (CacheModule module : CacheModuleRegistry.modules(cache)) {
+            if (module == null || !module.protection().allowManualCleanup()) continue;
+            if (AUTOMATIC_EXCLUDED.contains(module.id())) continue;
+            ids.add(module.id());
+        }
+        ArrayList<CacheModuleId> ordered = new ArrayList<>();
+        for (CacheModuleId id : CacheModuleId.values()) if (ids.contains(id)) ordered.add(id);
+        return new CacheCleanupPlan(CacheCleanupMode.CONVERGE, List.copyOf(ordered));
     }
 
     public static boolean allowsAutomatic(CacheModuleId id) {
@@ -109,7 +146,9 @@ public final class CachePolicyEngine {
             // split, so it must cover every cache the panel can name - including the report-only
             // leftovers a tiered run deliberately protects.
             case FULL -> EnumSet.allOf(CacheModuleId.class);
-            case MODULE -> Set.of();
+            // Both modes take their module list from the caller: MODULE names one row, CONVERGE
+            // names whatever the registry lets a user clean.
+            case MODULE, CONVERGE -> Set.of();
         };
         ArrayList<CacheModuleId> ordered = new ArrayList<>();
         for (CacheModuleId id : CacheModuleId.values()) if (selected.contains(id)) ordered.add(id);
