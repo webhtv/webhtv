@@ -488,3 +488,127 @@ SiteApi、ParseJob、BaseLoader、JS/Py/Jar、Chaquo/QuickJS/nodejs 原生模块
 2. TMDB 元数据未在设备上联网验证（无可用 TMDB 凭据），只验证了 tmdbId/mediaType 传入且失败时不影响原源线路渲染。
 3. 阅读器（小说/漫画）路由下的原源详情/起播未验证；TV（leanback）只做编译验证。
 4. 原源模式旋转重建复用租约的行为仍与 §13.3-4 相同，未新增验证。
+## 16. 返工 4（quick-fix）：跨源历史与标准历史同构分流，删除"必须有 TMDB 身份"前置
+
+### 16.1 改动
+
+* `OriginHistoryRoute.describe(tmdbDetailModeConfigured, standaloneTmdbMode, siteEnabled)`：删除 `tmdbId/mediaType` 入参与 `direct:history_without_tmdb_identity` 分支，判据与标准历史逐项同构（详情页模式 + 站点 TMDB 策略）。
+* `HistoryResumeCoordinator.routeOriginHistory`：改用 `TmdbSitePolicy.isEnabled(history.getSiteKey(), history.getVodId())` 作为站点判据；删除"这条历史没有 TMDB 身份，直接进入播放"的 `Notify` 与对应注释；非 TMDB 模式静默直放。
+* `TmdbDetailActivity`：`originHistoryIntent` 不再预置 `tmdb_id/tmdb_media_type/tmdb_title`（标准历史同样不预置）；`loadOriginContent` 改为调用与标准路径相同的 `loadTmdbResult()`（按原源 Vod 名称/站点既有匹配），不再依赖 `initialTmdbItem`。
+* `bindFlags`：原源模式下 `findInitialFlag` 失配时退回首条线路（原源历史里的稳定线路键来自上次播放，可能与本次 worker 返回顺序不符）。
+* 过时断言同步：`GlobalHistoryResumeSourceTest:21` 的搜索文本为 `routeOriginHistory(activity, history)`（本轮基线已含该文本，未再改动）。
+
+### 16.2 验证
+
+* 单测：`OriginHistoryRouteTest` 4（新签名/站点策略/无身份前置）、`GlobalHistoryResumeSourceTest` 32、`OriginPrePlaybackFallbackTest` 4、`OriginFallbackPolicyTest` 4、`OriginRelayTargetTest` 6、`OriginSessionContractTest` 4、`HistoryResumeCoordinatorTest` 4 —— 全绿（`s5-unit-1.log`）。
+* 编译：mobile + leanback + AndroidTest 三目标 `BUILD SUCCESSFUL`（`s5-build-1.log`）。
+* 设备：emulator-5556 `OK (1 test)`，logcat `ORIGIN_TMDB_DETAIL_OK cid=67 saved=1708`（无 TMDB 身份的历史也能进 `TmdbDetailActivity`、显示原源线路/第 2 集、真实起播、原 cid 进度写回）。该设备原先缺少夹具输入目录（`origin-isolation-input`），已从 5554 复制 `origin-fixture.jar` 与 `media-fixture` 后复验。
+* emulator-5554 **未通过**：同一用例渲染出 `线路/站源：origin_fixture/暂无可用选集或站源`（原源 Vod 已显示、选集为空），`OK` 未出现。断言原文：`TMDB detail must render the original source lines/episodes, got: …站源：origin_fixture|选集|季度|暂无可用选集或站源…`。已尝试的假设（每项各 1 次）：线路键失配退回首条线路、整进程重开一次，均未修复；按"同一失败假设最多 2 次"停止，未再猜测性改动。
+* 全量回归：5556 也曾在全量运行时失败于同一断言（`Tests run: 10, Failures: 2`），5554 全量为 `Tests run: 10, Failures: 1`。即该用例在"进程内已跑过其它用例"或"设备存在历史缓存"时不稳定，**本轮不声称设备全绿**。
+
+### 16.3 结论与未覆盖
+
+1. 分流逻辑（同构判据、无身份前置、无多余提示）已按用户要求改完并经单测锁定；5556 上设备行为正确。
+2. **未解决**：5554（以及 5556 的全量运行）上原源 TMDB 详情页偶发"暂无可用选集或站源"，需继续定位（怀疑点：原源 Vod 的 flags/episodes 在复用 `:origin` worker 或历史缓存场景下为空；`renderEpisodes` 依据 `selectedFlag.getEpisodes()`）。这是产品缺陷，不应以放宽断言收场。
+3. 未验证：TV(leanback) 设备、阅读器路由、TMDB 联网元数据、API24–27、Node 租约。
+## 17. 中断点：跨源历史走 TMDB 详情页（未完成，勿当通过）
+
+**状态**：工作区未提交（守卫 H-ORIGIN-RESUME-S5 active，BASE=264b7e688a3c993a6fc62c5af25a5a66a806c7f9）。
+
+### 已确认修复（各自有设备证据）
+1. 删除我自加的“必须有 TMDB 身份”前置判断与那句提示；分流改为与标准历史同构（详情页模式 + `TmdbSitePolicy.isEnabled`）。
+2. 旧租约属于另一份历史时：先 `setCallback(null)` + `PlaybackService.releaseOriginLease()`，再按有限次数重试开新租约（替代会超时留空的 `closeAfterDeath` 一次性回调）。
+3. `TmdbDetailActivity` 内联播放改用 `startPlayer(getPlaybackKey())`（原先传历史键，导致播放服务按“媒体已被替换”释放租约 → 端口注销 → `unregistered-loopback-port` / `IO_NETWORK_CONNECTION_FAILED`）。
+4. 缓存 Result 增加 relay 端口校验，端口变化即丢弃缓存。
+5. `progressCommitted()` 不再要求 `playbackStarted`：我们自己的进度写回不应把自己判成过期。
+6. 设备测试：`OriginHistoryRoute*` 等单测全绿；`Setting.putDebugLog(true)` 让渲染/取流路径可见。
+
+### 仍未收敛（两机交替失败，非设备差异，同为 SDK 28）
+- 详情页“原源线路/选集”渲染与“内联播放器挂载”之间的时序仍不稳定：`5554` 有时文本缺 `origin-line`，`5556` 有时点播放后播放器未挂载。
+- 决定性观测：每个租约 `READY → PLAY_READY → BLOCKED/ISOLATION_ERROR`；点击播放时 `onOriginResult`（`origin-play` 日志）未触发，说明播放请求在客户端被判过期并 `close()`，而不是页面绑定问题。
+- 断言口径：原断言要求文本含字面量“第2集”，但页面实际渲染集号与 `bob:jar - 2` 标题，属**断言过窄**（“暂无可用选集或站源”是布局常驻占位，即使隐藏也会被 dump）。已改为要求 `bob` + `origin-line` 且不含 `alice`。
+
+### 唯一下一步
+在独立会话中专门定位 TMDB 详情页的“详情送达 / 选集绑定 / 内联播放发起”三处时序（建议在该页加一次性 trace 并在 5554/5556 各跑 3 次），收敛后再提交；**在收敛前不得按通过处理**。
+## 18. 第 6 轮续接（进行中）
+
+### 18.1 起点现场（本轮开始即核对）
+
+* 分支 `dev2`，HEAD `264b7e688a`；工作区 9 个未提交文件即 §17 记录的改动，全部保留并以 `--adopt-dirty` 纳入守卫 `H-ORIGIN-RESUME-S6`（BASE 同上）。
+* 设备主包为 `com.silent.android.webhtv`，测试包 `com.silent.android.webhtv.test`；两台模拟器（5554/5556）均 SDK 28、`ro.product.cpu.abi=x86_64`，主包 18:29/18:30 已更新为含 §17 改动的构建。`com.fongmi.android.tv` 是无关旧包（5556 上状态 corrupt），与本任务无关。
+* `files/origin-isolation-input` 不在两台设备静态目录中，由设备用例运行时自行准备。
+
+### 18.2 本轮已核到的新证据
+
+1. `5554` 失败 dump 里**同时**出现“继续播放 - 第2集”（TMDB 标题与第 2 集信息已就位）与“线路|站源：origin_fixture|选集|季度||||暂无可用选集或站源”，即**没有 origin-line 线路 chip**；而 logcat 反复打印 `origin-detail applyLoaded flags=1 [origin-line:3]`，说明带 3 集的原源 Vod 确实进入了 `applyLoaded`。
+2. 设备用例的等待条件仍在找字面量 `第2集` 来决定是否重开页面，而最终断言用 `bob` + `origin-line`；“等不到就 finish 再 startActivitySync 重开”会把旧租约释放与新租约 open 挤在一起，两机耗时 40s / 128s 与该两轮 30s 等待吻合。**必须先区分“测试重开造成的竞争”与“真实渲染缺陷”。**
+3. `applyLoaded` 在 `initHistory()` 返回 null 时 `loading GONE` 并直接 return，不执行 `bindPage()`（线路与选集在这里渲染）；`bindPage` 渲染走 `enqueueRenderChunk` 且带 `generation != loadGeneration` 丢弃条件。
+
+### 18.3 状态
+
+只读根因调查已派发（报告写入 `app/build/origin-isolation/diagnosis-s6.md`）。该句为本轮初始检查点；后续现场以以下恢复锚点为准，不能当成最新状态。
+
+## 19. S6 续接恢复锚点（2026-11-11，UTC+08）
+
+- 目标/决定：跨源历史与标准历史同构分流（详情模式 + 站点策略），不要求历史已有 TMDB 身份，不新增分流/播放页/额外提示；WebHome 不在本单位内。用户明确继续任务且审批关闭，沿用已定范围，不请求审批、不推送、不下载依赖。
+- 现场/回滚：`dev2` / `264b7e688a3c993a6fc62c5af25a5a66a806c7f9`；现有 9 Java + 本文档未提交补丁保留。原 S6 守卫已仅归档状态（未丢弃代码），`H-ORIGIN-RESUME-S6-CONT` 精确采用这 10 个任务路径，其他路径不允许改。使用 `G:\Git\bin\bash.exe`，默认系统 `bash.exe` 是不可用 WSL；start 的 `--adopt-dirty` 实际须逐路径重复选项。
+- 已取得证据：`diagnosis-s6.md` 明确旧设备用例的文案 ready 与重开混页缺陷；当前测试已改为单页/结构就绪。`s6-device-5554-2.log`、`s6-device-emulator-5554-3.log`、`s6-device-emulator-5556.log`、`s6-device-emulator-5556-3.log` 各 `OK (1 test)`；这些只是 TMDB 定向通过。`s6-full-5554.log` 为 10 项 2 失败，`s6-fix-testSingleMobileRuntimeSequenceRequiresRealOriginPlayback.log` 后续单项通过；`s6-fix2-testPrePlayerFailureUsesGlobalAutoSearchAndOff.log` 最新 AUTO 仍在目标启动断言失败，不能宣称全量通过。
+- 计划/分工：修复 brief/run 1/3，agent `af0caf68-c363-46ea-b6be-85e4abd1b2a3`，仅允许测试/Coordinator/HistoryPlayback/SessionService/mobile VideoActivity；审查 brief/run 1/3，agent `49feeb41-174e-4a2f-b010-555a9a4997f2`，只读固定 `s6-cont-review-base.diff`。源码审查与修复共享接口但不共享写入，审查不得用活动工作树替代固定快照。两份六要素简报、后续报告都在 ignored `app/build/origin-isolation/s6-cont-*`。
+- 最新诊断（待验收）：修复者已保存 `s6-cont-before-logcat.log`，旧 AUTO 失败时目标实际启动并 RESUMED 的是 `TmdbDetailActivity`，而测试只监控 `VideoActivity`。详情模式污染了测试目标预期；这不是已证明的产品未启动。修复者继续固定场景并验证真实当前源起播，不降低 AUTO 起播要求。
+- 未验证/风险：新增 relative-media URL 补丁、租约重试待播选择、requestPlay false 与结构 ready 身份证明交独立审查。Node/API24–27/阅读器/TMDB联网/TV设备等原有未验边界不冒充本次通过。未提交、未建标签。
+- 预计：00:40 起修复 10 分钟、审查/验收 12 分钟、收尾 3 分钟，目标 01:05；超时去掉可选调查而非减少必要验证。
+- 审查结果/路由（01:52）：固定快照 Spec/Quality 不通过。A1 mobile 引用未定义 `dispatchOriginFallback`；最新代码已补声明但须实际编译确认。A2 TMDB 调用忽略 `requestPlay=false`、可能永久 pending；A3 结构 ready 未明确证明选中/实际请求第 2 集；两条均已发修复者处理。修复 Boundary 扩为前述 5 个文件 + 已在守卫内的 `TmdbDetailActivity.java`，源码唯一文件 cap 6（累计），未扩行为。
+- 审查争议/待复核：A4 把带 scheme URL 判断为晚期 relay 网络错误的推理，与 `URI.resolve` 及后续显式 `ISOLATION_ERROR` 不符；A5 把 OFF/resolved=null 推导为“已 finish”忽略了两分支早于 onLaunching 的 return。已要求原审查者 run 2/3 局部核实并修正报告。同时要求复核“pendingEpisodeUrl 字段保留即能重放用户选集”的结论，不接受未证明的无缺陷判断。
+- 超估时：01:52 时已超 01:05 目标，停止可选调查，仅完成编译阻断、真实请求/第2集断言、错误终态和必要设备回归；不重复已经成功且未改变的检查。
+- run 2 局部结论（01:57）：审查者基于固定起点 + diff 重建确认 A4/A5 的错误推断，已撤回。OFF/resolved=null 在 onLaunching 前 return；带 scheme URL 仍走 EDL 或明确非媒体 `ISOLATION_ERROR`，不需为错误报告扩功能。“pendingEpisodeUrl 字段保留就不会丢请求”结论亦撤回，改为条件性恢复缺口：READY 默认预解析旧历史集，pending 非旧集时没有自动补发；busy 只在 open/READY 前，UI 可达性尚未证实，已交实施者连同 inactive 明确拒绝验证。
+- 新证据（调度者已读真实输出）：`s6-cont-build-2.log` 为 `BUILD SUCCESSFUL in 27s`，`s6-cont-testPrePlayer-2.log` 为 `OK (1 test)`；前者补上 mobile 缺失方法后的构建，后者对应起播前失败 AUTO/SEARCH/OFF 用例。它们不代替 A2 请求拒绝可见终态、A3 明确第 2 集身份、双端最终相关回归。
+- 修复 run 1 交回：`s6-cont-fix-report.md` 记录 mobile 缺失派发方法已补、AUTO 用例固定 direct 模式并 try/finally 恢复。`TmdbDetailActivity` 已对 requestPlay=false 清 pending 和可见报错；TMDB 用例增加激活第 2 集与真实 episode 请求断言。`s6-cont-build-3.log` SUCCESS、`s6-cont-test-two-1.log` 5554 `OK (2 tests)`（36.287s），`s6-cont-after-logcat-3.log` 为原 cid=392 saved=1772。
+- 独立验收返工 run 2/3：正常两个用例未触发新增拒绝分支，不能替代该分支红绿；要求实施者在既有测试文件新增“详情就绪→释放会话→再播放”的拒绝终态用例，并收紧请求身份至 account=bob + episode=/episode/2（保持同集缓存，不强迫点击重取流）。原 busy 重连缺口经控制流核验：busy 只发生 open/READY 前，选集要 PLAY_READY 之后才可用；此路径不可达，未新增重发抽象。
+- 并行验收：5556 独立验证 agent `8dad24e3-ade0-49e6-91be-0638d74e7616`，brief/run 1/3，冻结现有主/test APK 后只跑 TMDB + 三模式回落；报告 `s6-cont-device-report.md`。调度者最终 leanback Java 编译 + 7 类定向单测 job `pwsh-60c87828b46b42e8`，日志 `s6-cont-final-unit-leanback.log`，不得为等待执行占位命令。
+- 未闭环边界：拒绝终态新绿例、5556最终两场景、leanback/定向单测、最终增量审查；增强详情模式下 AUTO 落点是需手动点播的正常 TMDB 详情页（同标准历史），本轮三模式自动起播用例固定 direct，不冒充增强 AUTO 全链路通过。
+- 最终静态/单测证据已独立核实：job `pwsh-60c87828b46b42e8` exit 0，`s6-cont-final-unit-leanback.log` 为 `BUILD SUCCESSFUL in 1m 11s`、实际执行 leanback Java 编译。7 类 JUnit XML 共 58 项、0 failures/0 errors（GlobalHistoryResumeSource 32、OriginHistoryRoute 4、PrePlaybackFallback 4、FallbackPolicy 4、RelayTarget 6、SessionContract 4、Coordinator 4）。不重复未变的已成功检查。
+- 新增拒绝用例 `testTmdbReleasedOriginRejectsPlayWithoutPendingOrCurrentTakeover` 在实现 run 2 做真实 release 后再次 playInline，核 false/pending/error/无当前源接管。红例只暂时回退该分支，已要求立即恢复原修复字节并报告恢复校验；5556已明确只用开始冻结的 02:27 绿版 APK，防止安装临时红例。最终生产源码若与此前验证字节相同，不重跑58项或leanback。
+- 5556 验收 run 1 新证据：验证者冻结并只安装 02:27 绿版（02:36:40），main SHA256 `7A308E1541F24E732B99DF15F4F40DC3EC788EAEE0344E8CCF3AD58BF03A075E`，test `0227EFFB971A92403E5968B8EF9E75DAECE256CE85A29DC86613982D98A00E45`，副本/日志位于 `app/build/origin-isolation/s6-cont-5556-20261111-023640/`。双方法实际 2 tests/1 failure：TMDB status=0 通过；PrePlayer在 AUTO 分流前 fixture-private prefs `[account]` 空→非空导致 MainState 断言失败，尚未进入回落行为，不伪报三模式通过。
+- 该红例已回到实现 run 2：核当前源 fixture init 与 baseline 时序（TMDB 已显式预热而 PrePlayer 未预热）；若确认为冷夹具基线缺口，必须显式预热再取基线，不对白名单加 account、不弱化污染断言。5556 先收尾 cleanup 证据，新的最终绿包后只复跑失败 PrePlayer，不重复已绿 TMDB。新增两个 lease 目录只核必要清理/进程/端口证据，不擅删设备数据。
+- 实现 run 2/3 交回（报告 §7，02:47）：新增 `testTmdbReleasedOriginRejectsPlayWithoutPendingOrCurrentTakeover`，真实 worker 详情就绪→反射读真实选中 URL=/episode/2→`mOrigin.release()`→requestPlay 实际 false→点同页真实 play 按钮。旧分支红例 `s6-cont-run2-red2-test.log` 失败 `pending expected false but true`（logcat `rejected=true pending=true`）；修复绿例 `s6-cont-run2-green2-test.log` `OK (1 test)` 8.273s，logcat `ORIGIN_RELEASED_REJECTION_OK cid=400 episode=/episode/2 pending=false searches=0 alicePlays=0`，错误 isShown/文字、spinner 清除、不 finish、无新增取流、完整 MainState 均实际执行。A3 收紧为 originRequestStart 起算 + path=/player + episode=/episode/2 + account=bob + bob Authorization，读 selectedEpisode 精确 URL；同集缓存不强制二次取流。PrePlayer 在 load(a) 后、matchCurrent 与全部 MainState 前 `SiteApi.detailContent` 预热（根因 OriginFixture.java:15-18 init 同步写 fixture account），不白名单 account。
+- 调度者独立核验：`TmdbDetailActivity.java` 当前 SHA256 `FC09786BC346F3A90CEEE58114911DE845C7004E34FD21E6E27AEE3443756043` 与两次红实验前备份一致（identical=True），故此前 58 项单测/leanback 结论仍对应当前生产字节；`git status` 仍为同一 10 个任务路径。
+- 终验最终包（`s6-cont-run2-final2-sha.log`）：main `184A23316A5C5F59ED23E450D89D03F5823E725D75D64725FF71D67A020B6A14`、test `2DAB4A746661DAAC8854B45E272A64403006D33CE8C42D5D6CDB24149389D152`。已被要求冻结后仅重验 PrePlayer，SHA 不符即停手。
+- 用户范围决定（租约目录）：`OriginStorageContext.java:31` 按 lease 建 `no_backup/origin/<lease>`，`OriginSessionService` 关闭 Node/relay 并退出进程但不删除目录；5556 观察到 2 个非空残留目录（无 fd-/媒体文件，进程与回环监听均已消失）。用户选择“本次完成续播修复，目录清理另立任务”，因此本次不宣称磁盘彻底清理，须作为独立后续任务处理，不在本提交内手删设备数据。
+- 审查 run 3/3（§F，02:5x）结论“有条件通过”：A1/A2/A3 均 ADDRESSED 且有红绿差分；增量口径为生产仅 `TmdbDetailActivity` +7 行 false 分支与 `VideoActivity` +13 行 `dispatchOriginFallback`（其余 5 个生产文件新增行逐行未变）。放行条件两条：(i) 强化后的正常 TMDB 用例设备复跑绿；(ii) A4（active 但待播集≠历史集的静默不交付）落地或明确记为已知限制。另有 Minor：`headers("bob")` 无空值防御、激活文本断言偏宽（由反射 URL 断言兜底）、`bindFlags` flags[0] 兜底仅覆盖正常路径、`dispatchOriginFallback` 增加 `pending==false` 早退使全局续播关闭只提示一次（合理去重，属行为微调）。
+- 5556 run 2 复验（新冻结包 main `184A23…6A14`/test `2DAB4A…9D152`，两包 SHA 均与期望一致，先 force-stop 残留主进程 17336）**失败**：`OriginIsolationPlaybackTest.java:426` monitor 30s 超时，`pre-player failure must launch the configured global-resume entry, mode=1`。run1 的 fixture 偏好基线断点确已消除（`ORIGIN_FIXTURE_PREFS_BEFORE existed=false keys=[]`，越过 :415）。实观：READY(proxy=42443)→BLOCKED ISOLATION_ERROR→Toast→约 2s 后 `TV-search site=origin-alice,keyword=bob:fixture` 返回 `{"vod_id":"origin-vod","vod_name":"bob:fixture"}`；未观到新 Activity START/onNewIntent/Deliver/新 VideoActivity 实例。SEARCH/OFF 未执行，三模式均不记通过。5554 同用例此前通过，属竞态或观测手段问题，两者尚未分清。
+- 决策：A4 记为**已知限制**（控制流上 busy 只在 open/READY 前，选集需 PLAY_READY 后才可用，故不实现 pending 重发）；租约目录清理按用户决定另立任务，本次不手删设备数据、不宣称磁盘彻底清理。
+- 实现 run 3/3（最后一轮配额）已派发：用最小一次性 trace 区分“产品真没启动”与“仅测试数新实例不足”，只修根因，禁止延长等待/重开/放宽断言。**结果：第三类根因——AUTO 解析段 `resolved=null`，从未进入启动段。** trace（`s6-cont-run3-trace-5556-logcat.log`）显示 `callback request=2 expected=2 resolved=false finishing=false destroyed=false`（引用计数与存活检查均通过，回调未被丢），同轮搜索已返回 `{"vod_id":"origin-vod","vod_name":"bob:fixture"}`，20ms 后 `resolved=false`，全程无 `startFromResolvedHistory` 早退、无 `onNewIntent`、无新实例。
+  - 根因：run 2 为修 §19 记录的空偏好基线，在 `matchCurrent=true` **之前**预热了当前源站点，把 alice 名详情写进 `SiteApi.detailContent` 缓存（键 siteKey+id，不含 cid），而 `HistorySourceResolver.scoreCandidate` 要求标题匹配 → AUTO 候选被判 REJECTED → 走可见搜索兜底。5554 当时缓存已是 bob 名，故此前“通过”是缓存状态巧合，不作为正确性依据。
+  - 修复（仅测试文件，生产零净改动）：把 `upstream.matchCurrent = true` 移到预热之前，预热断言改为不依赖账号名的非空判定；仍保证预热早于全部 `MainState` 基线。临时 trace 与红实验后三个生产文件按原字节还原：`TRACE-RUN3` 残留 0（本机 grep 复核无匹配），`TmdbDetailActivity` SHA `FC09786B…6043`、`HistoryResumeCoordinator` `BAE6EF33…93F3`、`VideoActivity` `876D06AF…BD78` 与审查快照一致。
+  - 双机绿例（本轮设备运行 4 次）：5556 `testPrePlayerFailureUsesGlobalAutoSearchAndOff` `OK (1 test)` 33.108s（`s6-cont-run3-fix-5556-test.log`，logcat 见 origin-alice 搜索返回 bob:fixture）；5554 同用例 `OK (1 test)` 36.579s（`s6-cont-run3-fix-5554-test.log`），logcat 三条标记 `ORIGIN_PREPLAYER_FALLBACK_OK mode=1 searches=1` / `mode=2 searches=1` / `mode=0 searches=0`（调度者已直接复核该日志行）；5554 强化版 `testTmdbDetailModeRoutesCrossSourceHistoryIntoTmdbDetailOnOriginLines` `OK (1 test)` 17.003s，`ORIGIN_TMDB_DETAIL_OK cid=404 saved=2240`。审查放行条件 (i) 的强化 TMDB 设备绿已取得。
+  - 最终产物（调度者 Get-FileHash 复核）：main `936E477ACF4DE9CA37681A15F470F6838FE03ADE56B29286D64DEB695815E74F`、test `2F3CC968E9FAF01840DC662A9F1A49ACFDB578829D606AEFB3E50274C3800592`。生产字节与审查 run3 快照一致，故未重复 58 项单测与 leanback 编译。
+- 阶段结论（待独立复核确认后定格）：原源详情第 2 集续播、原源起播前失败按 AUTO/SEARCH/OFF 接续均有双机设备证据；A4 重连待播为已知限制；租约目录清理另立任务；Node/API24–27/阅读器/TMDB 联网/TV 设备仍未验证，不冒充通过。
+- **唯一下一步**：收取 5556 独立复核（冻结上述最终包 SHA 后只跑 PrePlayer 一次）。通过则记录最终结论并原子提交 + 恢复标签；失败则如实记录未过项、不提交。
+
+## 20. 本轮最终结论（2026-11-11）
+
+### 20.1 已完成并有三重证据
+
+1. **跨源历史走正常入口**：同构分流（详情页模式 + `TmdbSitePolicy.isEnabled`），无 TMDB 身份前置、无额外提示；原源详情页渲染原配置线路/选集并在同一内联播放器真实起播历史第 2 集，进度按原 cid 写回，不产生当前配置记录。
+2. **原源起播前失败按全局历史设置接续**：AUTO 真实到当前源并起播、SEARCH 真搜索并携带原历史参数、OFF 停留原页且原因可见；起播后失败不接管。
+3. **拒绝终态**：原源会话已释放后再请求播放，明确拒绝并清除等待态、错误可见、不接管当前源（红绿差分证明）。
+4. **不再有静默失败**：原源详情页/播放页的 `requestPlay=false` 由产品显式处理；`mobile` 缺失的 `dispatchOriginFallback` 已补，手机/TV 均能编译。
+
+### 20.2 证据（可复核）
+
+- 编译：`s6-cont-build-2.log`/`s6-cont-build-3.log`/`s6-cont-run3-fix-build.log` 均 `BUILD SUCCESSFUL`；`s6-cont-final-unit-leanback.log` 实际执行 leanback Java 编译并 `BUILD SUCCESSFUL in 1m 11s`。
+- 定向单测：7 类共 58 项、0 failures/0 errors（`OriginHistoryRouteTest` 4、`GlobalHistoryResumeSourceTest` 32、`OriginPrePlaybackFallbackTest` 4、`OriginFallbackPolicyTest` 4、`OriginRelayTargetTest` 6、`OriginSessionContractTest` 4、`HistoryResumeCoordinatorTest` 4）。
+- 5554：`testPrePlayerFailureUsesGlobalAutoSearchAndOff` `OK (1 test)`，三条 `ORIGIN_PREPLAYER_FALLBACK_OK mode=1/2/0`；强化版 `testTmdbDetailModeRoutesCrossSourceHistoryIntoTmdbDetailOnOriginLines` `OK (1 test)` 17.003s，`ORIGIN_TMDB_DETAIL_OK cid=404 saved=2240`；拒绝用例红绿（旧 `pending=true` 失败 / 新 `pending=false` 通过）。
+- 5556：调度者本人独立冻结同一最终包（main `936E477A…5E74F`、test `2F3CC968…00592`，SHA 前后同字节）后保数据安装，只跑 `testPrePlayerFailureUsesGlobalAutoSearchAndOff` → `OK (1 test)` 30.967s，logcat 三条 `ORIGIN_PREPLAYER_FALLBACK_OK mode=1 searches=1`、`mode=2 searches=1`、`mode=0 searches=0`（`app/build/origin-isolation/s6-cont-5556-run3-dispatch/`）。
+- 审查：固定快照两轮独立审查 + 最终增量 run3 逐项 ADDRESSED，生产增量仅 `TmdbDetailActivity` +7 行与 `VideoActivity` +13 行。
+
+### 20.3 已知限制（本轮明确不声称通过）
+
+1. **A4 重连待播**：`onReady` 仍按历史集预解析，`busy` 只发生在 open/READY 前、选集需 PLAY_READY 后才可用，故该“用户待播集≠历史集”的静默不交付路径控制流不可达；不实现 pending 重发抽象，记为已知限制。
+2. **租约私有目录**：`OriginStorageContext` 按 lease 建 `no_backup/origin/<lease>`，关闭时不停删；5556 观察到非空残留目录（无 fd-/媒体文件，进程与回环监听已消失）。经用户决定另立任务处理，本次未手删设备数据。
+3. **增强详情页模式下的 AUTO 落点**：跨源历史失败回落在详情模式下落 `TmdbDetailActivity`（`auto_play=false`，需再点播放，与标准历史同构）；三模式自动起播用例固定 `DETAIL_OPEN_DIRECT` 覆盖，该形态未设备验证。
+4. **原有未验边界照旧**：Node 运行时租约（缺 libnode，不隐式下载）、API 24–27、阅读器（小说/漫画）路由、TMDB 联网元数据、TV(leanback) 设备运行。
+
+### 20.4 回滚
+
+本次为单一守卫单位：回滚该提交即恢复“跨源历史只走当前源匹配”的旧行为；不涉及主数据库迁移，不删除用户配置/历史，不改设备数据清理策略。

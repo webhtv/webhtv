@@ -19,6 +19,7 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.history.HistorySourceResolver;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.setting.TmdbSitePolicy;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.ui.novel.NovelRouter;
@@ -44,17 +45,12 @@ public final class HistoryResumeCoordinator {
         String route = com.fongmi.android.tv.playback.origin.OriginHistoryRoute.describe(
                 Setting.isTmdbDetailModeConfigured(),
                 Setting.isStandaloneTmdbDetailMode(Setting.getDetailOpenMode()),
-                history.getTmdbId(),
-                history.getMediaType());
-        com.github.catvod.crawler.SpiderDebug.log("origin-route", "cid=%d key=%s mode=%d route=%s tmdb=%d/%s",
-                history.getCid(), history.getKey(), Setting.getDetailOpenMode(), route, history.getTmdbId(), history.getMediaType());
+                TmdbSitePolicy.isEnabled(history.getSiteKey(), history.getVodId()));
+        com.github.catvod.crawler.SpiderDebug.log("origin-route", "cid=%d key=%s mode=%d route=%s",
+                history.getCid(), history.getKey(), Setting.getDetailOpenMode(), route);
         if (com.fongmi.android.tv.playback.origin.OriginHistoryRoute.isTmdbDetail(route)) {
             TmdbDetailActivity.startFromOriginHistory(activity, history);
             return;
-        }
-        // 炫彩模式却没有 TMDB 身份是用户可见的意外退化，必须提示，不能当成正常直接播放。
-        if (com.fongmi.android.tv.playback.origin.OriginHistoryRoute.DIRECT_IDENTITY.equals(route)) {
-            Notify.show("这条历史没有 TMDB 身份，直接进入播放（详情页模式无法用于原源）");
         }
         VideoActivity.startFromOriginHistory(activity, history);
     }

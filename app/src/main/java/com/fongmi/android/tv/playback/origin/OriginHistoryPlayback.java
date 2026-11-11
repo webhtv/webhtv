@@ -43,11 +43,18 @@ public final class OriginHistoryPlayback {
     private final History history;
     private final Listener listener;
     private final Map<String, Result> resolved = new HashMap<>();
+    /** 缓存里 Result 所属的 relay 端口：端口变了（换租约）就必须丢弃缓存，否则回环地址已注销。 */
+    private int resolvedPort;
     private OriginSessionClient client;
     private Vod vod;
     private String siteName = "";
     private String pendingEpisodeUrl = "";
     private boolean detailDelivered, resultDelivered, released;
+    private android.content.Context ownerContext;
+    private History targetHistory;
+    private int attempt;
+    /** 旧租约退出与新租约建立之间需要一个短暂窗口：worker 拒绝对已持有租约再开。 */
+    private static final int MAX_ATTEMPTS = 4;
 
     private final OriginSessionClient.Callback callback = new OriginSessionClient.Callback() {
         @Override public void onReady(String lease, Bundle envelope) {
@@ -102,8 +109,21 @@ public final class OriginHistoryPlayback {
             if (held.playback() != null) com.fongmi.android.tv.App.post(() -> entry.consume(held.playback()));
             return entry;
         }
-        entry.client = OriginSessionClient.open(owner, restored, entry.callback);
+        if (held != null && !held.isClosed()) {
+            // 旧租约属于另一份原历史：worker 一次只允许一个租约，直接开新的会被拒绝
+            // （表现为详情页拿不到原源线路）。释放旧租约后按有限次数重试，避免依赖一次性回调。
+            held.setCallback(owner, null);
+            PlaybackService.releaseOriginLease();
+        }
+        entry.ownerContext = owner;
+        entry.targetHistory = restored.copy();
+        entry.connect(owner, restored);
         return entry;
+    }
+
+    private void connect(Context owner, History target) {
+        if (released) return;
+        client = OriginSessionClient.open(owner, target, callback);
     }
 
     public boolean isActive() {
@@ -141,9 +161,14 @@ public final class OriginHistoryPlayback {
     public boolean requestPlay(Flag flag, Episode episode) {
         if (episode == null || !isActive()) return false;
         Result cached = resolved.get(episode.getUrl());
-        if (cached != null) {
+        if (cached != null && resolvedPort == client.proxyPort() && cached.getRealUrl().contains(":" + resolvedPort + "/")) {
             deliverResult(cached);
             return true;
+        }
+        if (cached != null) {
+            // 端口已换：旧 Result 指向的回环地址不再登记，重取而不是拿旧地址去播。
+            resolved.clear();
+            resolvedPort = 0;
         }
         String stableFlagKey = flag == null ? "" : Flag.stableKey(flag, vod == null ? 0 : vod.getFlags().indexOf(flag));
         pendingEpisodeUrl = episode.getUrl();
@@ -182,6 +207,7 @@ public final class OriginHistoryPlayback {
                 handleFailure(OriginSessionContract.BLOCKED, OriginSessionContract.SNAPSHOT_INVALID, "原源详情或选集数据无效");
                 return;
             }
+            resolvedPort = client == null ? 0 : client.proxyPort();
             resolved.put(resolvedEpisodeUrl(playback), result);
             if (!detailDelivered) {
                 detailDelivered = true;
@@ -206,12 +232,29 @@ public final class OriginHistoryPlayback {
 
     private void handleFailure(String status, String reason, String detail) {
         if (released) return;
+        // 只有"旧租约还占着 worker"才值得重试：那是一个几十毫秒级的时序窗口。
+        // 真正的隔离不足/代理异常必须立刻走用户可见的失败处理，绝不能被重试延迟成"点了没反应"。
+        if (!resultDelivered && leaseBusy(detail) && attempt < MAX_ATTEMPTS) {
+            attempt++;
+            OriginSessionClient previous = client;
+            client = null;
+            if (previous != null) previous.close();
+            com.fongmi.android.tv.App.post(() -> {
+                if (!released) connect(ownerContext, targetHistory);
+            }, 400L * attempt);
+            return;
+        }
         boolean fallback = OriginSessionContract.shouldResumeGlobally(resultDelivered, status, reason);
         String message = (TextUtils.isEmpty(reason) ? OriginSessionContract.ISOLATION_ERROR : reason)
                 + (TextUtils.isEmpty(detail) ? "" : ": " + detail);
         release();
         if (fallback) listener.onOriginFallback(history.copy(), message);
         else listener.onOriginError(message);
+    }
+
+    /** worker 一次只允许一个租约，被拒时会带这两句 detail；其它 detail 都按不可重试的失败处理。 */
+    private static boolean leaseBusy(String detail) {
+        return detail != null && (detail.contains("worker lease already held") || detail.contains("old worker still alive"));
     }
 
     private void apply(OriginSessionClient.Playback playback) {

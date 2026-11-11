@@ -127,7 +127,7 @@ public final class OriginSessionClient implements AutoCloseable {
     }
     public Playback playback() { return playback; }
     public void markPlaybackStarted() { playbackStarted = true; }
-    public void progressCommitted() { if (playbackStarted && !closed.get()) expectedResumeVersion = OriginSessionSnapshot.resumeVersion(HistoryResumePayload.restore(originCid, resumePayload)); }
+    public void progressCommitted() { if (!closed.get()) expectedResumeVersion = OriginSessionSnapshot.resumeVersion(HistoryResumePayload.restore(originCid, resumePayload)); }
     public String leaseId() { return leaseId; }
     public int proxyPort() { return proxyPort; }
     public History history() { return snapshotHistory.copy(); }

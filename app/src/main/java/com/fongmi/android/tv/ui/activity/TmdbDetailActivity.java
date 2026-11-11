@@ -382,6 +382,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private History history;
     private OriginHistoryPlayback mOrigin;
     private TmdbBundle originBundle;
+    private List<TmdbItem> originSearchItems = new ArrayList<>();
     private boolean originFallbackPending;
     @androidx.annotation.Keep
     private History mHistory;
@@ -642,9 +643,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         intent.putExtra("name", item.getVodName());
         intent.putExtra("pic", item.getVodPic());
         intent.putExtra("mark", item.getVodRemarks());
-        intent.putExtra("tmdb_id", item.getTmdbId());
-        intent.putExtra("tmdb_media_type", item.getMediaType());
-        intent.putExtra("tmdb_title", item.getVodName());
+        // 不预置 TMDB 身份：标准历史也不预置，匹配由本页按原源 Vod 名称/站点照常完成。
         intent.putExtra(EXTRA_RESUME_FROM_HISTORY, true);
         intent.putExtra(EXTRA_RESUME_HISTORY_CID, item.getCid());
         intent.putExtra(EXTRA_RESUME_HISTORY_KEY, HistoryResumePayload.encode(item));
@@ -1063,8 +1062,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private OriginHistoryPlayback origin() {
         if (mOrigin == null && OriginHistoryPlayback.hasPayload(getIntent())) {
             mOrigin = OriginHistoryPlayback.open(this, getIntent(), new OriginHistoryPlayback.Listener() {
-                @Override public void onOriginDetail(Vod vod) { applyLoaded(vod, originBundle, new ArrayList<>(), "", false); }
-                @Override public void onOriginResult(Result result) { startInlinePlayer(result); }
+                @Override public void onOriginDetail(Vod vod) { applyLoaded(vod, originBundle, originSearchItems, "", false); }
+                @Override public void onOriginResult(Result result) {
+                    com.github.catvod.crawler.SpiderDebug.log("origin-play", "onOriginResult hasUrl=%s parse=%s", !android.text.TextUtils.isEmpty(result.getRealUrl()), result.needParse());
+                    startInlinePlayer(result);
+                }
                 @Override public void onOriginFallback(History item, String reason) {
                     originFallbackPending = Setting.isGlobalHistoryEnabled();
                     showOriginError("原源播放失败：" + reason + (originFallbackPending
@@ -1091,21 +1093,23 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void loadOriginContent() {
         int generation = ++loadGeneration;
         tmdbConfig = TmdbConfig.effectiveCurrent();
-        TmdbItem item = initialTmdbItem;
         detailTasks.submit(() -> {
-            TmdbBundle bundle = null;
-            if (item != null && tmdbConfig != null && tmdbConfig.isReady()) {
+            // TMDB 匹配与标准历史完全同一套解析（按原源 Vod 名称/站点等既有规则），
+            // 不看历史里是否存过 tmdbId；原源只决定详情/线路/集数/取流/进度的来源。
+            TmdbLoadResult result = null;
+            if (isTmdbAllowedForCurrentSite()) {
                 try {
-                    bundle = loadTmdbBundle(item);
+                    result = loadTmdbResult();
                 } catch (Throwable ignored) {
                 }
             }
-            TmdbBundle loaded = bundle;
+            TmdbLoadResult loaded = result;
             runOnAliveUi(() -> {
                 if (generation != loadGeneration) return;
-                originBundle = loaded;
+                originBundle = loaded == null ? null : loaded.bundle();
+                originSearchItems = loaded == null ? new ArrayList<>() : loaded.searchItems();
                 Vod vod = mOrigin == null ? null : mOrigin.vod();
-                if (vod != null) applyLoaded(vod, loaded, new ArrayList<>(), "", false);
+                if (vod != null) applyLoaded(vod, originBundle, originSearchItems, "", false);
                 else mOrigin.requestDetail();
             });
         });
@@ -3007,6 +3011,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             return;
         }
         vod = loadedVod;
+        if (isOriginSession()) {
+            StringBuilder originFlags = new StringBuilder();
+            for (com.fongmi.android.tv.bean.Flag originFlag : loadedVod.getFlags()) originFlags.append("[").append(originFlag.getFlag()).append(":").append(originFlag.getEpisodes() == null ? -1 : originFlag.getEpisodes().size()).append("]");
+            com.github.catvod.crawler.SpiderDebug.log("origin-detail", "applyLoaded flags=%d %s", loadedVod.getFlags().size(), originFlags);
+        }
         brokenSources.clear();
         sourceVodName = loadedVod.getName();
         TmdbEpisodeSorter.sort(vod);
@@ -5103,6 +5112,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             return;
         }
         Flag currentFlag = findInitialFlag(flags);
+        // 原源历史里的稳定线路键来自上一次播放，可能对不上本次 worker 返回的线路顺序；
+        // 对不上时退回首条线路，绝不因此让整页变成"暂无可用选集"。
+        if (currentFlag == null && isOriginSession()) currentFlag = flags.get(0);
         selectedFlag = currentFlag;
         loadTmdbSeasonBinding();
         selectedEpisode = null;
@@ -8008,7 +8020,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         int playerKernel = inlineHistoryPlayerKernel();
         if (isOriginSession()) {
             // 原源模式：取流由原配置 worker 完成，结果经 relay 回环交给同一个内联播放器。
-            mOrigin.requestPlay(selectedFlag, selectedEpisode);
+            // 会话已被释放（原源失败/页面回收）时没有回调可等：必须明确拒绝并清掉本次等待态，
+            // 否则内联播放器永远转圈，既不取流也不给出可见失败。
+            if (mOrigin == null || !mOrigin.requestPlay(selectedFlag, selectedEpisode)) {
+                releaseInlinePlaybackPending(generation);
+                updateInlineLoading();
+                showInlineError("原源会话已结束，无法取流");
+            }
             return;
         }
         updateInlineDisplayPanel();
@@ -8140,7 +8158,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         Site site = getCurrentSite();
         ensureInlineDanmakuController();
         if (SubtitleRestoreCoordinator.restore(history, player(), result)) persistHistorySubtitleSource();
-        startPlayer(getHistoryKey(), result, useParse, site == null ? 0 : site.getTimeout(), buildMetadata());
+        // 播放键必须与原源租约的 playbackKey 一致：PlaybackService 的巡检用它与 player.getKey() 比对，
+        // 不一致会在 5s 内把刚起的原源租约释放掉，relay 端口随之注销，回环 URL 变成"外部地址"而连接失败。
+        startPlayer(getPlaybackKey(), result, useParse, site == null ? 0 : site.getTimeout(), buildMetadata());
         updateNavigationKey();
         subtitlePlaybackSession.onPlaybackStarted(this, result);
         modeController.onPlaybackStarted();

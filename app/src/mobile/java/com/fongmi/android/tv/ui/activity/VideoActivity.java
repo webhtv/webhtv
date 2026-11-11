@@ -563,6 +563,7 @@ private int mAudioBackgroundRandomNonce;
     private History mHistory;
     private OriginHistoryPlayback mOrigin;
     private boolean mOriginFallbackPending;
+    private History mOriginFallbackHistory;
     private boolean fullscreen;
     /**
      * 本页当前的画中画状态。
@@ -6905,16 +6906,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 @Override public void onOriginResult(Result result) { setPlayer(result); }
                 @Override public void onOriginFallback(History history, String reason) {
                     mOriginFallbackPending = Setting.isGlobalHistoryEnabled();
+                    mOriginFallbackHistory = history;
                     showOriginError("原源播放失败：" + reason + (mOriginFallbackPending
                             ? "，将按全局历史续播设置匹配当前源" : "，全局历史续播已关闭"));
-                    App.post(() -> {
-                        if (isFinishing() || isDestroyed()) return;
-                        HistoryResumeCoordinator.fallbackToCurrent(VideoActivity.this, history, () -> {
-                            mOriginFallbackPending = false;
-                            markPlaybackExiting();
-                            finish();
-                        });
-                    }, 2000);
+                    App.post(VideoActivity.this::dispatchOriginFallback, 2000);
                 }
                 @Override public void onOriginError(String message) {
                     showOriginError(message);
@@ -6926,6 +6921,23 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             }
         }
         return mOrigin;
+    }
+
+    /**
+     * 原源起播前失败后的全局续播派发：错误文案先留 2 秒再匹配，避免用户还没看到失败就被换页。
+     * 目标入口启动成功后才结束本页：同 key/id 的 VideoActivity 是 singleTop，先结束会把新入口变成 onNewIntent。
+     */
+    private void dispatchOriginFallback() {
+        if (isFinishing() || isDestroyed()) return;
+        // 全局续播关闭时 pending 为 false：错误页原地保留，不再触发匹配，也不再重复提示。
+        if (!mOriginFallbackPending) return;
+        History history = mOriginFallbackHistory;
+        if (history == null) return;
+        HistoryResumeCoordinator.fallbackToCurrent(this, history, () -> {
+            mOriginFallbackPending = false;
+            markPlaybackExiting();
+            finish();
+        });
     }
 
     /** 原源失败使用纯展示错误：不能复用原生 onError 的换线/换源流程。 */

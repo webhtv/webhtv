@@ -178,14 +178,31 @@ public class OriginSessionService extends Service {
             played = true;
             send(reply, request, OriginSessionContract.PLAY_READY, "", "", payload);
         } catch (OriginHistoryResolver.Failure e) {
+            android.util.Log.w("OriginSession", "play classified failure lease=" + leaseId + " reason=" + e.reason + " detail=" + e.getMessage());
             if (!closing.get()) send(reply, request, !played && OriginSessionContract.shouldFallback(e.reason) ? OriginSessionContract.UNAVAILABLE : OriginSessionContract.BLOCKED, e.reason, e.toString(), null);
         } catch (Exception e) {
+            android.util.Log.w("OriginSession", "play failed lease=" + leaseId + " generation=" + generation, e);
             if (!closing.get()) send(reply, request, OriginSessionContract.BLOCKED, OriginSessionContract.ISOLATION_ERROR, e.toString(), null);
         }
     }
 
+    /** 相对媒体地址只能相对原历史里那条绝对地址解析；解析不出来就原样返回，让后面的判定给出可见失败。 */
+    private String resolveMediaUrl(String url) {
+        if (url == null || url.startsWith("http:") || url.startsWith("https:") || url.startsWith("file:")) return url;
+        String base = history == null ? "" : history.getEpisodeUrl();
+        if (base == null || !(base.startsWith("http:") || base.startsWith("https:") || base.startsWith("file:"))) return url;
+        try {
+            return OriginMediaRelay.resolve(base, url);
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
     private Result relayResult(Result result) throws OriginHistoryResolver.Failure {
-        String url = result.getRealUrl();
+        // 相对媒体地址必须先按原历史里那条绝对地址解析：资源站返回 "/vod/xxx.m3u8" 很常见，
+        // 不解析就会以"unmapped original media scheme"拒绝一个本来可播的原源，用户看到的是播放失败。
+        String url = resolveMediaUrl(result.getRealUrl());
+        result.setUrl(url);
         String originalMediaUrl = url;
         int contentType = androidx.media3.common.util.Util.inferContentTypeForUriAndMimeType(android.net.Uri.parse(url), result.getFormat());
         if (contentType == androidx.media3.common.C.CONTENT_TYPE_HLS) result.setFormat(androidx.media3.common.MimeTypes.APPLICATION_M3U8);

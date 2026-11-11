@@ -36,6 +36,7 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.node.NodeRuntime;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.setting.TmdbSitePolicy;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.activity.SearchActivity;
 import com.fongmi.android.tv.ui.activity.TmdbDetailActivity;
@@ -82,6 +83,7 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
     @Override protected void setUp() throws Exception {
         super.setUp();
         context = getInstrumentation().getTargetContext();
+        com.fongmi.android.tv.setting.Setting.putDebugLog(true);
         fixturePreferenceFile = new File(new File(context.getApplicationInfo().dataDir, "shared_prefs"), FIXTURE_PREFS + ".xml");
         fixturePreferencesExisted = fixturePreferenceFile.isFile();
         originalFixturePreferenceBytes = fixturePreferencesExisted ? Files.readAllBytes(fixturePreferenceFile.toPath()) : null;
@@ -200,37 +202,71 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
     public void testTmdbDetailModeRoutesCrossSourceHistoryIntoTmdbDetailOnOriginLines() throws Exception {
         Config a = config("jar", "alice"), b = config("jar", "bob");
         load(a);
+        // 关键：历史里不存任何 TMDB 身份，与用户实测的设备状态一致。
         History h = history(b, "/episode/2");
-        h.setTmdbId(603);
-        h.setMediaType("tv");
-        AppDatabase.get().getHistoryDao().insertOrUpdate(h);
+        assertEquals(0, h.getTmdbId());
+        assertTrue(h.getMediaType().isEmpty());
         int originalMode = Setting.getDetailOpenMode();
         try {
             // 分流谓词必须按真实设置给出"进 TMDB 详情页"，并带上原历史的 TMDB 身份。
             Setting.putDetailOpenMode(Setting.DETAIL_OPEN_ENHANCED);
-            // 基线必须在本用例自己的设置改动之后取：改详情页模式本身就是本用例的动作，不是产品污染。
+            // 夹具 spider 的 init 会写 fixture 私有偏好；先在主进程把当前配置的站点真正跑一次，
+            // 让这次 init 落在基线之前，否则基线抓到的是"尚未 init"，之后任何一次取详情都会被误判成污染。
+            assertEquals("alice", SiteApi.detailContent(KEY, VOD).getVod().getName().split(":")[0]);
+            // 基线必须在本用例自己的设置改动与站点预热之后取。
             MainState baseline = new MainState(h);
-            assertEquals("TMDB 详情模式下跨源历史必须走详情页",
+            assertEquals("TMDB 详情模式下跨源历史必须走详情页（不看是否存过 tmdbId）",
                     OriginHistoryRoute.TMDB_DETAIL,
                     OriginHistoryRoute.describe(Setting.isTmdbDetailModeConfigured(),
-                            Setting.isStandaloneTmdbDetailMode(Setting.getDetailOpenMode()), h.getTmdbId(), h.getMediaType()));
+                            Setting.isStandaloneTmdbDetailMode(Setting.getDetailOpenMode()),
+                            TmdbSitePolicy.isEnabled(h.getSiteKey(), h.getVodId())));
             assertEquals("非 TMDB 模式必须退化为直接播放",
                     OriginHistoryRoute.DIRECT_MODE,
-                    OriginHistoryRoute.describe(Setting.isTmdbDetailModeConfigured(), false, h.getTmdbId(), h.getMediaType()));
-            assertEquals("没有 TMDB 身份必须退化",
-                    OriginHistoryRoute.DIRECT_IDENTITY,
-                    OriginHistoryRoute.describe(true, true, 0, ""));
+                    OriginHistoryRoute.describe(Setting.isTmdbDetailModeConfigured(), false, true));
 
             upstream.failSegments = false;
+            int originRequestStart = upstream.requests.size();
             Intent intent = TmdbDetailActivity.originHistoryIntent(context, h).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity = getInstrumentation().startActivitySync(intent);
             assertEquals("跨源历史在炫彩详情模式下必须进入 TMDB 详情页", TmdbDetailActivity.class.getName(), activity.getClass().getName());
-            // 详情页的线路/集数来自原配置 worker：外壳必须显示 bob 的第 2 集，而不是当前配置 alice 的内容。
+            // 详情页的线路/集数来自原配置 worker：外壳必须显示 bob 的线路与 3 集，而不是当前配置 alice 的内容。
+            // 只启动这一次：重开会把旧租约释放与新租约 open 挤在一起，且很容易让断言与点击落在不同实例上。
+            // 就绪判据必须是结构性的：正常渲染的是集号 2（EpisodeTitleFormatter 在无刮削集标题时输出数字），
+            // 不存在字面量“第2集”，用它当 ready 会永远等不到，并误点一个尚未就绪的新页面。
             AtomicReference<String> shell = new AtomicReference<>("");
-            waitUntil(() -> { main(() -> shell.set(allText(activity))); return shell.get().contains("bob") && shell.get().contains("第2集"); },
-                    30000, "TMDB detail must render the original source lines/episodes, got: " + shell.get());
-            assertFalse("原源详情页不得混入当前配置的站源 chip，got: " + shell.get(), shell.get().contains("alice"));
+            waitUntil(() -> {
+                AtomicBoolean ready = new AtomicBoolean();
+                main(() -> {
+                    shell.set(allText(activity));
+                    int[] counts = originDetailCounts(activity, context);
+                    ready.set(counts[0] >= 1 && counts[1] == 3 && counts[2] == 0);
+                });
+                return ready.get();
+            }, 90000, "the original-source lines and its 3 episodes must bind on the TMDB detail page");
+            int[] counts = new int[3];
+            main(() -> {
+                int[] current = originDetailCounts(activity, context);
+                counts[0] = current[0];
+                counts[1] = current[1];
+                counts[2] = current[2];
+            });
+            assertTrue("TMDB detail must render the original source lines/episodes, got: " + shell.get(),
+                    shell.get().contains("bob") && shell.get().contains("origin-line"));
+            assertEquals("原源线路必须有且只有 1 条", 1, counts[0]);
+            assertEquals("原源选集必须显示 3 集", 3, counts[1]);
+            assertEquals("有选集时不得显示空态占位", 0, counts[2]);
+            // 选中的必须是历史里的那一集（/episode/2，渲染为集号 2），不是列表默认的第一集。
+            AtomicReference<String> activated = new AtomicReference<>("");
+            main(() -> {
+                activated.set(activatedEpisodeTitle(activity, context));
+                com.fongmi.android.tv.bean.Episode selected = (com.fongmi.android.tv.bean.Episode) activityField(activity, "selectedEpisode");
+                assertNotNull("the detail must have a selected episode", selected);
+                assertEquals("the activated origin episode must have the exact history URL", "/episode/2", selected.getUrl());
+            });
+            assertTrue("the history episode /episode/2 must be the activated card, got: " + activated.get(),
+                    activated.get().contains("2"));
             assertEquals(b.getId(), h.getCid());
+            assertFalse("原源详情页不得混入当前配置的站源 chip，got: " + shell.get(), shell.get().contains("alice"));
             baseline.assertUnchanged(h);
 
             // 点播放：取流来自原配置 worker 的 relay，仍由同一个内联播放器真实起播。
@@ -245,6 +281,12 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
             AtomicReference<Bitmap> frame = new AtomicReference<>();
             waitUntil(() -> { Bitmap shot = getInstrumentation().getUiAutomation().takeScreenshot(); if (shot == null) return false; frame.set(shot); return coversVideoCenter(shot); }, 15000, "TMDB inline playback must show decoded pixels");
             if (frame.get() != null) frame.get().recycle();
+            // 交付集身份：worker 的真实取流必须精确命中历史里的 /episode/2（夹具对其它集返回 404）。
+            assertTrue("the origin worker must fetch exactly the bob history episode /episode/2",
+                    upstream.requests.subList(originRequestStart, upstream.requests.size()).stream().anyMatch(r ->
+                            "/player".equals(r.get("path")) && "/episode/2".equals(r.get("episode"))
+                                    && "bob".equals(r.get("account"))
+                                    && headers("bob").get("Authorization").equals(r.get("authorization"))));
             baseline.assertUnchanged(h);
             main(activity::finish);
             waitUntil(() -> processId(context.getPackageName() + ":origin") <= 0, 20000, "leaving the TMDB detail page must release the origin lease");
@@ -260,69 +302,158 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
         }
     }
 
+    public void testTmdbReleasedOriginRejectsPlayWithoutPendingOrCurrentTakeover() throws Exception {
+        Config a = config("jar", "alice"), b = config("jar", "bob");
+        load(a);
+        History h = history(b, "/episode/2");
+        Setting.putDetailOpenMode(Setting.DETAIL_OPEN_ENHANCED);
+        Setting.putGlobalHistoryMode(Setting.GLOBAL_HISTORY_AUTO);
+        assertEquals("alice", SiteApi.detailContent(KEY, VOD).getVod().getName().split(":")[0]);
+        MainState baseline = new MainState(h);
+        int originRequestStart = upstream.requests.size();
+        activity = getInstrumentation().startActivitySync(
+                TmdbDetailActivity.originHistoryIntent(context, h).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        AtomicReference<com.fongmi.android.tv.bean.Flag> flag = new AtomicReference<>();
+        AtomicReference<com.fongmi.android.tv.bean.Episode> episode = new AtomicReference<>();
+        AtomicReference<OriginHistoryPlayback> origin = new AtomicReference<>();
+        waitUntil(() -> {
+            main(() -> {
+                int[] counts = originDetailCounts(activity, context);
+                if (counts[0] != 1 || counts[1] != 3 || counts[2] != 0) return;
+                flag.set((com.fongmi.android.tv.bean.Flag) activityField(activity, "selectedFlag"));
+                episode.set((com.fongmi.android.tv.bean.Episode) activityField(activity, "selectedEpisode"));
+                origin.set((OriginHistoryPlayback) activityField(activity, "mOrigin"));
+            });
+            return flag.get() != null && episode.get() != null && origin.get() != null;
+        }, 90000, "the original-source detail and selected episode must be ready before release");
+        assertEquals("the selected origin episode must be the history URL", "/episode/2", episode.get().getUrl());
+        assertTrue("detail preparation must parse the bob history episode before release",
+                upstream.requests.subList(originRequestStart, upstream.requests.size()).stream().anyMatch(r ->
+                        "/player".equals(r.get("path")) && "/episode/2".equals(r.get("episode"))
+                                && "bob".equals(r.get("account"))
+                                && headers("bob").get("Authorization").equals(r.get("authorization"))));
+        int playerRequestsBeforeRelease = (int) upstream.requests.stream().filter(r -> "/player".equals(r.get("path"))).count();
+        main(() -> {
+            assertTrue("the original lease must be active before release", origin.get().isActive());
+            origin.get().release();
+            assertFalse("released origin must reject requests", origin.get().isActive());
+            assertFalse("the actual requestPlay must return false after release", origin.get().requestPlay(flag.get(), episode.get()));
+            assertEquals(Boolean.FALSE, activityField(activity, "inlinePlaybackPending"));
+            int playId = context.getResources().getIdentifier("play", "id", context.getPackageName());
+            assertTrue("the same detail page must expose its real play control", playId != 0);
+            assertTrue("the real play control must dispatch the click", activity.findViewById(playId).performClick());
+            System.out.println("ORIGIN_RELEASED_REJECTION rejected=true pending=" + activityField(activity, "inlinePlaybackPending"));
+            assertEquals("rejected request must clear pending instead of waiting for a missing callback",
+                    Boolean.FALSE, activityField(activity, "inlinePlaybackPending"));
+            int errorId = context.getResources().getIdentifier("playerError", "id", context.getPackageName());
+            int loadingId = context.getResources().getIdentifier("playerLoading", "id", context.getPackageName());
+            TextView error = activity.findViewById(errorId);
+            assertNotNull(error);
+            assertTrue("the rejected request must show a visible origin failure", error.isShown());
+            assertTrue("the rejected request must explain the ended origin session", error.getText().toString().contains("原源会话已结束"));
+            assertFalse("the rejected request must not leave a loading spinner", activity.findViewById(loadingId).isShown());
+            assertFalse("rejection must stay on this origin detail page", activity.isFinishing());
+        });
+        getInstrumentation().waitForIdleSync();
+        awaitWorkerGone();
+        assertEquals("rejection must not issue another origin or current-source player request", playerRequestsBeforeRelease,
+                (int) upstream.requests.stream().filter(r -> "/player".equals(r.get("path"))).count());
+        assertEquals("rejection must not start global-resume search", 0, upstream.searches.get());
+        assertEquals("rejection must not hand over to alice", 0, upstream.alicePlays.get());
+        baseline.assertUnchanged(h);
+        main(activity::finish);
+        activity = null;
+        System.out.println("ORIGIN_RELEASED_REJECTION_OK cid=" + b.getId() + " episode=/episode/2 pending=false searches=0 alicePlays=0");
+    }
+
+    private static Object activityField(Activity activity, String name) {
+        try {
+            java.lang.reflect.Field field = TmdbDetailActivity.class.getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(activity);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("read detail state " + name, e);
+        }
+    }
+
     public void testPrePlayerFailureUsesGlobalAutoSearchAndOff() throws Exception {
         Config a = config("jar", "alice"), b = config("jar", "bob");
         load(a);
+        // 夹具按账号给出详情名，而详情缓存键是 siteKey+id（不含配置）：必须先让本用例的匹配语义生效再预热，
+        // 否则预热会把 alice 名的详情写进缓存，AUTO 自动匹配随后用该缓存拒绝 bob 候选并退化成搜索框。
+        upstream.matchCurrent = true;
+        // init 写夹具账号属于当前源自身初始化，必须发生在隔离不变量基线之前。
+        assertFalse("current-source detail must load before the isolation baseline",
+                SiteApi.detailContent(KEY, VOD).getVod().getName().isEmpty());
         History h = history(b, "/episode/2");
         String targetKey = KEY + AppDatabase.SYMBOL + VOD + AppDatabase.SYMBOL + a.getId();
         ownedHistory.add(h.forPlaybackKey(targetKey, a.getId()));
         upstream.blockBobPlayer = true;
-        upstream.matchCurrent = true;
-        for (int mode : new int[]{Setting.GLOBAL_HISTORY_AUTO, Setting.GLOBAL_HISTORY_SEARCH, Setting.GLOBAL_HISTORY_OFF}) {
-            Setting.putGlobalHistoryMode(mode);
-            upstream.searches.set(0);
-            upstream.alicePlays.set(0);
-            MainState before = new MainState(h);
-            Activity originPage = getInstrumentation().startActivitySync(
-                    VideoActivity.originHistoryIntent(context, h).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            activity = originPage;
-            String targetClass = mode == Setting.GLOBAL_HISTORY_SEARCH ? SearchActivity.class.getName() : VideoActivity.class.getName();
-            Instrumentation.ActivityMonitor monitor = new Instrumentation.ActivityMonitor(targetClass, null, false);
-            getInstrumentation().addMonitor(monitor);
-            try {
-                AtomicReference<String> message = new AtomicReference<>("");
-                waitUntil(() -> {
-                    main(() -> message.set(allText(originPage)));
-                    return message.get().contains("原源播放失败") && message.get().contains("ISOLATION_ERROR");
-                }, 15000, "the pre-player worker failure must remain visibly explained on the normal shell");
-                assertFalse("do not finish the origin page before global matching has launched", originPage.isFinishing());
-                assertEquals("the explanation must appear before matching begins", 0, upstream.searches.get());
-                before.assertUnchanged(h);
-                if (mode == Setting.GLOBAL_HISTORY_OFF) {
-                    long visibleSince = SystemClock.elapsedRealtime();
-                    waitUntil(() -> SystemClock.elapsedRealtime() - visibleSince >= 2500, 4000, "observe the disabled-mode decision");
-                    assertFalse("global resume OFF must stay on the explained origin failure", originPage.isFinishing());
-                    assertEquals(0, upstream.searches.get());
-                    main(() -> message.set(allText(originPage)));
-                    assertTrue(message.get().contains("全局历史续播已关闭"));
+        // AUTO 的断言是"自动匹配后真正到达当前源播放器并起播"，判据必须与显示设置无关：
+        // 设备若处于独立 TMDB 详情模式，同一回落路径的落点会是 TmdbDetailActivity（auto_play=false，
+        // 还需用户再点一次才取流），目标页会随设备设置漂移，而产品分流本身正确。这里固定为直接播放模式，
+        // 落点即当前源播放器，退出时恢复原设置。
+        int originalDetailMode = Setting.getDetailOpenMode();
+        Setting.putDetailOpenMode(Setting.DETAIL_OPEN_DIRECT);
+        try {
+            for (int mode : new int[]{Setting.GLOBAL_HISTORY_AUTO, Setting.GLOBAL_HISTORY_SEARCH, Setting.GLOBAL_HISTORY_OFF}) {
+                Setting.putGlobalHistoryMode(mode);
+                upstream.searches.set(0);
+                upstream.alicePlays.set(0);
+                MainState before = new MainState(h);
+                Activity originPage = getInstrumentation().startActivitySync(
+                        VideoActivity.originHistoryIntent(context, h).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                activity = originPage;
+                String targetClass = mode == Setting.GLOBAL_HISTORY_SEARCH ? SearchActivity.class.getName() : VideoActivity.class.getName();
+                Instrumentation.ActivityMonitor monitor = new Instrumentation.ActivityMonitor(targetClass, null, false);
+                getInstrumentation().addMonitor(monitor);
+                try {
+                    AtomicReference<String> message = new AtomicReference<>("");
+                    waitUntil(() -> {
+                        main(() -> message.set(allText(originPage)));
+                        return message.get().contains("原源播放失败") && message.get().contains("ISOLATION_ERROR");
+                    }, 15000, "the pre-player worker failure must remain visibly explained on the normal shell");
+                    assertFalse("do not finish the origin page before global matching has launched", originPage.isFinishing());
+                    assertEquals("the explanation must appear before matching begins", 0, upstream.searches.get());
                     before.assertUnchanged(h);
-                } else {
-                    Activity target = monitor.waitForActivityWithTimeout(30000);
-                    assertNotNull("pre-player failure must launch the configured global-resume entry, mode=" + mode, target);
-                    activity = target;
-                    assertFalse("the target must no longer carry an origin-session intent", OriginHistoryPlayback.hasPayload(target.getIntent()));
-                    assertEquals("the main configuration never switches", a.getId(), VodConfig.getCid());
-                    waitUntil(() -> upstream.searches.get() > 0, 15000, "both global modes must actually search current sources");
-                    if (mode == Setting.GLOBAL_HISTORY_AUTO) {
-                        waitUntil(() -> upstream.alicePlays.get() > 0, 15000, "auto matching must reach the current-source player, not discard its async result");
-                        assertEquals(b.getId(), target.getIntent().getIntExtra("resume_history_cid", -1));
+                    if (mode == Setting.GLOBAL_HISTORY_OFF) {
+                        long visibleSince = SystemClock.elapsedRealtime();
+                        waitUntil(() -> SystemClock.elapsedRealtime() - visibleSince >= 2500, 4000, "observe the disabled-mode decision");
+                        assertFalse("global resume OFF must stay on the explained origin failure", originPage.isFinishing());
+                        assertEquals(0, upstream.searches.get());
+                        main(() -> message.set(allText(originPage)));
+                        assertTrue(message.get().contains("全局历史续播已关闭"));
+                        before.assertUnchanged(h);
                     } else {
-                        assertEquals(b.getId(), target.getIntent().getIntExtra("historyResumeCid", -1));
-                        assertEquals(a.getId(), target.getIntent().getIntExtra("historyResumeTargetCid", -1));
-                        assertEquals(h.getKey(), target.getIntent().getStringExtra("historyResumeKey"));
+                        Activity target = monitor.waitForActivityWithTimeout(30000);
+                        assertNotNull("pre-player failure must launch the configured global-resume entry, mode=" + mode, target);
+                        activity = target;
+                        assertFalse("the target must no longer carry an origin-session intent", OriginHistoryPlayback.hasPayload(target.getIntent()));
+                        assertEquals("the main configuration never switches", a.getId(), VodConfig.getCid());
+                        waitUntil(() -> upstream.searches.get() > 0, 15000, "both global modes must actually search current sources");
+                        if (mode == Setting.GLOBAL_HISTORY_AUTO) {
+                            waitUntil(() -> upstream.alicePlays.get() > 0, 15000, "auto matching must reach the current-source player, not discard its async result");
+                            assertEquals(b.getId(), target.getIntent().getIntExtra("resume_history_cid", -1));
+                        } else {
+                            assertEquals(b.getId(), target.getIntent().getIntExtra("historyResumeCid", -1));
+                            assertEquals(a.getId(), target.getIntent().getIntExtra("historyResumeTargetCid", -1));
+                            assertEquals(h.getKey(), target.getIntent().getStringExtra("historyResumeKey"));
+                        }
+                        main(target::finish);
+                        waitUntil(originPage::isFinishing, 10000, "finish the failed origin shell only after a target is launched");
                     }
-                    main(target::finish);
-                    waitUntil(originPage::isFinishing, 10000, "finish the failed origin shell only after a target is launched");
+                    main(originPage::finish);
+                    getInstrumentation().waitForIdleSync();
+                    awaitWorkerGone();
+                    activity = null;
+                    System.out.println("ORIGIN_PREPLAYER_FALLBACK_OK mode=" + mode + " searches=" + upstream.searches.get());
+                } finally {
+                    getInstrumentation().removeMonitor(monitor);
+                    main(originPage::finish);
                 }
-                main(originPage::finish);
-                getInstrumentation().waitForIdleSync();
-                awaitWorkerGone();
-                activity = null;
-                System.out.println("ORIGIN_PREPLAYER_FALLBACK_OK mode=" + mode + " searches=" + upstream.searches.get());
-            } finally {
-                getInstrumentation().removeMonitor(monitor);
-                main(originPage::finish);
             }
+        } finally {
+            Setting.putDetailOpenMode(originalDetailMode);
         }
     }
 
@@ -540,6 +671,47 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
         return text.toString();
     }
 
+    /**
+     * 原源 TMDB 详情页的结构就绪判据，返回 {线路 chip 数, 可见选集数, 空态占位是否可见(1/0)}。
+     * 用视图结构而不是文案：集标题会随 TMDB 刮削设置变成“2”或刮削名，文案判据会误报。
+     */
+    /**
+     * 详情页当前激活（选中）的选集卡片文本：enhanced 模式用描边 2 标记激活项，
+     * native-enhanced 模式用 ACTIVE_STROKE_DP 的描边宽度，两者都满足 strokeWidth > 1。
+     */
+    private String activatedEpisodeTitle(Activity activity, Context context) {
+        int episodeId = context.getResources().getIdentifier("episodeContainer", "id", context.getPackageName());
+        android.view.View view = activity.findViewById(episodeId);
+        if (!(view instanceof androidx.recyclerview.widget.RecyclerView)) return "";
+        androidx.recyclerview.widget.RecyclerView list = (androidx.recyclerview.widget.RecyclerView) view;
+        for (int i = 0; i < list.getChildCount(); i++) {
+            android.view.View child = list.getChildAt(i);
+            if (!(child instanceof com.google.android.material.card.MaterialCardView)) continue;
+            if (((com.google.android.material.card.MaterialCardView) child).getStrokeWidth() <= 1) continue;
+            StringBuilder text = new StringBuilder();
+            collectText(child, text);
+            return text.toString();
+        }
+        return "";
+    }
+
+    private static int[] originDetailCounts(Activity activity, Context context) {
+        int flagId = context.getResources().getIdentifier("flagContainer", "id", context.getPackageName());
+        int episodeId = context.getResources().getIdentifier("episodeContainer", "id", context.getPackageName());
+        int emptyId = context.getResources().getIdentifier("episodeEmpty", "id", context.getPackageName());
+        android.view.View flagView = activity.findViewById(flagId);
+        android.view.View episodeView = activity.findViewById(episodeId);
+        android.view.View emptyView = activity.findViewById(emptyId);
+        int flags = flagView instanceof android.view.ViewGroup ? ((android.view.ViewGroup) flagView).getChildCount() : 0;
+        int episodes = 0;
+        if (episodeView instanceof androidx.recyclerview.widget.RecyclerView && episodeView.getVisibility() == android.view.View.VISIBLE) {
+            androidx.recyclerview.widget.RecyclerView list = (androidx.recyclerview.widget.RecyclerView) episodeView;
+            episodes = list.getAdapter() == null ? 0 : list.getAdapter().getItemCount();
+        }
+        boolean empty = emptyView != null && emptyView.getVisibility() == android.view.View.VISIBLE;
+        return new int[]{flags, episodes, empty ? 1 : 0};
+    }
+
     private static void collectText(android.view.View view, StringBuilder text) {
         if (view instanceof TextView) text.append(((TextView) view).getText()).append('|');
         if (view instanceof android.view.ViewGroup) {
@@ -699,7 +871,7 @@ public class OriginIsolationPlaybackTest extends junit.framework.TestCase {
         FixtureServer(File root){super("127.0.0.1",0);files=root;}
         String base(){return "http://127.0.0.1:"+getListeningPort();}
         @Override public Response serve(IHTTPSession request){try{
-            String uri=request.getUri();Map<String,String> observed=new LinkedHashMap<>(request.getHeaders());observed.put("path",uri);requests.add(observed);
+            String uri=request.getUri();Map<String,String> observed=new LinkedHashMap<>(request.getHeaders());observed.put("path",uri);observed.put("episode",Objects.toString(request.getParms().get("episode"),""));observed.put("account",Objects.toString(request.getParms().get("account"),""));requests.add(observed);
             if(uri.equals("/redirect")){Response r=newFixedLengthResponse(Response.Status.FOUND,"text/plain","");r.addHeader("Location",base()+"/media-fixture/master.m3u8");return r;}
             boolean protectedPath=uri.startsWith("/media-fixture/")||uri.equals("/detail")||uri.equals("/player")||uri.equals("/search");
             String account=request.getParms().getOrDefault("account","bob");
