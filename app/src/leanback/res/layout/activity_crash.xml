@@ -3,8 +3,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/grey_800"
+    android:fitsSystemWindows="true"
     android:gravity="center"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:padding="24dp">
 
     <androidx.appcompat.widget.AppCompatImageView
         android:layout_width="wrap_content"
@@ -13,25 +15,30 @@
         android:src="@drawable/customactivityoncrash_error_image" />
 
     <com.google.android.material.textview.MaterialTextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginStart="40dp"
+        android:layout_marginTop="24dp"
+        android:layout_marginEnd="40dp"
         android:gravity="center"
         android:lineSpacingExtra="4dp"
         android:text="@string/crash_info"
         android:textColor="@color/white"
-        android:textSize="16sp" />
+        android:textSize="18sp" />
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/restart"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="24dp"
         android:background="@drawable/selector_button"
         android:focusable="true"
         android:focusableInTouchMode="true"
+        android:paddingHorizontal="32dp"
+        android:paddingVertical="12dp"
         android:text="@string/crash_restart"
-        android:textColor="@color/white" />
+        android:textColor="@color/white"
+        android:textSize="16sp" />
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/details"
@@ -41,7 +48,10 @@
         android:background="@drawable/selector_button"
         android:focusable="true"
         android:focusableInTouchMode="true"
+        android:paddingHorizontal="32dp"
+        android:paddingVertical="12dp"
         android:text="@string/crash_details"
-        android:textColor="@color/white" />
+        android:textColor="@color/white"
+        android:textSize="16sp" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

@@ -324,9 +324,9 @@
     <string name="personal_recommendation_confirm_message">Personal recommendations read movie and show titles from local viewing history, and may send the current title and history titles to TMDB or Douban as search keywords to build related lists.\n\nPlayback URLs, account information, source configuration, and playback progress are not sent. You can turn this off at any time.</string>
     <string name="setting_search_thread">Search threads</string>
     <string name="setting_search_ui">Search layout</string>
-    <string name="setting_search_column">Search results per row</string>
+    <string name="setting_search_column">Search results mode</string>
+    <string name="setting_search_result_sort">Sort search result</string>
     <string name="setting_site_column">Site display mode</string>
-    <string name="setting_search_result_sort">Search result mode</string>
     <string name="repo_github">GitHub repository</string>
     <string name="repo_cnb">CNB repository</string>
     <string name="setting_debug_log">Debug log</string>
@@ -1042,7 +1042,7 @@
     <string name="theme_import_no_warnings">Only supported color roles will be imported.</string>
     <string name="theme_import_warnings">Import warnings:\n%1$s</string>
     <string name="setting_appearance">Appearance &amp; language</string>
-    <string name="setting_appearance_summary">5 options</string>
+    <string name="setting_appearance_summary">6 options</string>
     <string name="setting_auto">Auto</string>
     <string name="setting_custom">Custom</string>
     <string name="setting_language">Language</string>

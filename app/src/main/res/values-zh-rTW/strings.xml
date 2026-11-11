@@ -293,9 +293,9 @@
     <string name="personal_recommendation_confirm_title">啟用個性推薦</string>
     <string name="personal_recommendation_confirm_message">個性推薦會讀取本機觀看歷史中的影片名稱，並可能將當前影片名和歷史影片名作為搜尋關鍵詞發送到 TMDB 或豆瓣，用於生成相關作品列表。\n\n不會發送播放地址、帳號資訊、站源配置或播放進度。你可以隨時關閉此功能。</string>
     <string name="setting_search_ui">搜尋佈局</string>
-    <string name="setting_search_column">搜尋結果列數</string>
+    <string name="setting_search_column">搜尋結果模式</string>
+    <string name="setting_search_result_sort">搜尋結果排序</string>
     <string name="setting_site_column">站點展示模式</string>
-    <string name="setting_search_result_sort">搜尋結果模式</string>
     <string name="repo_github">GitHub 倉庫</string>
     <string name="repo_cnb">CNB 倉庫</string>
     <string name="setting_debug_log">調試日誌</string>
@@ -994,7 +994,7 @@
     <string name="theme_import_no_warnings">只會匯入支援的顏色角色。</string>
     <string name="theme_import_warnings">匯入提示：\n%1$s</string>
     <string name="setting_appearance">外觀與語言</string>
-    <string name="setting_appearance_summary">5 項</string>
+    <string name="setting_appearance_summary">6 項</string>
     <string name="setting_auto">自動</string>
     <string name="setting_custom">自訂</string>
     <string name="setting_language">語言</string>

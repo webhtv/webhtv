@@ -5015,7 +5015,7 @@ private boolean runtimeSourceOnly;
         mBinding.video.requestFocus();
         mBinding.video.setForeground(null);
         mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
-        mBinding.flag.setSelectedPosition(mFlagAdapter.getPosition());
+        if (mFlagAdapter != null) mBinding.flag.setSelectedPosition(mFlagAdapter.getPosition());
         mKeyDown.setFull(true);
         setFullscreen(true);
         mFocus2 = null;

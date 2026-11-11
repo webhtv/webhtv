@@ -321,9 +321,9 @@
     <string name="personal_recommendation_confirm_message">个性推荐会读取本机观看历史中的影片名称，并可能将当前影片名和历史影片名作为搜索关键词发送到 TMDB 或豆瓣，用于生成相关作品列表。\n\n不会发送播放地址、账号信息、站源配置或播放进度。你可以随时关闭此功能。</string>
     <string name="setting_search_thread">搜索线程</string>
     <string name="setting_search_ui">搜索布局</string>
-    <string name="setting_search_column">搜索结果列数</string>
+    <string name="setting_search_column">搜索结果模式</string>
+    <string name="setting_search_result_sort">搜索结果排序</string>
     <string name="setting_site_column">站点展示模式</string>
-    <string name="setting_search_result_sort">搜索结果模式</string>
     <string name="repo_github">GitHub 仓库</string>
     <string name="repo_cnb">CNB 仓库</string>
     <string name="setting_debug_log">调试日志</string>
@@ -1038,7 +1038,7 @@
     <string name="theme_import_no_warnings">只会导入支持的颜色角色。</string>
     <string name="theme_import_warnings">导入提示：\n%1$s</string>
     <string name="setting_appearance">外观与语言</string>
-    <string name="setting_appearance_summary">5 项</string>
+    <string name="setting_appearance_summary">6 项</string>
     <string name="setting_auto">自动</string>
     <string name="setting_custom">自定义</string>
     <string name="setting_language">语言</string>

@@ -135,4 +135,9 @@
     -->
     <color name="tmdb_douban_rating_green">#78E08F</color>
     <color name="epg_date">#8AB4F8</color>
+    <!-- Theme.Crash / activity_crash.xml 引用的颜色 -->
+    <color name="grey_200">#EEEEEE</color>
+    <color name="grey_700">#616161</color>
+    <color name="grey_800">#424242</color>
+ 
 </resources>
