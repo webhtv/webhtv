@@ -40,28 +40,6 @@ public class UpdateChannelTest {
     }
 
     @Test
-    public void releaseWorkflowPublishesManifestsToFixedChannelRelease() throws Exception {
-        String workflow = read(findRepoPath().resolve(Path.of(".github", "workflows", "android-release.yml")));
-        String publishStep = between(workflow, "- name: Publish update channel manifests", "- name: Sync to CNB");
-
-        assertTrue("The workflow should reserve a fixed release tag for channel manifests",
-                workflow.contains("UPDATE_CHANNEL_TAG: update-channel"));
-        assertTrue("Future deadline regressions must block a release",
-                workflow.contains("--tests 'com.fongmi.android.tv.UpdaterFutureTest'"));
-        assertTrue("Both update channels must remain visible in mobile and TV release builds",
-                workflow.contains("--tests 'com.fongmi.android.tv.ui.dialog.UpdateDialogChannelVisibilityTest'"));
-        assertTrue("TV release builds must verify that update actions stay inside the dialog window",
-                workflow.contains(":app:testLeanbackArm64_v8aDebugUnitTest")
-                        && workflow.contains("--tests 'com.fongmi.android.tv.ui.dialog.UpdateDialogLayoutTest'"));
-        assertTrue("The fixed channel release must be a prerelease so it cannot replace the stable latest release",
-                publishStep.contains("--prerelease"));
-        assertTrue("The fixed channel release should be seeded with the other channel when it already exists",
-                publishStep.contains("gh release download \"$OTHER_TAG\""));
-        assertTrue("Every release should replace the complete stable/beta channel manifest set",
-                publishStep.contains("gh release upload \"$UPDATE_CHANNEL_TAG\" channel-manifests/*.json --clobber"));
-    }
-
-    @Test
     public void releaseWorkflowSerializesUpdatesToTheSharedChannelRelease() throws Exception {
         String workflow = read(findRepoPath().resolve(Path.of(".github", "workflows", "android-release.yml")));
 
@@ -73,7 +51,7 @@ public class UpdateChannelTest {
     public void releaseWorkflowCanRepairAnExistingReleaseOnRetry() throws Exception {
         String workflow = read(findRepoPath().resolve(Path.of(".github", "workflows", "android-release.yml")));
         String resolveStep = between(workflow, "- name: Resolve release tag", "- name: Configure release signing");
-        String releaseStep = between(workflow, "- name: Create GitHub Release", "- name: Publish update channel manifests");
+        String releaseStep = between(workflow, "- name: Create GitHub Release", "- name: Sync to CNB");
 
         assertFalse("An existing tag at the same commit should be reusable",
                 resolveStep.contains("Release tag exists::$TAG already exists"));
