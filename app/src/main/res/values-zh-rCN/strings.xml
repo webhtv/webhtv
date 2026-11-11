@@ -3063,7 +3063,7 @@
     <string name="plugin_manager_entry_meta">版本 %1$s · 运行时 %2$s · %3$s</string>
     <string name="plugin_manager_params">参数</string>
     <string name="plugin_manager_params_title">“%1$s”的参数</string>
-    <string name="plugin_manager_params_hint">JSON 对象，例如 {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
+    <string name="plugin_manager_params_hint">JSON 对象，例如 {\&quot;DOUBAN_TOKEN\&quot;:\&quot;abc\&quot;}</string>
     <string name="plugin_manager_params_invalid">参数必须是 JSON 对象</string>
     <string name="plugin_manager_params_too_large">参数量超出保存上限</string>
     <string name="plugin_manager_remote_import">从地址导入</string>
@@ -3103,4 +3103,5 @@
     <string name="plugin_manager_perm_events">播放事件（plugin.events）</string>
     <string name="plugin_manager_perm_episode_data">剧集数据（plugin.data.episode）</string>
     <string name="plugin_panel_title">插件面板</string>
+    <string name="crash_action_failed">操作失败，请重试。</string>
 </resources>

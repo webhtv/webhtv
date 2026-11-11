@@ -69,6 +69,10 @@
         </provider>
 
         <provider
+            android:name="cat.ereza.customactivityoncrash.CaocInitProvider"
+            tools:node="remove" />
+
+        <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
@@ -87,6 +91,7 @@
 
         <activity
             android:name=".ui.activity.CrashActivity"
+            android:exported="false"
             android:process=":error_activity"
             android:theme="@style/Theme.Crash" />
 

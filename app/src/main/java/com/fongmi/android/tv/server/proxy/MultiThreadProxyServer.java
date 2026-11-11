@@ -7,22 +7,32 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.net.Proxy;
 import java.net.Socket;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import fi.iki.elonen.NanoHTTPD;
+import okhttp3.OkHttpClient;
 
 public final class MultiThreadProxyServer extends NanoHTTPD implements AutoCloseable {
 
@@ -30,6 +40,7 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
     public static final String HEALTH_PATH = "/v1/health";
     public static final String CAPABILITIES_PATH = "/v1/capabilities";
     public static final String PROXY_PATH = "/v1/proxy";
+    public static final String PUBLIC_PATH = "/proxy";
     public static final String STREAM_PATH_PREFIX = ProxyTargetRegistry.STREAM_PATH_PREFIX;
     public static final String TOKEN_HEADER = "X-WebHtv-Proxy-Token";
     public static final int UNBOUND_PORT = -1;
@@ -44,6 +55,9 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
     private final ProxySessionRegistry sessions;
     private final ProxyTargetRegistry targets;
     private final UpstreamRangeClient upstream;
+    private final UpstreamRangeClient publicUpstream;
+    private final UpstreamUrlGuard guard;
+    private final Semaphore publicRequests;
     private final SegmentedRangeEngine rangeEngine;
     private final ThreadPoolExecutor streamWorkers;
     private final long configRevision;
@@ -83,6 +97,17 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
             long configRevision,
             UpstreamRangeClient upstream,
             ProxyDomainRuleSet domainRules) {
+        this(config, capabilityToken, configRevision, upstream, domainRules, UpstreamUrlGuard.PUBLIC_ONLY, null);
+    }
+
+    MultiThreadProxyServer(
+            ProxyRuntimeConfig config,
+            ProxyCapabilityToken capabilityToken,
+            long configRevision,
+            UpstreamRangeClient upstream,
+            ProxyDomainRuleSet domainRules,
+            UpstreamUrlGuard guard,
+            OkHttpClient publicClient) {
         super(LOOPBACK_HOST, listeningPort(config));
         this.config = config;
         this.domainRules = domainRules == null ? ProxyDomainRuleSet.EMPTY : domainRules;
@@ -90,6 +115,10 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
         this.sessions = new ProxySessionRegistry(config.maxSessions());
         this.targets = new ProxyTargetRegistry();
         this.upstream = upstream;
+        this.guard = Objects.requireNonNull(guard, "guard");
+        this.publicUpstream = new UpstreamRangeClient(
+                publicClient == null ? buildPublicClient(config, guard) : publicClient, config, guard);
+        this.publicRequests = new Semaphore(Math.max(0, config.serverWorkers() - 1));
         this.rangeEngine = new SegmentedRangeEngine(config, upstream, sessions);
         this.streamWorkers = new ThreadPoolExecutor(
                 0,
@@ -133,6 +162,7 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
         sessions.close();
         rangeEngine.close();
         upstream.close();
+        publicUpstream.close();
         streamWorkers.shutdownNow();
         stop();
     }
@@ -173,6 +203,7 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
         if (HEALTH_PATH.equals(uri)) return serveHealth(session);
         if (CAPABILITIES_PATH.equals(uri)) return serveCapabilities(session);
         if (PROXY_PATH.equals(uri)) return serveProxy(session);
+        if (PUBLIC_PATH.equals(uri)) return servePublicProxy(session);
         if (uri != null && uri.startsWith(STREAM_PATH_PREFIX)) return serveStream(session, uri);
         return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
     }
@@ -183,6 +214,122 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
         String target = session.getParms().get("url");
         if (target == null || target.isBlank()) return error(Response.Status.BAD_REQUEST, "Missing upstream URL");
         return serveTarget(session, target.trim(), session.getHeaders());
+    }
+
+    private Response servePublicProxy(IHTTPSession session) {
+        if (!supportsReadMethod(session)) return methodNotAllowed();
+        // Origin and Sec-Fetch headers keep other pages out; the Host check keeps a DNS-rebinding
+        // page from addressing this listener under a foreign authority.
+        if (!ProxyClientOriginPolicy.allows(session.getHeaders())) return forbidden();
+        if (!allowsPublicAuthority(session)) return forbidden();
+        for (String key : List.of("url", "thread", "shards", "chunkSize")) {
+            List<String> values = session.getParameters().get(key);
+            if (values != null && values.size() > 1) return error(Response.Status.BAD_REQUEST, "Invalid parameters");
+        }
+        final ProxyRequestOverrides overrides;
+        final String target;
+        final ProxyRuntimeConfig sessionConfig;
+        try {
+            overrides = ProxyRequestOverrides.parse(session.getParms());
+            String value = session.getParms().get("url");
+            if (value == null || value.isBlank()) return error(Response.Status.BAD_REQUEST, "Missing upstream URL");
+            target = value.trim();
+            UpstreamRangeClient.requireHttpUrl(target);
+            sessionConfig = overrides.applyTo(domainRules.resolveForPublic(target, config));
+            if (overrides.rangeConcurrency() != null && overrides.rangeConcurrency() > config.rangeWorkers()) {
+                throw new IllegalArgumentException("thread exceeds range workers");
+            }
+            if (overrides.chunkSizeBytes() != null
+                    && overrides.chunkSizeBytes() > sessionConfig.bufferBudgetBytes() / sessionConfig.maxSessions()) {
+                throw new IllegalArgumentException("chunkSize exceeds session buffer");
+            }
+            ProxyRuntimeConfigValidator.requireValid(sessionConfig);
+        } catch (IllegalArgumentException e) {
+            return error(Response.Status.BAD_REQUEST, "Invalid upstream request");
+        }
+        if (!publicRequests.tryAcquire()) return serviceUnavailable();
+        try {
+            final Response response;
+            try {
+                guard.check(target);
+                response = serveTarget(session, target, session.getHeaders(), sessionConfig, publicUpstream, 1, true);
+            } catch (IOException e) {
+                return releasePublicRequest(error(Response.Status.BAD_REQUEST, "Invalid upstream request"));
+            }
+            return releasePublicRequest(response);
+        } catch (RuntimeException | Error e) {
+            publicRequests.release();
+            throw e;
+        }
+    }
+
+    private Response releasePublicRequest(Response response) {
+        InputStream delegate = response.getData();
+        response.setData(new InputStream() {
+            private final AtomicBoolean closed = new AtomicBoolean();
+
+            @Override
+            public int read() throws IOException {
+                return delegate.read();
+            }
+
+            @Override
+            public int read(byte[] bytes, int offset, int length) throws IOException {
+                return delegate.read(bytes, offset, length);
+            }
+
+            @Override
+            public void close() throws IOException {
+                if (!closed.compareAndSet(false, true)) return;
+                try {
+                    delegate.close();
+                } finally {
+                    publicRequests.release();
+                }
+            }
+        });
+        return response;
+    }
+
+    private boolean allowsPublicAuthority(IHTTPSession session) {
+        String host = header(session, "Host");
+        if (host == null) return false;
+        try {
+            URI authority = new URI("http://" + host);
+            if ((!LOOPBACK_HOST.equalsIgnoreCase(authority.getHost())
+                    && !"localhost".equalsIgnoreCase(authority.getHost()))
+                    || authority.getPort() != actualPort || authority.getRawUserInfo() != null
+                    || !authority.getRawPath().isEmpty() || authority.getRawQuery() != null
+                    || authority.getRawFragment() != null) return false;
+            String origin = header(session, "Origin");
+            if (origin == null) return true;
+            URI source = new URI(origin.trim());
+            return "http".equalsIgnoreCase(source.getScheme())
+                    && authority.getHost().equalsIgnoreCase(source.getHost()) && source.getPort() == actualPort;
+        } catch (URISyntaxException e) {
+            return false;
+        }
+    }
+
+    private static Response forbidden() {
+        return error(Response.Status.FORBIDDEN, "Forbidden");
+    }
+
+    static OkHttpClient buildPublicClient(ProxyRuntimeConfig config, UpstreamUrlGuard guard) {
+        return new OkHttpClient.Builder()
+                .proxy(Proxy.NO_PROXY)
+                .dns(host -> {
+                    try {
+                        return Arrays.asList(guard.resolve(host));
+                    } catch (IOException e) {
+                        UnknownHostException blocked = new UnknownHostException("blocked upstream target");
+                        blocked.initCause(e);
+                        throw blocked;
+                    }
+                })
+                .connectTimeout(config.connectTimeoutMillis(), TimeUnit.MILLISECONDS)
+                .readTimeout(config.readTimeoutMillis(), TimeUnit.MILLISECONDS)
+                .build();
     }
 
     private Response serveStream(IHTTPSession session, String uri) {
@@ -199,17 +346,28 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
             IHTTPSession session,
             String target,
             Map<String, String> requestHeaders) {
+        return serveTarget(session, target, requestHeaders, domainRules.resolve(target, config), upstream, 0, false);
+    }
+
+    private Response serveTarget(
+            IHTTPSession session,
+            String target,
+            Map<String, String> requestHeaders,
+            ProxyRuntimeConfig sessionConfig,
+            UpstreamRangeClient requestUpstream,
+            int reservedSlots,
+            boolean closeDataOnSend) {
         if (!supportsReadMethod(session)) return methodNotAllowed();
         String range = header(session, "Range");
         if (session.getMethod() == Method.HEAD || range == null || range.isBlank()) {
-            return serveSingleConnection(session, target, requestHeaders, range);
+            return serveSingleConnection(
+                    session, target, requestHeaders, range, requestUpstream, reservedSlots, closeDataOnSend);
         }
 
         final StreamingTransfer transfer;
         final SegmentedRangeEngine.TransferResult prepared;
         try {
-            ProxyRuntimeConfig sessionConfig = domainRules.resolve(target, config);
-            transfer = new StreamingTransfer(target, requestHeaders, range, sessionConfig);
+            transfer = new StreamingTransfer(target, requestHeaders, range, sessionConfig, requestUpstream, reservedSlots);
             prepared = transfer.awaitPrepared();
         } catch (RejectedExecutionException e) {
             return serviceUnavailable();
@@ -220,11 +378,12 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
         }
 
         if (prepared.decision() == SegmentedRangeEngine.Decision.PARALLEL) {
-            return parallelResponse(transfer, prepared);
+            return parallelResponse(transfer, prepared, closeDataOnSend);
         }
         transfer.close();
         if (prepared.decision() == SegmentedRangeEngine.Decision.FALLBACK_SINGLE_CONNECTION) {
-            return serveSingleConnection(session, target, requestHeaders, range);
+            return serveSingleConnection(
+                    session, target, requestHeaders, range, requestUpstream, reservedSlots, closeDataOnSend);
         }
         return switch (prepared.decision()) {
             case UNSATISFIABLE -> rangeNotSatisfiable(prepared.totalLength());
@@ -240,10 +399,13 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
             IHTTPSession session,
             String target,
             Map<String, String> requestHeaders,
-            String range) {
+            String range,
+            UpstreamRangeClient requestUpstream,
+            int reservedSlots,
+            boolean closeDataOnSend) {
         final UpstreamRangeClient.SingleRequest request;
         try {
-            request = upstream.singleRequest(
+            request = requestUpstream.singleRequest(
                     target,
                     requestHeaders,
                     range,
@@ -252,7 +414,7 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
             return error(Response.Status.BAD_REQUEST, "Invalid upstream request");
         }
 
-        Optional<ProxySessionRegistry.Lease> acquired = sessions.tryAcquire(request::cancel);
+        Optional<ProxySessionRegistry.Lease> acquired = sessions.tryAcquire(request::cancel, reservedSlots);
         if (acquired.isEmpty()) {
             request.cancel();
             return serviceUnavailable();
@@ -269,8 +431,8 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
                     upstreamResponse,
                     lease);
             Response response = upstreamResponse.contentLength() >= 0
-                    ? newFixedLengthResponse(status, mime, stream, upstreamResponse.contentLength())
-                    : newChunkedResponse(status, mime, stream);
+                    ? relayResponse(closeDataOnSend, status, mime, stream, upstreamResponse.contentLength())
+                    : relayChunkedResponse(closeDataOnSend, status, mime, stream);
             copyRelayHeader(response, upstreamResponse, "Content-Range");
             copyRelayHeader(response, upstreamResponse, "Accept-Ranges");
             copyRelayHeader(response, upstreamResponse, "ETag");
@@ -293,19 +455,40 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
         if (value != null && !value.isBlank()) response.addHeader(name, value);
     }
 
+    private static Response relayResponse(
+            boolean closeDataOnSend,
+            Response.IStatus status,
+            String mime,
+            InputStream stream,
+            long length) {
+        return closeDataOnSend
+                ? new CloseOnSendResponse(status, mime, stream, length)
+                : newFixedLengthResponse(status, mime, stream, length);
+    }
+
+    private static Response relayChunkedResponse(
+            boolean closeDataOnSend,
+            Response.IStatus status,
+            String mime,
+            InputStream stream) {
+        Response response = closeDataOnSend
+                ? new CloseOnSendResponse(status, mime, stream, -1L)
+                : newChunkedResponse(status, mime, stream);
+        response.setChunkedTransfer(true);
+        return response;
+    }
+
     private static Response parallelResponse(
             StreamingTransfer transfer,
-            SegmentedRangeEngine.TransferResult prepared) {
+            SegmentedRangeEngine.TransferResult prepared,
+            boolean closeDataOnSend) {
         long length = prepared.endInclusive() - prepared.startInclusive() + 1;
         UpstreamRangeClient.ProbeResult probe = prepared.probe();
         String mime = probe.contentType() == null || probe.contentType().isBlank()
                 ? "application/octet-stream"
                 : probe.contentType();
-        Response response = newFixedLengthResponse(
-                Response.Status.PARTIAL_CONTENT,
-                mime,
-                transfer,
-                length);
+        Response response = relayResponse(
+                closeDataOnSend, Response.Status.PARTIAL_CONTENT, mime, transfer, length);
         response.addHeader("Accept-Ranges", "bytes");
         response.addHeader("Content-Range", "bytes " + prepared.startInclusive() + "-"
                 + prepared.endInclusive() + "/" + prepared.totalLength());
@@ -481,17 +664,20 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
         private final PipedOutputStream output;
         private final CompletableFuture<SegmentedRangeEngine.TransferResult> prepared = new CompletableFuture<>();
         private final AtomicBoolean closed = new AtomicBoolean();
+        private final AtomicReference<Runnable> cancellation = new AtomicReference<>();
         private volatile Future<?> task;
 
         private StreamingTransfer(
                 String target,
                 Map<String, String> headers,
                 String range,
-                ProxyRuntimeConfig sessionConfig) throws IOException {
+                ProxyRuntimeConfig sessionConfig,
+                UpstreamRangeClient requestUpstream,
+                int reservedSlots) throws IOException {
             input = new PipedInputStream(PIPE_BUFFER_BYTES);
             output = new PipedOutputStream(input);
             try {
-                task = streamWorkers.submit(() -> runTransfer(target, headers, range, sessionConfig));
+                task = streamWorkers.submit(() -> runTransfer(target, headers, range, sessionConfig, requestUpstream, reservedSlots));
             } catch (RejectedExecutionException e) {
                 close();
                 throw e;
@@ -502,7 +688,9 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
                 String target,
                 Map<String, String> headers,
                 String range,
-                ProxyRuntimeConfig sessionConfig) {
+                ProxyRuntimeConfig sessionConfig,
+                UpstreamRangeClient requestUpstream,
+                int reservedSlots) {
             try (PipedOutputStream sink = output) {
                 SegmentedRangeEngine.TransferResult result = rangeEngine.transfer(
                         target,
@@ -510,7 +698,14 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
                         range,
                         sink,
                         sessionConfig,
-                        prepared::complete);
+                        prepared::complete,
+                        requestUpstream,
+                        reservedSlots,
+                        cancel -> {
+                            if (reservedSlots == 0) return;
+                            cancellation.set(cancel);
+                            if (closed.get()) cancel.run();
+                        });
                 prepared.complete(result);
             } catch (Throwable failure) {
                 prepared.completeExceptionally(failure);
@@ -561,8 +756,34 @@ public final class MultiThreadProxyServer extends NanoHTTPD implements AutoClose
                 output.close();
             } catch (IOException ignored) {
             }
+            Runnable cancel = cancellation.get();
+            if (cancel != null) cancel.run();
             Future<?> current = task;
             if (current != null) current.cancel(true);
+        }
+    }
+
+    // Close when sending finishes or fails. A stalled upstream body is bounded by the existing
+    // client read timeout; a downstream reset alone cannot interrupt a pending upstream read.
+    private static final class CloseOnSendResponse extends Response {
+
+        private CloseOnSendResponse(IStatus status, String mimeType, InputStream data, long totalBytes) {
+            super(status, mimeType, data, totalBytes);
+        }
+
+        @Override
+        protected void send(OutputStream outputStream) {
+            try {
+                super.send(outputStream);
+            } finally {
+                InputStream data = getData();
+                if (data != null) {
+                    try {
+                        data.close();
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
         }
     }
 

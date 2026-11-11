@@ -6,7 +6,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -146,8 +145,18 @@ public final class DanmakuTitle {
 
     /** 按集数对弹幕列表排序（升序，无法解析集数的排末尾）。 */
     public static void sortByEpisode(List<Danmaku> items) {
+        sortByEpisode(items, false);
+    }
+
+    public static void sortByEpisode(List<Danmaku> items, boolean reverse) {
         if (items == null || items.size() <= 1) return;
-        Collections.sort(items, Comparator.comparingInt(DanmakuTitle::getEpisode));
+        Collections.sort(items, (left, right) -> {
+            int leftEpisode = getEpisode(left);
+            int rightEpisode = getEpisode(right);
+            if (leftEpisode == EPISODE_UNKNOWN || rightEpisode == EPISODE_UNKNOWN)
+                return Integer.compare(leftEpisode, rightEpisode);
+            return reverse ? Integer.compare(rightEpisode, leftEpisode) : Integer.compare(leftEpisode, rightEpisode);
+        });
     }
 
     /** 归一化搜索文本：去 from/括号/年份/空白，小写。 */

@@ -34,9 +34,11 @@ import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.provider.SubtitleProviderRegistry;
 import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.utils.CrashReport;
 import com.fongmi.android.tv.utils.DanmakuSearchListFocusFixer;
 import com.fongmi.android.tv.utils.NsdDeviceDiscovery;
 import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.PreviousProcessCrashRecovery;
 import com.fongmi.android.tv.utils.PreviousProcessExitLogger;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.WebViewDataDirectoryGuard;
@@ -62,6 +64,9 @@ public class App extends Application implements Application.ActivityLifecycleCal
     private volatile int foregroundActivities;
     private volatile Context originContext;
     private Hook hook;
+    private volatile boolean lightweightProcess = true;
+    /** Only the crash page process skips language resources; recovery helpers keep the old path. */
+    private volatile boolean crashPageProcess;
 
     /** 同一语言上语言更新连续失败的次数上限，超过后放弃该语言，避免热路径无限重试。 */
     private static final int MAX_RESOURCES_APPLY_ATTEMPTS = 3;
@@ -126,7 +131,16 @@ public class App extends Application implements Application.ActivityLifecycleCal
         super.attachBaseContext(base);
         // 原源子进程必须先被识别：它的私有 Context 只在租约 open 时安装，此前不得做任何主进程初始化。
         if (com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.identify(base)) return;
-        if (PlaybackRecoveryMonitor.isRecoveryProcess(base)) return;
+        boolean errorProcess = CrashReport.isErrorProcess(base);
+        crashPageProcess = errorProcess;
+        lightweightProcess = errorProcess || PlaybackRecoveryMonitor.isRecoveryProcess(base);
+        if (lightweightProcess) {
+            if (errorProcess) Init.set(base);
+            return;
+        }
+        CrashReport.install(base);
+        // Helper processes must not publish recovery state on behalf of the default process.
+        if (CrashReport.isMainProcess(base)) PreviousProcessCrashRecovery.initialize(base);
         WebViewDataDirectoryGuard.clearStaleLock(base);
         Init.set(base);
     }
@@ -196,7 +210,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     public void onCreate() {
         super.onCreate();
         if (com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()) return;
-        if (PlaybackRecoveryMonitor.isRecoveryProcess(this)) return;
+        if (lightweightProcess) return;
         PlaybackMemoryMonitor.process().initialize(this);
         PlaybackSystemConditionMonitor.process().initialize(this);
         Setting.applyLanguage();
@@ -271,13 +285,13 @@ public class App extends Application implements Application.ActivityLifecycleCal
 
     @Override
     public void onTrimMemory(int level) {
-        if (!com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker() && !PlaybackRecoveryMonitor.isRecoveryProcess(this)) PlaybackMemoryMonitor.process().onTrimMemory(level);
+        if (!lightweightProcess && !com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()) PlaybackMemoryMonitor.process().onTrimMemory(level);
         super.onTrimMemory(level);
     }
 
     @Override
     public void onLowMemory() {
-        if (!com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker() && !PlaybackRecoveryMonitor.isRecoveryProcess(this)) PlaybackMemoryMonitor.process().onLowMemory();
+        if (!lightweightProcess && !com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()) PlaybackMemoryMonitor.process().onLowMemory();
         super.onLowMemory();
     }
 
@@ -355,6 +369,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     @SuppressWarnings("deprecation")
     public Resources getResources() {
+        if (crashPageProcess) return super.getResources();
         int language = Setting.getLanguage();
         Resources cached = resources;
         if (cached != null && resourcesLanguage == language) return cached;

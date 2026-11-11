@@ -5120,6 +5120,14 @@ C3 的触发来源主要是 media `990abc2368fd74779f525ee345734470659f3d53`（`
 - 未执行：设备端实测（面板 X/Y 实际数值、退出播放后 EXO 目录收缩、PiP 下插件 chip 闪烁），本机无连接设备。
 - 下一动作：提交推送 `dev2` 并向 `beta` 提 PR，随后拉取远端最新。
 
+## C123：本机公共多线程代理接口（2026-11-09）
+
+- 任务记录：[C123-public-proxy-api.md](C123-public-proxy-api.md)。用户已批准实施；复用现有控制栏多线程引擎，新增本机免 Token /proxy 与请求级 thread/shards/chunkSize(KiB)，应用后台服务期间自动监听但播放器自动代理默认不变。
+- 范围：App Java代理模块及测试；不引入Go/JNI，不修改native/播放器依赖。原实施阶段不推送；用户本次已允许dev4 push、中文PR到beta及最终pull，当前尚未执行。
+- 当前状态：原公共接口任务已提交 `b60a3952d26df2b2786c026a1df1c469dd17cdd6`，annotated标签 `recovery/C123-public-proxy-api/20261110012924-b60a3952d26d`，原guard已闭环。当前beta合并MERGE_HEAD `bf0f23c9326de676812334ad4b96d9b5e52c0335`、HEAD未变，guard `C123-beta-review-dev4-20261110`活跃，合并未提交；文档冲突双方已保留，现仅文档收口。
+- 本次评审/验证：Standards硬违规0、Spec必修0；冻结tree `5c9217207b75d142835ef2e0e4b0eae40b2e0304`，双端arm64 Debug Java编译与测试真实执行，leanback353/mobile297 tests均0失败/错误/跳过。QuickJS编译缓存及native/assemble/设备/真实TLS/吞吐未验边界，详见 [C123-public-proxy-api.md](C123-public-proxy-api.md) 当前记录；与dev1同步任务 [C123-upstream-sync-silent1566.md](C123-upstream-sync-silent1566.md) 区分。
+- 当前下一动作：仅等待协调者独立文档复审；通过后由协调者执行当前guard finish、dev4 push、中文PR到beta及最终pull；不重开原公共接口guard、不重复已成功构建/测试、不预填新交付坐标。
+
 ## 检查点 67：2026-11-09 C123 dev1 合并 Silent1566 最新窄修复
 
 - 恢复锚点：唯一任务记录 [C123-upstream-sync-silent1566.md](C123-upstream-sync-silent1566.md)；本地原基线 `e00f1e862dfd4aef0051190cccc723377999ecc9`，共同祖先 `47454687f504955775b398905ba09d73aeb9f20c`；目标 `webhtv/webhtv:Silent1566@fbe5fe91db9ba41fd380929ebc039a699dba463b`。

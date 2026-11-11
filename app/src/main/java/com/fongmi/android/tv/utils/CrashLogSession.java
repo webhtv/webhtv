@@ -1,6 +1,8 @@
 package com.fongmi.android.tv.utils;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 
 import com.github.catvod.crawler.DebugLogStore;
 
@@ -33,9 +35,15 @@ public final class CrashLogSession {
         prepared = true;
         try {
             boolean temporary = DebugLogStore.beginCrashSession();
+            String history = PreviousProcessCrashRecovery.getRecoveryDetails(intentOf(context));
+            int historyPid = historyPid(history);
             String report = CrashReport.readRecent(context);
-            List<String> logcat = logcatTail(CrashLogText.reportPid(report));
-            String body = CrashLogText.composeSession(report, logcat, logcat != null && !logcat.isEmpty(), report != null, !temporary);
+            int reportPid = CrashLogText.reportPid(report);
+            // A report written by a Java fatal handler is only this entry's evidence when the entry
+            // itself is that Java death; a platform recovery has no report of its own.
+            if (discardReport(history, report)) report = null;
+            List<String> logcat = logcatTail(historyPid > 0 ? historyPid : reportPid);
+            String body = withHistory(CrashLogText.composeSession(report, logcat, logcat != null && !logcat.isEmpty(), report != null, !temporary), history);
             for (String line : body.split("\n", -1)) {
                 if (!line.isEmpty()) DebugLogStore.appendCrashContext(line);
             }
@@ -46,6 +54,59 @@ public final class CrashLogSession {
                 // The debug service still starts; the page then reports the original state.
             }
         }
+    }
+
+    /** The crash screen passes itself; its intent carries the recovery history of this entry. */
+    private static Intent intentOf(Context context) {
+        return context instanceof Activity ? ((Activity) context).getIntent() : null;
+    }
+
+    /**
+     * Whether the recent report belongs to a different death than this entry.
+     *
+     * <p>A Java fatal handoff keeps a report only when its reliable event identity matches. A
+     * platform recovery (CRASH/CRASH_NATIVE/ANR) produced no Java report at all: a report left by an
+     * older Java death must not be presented as its evidence even when the pid was reused, and an
+     * unprovable identity is never mixed in. Without a history the recent report stays as before.
+     */
+    static boolean discardReport(String history,String report) {
+        if(history==null || history.isEmpty() || report==null || report.isEmpty()) return false;
+        String event=metadata(history,"event");
+        return !"JAVA_FATAL".equals(metadata(history,"reason")) || event.isEmpty()
+                || !event.equals(metadata(report,"event"))
+                || !metadata(history,"process").equals(metadata(report,"process"));
+    }
+
+    private static String metadata(String text,String key) {
+        for(String line:text.split("\n")) {
+            if(line.startsWith("---")) break;
+            if(line.startsWith(key+"=")) return line.substring(key.length()+1);
+            if(line.startsWith("reason=")) break;
+        }
+        return "";
+    }
+    private static int historyPid(String history) {
+        if (history == null) return -1;
+        for (String line : history.split("\n")) {
+            if (!line.startsWith("pid=")) continue;
+            try {
+                return Integer.parseInt(line.substring(4).trim());
+            } catch (NumberFormatException ignored) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    private static String withHistory(String body, String history) {
+        if (history == null || history.isEmpty()) return body;
+        List<String> lines = new ArrayList<>();
+        String[] existing = body.split("\n", -1);
+        lines.add(existing.length > 0 ? existing[0] : "");
+        lines.add("# === previous process recovery ===");
+        for (String line : history.split("\n")) if (!line.isEmpty()) lines.add(line);
+        for (int i = 1; i < existing.length; i++) lines.add(existing[i]);
+        return String.join("\n", lines);
     }
 
     private static List<String> logcatTail(int pid) {

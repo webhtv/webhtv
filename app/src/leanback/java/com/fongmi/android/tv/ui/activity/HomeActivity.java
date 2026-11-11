@@ -81,6 +81,7 @@ import com.fongmi.android.tv.ui.presenter.ProgressPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.CrashRestartMode;
+import com.fongmi.android.tv.utils.PreviousProcessCrashRecovery;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -644,6 +645,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void checkAction(Intent intent) {
+        PreviousProcessCrashRecovery.checkBeforeConfig(this, () -> handleAction(intent));
+    }
+
+    private void handleAction(Intent intent) {
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             VideoActivity.push(this, intent.getStringExtra(Intent.EXTRA_TEXT));
         } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
@@ -760,6 +765,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void initConfig() {
+        PreviousProcessCrashRecovery.checkBeforeConfig(this, this::loadConfig);
+    }
+
+    private void loadConfig() {
         if (CrashRestartMode.consume()) {
             SpiderDebug.log("startup", "skip config load once after crash restart");
             showContent();
@@ -1611,6 +1620,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     protected void onDestroy() {
+        PreviousProcessCrashRecovery.release(this);
         invalidatePendingFocusRequests();
         if (mFolder != null) mFolder.clearContentFocusRequest();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);

@@ -1,11 +1,13 @@
 package com.fongmi.android.tv.utils;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.Process;
 import android.os.SystemClock;
 import android.util.Log;
 
+import com.fongmi.android.tv.ui.activity.CrashActivity;
 import com.github.catvod.crawler.DebugLogStore;
 
 import java.io.ByteArrayOutputStream;
@@ -19,15 +21,9 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.Locale;
+import java.util.function.BiConsumer;
 
-/**
- * Writes the crash facts from the dying process and hands them to the crash screen process.
- *
- * <p>CustomActivityOnCrash starts the error activity in a separate {@code :error_activity}
- * process and kills the crashing process, so nothing in memory survives. The report is the only
- * hand-off channel; it is written best-effort and must never take over process termination from
- * the configured crash handler.
- */
+/** Writes Java fatal facts and explicitly hands off to the isolated recovery process. */
 public final class CrashReport {
 
     private static final String DIRECTORY = "crash";
@@ -41,35 +37,92 @@ public final class CrashReport {
     private CrashReport() {
     }
 
-    /**
-     * Chain a crash writer in front of the configured handler (CustomActivityOnCrash). Idempotent.
-     *
-     * <p>Order matters: CAOC's normal crash path shows the error activity and kills the process
-     * without calling the handler it wrapped, so this writer must be the outermost handler.
-     * CAOC installs itself from {@code CaocInitProvider} with {@code initOrder="101"}, which runs
-     * before androidx.startup's {@code InitializationProvider}; this call from {@code Startup}
-     * therefore lands on top of CAOC's handler. Do not move it earlier, and do not let the provider
-     * order change: the report would silently stop being written while everything else kept working.
-     */
-    public static void install(Context context) {
-        if (installed) return;
+    /** Installed from App.attachBaseContext, before providers and business initialization. */
+    public static synchronized void install(Context context) {
+        if (installed || isErrorProcess(context)) return;
         Context app = application(context);
         if (app == null) return;
-        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
-        if (previous == null) return;
         try {
-            Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
-                try {
-                    write(app, thread, error);
-                } catch (Throwable ignored) {
-                    // A report failure must not change crash handling.
-                } finally {
-                    previous.uncaughtException(thread, error);
-                }
-            });
+            Thread.setDefaultUncaughtExceptionHandler(new FatalHandler(
+                    (thread, error) -> write(app, thread, error),
+                    (thread, error) -> launchRecovery(app, error),
+                    CrashReport::terminateProcess));
             installed = true;
         } catch (RuntimeException ignored) {
-            // Very early startup may refuse handler changes; the crash screen then falls back to logcat.
+            // Very early startup may refuse handler replacement; the recovery gate still runs.
+        }
+    }
+
+    public static boolean isErrorProcess(Context context) {
+        return processName().endsWith(":error_activity");
+    }
+
+    /** True only for the default process, which owns cross-process recovery state. */
+    public static boolean isMainProcess(Context context) {
+        try {
+            android.content.pm.ApplicationInfo info = context.getApplicationInfo();
+            String expected = info == null ? null : info.processName;
+            if (expected == null || expected.isEmpty()) expected = context.getPackageName();
+            return expected != null && !expected.isEmpty() && expected.equals(processName());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static void launchRecovery(Context context, Throwable error) {
+        Intent intent = new Intent(context, CrashActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        String details = "Java fatal exception (details unavailable)";
+        try {
+            String stack = error == null ? "" : Log.getStackTraceString(error);
+            if (stack != null && !stack.isEmpty()) details = stack;
+        } catch (Throwable ignored) {
+        }
+        if (details.length() > 64 * 1024) details = details.substring(0, 64 * 1024);
+        intent.putExtra("cat.ereza.customactivityoncrash.EXTRA_STACK_TRACE", details);
+        try {
+            PreviousProcessCrashRecovery.decorateJavaCrashIntent(context, intent);
+        } catch (Throwable ignored) {
+        }
+        context.startActivity(intent);
+    }
+
+    private static void terminateProcess() {
+        try {
+            Process.killProcess(Process.myPid());
+        } finally {
+            System.exit(10);
+        }
+    }
+
+    static final class FatalHandler implements Thread.UncaughtExceptionHandler {
+        private final BiConsumer<Thread, Throwable> report;
+        private final BiConsumer<Thread, Throwable> handoff;
+        private final Runnable terminate;
+        private boolean handling;
+
+        FatalHandler(BiConsumer<Thread, Throwable> report, BiConsumer<Thread, Throwable> handoff, Runnable terminate) {
+            this.report = report;
+            this.handoff = handoff;
+            this.terminate = terminate;
+        }
+
+        @Override
+        public synchronized void uncaughtException(Thread thread, Throwable error) {
+            if (handling) return;
+            handling = true;
+            try {
+                try {
+                    report.accept(thread, error);
+                } catch (Throwable ignored) {
+                }
+                try {
+                    handoff.accept(thread, error);
+                } catch (Throwable ignored) {
+                }
+            } finally {
+                terminate.run();
+            }
         }
     }
 
@@ -79,7 +132,7 @@ public final class CrashReport {
         if (directory == null) return false;
         String report;
         try {
-            report = CrashLogText.format(facts(thread, error));
+            report = withIdentity(CrashLogText.format(facts(thread, error)), PreviousProcessCrashRecovery.javaEvent(context));
         } catch (Throwable ignored) {
             return false;
         }
@@ -103,6 +156,10 @@ public final class CrashReport {
         return true;
     }
 
+    static String withIdentity(String report,String event) {
+        int newline=report.indexOf('\n');
+        return report.substring(0,newline+1)+"event="+event+"\n"+report.substring(newline+1);
+    }
     /** Newest report written by the just-crashed process, or null when absent/stale/unreadable. */
     public static String readRecent(Context context) {
         File[] files = reports(context);

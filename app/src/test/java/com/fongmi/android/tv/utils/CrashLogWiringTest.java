@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.utils;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -13,13 +14,16 @@ import java.nio.file.Path;
 public class CrashLogWiringTest {
 
     @Test
-    public void crashWriterIsInstalledRightAfterTheCrashHandlerConfiguration() throws Exception {
+    public void crashWriterIsInstalledBeforeStartupProviders() throws Exception {
+        String app = read("app/src/main/java/com/fongmi/android/tv/App.java");
         String startup = read("app/src/main/java/com/fongmi/android/tv/Startup.java");
-        int config = startup.indexOf("CaocConfig.Builder.create()");
-        int install = startup.indexOf("CrashReport.install(context)");
-
-        assertTrue("Startup must install the crash report writer", install >= 0);
-        assertTrue("the writer must wrap the handler installed by CustomActivityOnCrash", config >= 0 && install > config);
+        int attach = app.indexOf("protected void attachBaseContext");
+        int install = app.indexOf("CrashReport.install(base)", attach);
+        int initialize = app.indexOf("PreviousProcessCrashRecovery.initialize(base)", attach);
+        int mainOnly = app.indexOf("CrashReport.isMainProcess(base)", install);
+        assertTrue("fatal routing must cover provider/Application startup", install > attach && initialize > install);
+        assertTrue("recovery state must be published only by the default process", mainOnly > install && mainOnly < initialize);
+        assertFalse("Startup must not install over the early handler", startup.contains("CrashReport.install(context)"));
     }
 
     @Test
@@ -99,8 +103,69 @@ public class CrashLogWiringTest {
         }
     }
 
+    @Test
+    public void javaRecoveryKeepsTheReportOfTheSameDeath() {
+        assertFalse("a Java fatal handoff writes the report of this very death",
+                CrashLogSession.discardReport(javaHistory(42), report(42)));
+        assertTrue("a report of another death must not be presented as this entry's evidence",
+                CrashLogSession.discardReport(javaHistory(42), report(7).replace("event=java:test","event=java:other")));
+        assertTrue("an unprovable Java identity must not mix another report in",
+                CrashLogSession.discardReport(javaHistory(0).replace("event=java:test\n",""), report(7)));
+        assertFalse("without a history the recent report is the only evidence, as before",
+                CrashLogSession.discardReport(null, report(7)));
+    }
+
+    @Test
+    public void platformRecoveryNeverBorrowsAnOlderJavaReport() {
+        for (String reason : new String[]{"CRASH", "CRASH_NATIVE", "ANR"}) {
+            assertTrue("a " + reason + " entry has no report of its own, even when the pid was reused",
+                    CrashLogSession.discardReport(exitHistory(reason, 42), report(42)));
+        }
+        assertTrue("an unknown platform identity must not be relabelled as this entry's report",
+                CrashLogSession.discardReport(exitHistory("CRASH_NATIVE", -1), report(7)));
+    }
+
+    private static String javaHistory(int pid) {
+        return "# Java fatal recovery\nevent=java:test\nprocess=actual.main\npid=" + pid + "\ntimestamp=1\nreason=JAVA_FATAL\nstack";
+    }
+
+    private static String exitHistory(String reason, int pid) {
+        return "# previous-process-recovery v1\nprocess=actual.main\npid=" + pid
+                + "\ntimestamp=1\nreason=" + reason + "\nstatus=0\n";
+    }
+
+    private static String report(int pid) {
+        return "# webhtv crash report\nevent=java:test\nprocess=actual.main\npid=" + pid + "\n";
+    }
+
     private static String read(String file) throws Exception {
         Path root = Files.exists(Path.of("app")) ? Path.of("") : Path.of("..");
         return Files.readString(root.resolve(file), StandardCharsets.UTF_8).replace("\r\n", "\n");
+    }
+    @Test public void reusedPidCannotAssociateDifferentJavaEvents() {
+        String a = javaHistory(42).replace("event=java:test", "event=java:A");
+        String b = report(42).replace("event=java:test","event=java:B");
+        assertTrue("B report must not enter A page just because pid matches", CrashLogSession.discardReport(a,b));
+        assertTrue("legacy report without identity is not attributed", CrashLogSession.discardReport(a,report(42).replace("event=java:test\n","")));
+        assertTrue("legacy history without identity is not attributed", CrashLogSession.discardReport(javaHistory(42).replace("event=java:test\n",""),b));
+        assertFalse(CrashLogSession.discardReport(a,report(42).replace("event=java:test","event=java:A")));
+    }
+    @Test public void writerAndHandoffShareOneRunTokenWithMetadataBeforeLargeBody() throws Exception {
+        java.lang.reflect.Field run = PreviousProcessCrashRecovery.class.getDeclaredField("run");
+        run.setAccessible(true);
+        Object previous = run.get(null);
+        try {
+            run.set(null,new CrashRecoveryState.Run("shared-token",42,100,"actual.main"));
+            String writer = PreviousProcessCrashRecovery.javaEvent(null);
+            String handoff = PreviousProcessCrashRecovery.javaEvent(null);
+            assertEquals("java:shared-token",writer);
+            assertEquals(writer,handoff);
+            String report = CrashReport.withIdentity("# report\nprocess=actual.main\n--- stack ---\n"+"x".repeat(200000),writer);
+            assertTrue(report.startsWith("# report\nevent=java:shared-token\n"));
+            String source = read("app/src/main/java/com/fongmi/android/tv/utils/CrashReport.java");
+            assertTrue(source.contains("withIdentity(CrashLogText.format(facts(thread, error)), PreviousProcessCrashRecovery.javaEvent(context))"));
+            source = read("app/src/main/java/com/fongmi/android/tv/utils/PreviousProcessCrashRecovery.java");
+            assertTrue(source.contains("String event = javaEvent(app)"));
+        } finally { run.set(null,previous); }
     }
 }
