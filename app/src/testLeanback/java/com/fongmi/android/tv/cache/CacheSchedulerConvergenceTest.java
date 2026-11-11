@@ -59,6 +59,8 @@ public class CacheSchedulerConvergenceTest {
         CleanupShadow.throwOnExecute = false;
         PlayerShadow.playing = false;
         CenterShadow.notified = false;
+        CenterShadow.throwOnQuota = false;
+        InventoryShadow.throwOnScan = false;
         InventoryShadow.snapshot = snapshot(200, 0);
         CachePolicyStore.putTotalLimitBytes(100);
     }
@@ -124,6 +126,86 @@ public class CacheSchedulerConvergenceTest {
         assertEquals(0L, CacheScheduler.blockedOverBytes());
     }
 
+    @Test public void raisingLimitWithInitialScanFailureClearsBlockedOnce() {
+        prepareRaisedLimit();
+        InventoryShadow.throwOnScan = true;
+        int[] calls = {0};
+        scheduler.convergeNow(() -> calls[0]++);
+        executor.drain();
+        assertFinishedWithoutBlocked(calls);
+        assertNull(CleanupShadow.callback);
+    }
+
+    @Test public void raisingLimitWithConvergenceExceptionClearsBlockedOnce() {
+        prepareRaisedLimit();
+        CleanupShadow.throwOnExecute = true;
+        int[] calls = {0};
+        scheduler.convergeNow(() -> calls[0]++);
+        executor.drain();
+        assertFinishedWithoutBlocked(calls);
+    }
+
+    @Test public void raisingLimitWithInitialSubmissionRejectedClearsBlockedOnce() {
+        prepareRaisedLimit();
+        executor.reject = true;
+        int[] calls = {0};
+        scheduler.convergeNow(() -> calls[0]++);
+        assertFinishedWithoutBlocked(calls);
+    }
+
+    @Test public void raisingLimitWithVerificationScanFailureClearsBlockedOnce() {
+        int[] calls = startRaisedLimitCleanup();
+        InventoryShadow.throwOnScan = true;
+        CleanupShadow.callback.accept(result(CacheCleanupStatus.COMPLETED));
+        ShadowLooper.idleMainLooper();
+        assertEquals("must wait for queued verification", 0, calls[0]);
+        executor.drain();
+        assertFinishedWithoutBlocked(calls);
+    }
+
+    @Test public void raisingLimitWithVerificationSubmissionRejectedClearsBlockedOnce() {
+        int[] calls = startRaisedLimitCleanup();
+        executor.reject = true;
+        CleanupShadow.callback.accept(result(CacheCleanupStatus.COMPLETED));
+        CleanupShadow.callback.accept(result(CacheCleanupStatus.COMPLETED));
+        assertFinishedWithoutBlocked(calls);
+    }
+
+    @Test public void raisingLimitWithVerificationExceptionClearsBlockedOnce() {
+        int[] calls = startRaisedLimitCleanup();
+        CenterShadow.throwOnQuota = true;
+        CleanupShadow.callback.accept(result(CacheCleanupStatus.COMPLETED));
+        ShadowLooper.idleMainLooper();
+        assertEquals("must wait for queued verification", 0, calls[0]);
+        assertThrows(IllegalStateException.class, executor::drain);
+        assertFinishedWithoutBlocked(calls);
+    }
+
+    private void prepareRaisedLimit() {
+        settle(150, 150, result(CacheCleanupStatus.COMPLETED));
+        assertEquals(50L, CacheScheduler.blockedOverBytes());
+        CachePolicyStore.putTotalLimitBytes(256);
+        InventoryShadow.snapshot = snapshot(300, 0);
+        CleanupShadow.callback = null;
+    }
+
+    private int[] startRaisedLimitCleanup() {
+        prepareRaisedLimit();
+        int[] calls = {0};
+        scheduler.convergeNow(() -> calls[0]++);
+        executor.drain();
+        ShadowLooper.idleMainLooper();
+        assertEquals("must not finish when cleanup only starts", 0, calls[0]);
+        assertNotNull(CleanupShadow.callback);
+        return calls;
+    }
+
+    private void assertFinishedWithoutBlocked(int[] calls) {
+        ShadowLooper.idleMainLooper();
+        assertEquals("finished must run exactly once", 1, calls[0]);
+        assertEquals("failed measurement cannot prove the old limit is blocked", 0L,
+                CacheScheduler.blockedOverBytes());
+    }
     @Test public void deferredCancelledOrFailedCleanupIsNotPermanentProtection() {
         for (CacheCleanupStatus status : List.of(CacheCleanupStatus.DEFERRED,
                 CacheCleanupStatus.CANCELLED, CacheCleanupStatus.FAILED,
@@ -230,14 +312,21 @@ public class CacheSchedulerConvergenceTest {
         @Implementation protected void onCreate() { }
     }
     @Implements(CacheCenter.class) public static class CenterShadow {
-        static boolean notified;
+        static boolean notified, throwOnQuota;
         @Implementation protected void requestSnapshot(boolean force, Consumer<CacheSnapshot> callback) { }
-        @Implementation protected long systemQuotaBytes() { return 1000; }
+        @Implementation protected long systemQuotaBytes() {
+            if (throwOnQuota) throw new IllegalStateException("quota fixture");
+            return 1000;
+        }
         @Implementation protected void notifyChanged() { notified = true; }
     }
     @Implements(CacheInventory.class) public static class InventoryShadow {
         static CacheSnapshot snapshot;
-        @Implementation protected CacheSnapshot scan() { return snapshot; }
+        static boolean throwOnScan;
+        @Implementation protected CacheSnapshot scan() {
+            if (throwOnScan) throw new IllegalStateException("inventory fixture");
+            return snapshot;
+        }
     }
     @Implements(CacheCleanupManager.class) public static class CleanupShadow {
         static Consumer<CacheCleanupResult> callback;

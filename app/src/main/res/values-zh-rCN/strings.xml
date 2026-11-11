@@ -3105,4 +3105,5 @@
     <string name="plugin_manager_perm_events">播放事件（plugin.events）</string>
     <string name="plugin_manager_perm_episode_data">剧集数据（plugin.data.episode）</string>
     <string name="plugin_panel_title">插件面板</string>
+    <string name="crash_action_failed">操作失败，请重试。</string>
 </resources>

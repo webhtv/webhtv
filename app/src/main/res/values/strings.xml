@@ -3112,4 +3112,5 @@
     <string name="plugin_manager_perm_events">Playback events (plugin.events)</string>
     <string name="plugin_manager_perm_episode_data">Episode data (plugin.data.episode)</string>
     <string name="plugin_panel_title">Plugin panel</string>
+    <string name="crash_action_failed">Action failed. Please try again.</string>
 </resources>

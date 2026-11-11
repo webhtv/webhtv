@@ -122,3 +122,35 @@
 - 已发现且已路由风险：插件审计静默清空（修正收敛计划排除）、TTL 内插件 HTTP 缓存清空（同上）、提高总限后持久 blocked 误报（两个提前返回前失效并补红绿回归），全部修复后两轴复审放行。原裸字符串扫描的二进制/文档示例误报改为行首真实冲突标记扫描，未删除无关内容。既有 Windows symlink skip 已由用户明确接受环境例外。
 - 守卫晚于 merge 启动的流程偏差已如实记录；补启动仅收编本次 14 合并产物和任务文档，基线 HEAD 与 dev3 未变，276 个预存脏文件受指纹保护；finish 将执行最终范围/保护文件检查，不把预存文件纳入提交。未改 native、ABI、锁文件、依赖与构建配置。
 - 回滚：用 git revert -m 1 <Task-Guard: C128 的合并提交>；恢复标签 recovery/C128/<timestamp>-<commit-prefix> 由同次守卫创建。没有使用 reset --hard、改写历史或远端发布。
+
+## 本次 dev3 同步冻结 beta 与发布边界（2026-11-11，集成 run1 / run2）
+
+- **最新用户授权覆盖范围**：原“不推送、不开 PR”是前次 C128 本地交付的历史边界，原记录保留。本次用户已另行授权通过验收后提交/恢复标签、推送 dev3、创建中文 PR 到 beta、最后 pull；不得强推、重写历史或直接合并 PR。本执行轮不 commit/tag/push/PR/fetch/pull，必须等待协调者独立验收及两轴 run2 后由协调者 finish。
+- 冻结源 `origin/beta=4038aab74959f763a80cdc132a6da72b4a3e314c`；目标 `dev3/HEAD=6e97bff395af855b774cc2c41c6b53150abd7e6d`；`origin/dev3=7f8e1a966b6ff44c254eecec9ba657b9517aae50`；HEAD/beta 各 3 提交分叉。未拉取新的 refs，也不把冻结源称为此刻远端最新。
+- 初始 tracked clean；276 个预存未跟踪路径（含 .tmp-*、.design-evidence、%SystemDrive% 等）均不收编。简报预计22条 beta 增量，实际 `git diff --name-only HEAD...4038aab74959f763a80cdc132a6da72b4a3e314c` 为21条；协调者确认按实际21+C128文件声明22条 scope，不凑数。首次 Count 预检 exit1 位于任何 mutation 之前。
+- 本次先用 Git Bash `G:\Git\bin\bash.exe` 启动 `task_guard start --id C128-beta-dev3-20261111 --mode standard`，对22个精确路径逐一 scope，无 adopt；exit0，保护276。随后 `git merge --no-ff --no-commit 4038aab74959f763a80cdc132a6da72b4a3e314c` exit0，无冲突，unmerged0。文档改动前真实 index `write-tree=2c0a9579dc58b758e8f9e7bdb80a4b5bf6f79edf` 精确等于预演；HEAD未变、MERGE_HEAD为冻结 beta。
+- 协调者因前次审查快照缺失，对本地C128全部15路径与本次beta覆盖重新进行独立双轴审查，而非只依赖旧结论。两轴及协调者确认 P2：提高总限后，首扫/复扫失败、converge异常或executor拒绝仍保留旧持久blocked，面板把未知状态误报为当前永久超限。发现后明确路由 run2 返工，不以原测试绿色掩盖。
+
+### run1 实际验证（环境失败，不是通过）
+
+- 联合 Gradle：12:26:48–12:38:31 +08:00，exit1，`BUILD FAILED in 11m 42s`。Mobile Java已执行；Leanback dataBinding写全局 build-cache 超时，Owner PID45684 / Our PID32596，锁 `G:\GradleCache\caches\build-cache-1\build-cache-1.lock`；只读确认另一个 webtv2 工作区使用该 daemon，没有杀其他任务或修改全局配置。
+- 缓存/crash测试未执行；run1保存的35份缓存XML是历史报告，`xml_all_fresh=false`，不能用旧 Mobile97/Leanback109计数宣称此轮通过。完整日志、退出时间与 source_before/after 位于 `app/build/c128-beta-evidence/`；原采集进程丢失后仅重新附着原 cmd PID26160收集退出码，没有重复启动Gradle。
+
+### run2 守卫、因果与真实 RED / GREEN
+
+- 扩scope前两个cache文件 blob仍精确等于预演T：scheduler `e5993aea2f32f3c745bd10d887ab4d1489be8d05`、现有ConvergenceTest `074ccbc221d867da936e017a8d83c3c30c537b7f`。原 guard check exit0；随后 abort仅归档状态，不丢merge/worktree；同 id/standard 重start exit0，scope24（原22加scheduler与现有testLeanback回归），adopt仅21个本任务merge路径，C128此时clean不adopt，276预存路径继续保护。未改变双父合并、HEAD/MERGE_HEAD。
+- 先仅测试新增6项行为回归，建立旧100限/protected150→blocked50，再提高256，分别模拟初扫失败、converge异常、首次提交拒绝、复扫失败、复扫提交拒绝、复扫执行异常。使用现有shadow/QueueExecutor，仅增加失败开关；验证旧blocked必须失效、finished恰好一次且不早于异步验证，未加production test hook。
+- **RED**：12:50:33–12:56:41 +08:00，`--no-build-cache --offline` 定向 `CacheSchedulerConvergenceTest`，exit1 / BUILD FAILED 6m3s；18项/6失败/0错误/0跳过，六项均为 `expected:<0> but was:<50>`，生产仍上述原blob。红XML和完整日志原样保存于 `app/build/c128-beta-evidence/run2-red/`。
+- 最小生产修复仅 `CacheScheduler.submitConvergence`：每次新测量开始、任何fallible工作之前清除上一次blocked；首次executor拒绝也失效旧值。合法本次测量仍可recordBlocked，保留播放/忙碌保护、never-evict排除、cleanup等级与AtomicBoolean恰好一次/异步完成时序。不在getter读盘，不修改其他生产逻辑。
+- **GREEN**：12:57:55–13:00:37 +08:00，一次联合双端Java与全部cache/crash定向测试，exit0 / BUILD SUCCESSFUL 2m41s；测试与两条 `compile*Arm64_v8aDebugJavaWithJavac` 均实际执行。Mobile25类175项（cache97+crash78）=174通过/0失败/0错误/1跳过；Leanback25类186项（cache115+crash71）=185通过/0失败/0错误/1跳过。新增ConvergenceTest18项全通过，原合法protected与可重试行为保留。
+- 两端唯一skip仍为用户前次已接受的 `CachePathSafetyTest.finalComponentSymlinkIsStillDetected`；原因 `File.getCanonicalFile() does not follow symbolic links on this host`，未修改/排除用例，不伪称0跳过。50份新鲜GREEN XML原样快照、逐类计数/skip信息、完整日志、JDK21/本机SDK信息及源指纹位于 `app/build/c128-beta-evidence/run2-green/`。source_before/after完全一致。
+- 为避免已证实的跨工作区cache锁，run2仅在命令中增加 `--no-build-cache`，不改仓库构建脚本、依赖或全局配置；继续复用既有ignored `c128-offline.init.gradle` / `c128-robolectric-offline`，JDK21通过JAVA_HOME由gradlew.bat调用。run2使用2/3次Gradle（RED一次、GREEN联合一次），不重复成功检查。
+
+### 未验边界、回滚和唯一下一步
+
+- 未进行native/其他ABI矩阵、设备安装运行、恢复页按钮/渲染、OEM平台历史/summary及真实跨进程ack验证；真实缓存owner写入竞态、性能压力仍未验证。不把静态/JVM/Gradle通过称为设备或完整性能保证。原有Room/API/unchecked/resource与Gradle兼容性警告不在本轮顺手修复。
+- 当前未提交；回滚锚点仍为 dev3/6e97bff395af855b774cc2c41c6b53150abd7e6d，未提交状态如需撤销须由协调者明确授权安全处理，禁止reset/stash；验收后生成合并提交才能使用 `git revert -m 1 <真实合并提交>`，不写尚不存在的commit/tag/PR坐标。
+- **最终独立验收（本次 beta 发布门）**：协调者已实际读取集成报告、候选树 `72c6bbaf0389405c45ae4ba1a3ef380d9aef6b25`（本行收口前）、修复补丁、RED/GREEN 日志与新鲜 XML、最终守卫 PASS 和两轴 run2 报告。Standards：S1/P2 addressed，硬违反/可信缺陷/启发式新增均0；Spec：S-P2-1 addressed，缺失/越界/新增错误实现均0；最终开放缺陷0。源代码与 GREEN 指纹相同，本次只追加该验收记录，不重复成功构建。
+- **风险路由结果**：旧评审缺少完整快照，已重审全部15个净差异文件和合并交互；失败/拒绝后的旧 blocked 误报已最小修复并有6项真实红绿回归；跨工作区构建缓存锁已仅用本次 `--no-build-cache` 参数绕过；两端各1项既有 Windows symlink 跳过继续按已接受的平台例外记实，未改断言。没有未处理的本次新增确定缺陷，前述设备/真实 owner 竞态/性能及历史风险边界仍保留。
+- **交付决定**：本次最新用户授权仍为合入 beta、提交恢复标签、推送 dev3、具体中文 PR 到 beta、最后拉取；不强推、不直接合并 PR、不删除276个预存路径。发布前只读核验远端 beta/dev3 仍分别为上述冻结4038aab7/7f8e1a96。实际提交、恢复标签、PR及最终拉取结果由执行输出和最终摘要报告，不为回填坐标制造第二个文档提交。
+- **唯一下一步**：发布执行者通过当前 `C128-beta-dev3-20261111` 守卫 finish 原子关闭本任务并立即建立 annotated recovery 标签，随后仅推送 dev3 与本次新标签，创建或更新中文 dev3→beta PR，最后 `git pull --ff-only origin dev3`；若直接操作失败，只定位该原因，不改写历史或将失败说成完成。

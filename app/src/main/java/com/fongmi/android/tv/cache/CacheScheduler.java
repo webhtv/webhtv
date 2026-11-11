@@ -168,6 +168,8 @@ public final class CacheScheduler {
             executor.execute(() -> {
                 boolean pending = false;
                 try {
+                    // A new measurement invalidates the previous limit before any fallible work.
+                    clearBlocked();
                     pending = converge(reason, complete);
                 } catch (Throwable error) {
                     if (SpiderDebug.isEnabled()) SpiderDebug.log("cache-scheduler", "total-limit failed reason=%s error=%s", reason, error.getClass().getSimpleName());
@@ -176,6 +178,7 @@ public final class CacheScheduler {
                 }
             });
         } catch (Throwable error) {
+            clearBlocked();
             complete.run();
         }
     }
