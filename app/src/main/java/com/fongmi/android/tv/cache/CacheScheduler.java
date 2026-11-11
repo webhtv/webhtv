@@ -24,6 +24,12 @@ public final class CacheScheduler {
     private static final String KEY_LAST_AUTO_MS = "cache_mgmt_last_auto_ms";
     private static final String KEY_LOW_SPACE_STREAK = "cache_mgmt_low_space_streak";
     private static final String KEY_LAST_LIMIT_MS = "cache_mgmt_last_limit_ms";
+    /**
+     * Bytes that stayed above the effective total limit because they sit in modules the registry
+     * forbids cleaning. Persisted so the panel can say why the total did not reach its limit
+     * instead of showing a number that quietly disagrees with the configured value.
+     */
+    private static final String KEY_TOTAL_BLOCKED_BYTES = "cache_mgmt_total_blocked_bytes";
     static final int JOB_ID = 0x43414301;
     static final long PERIODIC_INTERVAL_MS = TimeUnit.DAYS.toMillis(7);
     private static final long STARTUP_DELAY_MS = TimeUnit.SECONDS.toMillis(30);
@@ -31,6 +37,7 @@ public final class CacheScheduler {
 
     private static final CacheScheduler INSTANCE = new CacheScheduler();
     private final AtomicBoolean started = new AtomicBoolean();
+    private final AtomicBoolean convergenceStarted = new AtomicBoolean();
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "cache-scheduler");
         thread.setDaemon(true);
@@ -46,14 +53,25 @@ public final class CacheScheduler {
 
     public void start() {
         CachePolicyStore.migrate();
+        // A configured total limit is the user's own statement about the whole cache directory, so
+        // it converges even while the background auto-cleanup switch is off: gating it behind that
+        // switch is what made an explicit limit look ignored until the switch was turned on too.
+        if (convergenceStarted.compareAndSet(false, true)) {
+            // Warm the snapshot: the capacity budget reads module sizes from it, and an absent
+            // snapshot would hand the playback cache the whole total limit.
+            CacheCenter.get().requestSnapshot(true, ignored -> {
+            });
+            executor.schedule(() -> submitConvergence("startup", null), STARTUP_DELAY_MS, TimeUnit.MILLISECONDS);
+            executor.scheduleWithFixedDelay(this::limitCheck, LIMIT_INTERVAL_MS,
+                    LIMIT_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        }
         if (!CachePolicyStore.isAutoCleanupEnabled()) return;
         schedulePersistent(App.get());
         if (!started.compareAndSet(false, true)) return;
         executor.schedule(this::startupCheck, STARTUP_DELAY_MS, TimeUnit.MILLISECONDS);
         executor.scheduleWithFixedDelay(this::periodicCheck, PERIODIC_INTERVAL_MS,
                 PERIODIC_INTERVAL_MS, TimeUnit.MILLISECONDS);
-        executor.scheduleWithFixedDelay(this::limitCheck, LIMIT_INTERVAL_MS,
-                LIMIT_INTERVAL_MS, TimeUnit.MILLISECONDS);
+
     }
 
     public void schedulePersistent(Context context) {
@@ -87,17 +105,40 @@ public final class CacheScheduler {
         return trigger(periodic ? "periodic" : "low-space", finished);
     }
 
+    /**
+     * Converges the total limit once the last player released.
+     *
+     * <p>This is the playback half of the total limit: the playback caches are the largest
+     * consumers and are only reclaimable while nothing plays, so the moment playback ends is the
+     * moment the configured total can actually be reached.</p>
+     */
+    public void onPlaybackEnded() {
+        submitConvergence("playback-end", null);
+    }
+
+    /**
+     * Applies a freshly configured total limit without waiting for the next playback.
+     *
+     * <p>{@code finished} runs on the main thread after the pass, so the panel refreshes against
+     * the disk state the pass left instead of the pre-cleanup numbers.</p>
+     */
+    public void convergeNow(Runnable finished) {
+        submitConvergence("settings", finished);
+    }
+
+    /** Bytes the last convergence left above the effective limit, or 0 when it converged. */
+    public static long blockedOverBytes() {
+        return Math.max(0L, Prefers.getLong(KEY_TOTAL_BLOCKED_BYTES, 0L));
+    }
+
     private void startupCheck() {
         // The scheduled tasks are queued once for the whole process, while cancelPersistent() only
         // cancels the platform job. Every tick must therefore re-read the switch, otherwise turning
-        // auto cleanup off would still delete cache at the next periodic/limit tick.
+        // auto cleanup off would still delete cache at the next automatic tick.
         if (!CachePolicyStore.isAutoCleanupEnabled()) return;
-        // Warm the snapshot: the capacity budget reads module sizes from it, and an absent snapshot
-        // would hand the playback cache the whole total limit.
         CacheCenter.get().requestSnapshot(true, ignored -> {
         });
         trigger("startup", null);
-        enforceTotalLimit();
     }
 
     private void periodicCheck() {
@@ -108,63 +149,165 @@ public final class CacheScheduler {
     }
 
     private void limitCheck() {
-        if (!CachePolicyStore.isAutoCleanupEnabled()) return;
         long now = System.currentTimeMillis();
         if (now - Prefers.getLong(KEY_LAST_LIMIT_MS, 0L) < LIMIT_INTERVAL_MS) return;
         Prefers.put(KEY_LAST_LIMIT_MS, now);
-        CacheCleanupManager.applyConfiguredLimits();
+        if (CachePolicyStore.isAutoCleanupEnabled()) CacheCleanupManager.applyConfiguredLimits();
         // The playback cache converges on its own when the last player session is released; this is
         // the backstop for a device that keeps a player alive for days.
         MediaSourceFactory.enforceCapacityNow();
-        enforceTotalLimit();
+        submitConvergence("limit-interval", null);
+    }
+
+    private void submitConvergence(String reason, Runnable finished) {
+        AtomicBoolean completed = new AtomicBoolean();
+        Runnable complete = () -> {
+            if (completed.compareAndSet(false, true) && finished != null) App.post(finished);
+        };
+        try {
+            executor.execute(() -> {
+                boolean pending = false;
+                try {
+                    // A new measurement invalidates the previous limit before any fallible work.
+                    clearBlocked();
+                    pending = converge(reason, complete);
+                } catch (Throwable error) {
+                    if (SpiderDebug.isEnabled()) SpiderDebug.log("cache-scheduler", "total-limit failed reason=%s error=%s", reason, error.getClass().getSimpleName());
+                } finally {
+                    if (!pending) complete.run();
+                }
+            });
+        } catch (Throwable error) {
+            clearBlocked();
+            complete.run();
+        }
     }
 
     /**
-     * Runs the total-limit pass only when the automatic plan can actually lower the total.
+     * One convergence pass over the whole cache directory.
      *
-     * <p>The automatic plan never touches the playback caches, Glide, WebHome raw or unclassified
-     * cache. When everything above the limit sits in those modules, cleaning would report success
-     * every twelve hours while the number never moves, so the pass is skipped instead of repeating
-     * an action that cannot converge.</p>
+     * <p>Order of the guards matters: a running cleanup already owns the disk, a running player
+     * owns the playback cache, and only then is the limit worth computing. The plan is the
+     * registry-driven {@link CachePolicyEngine#convergencePlan(File)} set, so the playback caches
+     * participate while plugin scripts and unclassified cache stay untouched; when those two alone
+     * exceed the limit the pass records the blocked remainder and does nothing else, instead of
+     * burning a full inventory every twelve hours for a number that can not move.</p>
      */
-    private void enforceTotalLimit() {
+    private boolean converge(String reason, Runnable complete) {
+        // A busy disk or a running player leaves the total unverified, so the last blocked figure is
+        // stale rather than proof: it was measured against a limit that may since have changed.
+        // Reporting it as permanently protected content would make the panel disagree with the
+        // configured total, so the same rule as settleBlocked's retryable case applies here.
+        if (CacheCleanupManager.isRunning()) {
+            clearBlocked();
+            return false;
+        }
+        if (PlaybackService.isRunning()) {
+            clearBlocked();
+            return false;
+        }
         long configured = CachePolicyStore.getTotalLimitBytes();
-        if (configured <= 0) return;
+        if (configured <= 0) {
+            clearBlocked();
+            return false;
+        }
         long effective = CacheTotalLimitPolicy.effectiveLimit(configured,
                 CacheCenter.get().systemQuotaBytes());
         CacheSnapshot snapshot = scanQuietly();
-        if (snapshot == null) return;
-        if (!CacheTotalLimitPolicy.overLimit(snapshot.totalBytes(), effective)) return;
-        if (!canReclaimBelow(snapshot, effective)) {
-            if (SpiderDebug.isEnabled()) SpiderDebug.log("cache-scheduler", "total-limit skipped reason=unreclaimable effectiveLimit=%d totalBytes=%d", effective, snapshot.totalBytes());
-            return;
+        if (snapshot == null) return false;
+        if (!CacheTotalLimitPolicy.overLimit(snapshot.totalBytes(), effective)) {
+            clearBlocked();
+            return false;
         }
-        CacheCleanupManager.execute(automaticPlan(CacheCleanupMode.LIGHT), "total-limit", first -> {
-            if (PlaybackService.isRunning()) return;
-            executor.execute(() -> {
-                CacheSnapshot after = scanQuietly();
-                if (after == null || !CacheTotalLimitPolicy.overLimit(after.totalBytes(), effective)) return;
-                CacheCleanupManager.execute(automaticPlan(CacheCleanupMode.STANDARD),
-                        "total-limit", ignored -> {
-                        });
-            });
+        CacheCleanupPlan plan = CachePolicyEngine.convergencePlan(App.get().getCacheDir());
+        if (plan.modules().isEmpty()) return false;
+        long protectedBytes = unclaimableBytes(snapshot, plan);
+        if (protectedBytes > effective) {
+            recordBlocked(snapshot.totalBytes() - effective);
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("cache-scheduler", "total-limit blocked reason=%s effectiveLimit=%d totalBytes=%d protectedBytes=%d", reason, effective, snapshot.totalBytes(), protectedBytes);
+            return false;
+        }
+        CacheCleanupManager.execute(plan, reason, result -> {
+            try {
+                executor.execute(() -> {
+                    try {
+                        verifyConvergence(reason, result);
+                    } finally {
+                        complete.run();
+                    }
+                });
+            } catch (Throwable error) {
+                complete.run();
+            }
         });
+        return true;
     }
 
     /**
-     * Whether removing every automatically cleanable module could bring the total under the limit.
+     * Re-reads the disk after a pass and records what the limit still leaves above itself.
      *
-     * <p>If the modules the plan may not touch already exceed the limit, no automatic run can pass
-     * it, so this is the guard that stops the pass from burning a full inventory and a journal
-     * record every twelve hours for nothing.</p>
+     * <p>Runs off the main thread because it is a full inventory, and it never starts a second
+     * pass: one convergence per trigger is the contract, and a limit that stays unreachable is
+     * reported rather than retried in a loop.</p>
      */
-    private boolean canReclaimBelow(CacheSnapshot snapshot, long effective) {
-        long unclaimable = 0;
-        for (CacheMeasurement module : snapshot.modules()) {
-            if (CachePolicyEngine.allowsAutomatic(module.id())) continue;
-            unclaimable += Math.max(0, module.bytes());
+    private void verifyConvergence(String reason, CacheCleanupResult result) {
+        long configured = CachePolicyStore.getTotalLimitBytes();
+        if (configured <= 0) {
+            clearBlocked();
+            return;
         }
-        return unclaimable <= effective;
+        long effective = CacheTotalLimitPolicy.effectiveLimit(configured,
+                CacheCenter.get().systemQuotaBytes());
+        CacheSnapshot after = scanQuietly();
+        if (after == null) return;
+        CacheCleanupPlan plan = CachePolicyEngine.convergencePlan(App.get().getCacheDir());
+        long over = Math.max(0L, after.totalBytes() - effective);
+        long protectedBytes = unclaimableBytes(after, plan);
+        boolean retryable = PlaybackService.isRunning()
+                || result == null || result.status() != CacheCleanupStatus.COMPLETED;
+        long blocked = settleBlocked(over, protectedBytes, effective, retryable);
+        if (blocked > 0) recordBlocked(blocked);
+        else clearBlocked();
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("cache-scheduler", "total-limit settled reason=%s effectiveLimit=%d totalBytes=%d over=%d protectedBytes=%d status=%s blocked=%d", reason, effective, after.totalBytes(), over, protectedBytes, result == null ? "none" : result.status(), blocked);
+        CacheCenter.get().notifyChanged();
+    }
+
+    /**
+     * How many bytes the panel may report as permanently blocked.
+     *
+     * <p>A pass that only deferred (a player restarted), was cancelled, failed, or was not allowed
+     * proves nothing about the limit, so the same condition is reported as retryable instead of
+     * being remembered as protected content.</p>
+     *
+     * <p>Even after a completed pass the excess is permanent only when the content the pass may not
+     * delete is itself above the effective limit. Comparing the excess against the protected bytes
+     * is not that test: a protected set that still fits under the limit leaves reclaimable bytes
+     * for the next trigger, so reporting that excess as unreachable would blame the user's own
+     * limit on content that never exceeded it.</p>
+     */
+    static long settleBlocked(long overBytes, long protectedBytes, long effectiveBytes, boolean retryable) {
+        if (overBytes <= 0 || retryable) return 0L;
+        return protectedBytes > effectiveBytes ? overBytes : 0L;
+    }
+    /**
+     * Bytes the convergence plan may not delete, so a limit below this floor is unreachable by
+     * definition.
+     */
+    private long unclaimableBytes(CacheSnapshot snapshot, CacheCleanupPlan plan) {
+        long protectedBytes = 0;
+        for (CacheMeasurement module : snapshot.modules()) {
+            if (plan.modules().contains(module.id())) continue;
+            protectedBytes += Math.max(0, module.bytes());
+        }
+        return protectedBytes;
+    }
+
+    private static void recordBlocked(long overBytes) {
+        Prefers.put(KEY_TOTAL_BLOCKED_BYTES, Math.max(0L, overBytes));
+    }
+
+    private static void clearBlocked() {
+        if (blockedOverBytes() != 0L) Prefers.put(KEY_TOTAL_BLOCKED_BYTES, 0L);
     }
 
     private CacheSnapshot scanQuietly() {
