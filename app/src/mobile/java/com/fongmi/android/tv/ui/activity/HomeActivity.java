@@ -54,6 +54,7 @@ import com.fongmi.android.tv.ui.fragment.SettingPlayerFragment;
 import com.fongmi.android.tv.ui.fragment.SettingSubtitleFragment;
 import com.fongmi.android.tv.ui.fragment.VodFragment;
 import com.fongmi.android.tv.utils.CrashRestartMode;
+import com.fongmi.android.tv.utils.PreviousProcessCrashRecovery;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.MobileWindow;
 import com.fongmi.android.tv.utils.Notify;
@@ -141,6 +142,10 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     }
 
     private void checkAction(Intent intent) {
+        PreviousProcessCrashRecovery.checkBeforeConfig(this, () -> handleAction(intent));
+    }
+
+    private void handleAction(Intent intent) {
         if (intent.hasExtra(EXTRA_NAV_POSITION)) {
             change(intent.getIntExtra(EXTRA_NAV_POSITION, 0));
             intent.removeExtra(EXTRA_NAV_POSITION);
@@ -187,6 +192,10 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
     }
 
     private void initConfig() {
+        PreviousProcessCrashRecovery.checkBeforeConfig(this, this::loadConfig);
+    }
+
+    private void loadConfig() {
         if (CrashRestartMode.consume()) {
             checkAction(getIntent());
             StateEvent.empty();
@@ -530,6 +539,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
 
     @Override
     protected void onDestroy() {
+        PreviousProcessCrashRecovery.release(this);
         if (mChrome != null) mChrome.destroy();
         LiveConfig.get().clear();
         VodConfig.get().clear("mobile-home-destroy");

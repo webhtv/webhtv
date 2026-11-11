@@ -25,12 +25,10 @@ public class CrashActivityDetailsTest {
     @Test
     public void errorDetailsUseTheFullBuildVersionShownByAbout() throws Exception {
         String source = read("app/src/main/java/com/fongmi/android/tv/ui/activity/CrashActivity.java");
-        int message = source.indexOf(".setMessage(getString(R.string.crash_details_message");
-        int version = source.indexOf("AppVersion.fullName()", message);
-        int stackTrace = source.indexOf("CustomActivityOnCrash.getAllErrorDetailsFromIntent(this, getIntent())", version);
-
-        assertTrue("Crash details must prepend the About screen's timestamped version to the stack trace",
-                message >= 0 && version > message && stackTrace > version);
+        assertTrue("Crash details must prepend the About screen's timestamped version", source.contains("version = AppVersion.fullName()"));
+        assertTrue(source.contains("getString(R.string.crash_details_message, version, errorDetails())"));
+        assertTrue("historical recovery details must take precedence", source.indexOf("PreviousProcessCrashRecovery.getRecoveryDetails")
+                < source.indexOf("CustomActivityOnCrash.getAllErrorDetailsFromIntent"));
     }
 
     @Test
