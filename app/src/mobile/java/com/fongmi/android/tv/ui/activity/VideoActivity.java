@@ -131,6 +131,7 @@ import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.FlagSwitchPlaybackPolicy;
 import com.fongmi.android.tv.ui.dialog.PlayerKernelDialog;
+import com.fongmi.android.tv.ui.dialog.PlaybackSettingDialog;
 import com.fongmi.android.tv.ui.dialog.PlaybackSpeedDialog;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.theme.PlaybackMenuScrim;
@@ -615,17 +616,39 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         else if (!dispatchToContentHandler(activity, push.getUrl(), title)) start(activity, SiteApi.PUSH, push.getId(), TextUtils.isEmpty(name) ? push.getName() : name);
     }
 
-    private static boolean sPendingFullscreen;
+    /**
+     * 点名「下一次打开这条视频直接全屏」。用 key+id 绑定目标，而不是一个全局布尔：
+     * 历史/收藏点击可能被路由到 TMDB 详情、搜索页或阅读器，布尔标记会滞留下来，
+     * 把之后随便打开的一部片子顶成全屏；按条目绑定就不会误伤别的视频。
+     */
+    private static String sPendingFullscreenTarget;
+    private static String sPendingFullscreenName;
+
+    public static void requestFullscreenFor(String key, String id, String name) {
+        sPendingFullscreenTarget = fullscreenTarget(key, id);
+        // 源变更时续播会走「按片名全站搜索」，用户在结果里换源播放时 key/id 已经不同，
+        // 额外记住片名，让这条续播链在换源后仍然直接全屏。
+        sPendingFullscreenName = name == null ? "" : name;
+    }
 
     public static void startFullscreen(Activity activity, History history) {
-        sPendingFullscreen = true;
+        requestFullscreenFor(history.getSiteKey(), history.getVodId(), history.getVodName());
         start(activity, history.getSiteKey(), history.getVodId(), history.getVodName(), history.getVodPic(), null, history.getWallPic());
     }
 
-    private static boolean consumePendingFullscreen() {
-        boolean pending = sPendingFullscreen;
-        sPendingFullscreen = false;
-        return pending;
+    private static String fullscreenTarget(String key, String id) {
+        return (key == null ? "" : key) + AppDatabase.SYMBOL + (id == null ? "" : id);
+    }
+
+    private boolean takePendingFullscreen() {
+        String pending = sPendingFullscreenTarget;
+        if (pending == null) return false;
+        // 一次性消费：这次打开的是别的片子就顺手作废，避免很久以后打开同名条目突然全屏。
+        sPendingFullscreenTarget = null;
+        String pendingName = sPendingFullscreenName;
+        sPendingFullscreenName = null;
+        if (pending.equals(fullscreenTarget(getKey(), getId()))) return true;
+        return !TextUtils.isEmpty(pendingName) && pendingName.equals(getName());
     }
 
     @Override
@@ -1747,6 +1770,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.next.setOnClickListener(view -> checkNext());
         mBinding.control.prev.setOnClickListener(view -> checkPrev());
         mBinding.control.setting.setOnClickListener(view -> onSetting());
+        mBinding.control.action.setting.setOnClickListener(view -> onPlaybackSetting());
         mBinding.control.title.setOnLongClickListener(view -> onChange());
         mBinding.control.right.lock.setOnClickListener(view -> onLock());
         mBinding.control.right.rotate.setOnClickListener(view -> onRotate());
@@ -2069,6 +2093,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         addActionButton(PlayerButtonSetting.PREV, mBinding.control.action.prev);
         addActionButton(PlayerButtonSetting.NEXT, mBinding.control.action.next);
         addActionButton(PlayerButtonSetting.EPISODES, mBinding.control.action.episodes);
+        addActionButton(PlayerButtonSetting.SETTING, mBinding.control.action.setting);
         applyActionButtonSettings();
         addActionButton(PlayerButtonSetting.CHANGE, mBinding.control.action.change2);
         PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
@@ -2227,6 +2252,18 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     private void applyActionButtonSettings() {
         if (mActionButtons != null) PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+    }
+
+    /**
+     * 面板里改过「播放器按钮」之后重建一次动作栏：先全部置 VISIBLE 作基线，
+     * 再按新的隐藏集/顺序重排，最后补回按能力判断的显隐（轨道、弹幕等）。
+     */
+    private void refreshActionButtonsAfterPanel() {
+        if (mActionButtons == null) return;
+        for (View view : mActionButtons.values()) if (view != null) view.setVisibility(View.VISIBLE);
+        setupActionButtons();
+        setTrackVisible();
+        refreshDanmakuControls();
     }
 
     private void setVideoView(boolean isInPictureInPictureMode) {
@@ -2451,7 +2488,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void checkLand() {
-        if (consumePendingFullscreen() || (isPort() && ResUtil.isLand(this))) enterFullscreen();
+        boolean requested = takePendingFullscreen();
+        if (requested || (isPort() && ResUtil.isLand(this))) enterFullscreen();
+        // 播放器实例还没就绪时 enterFullscreen 会直接返回，把请求留给这条片子下次进来再用，
+        // 不能因为一次时序问题就让「历史/收藏点播全屏」失效。
+        if (requested && !isFullscreen()) requestFullscreenFor(getKey(), getId(), getName());
     }
 
     private void getDetail() {
@@ -4007,7 +4048,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             return;
         }
         CastVideo video = new CastVideo(mBinding.name.getText().toString(), player().getUrl(), player().getPosition(), player().getHeaders());
-        CastDialog.create().history(mHistory).video(video).fm(true).show(this);
+        // webhome_inline 的 VOD 只在发送端内存里，远端拿 history 必然 not found；
+        // 改写成自包含的 push_agent 推送串（真实地址 + 请求头）后再发。
+        CastDialog.create().history(SiteApi.castHistory(mHistory, player().getUrl(), player().getHeaders())).video(video).fm(true).show(this);
     }
 
     private void onInfo() {
@@ -4075,6 +4118,50 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     private void onSetting() {
         setTrackVisible();
         ControlDialog.create().parent(mBinding).history(mHistory).parse(isUseParse()).player(player()).show(this);
+    }
+
+    /**
+     * 播放设置面板：半透明对话框里直接加载设置页内容，关掉后如果进来时正在播放就继续播放。
+     */
+    private void onPlaybackSetting() {
+        boolean wasPlaying = service() != null && player() != null && player().isPlaying();
+        int scaleBefore = PlayerSetting.getScale();
+        boolean[] displayBefore = PlayerSetting.getDisplayChecked();
+        int badgeBefore = PlayerSetting.getMediaBadgeChoice();
+        String buttonsBefore = PlayerButtonSetting.signature();
+        boolean shown = PlaybackSettingDialog.show(this, () -> {
+            if (isFinishing() || isDestroyed()) return;
+            applyPanelSettings(scaleBefore, displayBefore, badgeBefore, buttonsBefore);
+            if (wasPlaying && service() != null && player() != null && !player().isPlaying()) player().play();
+        });
+        if (!shown) return;
+        // 面板期间停掉控制栏自动隐藏，关面板后控制栏还在，不用再摸一次屏幕唤出。
+        App.removeCallbacks(mR1);
+        // 面板铺满播放画面：确认面板真的打开了，才把播放暂停。
+        if (wasPlaying && player() != null) player().pause();
+    }
+
+    /**
+     * 面板关掉后把面板里改动过、且当前实例能立刻吃到的设置补上：
+     * 画面比例直接重设；屏显（时间/网速/媒体徽标/角位/诊断）重开一次 OSD 循环读取新值。
+     * 内核、渲染、缓冲这类需要重建播放器的设置不在这里强行生效，等下次加载。
+     */
+    private void applyPanelSettings(int scaleBefore, boolean[] displayBefore, int badgeBefore, String buttonsBefore) {
+        if (service() == null || player() == null) return;
+        int scale = PlayerSetting.getScale();
+        if (scale != scaleBefore) {
+            applyResizeMode(scale);
+            mBinding.control.action.scale.setText(ResUtil.getStringArray(R.array.select_scale)[scale]);
+        }
+        // 屏显开关/媒体徽标角位真的改过才重开 OSD 循环，避免只是打开面板看一眼也打断屏显。
+        if (badgeBefore != PlayerSetting.getMediaBadgeChoice()
+                || !java.util.Arrays.equals(displayBefore, PlayerSetting.getDisplayChecked())) {
+            onDisplayChanged();
+        }
+        // 播放器按钮配置（显示/隐藏、排序）改过就重排控制栏，不用等下次进播放页。
+        if (mActionButtons != null && !buttonsBefore.equals(PlayerButtonSetting.signature())) {
+            refreshActionButtonsAfterPanel();
+        }
     }
 
     private void onLock() {

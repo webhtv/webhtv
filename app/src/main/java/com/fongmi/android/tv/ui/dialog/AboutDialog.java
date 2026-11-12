@@ -53,10 +53,6 @@ public final class AboutDialog {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         dialog.setContentView(binding.getRoot());
         binding.confirm.setOnClickListener(v -> dialog.dismiss());
-        binding.updateSettings.setOnClickListener(v -> {
-            dialog.dismiss();
-            UpdateSettingsDialog.show(activity);
-        });
         binding.checkUpdate.setOnClickListener(v -> {
             dialog.dismiss();
             if (updateAction != null) updateAction.run();

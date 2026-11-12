@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -44,6 +45,7 @@ import com.fongmi.android.tv.ui.dialog.SiteNameDialog;
 import com.fongmi.android.tv.ui.dialog.ViewingRecordSyncDialog;
 import com.fongmi.android.tv.ui.dialog.WebHomeExtensionDialog;
 import com.fongmi.android.tv.ui.dialog.WebHomeThemeDialog;
+import com.fongmi.android.tv.utils.FocusLoop;
 import com.fongmi.android.tv.utils.LoginStateSync;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
@@ -53,9 +55,9 @@ import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 public class SettingEnhanceActivity extends BaseActivity {
 
     private static final String URL_GITHUB = "https://github.com/llb0/webhtv";
-    private static final String URL_CNB = "https://cnb.cool/fish2018/ext";
 
     private ActivitySettingEnhanceBinding mBinding;
+    private int[][] focusGrid;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingEnhanceActivity.class));
@@ -73,14 +75,19 @@ public class SettingEnhanceActivity extends BaseActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         reorderItems();
-        mBinding.customCsp.requestFocus();
+        mBinding.githubRepo.requestFocus();
         setText();
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (FocusLoop.handle(this, focusGrid, FocusLoop.Mode.VERTICAL, event)) return true;
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
     protected void initEvent() {
         mBinding.githubRepo.setOnClickListener(view -> openRepo(URL_GITHUB));
-        mBinding.cnbRepo.setOnClickListener(view -> openRepo(URL_CNB));
         mBinding.lab.setOnClickListener(view -> LabActivity.start(this));
         mBinding.driveCheck.setOnClickListener(this::setDriveCheck);
         mBinding.siteName.setOnClickListener(this::setSiteName);
@@ -142,6 +149,31 @@ public class SettingEnhanceActivity extends BaseActivity {
         };
         for (View view : order) parent.removeView(view);
         for (View view : order) parent.addView(view);
+        focusGrid = new int[][]{
+                {mBinding.githubRepo.getId()},
+                {mBinding.lab.getId()},
+                {mBinding.customCsp.getId()},
+                {mBinding.webHomeExtension.getId()},
+                {mBinding.gitCloud.getId()},
+                {mBinding.remoteTrust.getId()},
+                {mBinding.oneKeySync.getId()},
+                {mBinding.loginState.getId()},
+                {mBinding.shellProxy.getId()},
+                {mBinding.managePage.getId()},
+                {mBinding.webHomeTheme.getId()},
+                {mBinding.webHomeFullscreen.getId()},
+                {mBinding.cspWarmup.getId()},
+                {mBinding.playbackArtworkWall.getId()},
+                {mBinding.driveCheck.getId()},
+                {mBinding.siteName.getId()},
+                {mBinding.audioSource.getId()},
+                {mBinding.shortDramaSource.getId()},
+                {mBinding.siteHealthSort.getId()},
+                {mBinding.debugLog.getId()},
+                {mBinding.fileSites.getId()},
+                {mBinding.playbackWebhook.getId()},
+                {mBinding.pluginManager.getId()}
+        };
     }
 
     private void setText() {

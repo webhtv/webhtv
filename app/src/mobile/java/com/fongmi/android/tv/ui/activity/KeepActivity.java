@@ -176,6 +176,8 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
 
     @Override
     public void onItemClick(Keep item) {
+        // 收藏点播直接进全屏，绑定到这一条 key+id，换配置/异步加载配置后仍然有效。
+        VideoActivity.requestFullscreenFor(item.getSiteKey(), item.getVodId(), item.getVodName());
         Config config = Config.find(item.getCid());
         if (config == null) SearchActivity.start(this, item.getVodName());
         else if (item.getCid() != VodConfig.getCid()) loadConfig(config, item);

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.View;
 
 import androidx.viewbinding.ViewBinding;
@@ -40,6 +41,8 @@ import com.fongmi.android.tv.cache.CacheCenter;
 import com.fongmi.android.tv.cache.CachePolicyStore;
 import com.fongmi.android.tv.ui.dialog.CacheManagementDialog;
 import com.fongmi.android.tv.utils.FileUtil;
+import com.fongmi.android.tv.utils.FocusLoop;
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -53,6 +56,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SettingActivity extends BaseActivity implements ConfigListener, SiteListener, LiveListener, DohDialog.Listener {
+
+    /**
+     * 设置页的焦点网格：一行一个数组，顺序与 activity_setting.xml 的分组顺序一致。
+     * 上下左右都按这张表环形跳转，跨组时不会掉进死胡同。
+     */
+    private static final int[][] FOCUS_GRID = {
+            {R.id.vod, R.id.vodHome, R.id.vodHistory},
+            {R.id.live, R.id.liveHome, R.id.liveHistory},
+            {R.id.wall, R.id.wallDefault, R.id.wallRefresh},
+            {R.id.enhance, R.id.player, R.id.danmaku},
+            {R.id.ad},
+            {R.id.subtitle, R.id.defaultLaunch},
+            {R.id.tmdb, R.id.ai},
+            {R.id.appearance, R.id.personal},
+            {R.id.incognito, R.id.doh},
+            {R.id.backup, R.id.restore},
+            {R.id.cache, R.id.version}
+    };
 
     private ActivitySettingBinding mBinding;
     private String[] defaultLaunch;
@@ -281,6 +302,20 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
 
     private void onVersion(View view) {
         AboutDialog.show(this, () -> Updater.create().force().start(this));
+    }
+
+    /**
+     * 菜单键等于「关于」里那颗检查更新按钮：不进弹窗，直接走同一套强制检查更新流程。
+     * 方向键在整页范围内按 {@link #FOCUS_GRID} 环形跳转，到边不再卡住。
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
+            if (KeyUtil.isActionUp(event)) Updater.create().force().start(this);
+            return true;
+        }
+        if (FocusLoop.handle(this, FOCUS_GRID, FocusLoop.Mode.BOTH, event)) return true;
+        return super.dispatchKeyEvent(event);
     }
 
     private void setWallDefault(View view) {

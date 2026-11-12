@@ -47,6 +47,25 @@ public class DiagnosticExportAccessTest {
         assertFalse(DiagnosticAccess.sameOrigin("http://" + host, null, hosts));
     }
 
+    @Test public void controlRequestsAcceptSameOriginEvidenceAndRejectCrossSite() {
+        String host = "192.168.1.2:9978";
+        Set<String> hosts = Set.of(host, "127.0.0.1:9978");
+        assertTrue(DiagnosticAccess.controlRequestAllowed("http://" + host, null, null, host, hosts));
+        assertTrue(DiagnosticAccess.controlRequestAllowed(null, "http://" + host + "/debug/logs", null, host, hosts));
+        assertTrue(DiagnosticAccess.controlRequestAllowed(null, null, "same-origin", host, hosts));
+        assertTrue(DiagnosticAccess.controlRequestAllowed("null", "http://" + host + "/debug/logs", null, host, hosts));
+        // 计算出的地址集合可能漏掉实际网卡；私有/回环地址字面量自身即可信，域名不行。
+        assertTrue(DiagnosticAccess.controlRequestAllowed(null, null, null, "127.0.0.1:9978", Set.of()));
+        assertTrue(DiagnosticAccess.controlRequestAllowed(null, null, "same-origin", "10.0.0.5:9978", Set.of()));
+        assertTrue(DiagnosticAccess.controlRequestAllowed(null, null, "same-origin", "[::1]:9978", Set.of()));
+        assertFalse(DiagnosticAccess.controlRequestAllowed("http://evil.test", "http://" + host + "/debug/logs", "same-origin", host, hosts));
+        assertFalse(DiagnosticAccess.controlRequestAllowed(null, "http://evil.test/debug/logs", null, host, hosts));
+        assertFalse(DiagnosticAccess.controlRequestAllowed(null, "http://" + host + "/other", null, host, hosts));
+        assertFalse(DiagnosticAccess.controlRequestAllowed(null, null, null, host, hosts));
+        assertFalse(DiagnosticAccess.controlRequestAllowed(null, null, null, "evil.test:9978", Set.of()));
+        assertFalse(DiagnosticAccess.controlRequestAllowed(null, null, null, null, hosts));
+    }
+
     @Test public void zipUsesOneImmutableSnapshotAndEveryEntryHasMatchingHash() throws Exception {
         RollingDiagnosticFile file = new RollingDiagnosticFile(temp.newFolder(), LIMITS);
         file.append(List.of(line("video.output.summary", 1), line("audio.output.write", 2)), List.of());

@@ -159,6 +159,8 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     public void onItemClick(History item) {
+        // 历史点播直接进全屏：请求按 key+id 绑定这一条，续播路由改道到 TMDB 详情/搜索/阅读器时不会误伤别的视频。
+        VideoActivity.requestFullscreenFor(item.getSiteKey(), item.getVodId(), item.getVodName());
         HistoryResumeCoordinator.open(this, item);
     }
 

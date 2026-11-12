@@ -1,57 +1,82 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/grey_800"
+    android:clipToPadding="false"
+    android:fillViewport="true"
     android:fitsSystemWindows="true"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:paddingTop="24dp"
+    android:paddingBottom="24dp">
 
-    <androidx.appcompat.widget.AppCompatImageView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:contentDescription="@null"
-        android:src="@drawable/customactivityoncrash_error_image" />
-
-    <com.google.android.material.textview.MaterialTextView
+    <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="40dp"
-        android:layout_marginTop="24dp"
-        android:layout_marginEnd="40dp"
         android:gravity="center"
-        android:lineSpacingExtra="4dp"
-        android:text="@string/crash_info"
-        android:textColor="@color/white"
-        android:textSize="18sp" />
+        android:orientation="vertical"
+        android:paddingStart="48dp"
+        android:paddingEnd="48dp">
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/restart"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:background="@drawable/selector_button"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
-        android:paddingHorizontal="32dp"
-        android:paddingVertical="12dp"
-        android:text="@string/crash_restart"
-        android:textColor="@color/white"
-        android:textSize="16sp" />
+        <androidx.appcompat.widget.AppCompatImageView
+            android:layout_width="wrap_content"
+            android:layout_height="120dp"
+            android:adjustViewBounds="true"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:src="@drawable/customactivityoncrash_error_image" />
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/details"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:background="@drawable/selector_button"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
-        android:paddingHorizontal="32dp"
-        android:paddingVertical="12dp"
-        android:text="@string/crash_details"
-        android:textColor="@color/white"
-        android:textSize="16sp" />
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:lineSpacingExtra="6dp"
+            android:text="@string/crash_info"
+            android:textColor="@color/white"
+            android:textSize="20sp" />
 
-</androidx.appcompat.widget.LinearLayoutCompat>
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/restart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:background="@drawable/selector_button"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center"
+            android:minWidth="220dp"
+            android:minHeight="56dp"
+            android:nextFocusDown="@id/details"
+            android:nextFocusUp="@id/details"
+            android:paddingStart="36dp"
+            android:paddingEnd="36dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp"
+            android:text="@string/crash_restart"
+            android:textColor="@color/white"
+            android:textSize="18sp" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/details"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/selector_button"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center"
+            android:minWidth="220dp"
+            android:minHeight="56dp"
+            android:nextFocusDown="@id/restart"
+            android:nextFocusUp="@id/restart"
+            android:paddingStart="36dp"
+            android:paddingEnd="36dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp"
+            android:text="@string/crash_details"
+            android:textColor="@color/white"
+            android:textSize="18sp" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+</androidx.core.widget.NestedScrollView>

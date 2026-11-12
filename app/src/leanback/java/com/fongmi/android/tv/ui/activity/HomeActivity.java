@@ -46,6 +46,7 @@ import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.following.FollowingScheduler;
+import com.fongmi.android.tv.following.FollowingSettings;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.player.Source;
@@ -119,6 +120,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private boolean loadingHomeCategory;
     private boolean mStartupActionDone;
     private int mMenuButtonCount;
+    /** 首页按钮行的内容宽度（由子项几何算出），0 表示还没算出来。 */
+    private int funcContentWidth;
+    private int funcFitAttempts;
 
     public static List<Vod> sRecommendCache = new ArrayList<>();
     public static Vod sPendingVideo = null;
@@ -269,6 +273,67 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         mBinding.funcRecycler.setAdapter(new ItemBridgeAdapter(mFuncAdapter = new ArrayObjectAdapter(funcPresenter)));
         mBinding.funcRecycler.setHorizontalSpacing(ResUtil.dp2px(4));
         mBinding.funcRecycler.setRowHeight(ResUtil.dp2px(40));
+        // 容器宽度由权重决定（标题与时钟之间的全部余量），按钮行在容器内按内容宽度居中；
+        // 容器尺寸变化时重新算一次，保证居中基准跟着变。
+        mBinding.funcContainer.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (right - left != oldRight - oldLeft) view.post(this::fitFuncWidth);
+        });
+        mBinding.funcRecycler.getAdapter().registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+            @Override
+            public void onChanged() {
+                onFuncItemsChanged();
+            }
+
+            @Override
+            public void onItemRangeInserted(int positionStart, int itemCount) {
+                onFuncItemsChanged();
+            }
+
+            @Override
+            public void onItemRangeRemoved(int positionStart, int itemCount) {
+                onFuncItemsChanged();
+            }
+        });
+    }
+
+    private void onFuncItemsChanged() {
+        funcContentWidth = 0;
+        scheduleFuncFit();
+    }
+
+    private void scheduleFuncFit() {
+        funcFitAttempts = 0;
+        mBinding.funcContainer.post(this::fitFuncWidth);
+    }
+
+    /**
+     * 让按钮行在容器内居中。容器宽度已由 FrameLayout 权重锁死（标题之后、时钟之前的全部余量），
+     * 这里只负责算按钮行自身的宽度：读已排好的子项几何宽度得到内容宽，夹到容器可用宽度。
+     * 不能依赖 wrap_content 的测量值 —— 在定宽父容器里它会被量成整行宽，居中就失效了。
+     */
+    private void fitFuncWidth() {
+        FrameLayout container = mBinding.funcContainer;
+        HorizontalGridView recycler = mBinding.funcRecycler;
+        int available = container.getWidth() - container.getPaddingStart() - container.getPaddingEnd();
+        if (available <= 0) return;
+        RecyclerView.Adapter<?> adapter = recycler.getAdapter();
+        int itemCount = adapter == null ? 0 : adapter.getItemCount();
+        int childCount = recycler.getChildCount();
+        if (itemCount == 0) {
+            funcContentWidth = 0;
+        } else if (childCount >= itemCount) {
+            int first = recycler.getChildAt(0).getLeft();
+            int last = recycler.getChildAt(childCount - 1).getRight();
+            if (last > first) funcContentWidth = last - first;
+        }
+        int target = funcContentWidth > 0 ? Math.min(funcContentWidth, available) : available;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) recycler.getLayoutParams();
+        if (params.width != target) {
+            params.width = target;
+            recycler.setLayoutParams(params);
+        }
+        // 首次进来时子项可能还没排版完，等一帧再算；超过次数就按可用宽度先铺满。
+        if (itemCount > 0 && funcContentWidth <= 0 && ++funcFitAttempts < 4) recycler.post(this::fitFuncWidth);
     }
 
     private void setWebView() {
@@ -505,21 +570,29 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void setFunc() {
         mFuncAdapter.setItems(getFuncItems(), new BaseDiffCallback<Func>());
-        int count = mFuncAdapter.size();
-        if (count > 0) {
-            android.view.ViewGroup.LayoutParams params = mBinding.funcRecycler.getLayoutParams();
-            params.width = ResUtil.dp2px(64 * count + 4 * (count - 1) + 68);
-            mBinding.funcRecycler.setLayoutParams(params);
-        }
+        // 按钮行宽度不在这里决定：setWebView() 里注册的观察器会在条目变化后调用
+        // fitFuncWidth()，按内容宽度居中；容器宽度由 FrameLayout 权重锁死，
+        // 按钮再多也只会被裁剪/横向滚动，右侧时钟的位置与可见性不受影响。
+        mBinding.funcRecycler.requestLayout();
+        scheduleFuncFit();
     }
 
     private List<Func> getFuncItems() {
+        return getFuncItems(false);
+    }
+
+    /**
+     * 首页菜单里追更新开关打开时，在「设置」前面插一个「追更」入口，点开就是追更管理界面；
+     * 首页按钮行保持用户自己配置的按钮集合，不跟着菜单一起变。
+     */
+    private List<Func> getFuncItems(boolean forMenu) {
         List<Func> items = new ArrayList<>();
         if (LiveConfig.hasLoadedLives()) items.add(Func.create(R.string.home_live));
         items.add(Func.create(R.string.home_search));
         items.add(Func.create(R.string.home_history));
         items.add(Func.create(R.string.home_keep));
         items.add(Func.create(R.string.home_push));
+        if (forMenu && FollowingSettings.isEnabled()) items.add(Func.create(R.string.home_following));
         items.add(Func.create(R.string.home_setting));
         return items;
     }
@@ -619,6 +692,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         else if (item.getResId() == R.string.home_history) HistoryActivity.start(this);
         else if (item.getResId() == R.string.home_push) PushActivity.start(this);
         else if (item.getResId() == R.string.home_search) SearchActivity.start(this);
+        else if (item.getResId() == R.string.home_following) FollowingActivity.start(this);
         else if (item.getResId() == R.string.home_setting) SettingActivity.start(this);
     }
 
@@ -711,7 +785,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void showHomeMenu() {
-        List<Func> funcs = getFuncItems();
+        List<Func> funcs = getFuncItems(true);
         boolean hasRecommend = mHomeResult != null && !mHomeResult.getList().isEmpty();
         List<Class> types = mHomeResult == null ? new ArrayList<>() : mHomeResult.getTypes();
         mMenuButtonCount = 2 + funcs.size(); // 选站 + 多仓 + funcs
@@ -738,7 +812,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             return;
         }
         if (which >= 2 && which < mMenuButtonCount) {
-            onItemClick(getFuncItems().get(which - 2));
+            onItemClick(getFuncItems(true).get(which - 2));
             return;
         }
         if (which == mMenuButtonCount) {
@@ -820,11 +894,30 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             showHomeMenu();
             return true;
         }
+        // 标题栏按钮组左右不环形：直播再往左、设置再往右都回到标题，
+        // 否则会在按钮组里首尾互相跳（直播←→设置）。
+        if (KeyUtil.isActionDown(event) && mBinding.funcRecycler.hasFocus() && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event))) {
+            View funcFocus = getCurrentFocus();
+            View funcItem = funcFocus == null ? null : mBinding.funcRecycler.findContainingItemView(funcFocus);
+            int position = funcItem == null ? -1 : mBinding.funcRecycler.getChildAdapterPosition(funcItem);
+            int count = mFuncAdapter.size();
+            if (KeyUtil.isLeftKey(event) && position == 0 && count > 0) {
+                requestTitleFocus();
+                return true;
+            }
+            if (KeyUtil.isRightKey(event) && position == count - 1 && count > 0) {
+                requestTitleFocus();
+                return true;
+            }
+        }
         // 视频列表/筛选左右环形跳转（放在最前面，确保在VerticalGridView处理之前消费）
         if (KeyUtil.isActionDown(event) && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event))) {
             View focus = getCurrentFocus();
             if (focus != null && mBinding.recycler.getVisibility() == View.VISIBLE) {
                 HorizontalGridView grid = findHorizontalGridView(focus);
+                // 标题栏按钮组也是 HorizontalGridView，别被下面这段"列表首尾环形"逻辑抓走，
+                // 否则直播按左会跑到设置、设置按右会跑到直播。
+                if (grid == mBinding.funcRecycler) grid = null;
                 if (grid != null && grid.getAdapter() != null) {
                     int position = grid.getSelectedPosition();
                     int count = grid.getAdapter().getItemCount();
@@ -969,8 +1062,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
      */
     private void confirmExitHome() {
         finish();
+        boolean autoBackup = AutoBackupPolicy.isEffective(Setting.isAutoBackup(), Setting.hasFileAccess());
         Task.execute(() -> {
-            AppDatabase.backupOnExitSync();
+            if (autoBackup) AppDatabase.backupOnExitSync();
             CacheScheduler.get().runExitCleanup();
             Process.killProcess(Process.myPid());
             System.exit(0);

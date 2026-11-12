@@ -553,11 +553,32 @@ public final class RealtimeSubtitleController {
                 completed += model.size();
                 continue;
             }
-            download(model.url(), target, model, completed, total, progress, cancelled);
+            download(model.urls(), target, model, completed, total, progress, cancelled);
             completed += model.size();
         }
         reportProgress(progress, 100, "");
         return dir;
+    }
+
+    private void download(String[] urls, File target, ModelFile model, long completed, long total, @Nullable ModelDownloadListener progress, BooleanSupplier cancelled) throws IOException {
+        IOException last = null;
+        for (String url : urls) {
+            try {
+                download(url, target, model, completed, total, progress, cancelled);
+                return;
+            } catch (InterruptedIOException cancelledError) {
+                throw cancelledError;
+            } catch (IOException error) {
+                last = error;
+                deleteQuietly(new File(target.getPath() + ".part"));
+            }
+        }
+        throw last != null ? last : new IOException("Model download failed: no url");
+    }
+
+    private void deleteQuietly(File file) {
+        RealtimeSubtitleModelVerifier.deleteMarker(file);
+        if (file.exists()) file.delete();
     }
 
     private void download(String url, File target, ModelFile model, long completed, long total, @Nullable ModelDownloadListener progress, BooleanSupplier cancelled) throws IOException {

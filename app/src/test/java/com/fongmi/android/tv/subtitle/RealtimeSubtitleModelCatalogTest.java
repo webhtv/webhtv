@@ -42,9 +42,19 @@ public class RealtimeSubtitleModelCatalogTest {
                 assertTrue(file.size() > 0L);
                 assertEquals(64, file.sha256().length());
                 assertTrue(file.url().startsWith("https://"));
+                assertTrue(file.urls().length > 0);
+                for (String url : file.urls()) assertTrue(url.startsWith("https://"));
             }
         }
         assertEquals(64, RealtimeSubtitleModelCatalog.vad().sha256().length());
+    }
+
+    @Test
+    public void vadFallsBackFromGithubAcceleratorsToOrigin() {
+        RealtimeSubtitleModelCatalog.ModelFile vad = RealtimeSubtitleModelCatalog.vad();
+        assertTrue(vad.urls().length > 1);
+        assertTrue(vad.urls()[0].startsWith("https://gh-proxy.com/https://github.com/"));
+        assertEquals("https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx", vad.urls()[vad.urls().length - 1]);
     }
 
     @Test

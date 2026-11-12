@@ -42,18 +42,6 @@
                 android:src="@drawable/ic_repo_github"
                 app:tint="?attr/webhtvColorOnWallpaper" />
 
-            <androidx.appcompat.widget.AppCompatImageButton
-                android:id="@+id/cnbRepo"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="4dp"
-                android:background="@drawable/selector_item"
-                android:contentDescription="@string/repo_cnb"
-                android:focusable="true"
-                android:padding="10dp"
-                android:src="@drawable/ic_repo_cnb"
-                app:tint="?attr/webhtvColorOnWallpaper" />
-
         </androidx.appcompat.widget.LinearLayoutCompat>
 
         <androidx.appcompat.widget.LinearLayoutCompat

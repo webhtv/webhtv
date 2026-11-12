@@ -27,6 +27,7 @@ import androidx.fragment.app.FragmentActivity;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.MultiRepo;
 import com.fongmi.android.tv.setting.MultiRepoStore;
+import com.fongmi.android.tv.ui.helper.MultiRepoTheme;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.button.MaterialButton;
@@ -87,7 +88,7 @@ public class MultiRepoManageDialog extends DialogFragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         LinearLayout root = new LinearLayout(requireContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundResource(R.drawable.shape_shell_proxy_dialog);
+        MultiRepoTheme.applyPanel(root);
         int horizontal = ResUtil.dp2px(24);
         int vertical = ResUtil.dp2px(20);
         root.setPadding(horizontal, ResUtil.dp2px(24), horizontal, vertical);
@@ -95,7 +96,7 @@ public class MultiRepoManageDialog extends DialogFragment {
         // 标题
         MaterialTextView title = new MaterialTextView(requireContext());
         title.setText(R.string.multi_repo_manage_title);
-        title.setTextColor(Color.parseColor("#202124"));
+        title.setTextColor(MultiRepoTheme.onSurface());
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -113,22 +114,10 @@ public class MultiRepoManageDialog extends DialogFragment {
         addBtn.setInsetTop(0);
         addBtn.setInsetBottom(0);
         addBtn.setStrokeWidth(ResUtil.dp2px(1));
-        addBtn.setCornerRadius(ResUtil.dp2px(6));
-        addBtn.setTextColor(ColorStateList.valueOf(Color.parseColor("#174EA6")));
-        addBtn.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#E8F0FE")));
-        addBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#8AB4F8")));
+        addBtn.setCornerRadius(ResUtil.dp2px(12));
+        MultiRepoTheme.filled(addBtn, false);
         addBtn.setText(R.string.multi_repo_add);
-        addBtn.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus) {
-                addBtn.setTextColor(ColorStateList.valueOf(Color.WHITE));
-                addBtn.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#1A73E8")));
-                addBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#174EA6")));
-            } else {
-                addBtn.setTextColor(ColorStateList.valueOf(Color.parseColor("#174EA6")));
-                addBtn.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#E8F0FE")));
-                addBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#8AB4F8")));
-            }
-        });
+        addBtn.setOnFocusChangeListener((v, hasFocus) -> MultiRepoTheme.filled((MaterialButton) v, hasFocus));
         addBtn.setOnClickListener(v -> MultiRepoAddDialog.show(requireActivity(), repo -> refreshList(root)));
         root.addView(addBtn, rowParams);
 
@@ -160,7 +149,7 @@ public class MultiRepoManageDialog extends DialogFragment {
         if (repos.isEmpty()) {
             MaterialTextView empty = new MaterialTextView(requireContext());
             empty.setText(R.string.multi_repo_empty);
-            empty.setTextColor(Color.parseColor("#9AA0A6"));
+            empty.setTextColor(MultiRepoTheme.hint());
             empty.setTextSize(14);
             LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             ep.topMargin = ResUtil.dp2px(24);
@@ -195,22 +184,10 @@ public class MultiRepoManageDialog extends DialogFragment {
         nameBtn.setInsetTop(0);
         nameBtn.setInsetBottom(0);
         nameBtn.setStrokeWidth(ResUtil.dp2px(1));
-        nameBtn.setCornerRadius(ResUtil.dp2px(6));
-        nameBtn.setBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
-        nameBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#DADCE0")));
-        nameBtn.setTextColor(ColorStateList.valueOf(Color.parseColor("#202124")));
+        nameBtn.setCornerRadius(ResUtil.dp2px(12));
+        MultiRepoTheme.chip(nameBtn, false, false);
         nameBtn.setText(repo.getName());
-        nameBtn.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus) {
-                nameBtn.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#1A73E8")));
-                nameBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#174EA6")));
-                nameBtn.setTextColor(ColorStateList.valueOf(Color.WHITE));
-            } else {
-                nameBtn.setBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
-                nameBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#DADCE0")));
-                nameBtn.setTextColor(ColorStateList.valueOf(Color.parseColor("#202124")));
-            }
-        });
+        nameBtn.setOnFocusChangeListener((v, hasFocus) -> MultiRepoTheme.chip((MaterialButton) v, false, hasFocus));
         nameBtn.setOnClickListener(v -> {
             String url = repo.getUrl();
             if (TextUtils.isEmpty(url)) {
@@ -244,21 +221,9 @@ public class MultiRepoManageDialog extends DialogFragment {
         deleteBtn.setIconPadding(0);
         deleteBtn.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
         deleteBtn.setStrokeWidth(ResUtil.dp2px(1));
-        deleteBtn.setCornerRadius(ResUtil.dp2px(6));
-        deleteBtn.setBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
-        deleteBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#DADCE0")));
-        deleteBtn.setIconTint(ColorStateList.valueOf(Color.parseColor("#D93025")));
-        deleteBtn.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus) {
-                deleteBtn.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#1A73E8")));
-                deleteBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#174EA6")));
-                deleteBtn.setIconTint(ColorStateList.valueOf(Color.WHITE));
-            } else {
-                deleteBtn.setBackgroundTintList(ColorStateList.valueOf(Color.WHITE));
-                deleteBtn.setStrokeColor(ColorStateList.valueOf(Color.parseColor("#DADCE0")));
-                deleteBtn.setIconTint(ColorStateList.valueOf(Color.parseColor("#D93025")));
-            }
-        });
+        deleteBtn.setCornerRadius(ResUtil.dp2px(12));
+        MultiRepoTheme.iconAction(deleteBtn, false, true);
+        deleteBtn.setOnFocusChangeListener((v, hasFocus) -> MultiRepoTheme.iconAction((MaterialButton) v, hasFocus, true));
         deleteBtn.setOnClickListener(v -> {
             // 确认删除
             String name = repo.getName() != null ? repo.getName() : "";

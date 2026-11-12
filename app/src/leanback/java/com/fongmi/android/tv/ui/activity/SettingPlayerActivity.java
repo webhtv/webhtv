@@ -4,7 +4,10 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
 
 import androidx.viewbinding.ViewBinding;
 
@@ -34,6 +37,7 @@ import com.fongmi.android.tv.ui.dialog.SpeedDialog;
 import com.fongmi.android.tv.ui.dialog.UaDialog;
 import com.fongmi.android.tv.ui.dialog.VideoAspectModeDialog;
 import com.fongmi.android.tv.utils.FileUtil;
+import com.fongmi.android.tv.utils.FocusLoop;
 import com.fongmi.android.tv.utils.ResUtil;
 
 import java.text.DecimalFormat;
@@ -74,7 +78,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         setVisible();
         format = new DecimalFormat("0.#");
         PlaybackPerformanceSetting.ensureInitialized();
-        mBinding.exo4kCompat.requestFocus();
+        mBinding.playerButtons.requestFocus();
         mBinding.uaText.setText(Setting.getUa());
         mBinding.aacText.setText(getSwitch(PlayerSetting.isPreferAAC()));
         mBinding.tunnelText.setText(getSwitch(PlayerSetting.isTunnel()));
@@ -108,6 +112,16 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.renderText.setText((render = ResUtil.getStringArray(R.array.select_render))[PlayerSetting.getRender()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
         hidePerformanceRows();
+    }
+
+    /**
+     * 上下键在整页范围内环形跳转（含被 setVisible 隐藏的行会自动跳过），到顶/到底不再卡住。
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        ViewParent parent = mBinding.render.getParent();
+        if (parent instanceof ViewGroup && FocusLoop.handleChildGrid((ViewGroup) parent, 1, FocusLoop.Mode.VERTICAL, event)) return true;
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

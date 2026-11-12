@@ -551,8 +551,9 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
             // 根页面返回 = 真正退出（与 fish 一致）：先销毁界面给出即时反馈，后台线程同步备份、
             // 按开关做限时缓存清理后结束进程。想进后台请用 Home 键，返回键即真正退出。
             finish();
+            boolean autoBackup = AutoBackupPolicy.isEffective(Setting.isAutoBackup(), Setting.hasFileAccess());
             Task.execute(() -> {
-                AppDatabase.backupOnExitSync();
+                if (autoBackup) AppDatabase.backupOnExitSync();
                 CacheScheduler.get().runExitCleanup();
                 Process.killProcess(Process.myPid());
                 System.exit(0);

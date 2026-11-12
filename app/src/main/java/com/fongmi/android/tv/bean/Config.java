@@ -126,8 +126,18 @@ public class Config {
         if (!TextUtils.isEmpty(url)) {
             Config item = AppDatabase.get().getConfigDao().find(url, type);
             if (item != null) return item;
+            // 恢复备份时同一接口会把地址并进 urls 列表、主 url 换成备份里的第一条，
+            // 精确匹配落空，这里按地址别名再认一次，避免又退回到"固定那一条"。
+            for (Config candidate : AppDatabase.get().getConfigDao().findByType(type)) {
+                if (candidate.matchesAddress(url)) return candidate;
+            }
         }
         return AppDatabase.get().getConfigDao().findOne(type);
+    }
+
+    public boolean matchesAddress(String value) {
+        if (TextUtils.isEmpty(value)) return false;
+        return getUrls().contains(value) || getAddressMatchAliases().contains(value);
     }
 
     public static String defaultUrl() {
@@ -502,6 +512,9 @@ public class Config {
     }
 
     public Config update() {
+        if (isEmpty()) return this;
+        setTime(System.currentTimeMillis());
+        Prefers.put("config_" + getType(), getUrl());
         return save();
     }
 

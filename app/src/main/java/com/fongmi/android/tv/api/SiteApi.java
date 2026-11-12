@@ -9,9 +9,11 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Class;
+import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.CatWebEvent;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.server.Server;
@@ -355,7 +357,22 @@ public class SiteApi {
     }
 
     static String resolvePushPlayerUrl(String id) {
-        return PushParser.fromId(id).getUrl();
+        return Sniffer.pushUrl(PushParser.fromId(id).getUrl());
+    }
+
+    /**
+     * 投屏用：webhome_inline 的 VOD 只存在发送端内存里，远端拿到同一条历史必然
+     * 报 "WebHome inline VOD not found"；改写成自包含的 push_agent 推送串（真实地址 + 请求头）后再发。
+     */
+    public static History castHistory(History history, String url, Map<String, String> headers) {
+        if (history == null || !WebHomeInlineVodStore.KEY.equals(history.getSiteKey())) return history;
+        String base = Sniffer.gatewayTarget(url);
+        if (TextUtils.isEmpty(base)) base = url;
+        if (TextUtils.isEmpty(base)) return history;
+        History copy = History.objectFrom(history.toString());
+        if (copy == null) return history;
+        copy.setKey(PUSH + AppDatabase.SYMBOL + Sniffer.pushPayload(base, headers) + AppDatabase.SYMBOL + history.getCid());
+        return copy;
     }
 
     static boolean isLocalFileUrl(String url) {
@@ -383,10 +400,14 @@ public class SiteApi {
     }
 
     private static Result pushPlayer(String flag, String url, int playerType, Source source) throws Exception {
+        // 推送串可能带请求头：url@Headers=<encode(json)>，也可能只有 @Cookie= / @Referer= / @User-Agent=
+        Map<String, String> pushHeaders = Sniffer.pushHeaders(url);
+        String realUrl = Sniffer.pushUrl(url);
         Result result = new Result();
-        result.setUrl(url);
-        result.setParse(shouldSniffPushUrl(url) ? 1 : 0);
+        result.setUrl(realUrl);
+        result.setParse(shouldSniffPushUrl(realUrl) ? 1 : 0);
         result.setFlag(flag);
+        if (!pushHeaders.isEmpty()) result.setHeader(pushHeaders);
         result.setUrl(source.fetch(result, playerType));
         SpiderDebug.log("player", result.toString());
         return result;

@@ -94,21 +94,31 @@
             android:textColor="@color/white"
             android:textSize="24sp" />
 
-        <View
+        <!-- 按钮组的可用宽度由 FrameLayout 的权重决定：恒等于「标题之后、时钟之前」的余量，
+             所以按钮再多也挤不掉右侧时钟。按钮行在容器内水平居中，宽度由代码按内容算
+             （fitFuncWidth），内容比容器宽时退回容器宽度、行内横向滚动。 -->
+        <FrameLayout
+            android:id="@+id/funcContainer"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1" />
-
-        <androidx.leanback.widget.HorizontalGridView
-            android:id="@+id/funcRecycler"
-            android:layout_width="wrap_content"
             android:layout_height="40dp"
-            android:layout_marginEnd="16dp"
-            android:clipChildren="false"
+            android:layout_weight="1"
+            android:clipChildren="true"
             android:clipToPadding="false"
-            android:nextFocusDown="@id/typeRecycler"
-            app:focusOutEnd="false"
-            app:focusOutFront="false" />
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <androidx.leanback.widget.HorizontalGridView
+                android:id="@+id/funcRecycler"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:nextFocusDown="@id/typeRecycler"
+                app:focusOutEnd="false"
+                app:focusOutFront="false" />
+
+        </FrameLayout>
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/clock"

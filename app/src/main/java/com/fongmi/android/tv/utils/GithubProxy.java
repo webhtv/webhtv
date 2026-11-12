@@ -17,9 +17,10 @@ public final class GithubProxy {
     private static final String[] BUILT_IN = {
             DEFAULT,
             "https://ghfast.top/",
-            "https://99z.top/",
-            "https://proxy.v2gh.com/",
-            "https://proxy.api.030101.xyz/"
+            "https://github.chenc.dev/",
+            "https://gh-proxy.org/",
+            "https://gh.monlor.com/",
+            "https://gh.acmsz.top/"
     };
 
     private GithubProxy() {

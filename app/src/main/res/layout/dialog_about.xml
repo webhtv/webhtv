@@ -144,17 +144,6 @@
             app:strokeColor="@color/focus_ring_primary_container"
             app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
-        <androidx.appcompat.widget.AppCompatImageButton
-            android:id="@+id/updateSettings"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_gravity="end"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/about_primary_icon_button"
-            android:contentDescription="@string/update_settings"
-            android:padding="10dp"
-            android:src="@drawable/ic_remote_settings"
-            app:tint="@color/about_primary_icon_tint" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 </androidx.appcompat.widget.LinearLayoutCompat>

@@ -256,6 +256,7 @@ import com.fongmi.android.tv.ui.dialog.CastDialog;
 import com.fongmi.android.tv.ui.dialog.ControlDialog;
 import com.fongmi.android.tv.ui.dialog.PanNetworkDiagnosticDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerKernelDialog;
+import com.fongmi.android.tv.ui.dialog.PlaybackSettingDialog;
 import com.fongmi.android.tv.ui.dialog.QuickSearchDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
 import com.fongmi.android.tv.ui.dialog.TitleDialog;
@@ -649,17 +650,38 @@ private boolean runtimeSourceOnly;
         else if (!dispatchToContentHandler(activity, push.getUrl(), title)) start(activity, SiteApi.PUSH, push.getId(), TextUtils.isEmpty(name) ? push.getName() : name);
     }
 
-    private static boolean sPendingFullscreen;
+    /**
+     * 点名「下一次打开这条视频直接全屏」。用 key+id 绑定目标而不是全局布尔：
+     * 历史/收藏点击可能被路由到 TMDB 详情、搜索页或阅读器，布尔标记会滞留下来，
+     * 把之后随便打开的一部片子顶成全屏；按条目绑定就不会误伤别的视频。
+     */
+    private static String sPendingFullscreenTarget;
+    private static String sPendingFullscreenName;
+
+    public static void requestFullscreenFor(String key, String id, String name) {
+        sPendingFullscreenTarget = fullscreenTarget(key, id);
+        // 源变更时续播会走「按片名全站搜索」，换源后 key/id 已经不同，额外记住片名兜底。
+        sPendingFullscreenName = name == null ? "" : name;
+    }
 
     public static void startFullscreen(Activity activity, History history) {
-        sPendingFullscreen = true;
+        requestFullscreenFor(history.getSiteKey(), history.getVodId(), history.getVodName());
         start(activity, history.getSiteKey(), history.getVodId(), history.getVodName(), history.getVodPic(), null, history.getWallPic());
     }
 
-    private static boolean consumePendingFullscreen() {
-        boolean pending = sPendingFullscreen;
-        sPendingFullscreen = false;
-        return pending;
+    private static String fullscreenTarget(String key, String id) {
+        return (key == null ? "" : key) + AppDatabase.SYMBOL + (id == null ? "" : id);
+    }
+
+    private boolean takePendingFullscreen() {
+        String pending = sPendingFullscreenTarget;
+        if (pending == null) return false;
+        // 一次性消费：这次打开的是别的片子就顺手作废，避免很久以后打开同名条目突然全屏。
+        sPendingFullscreenTarget = null;
+        String pendingName = sPendingFullscreenName;
+        sPendingFullscreenName = null;
+        if (pending.equals(fullscreenTarget(getKey(), getId()))) return true;
+        return !TextUtils.isEmpty(pendingName) && pendingName.equals(getName());
     }
 
     @Override
@@ -1774,6 +1796,7 @@ private boolean runtimeSourceOnly;
         if (mBinding.control.action.immersiveAudio != null) mBinding.control.action.immersiveAudio.setOnClickListener(view -> toggleImmersiveAudioMode());
         if (mBinding.control.action.cast != null) mBinding.control.action.cast.setOnClickListener(view -> onCast());
         if (mBinding.control.action.timer != null) mBinding.control.action.timer.setOnClickListener(view -> onTimer());
+        if (mBinding.control.action.setting != null) mBinding.control.action.setting.setOnClickListener(view -> onPlaybackSetting());
         if (mBinding.audioPlay != null) mBinding.audioPlay.setOnClickListener(view -> checkPlay());
         if (mBinding.audioNext != null) mBinding.audioNext.setOnClickListener(view -> checkNext());
         if (mBinding.audioPrev != null) mBinding.audioPrev.setOnClickListener(view -> checkPrev());
@@ -1887,6 +1910,7 @@ private boolean runtimeSourceOnly;
         addActionButton(PlayerButtonSetting.CAST, mBinding.control.action.cast);
         addActionButton(PlayerButtonSetting.TIMER, mBinding.control.action.timer);
         addActionButton(PlayerButtonSetting.REPEAT, mBinding.control.action.repeat);
+        addActionButton(PlayerButtonSetting.SETTING, mBinding.control.action.setting);
         PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
         setupCustomActionButtons();
         updatePanDiagnosticAction();
@@ -2127,6 +2151,24 @@ private boolean runtimeSourceOnly;
         if (mCustomPortraitButtons != null) mCustomPortraitButtons.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
+    private void applyActionButtonSettings() {
+        if (mActionButtons != null) PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+    }
+
+    /**
+     * 面板里改过「播放器按钮」之后重建一次动作栏：先全部置 VISIBLE 作基线，
+     * 再按新的隐藏集/顺序重排，最后补回按能力判断的显隐（轨道、弹幕、投屏、诊断等）。
+     */
+    private void refreshActionButtonsAfterPanel() {
+        if (mActionButtons == null) return;
+        for (View view : mActionButtons.values()) if (view != null) view.setVisibility(View.VISIBLE);
+        setupActionButtons();
+        applyActionButtonVisibility();
+        setTrackVisible();
+        mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+    }
+
     private void applyActionButtonVisibility() {
         updateCustomButtonVisibility();
         mBinding.control.action.cast.setVisibility(isFullscreen() ? View.GONE : View.VISIBLE);
@@ -2276,7 +2318,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void checkCast() {
-        if ((consumePendingFullscreen() || isCast()) && !isFullscreen()) enterFullscreen();
+        if ((takePendingFullscreen() || isCast()) && !isFullscreen()) enterFullscreen();
         else if (mAudioStageVisible) mBinding.progressLayout.showContent();
         else if (hasInitialPreview()) showInitialPreview();
         else mBinding.progressLayout.showProgress();
@@ -5096,13 +5138,62 @@ private boolean runtimeSourceOnly;
         ControlDialog.create().parent(mBinding).history(mHistory).parse(isUseParse()).player(player()).show(this);
     }
 
+    /**
+     * 播放设置面板：全屏且控制栏显示时按菜单键、或控制栏里的「设置」按钮进来，
+     * 用半透明对话框加载设置页内容，不再跳 Activity；关掉后继续播放。
+     */
+    private void onPlaybackSetting() {
+        boolean wasPlaying = service() != null && player() != null && player().isPlaying();
+        int scaleBefore = PlayerSetting.getScale();
+        boolean[] displayBefore = PlayerSetting.getDisplayChecked();
+        int badgeBefore = PlayerSetting.getMediaBadgeChoice();
+        String buttonsBefore = PlayerButtonSetting.signature();
+        boolean shown = PlaybackSettingDialog.show(this, () -> {
+            if (isFinishing() || isDestroyed()) return;
+            applyPanelSettings(scaleBefore, displayBefore, badgeBefore, buttonsBefore);
+            if (wasPlaying && service() != null && player() != null && !player().isPlaying()) player().play();
+        });
+        if (!shown) return;
+        // 面板期间停掉控制栏自动隐藏：否则 3 秒后控制栏被置 GONE，关面板后遥控没有落点。
+        App.removeCallbacks(mR1);
+        // 记下进面板前的焦点，关面板后由 onWindowFocusChanged 还给控制栏原来的按钮。
+        mDialogReturnFocus = mBinding.control.getRoot().findFocus();
+        // 面板铺满播放画面：确认面板真的打开了，才把播放暂停。
+        if (wasPlaying && player() != null) player().pause();
+    }
+
+    /**
+     * 面板关掉后把面板里改动过、且当前实例能立刻吃到的设置补上：
+     * 画面比例直接重设；屏显（时间/网速/媒体徽标/角位/诊断）重开一次 OSD 循环读取新值。
+     * 内核、渲染、缓冲这类需要重建播放器的设置不在这里强行生效，等下次加载。
+     */
+    private void applyPanelSettings(int scaleBefore, boolean[] displayBefore, int badgeBefore, String buttonsBefore) {
+        if (service() == null || player() == null) return;
+        int scale = PlayerSetting.getScale();
+        if (scale != scaleBefore) {
+            applyResizeMode(scale);
+            mBinding.control.action.scale.setText(ResUtil.getStringArray(R.array.select_scale)[scale]);
+        }
+        // 屏显开关/媒体徽标角位真的改过才重开 OSD 循环，避免只是打开面板看一眼也打断屏显。
+        if (badgeBefore != PlayerSetting.getMediaBadgeChoice()
+                || !java.util.Arrays.equals(displayBefore, PlayerSetting.getDisplayChecked())) {
+            onDisplayChanged();
+        }
+        // 播放器按钮配置（显示/隐藏、排序）改过就重排控制栏，不用等下次进播放页。
+        if (mActionButtons != null && !buttonsBefore.equals(PlayerButtonSetting.signature())) {
+            refreshActionButtonsAfterPanel();
+        }
+    }
+
     private void onCast() {
         if (mHistory == null || TextUtils.isEmpty(mHistory.getVodId()) || service() == null || player().isEmpty() || TextUtils.isEmpty(player().getUrl())) {
             Notify.show(R.string.cast_not_ready);
             return;
         }
         CastVideo video = new CastVideo(Objects.toString(mBinding.widget.title.getText(), ""), player().getUrl(), player().getPosition(), player().getHeaders());
-        CastDialog.create().history(mHistory).video(video).fm(true).show(this);
+        // webhome_inline 的 VOD 只在发送端内存里，远端拿 history 必然 not found；
+        // 改写成自包含的 push_agent 推送串（真实地址 + 请求头）后再发。
+        CastDialog.create().history(SiteApi.castHistory(mHistory, player().getUrl(), player().getHeaders())).video(video).fm(true).show(this);
     }
 
     private void onTimer() {
@@ -8999,6 +9090,20 @@ private boolean runtimeSourceOnly;
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // 播放设置面板开着时，菜单/方向/确定/返回这些键只归面板：不让播放页再切控制栏、重开面板。
+        // 只有极端情况下按键才会漏到播放页（个别设备对话框窗口没拿到焦点）；音量等系统键照常放行。
+        if (PlaybackSettingDialog.isShowing(this)) {
+            int keyCode = event.getKeyCode();
+            if (KeyUtil.isBackKey(event)) {
+                if (KeyUtil.isActionUp(event)) PlaybackSettingDialog.dismissIfShowing(this);
+                return true;
+            }
+            if (KeyUtil.isMenuKey(event)) return true;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                    || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                    || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) return true;
+        }
         if (dispatchDiscMenuKey(event)) return true;
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event) && mBinding.lutQuick.hideIfVisible()) return true;
         if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {
@@ -9007,11 +9112,20 @@ private boolean runtimeSourceOnly;
             return true;
         }
         if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
+        if (isFullscreen() && KeyUtil.isMenuKey(event) && isVisible(mBinding.control.getRoot())) {
+            onPlaybackSetting();
+            return true;
+        }
         if (isFullscreen() && KeyUtil.isMenuKey(event)) {
             int menuKey = Setting.getFullscreenMenuKey();
             if (menuKey == Setting.FULLSCREEN_MENU_KEY_EPISODES) onEpisodes();
             else if (menuKey == Setting.FULLSCREEN_MENU_KEY_NEXT_EPISODE) onMenuNextEpisode();
             else onToggle();
+        }
+        // 详情页（小窗预览状态）的菜单键等同于该页可见的「简介」按钮。
+        if (!isFullscreen() && KeyUtil.isMenuKey(event) && isVisible(mBinding.content)) {
+            onContent();
+            return true;
         }
         if (isVisible(mBinding.control.getRoot())) {
             setR1Callback();

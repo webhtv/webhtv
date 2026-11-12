@@ -99,7 +99,8 @@ public class DebugLogs implements Process {
         for (String address : new String[]{Server.get().getAddress("/debug/logs"), Server.get().getAddress(false)}) {
             try { hosts.add(java.net.URI.create(address).getRawAuthority().toLowerCase(java.util.Locale.ROOT)); } catch (RuntimeException ignored) {}
         }
-        return DiagnosticAccess.sameOrigin(session.getHeaders().get("origin"), session.getHeaders().get("host"), hosts);
+        Map<String, String> headers = session.getHeaders();
+        return DiagnosticAccess.controlRequestAllowed(headers.get("origin"), headers.get("referer"), headers.get("sec-fetch-site"), headers.get("host"), hosts);
     }
 
     private Response controlRequestError(IHTTPSession session) {

@@ -25,6 +25,7 @@ import com.fongmi.android.tv.bean.MultiRepo;
 import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.MultiRepoStore;
+import com.fongmi.android.tv.ui.helper.MultiRepoTheme;
 import com.fongmi.android.tv.utils.QRCode;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
@@ -103,7 +104,7 @@ public class MultiRepoAddDialog extends DialogFragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         LinearLayout root = new LinearLayout(requireContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundResource(R.drawable.shape_shell_proxy_dialog);
+        MultiRepoTheme.applyPanel(root);
         int horizontal = ResUtil.dp2px(24);
         int vertical = ResUtil.dp2px(20);
         root.setPadding(horizontal, vertical, horizontal, vertical);
@@ -111,7 +112,7 @@ public class MultiRepoAddDialog extends DialogFragment {
         // 标题
         MaterialTextView title = new MaterialTextView(requireContext());
         title.setText(R.string.multi_repo_add_title);
-        title.setTextColor(Color.parseColor("#202124"));
+        title.setTextColor(MultiRepoTheme.onSurface());
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
         root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -153,7 +154,7 @@ public class MultiRepoAddDialog extends DialogFragment {
 
         MaterialTextView info = new MaterialTextView(requireContext());
         info.setText(ResUtil.getString(R.string.multi_repo_push_info, Server.get().getAddress()).replace("\uff0c", "\n"));
-        info.setTextColor(Color.parseColor("#3C4043"));
+        info.setTextColor(MultiRepoTheme.infoText());
         info.setTextSize(13);
         info.setLineSpacing(ResUtil.dp2px(4), 1f);
         info.setMaxLines(3);
@@ -211,7 +212,7 @@ public class MultiRepoAddDialog extends DialogFragment {
     private TextInputEditText addInput(LinearLayout parent, int labelRes, int hintRes) {
         MaterialTextView label = new MaterialTextView(requireContext());
         label.setText(labelRes);
-        label.setTextColor(Color.parseColor("#5F6368"));
+        MultiRepoTheme.applyLabel(label);
         label.setTextSize(14);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = ResUtil.dp2px(12);
@@ -219,12 +220,10 @@ public class MultiRepoAddDialog extends DialogFragment {
 
         TextInputEditText edit = new TextInputEditText(requireContext());
         edit.setHint(hintRes);
-        edit.setTextColor(Color.parseColor("#202124"));
-        edit.setHintTextColor(Color.parseColor("#9AA0A6"));
         edit.setTextSize(15);
         LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ep.topMargin = ResUtil.dp2px(4);
-        edit.setBackgroundResource(android.R.drawable.edit_text);
+        MultiRepoTheme.applyInput(edit);
         edit.setPadding(ResUtil.dp2px(4), ResUtil.dp2px(10), ResUtil.dp2px(4), ResUtil.dp2px(10));
         edit.setSingleLine(true);
         parent.addView(edit, ep);
@@ -244,16 +243,13 @@ public class MultiRepoAddDialog extends DialogFragment {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.rightMargin = ResUtil.dp2px(6);
         btn.setLayoutParams(params);
-        if (primary) {
-            btn.setTextColor(Color.WHITE);
-            btn.setBackgroundColor(Color.parseColor("#1A73E8"));
-            btn.setStrokeWidth(0);
-        } else {
-            btn.setTextColor(Color.parseColor("#5F6368"));
-            btn.setBackgroundColor(Color.TRANSPARENT);
-            btn.setStrokeWidth(ResUtil.dp2px(1));
-            btn.setStrokeColorResource(R.color.dialog_outlined_button_stroke);
-        }
+        btn.setStrokeWidth(ResUtil.dp2px(1));
+        if (primary) MultiRepoTheme.filled(btn, false);
+        else MultiRepoTheme.ghost(btn, false);
+        btn.setOnFocusChangeListener((v, hasFocus) -> {
+            if (primary) MultiRepoTheme.filled(btn, hasFocus);
+            else MultiRepoTheme.ghost(btn, hasFocus);
+        });
         return btn;
     }
 

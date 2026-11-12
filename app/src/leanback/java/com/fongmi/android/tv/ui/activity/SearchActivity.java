@@ -467,6 +467,20 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         return true;
     }
 
+    private View findLastInRow(RecyclerView rv, View focused) {
+        int top = focused.getTop();
+        View last = null;
+        int maxRight = Integer.MIN_VALUE;
+        for (int i = 0; i < rv.getChildCount(); i++) {
+            View child = rv.getChildAt(i);
+            if (child.getTop() == top && child.getRight() > maxRight) {
+                maxRight = child.getRight();
+                last = child;
+            }
+        }
+        return last;
+    }
+
     private boolean isLastInRow(RecyclerView rv, View focused) {
         int top = focused.getTop();
         int right = focused.getRight();
@@ -478,6 +492,14 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     private boolean handleKeywordKey(KeyEvent event) {
+        if (KeyUtil.isUpKey(event)) {
+            View last = findNearestInLastRow(mBinding.keyboard, mBinding.keyword.getLeft());
+            if (last != null) {
+                last.requestFocus();
+                return true;
+            }
+            return false;
+        }
         if (!KeyUtil.isRightKey(event)) return false;
         if (mBinding.keyword.getSelectionEnd() < mBinding.keyword.getText().length()) return false;
         mBinding.searchScope.requestFocus();
@@ -500,8 +522,19 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
             mBinding.keyword.requestFocus();
             return true;
         }
-        if (KeyUtil.isLeftKey(event) && isFirstInRow(mBinding.keyboard, item)) return true;
-        return KeyUtil.isDownKey(event) && isLastRow(mBinding.keyboard, item);
+        if (KeyUtil.isDownKey(event) && isLastRow(mBinding.keyboard, item)) {
+            mBinding.keyword.requestFocus();
+            return true;
+        }
+        if (KeyUtil.isLeftKey(event) && isFirstInRow(mBinding.keyboard, item)) {
+            View lastInRow = findLastInRow(mBinding.keyboard, item);
+            if (lastInRow != null) {
+                lastInRow.requestFocus();
+                return true;
+            }
+            return true;
+        }
+        return false;
     }
 
     private boolean handleWordKey(KeyEvent event, View item) {

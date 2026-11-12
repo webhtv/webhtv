@@ -71,7 +71,6 @@ public class TvFocusRingContractTest {
 
     private static final String UPDATE_LEANBACK = "app/src/leanback/res/layout/dialog_update.xml";
     private static final String UPDATE_MOBILE = "app/src/mobile/res/layout/dialog_update.xml";
-    private static final String ABOUT_ICON_TINT = "app/src/main/res/color/about_primary_icon_tint.xml";
 
     // ------------------------------------------------------------ R3 主题控制
 
@@ -1172,46 +1171,20 @@ public class TvFocusRingContractTest {
         return out;
     }
 
-    // ------------------------------------------- 关于弹窗齿轮图标（用户实拍第一张照片）
+    // ------------------------------------------- 关于弹窗齿轮图标（用户要求：两端都不要这颗齿轮）
 
     /**
-     * R1 回归：齿轮图标未聚焦时背景全透明，直接贴在 colorSurfaceContainerHigh 面板上，
-     * 而 dialog_about.xml 此前硬写 app:tint="?attr/colorOnPrimary"（深蓝），
-     * 夜间 #062E6F / #2A2F34 = 1.05:1、浅色 #FFFFFF / #E7E8EF = 1.22:1 —— 两种主题
-     * 下图标都等于看不见。着色必须分状态，且常态取面板上的前景色。
+     * 关于弹窗右下角那颗齿轮（updateSettings）已从布局里整体移除：
+     * 手机端和电视端都不再出现，也就不存在"图标与背景对比度"的问题需要守。
+     * 这里钉住"不要再长回来"，同时确保检查更新按钮仍在。
      */
     @Test
-    public void aboutGearIconTintPairsWithTheBackgroundItActuallySitsOn() throws Exception {
+    public void aboutDialogHasNoUpdateSettingsGearAnymore() throws Exception {
         String layout = values(read(ABOUT_LAYOUT));
-        int start = layout.indexOf("android:id=\"@+id/updateSettings\"");
-        assertTrue("关于弹窗必须有齿轮按钮", start >= 0);
-        String gear = layout.substring(start, layout.indexOf("/>", start));
-        assertTrue("齿轮必须引用状态化着色表", gear.contains("app:tint=\"@color/about_primary_icon_tint\""));
-        assertFalse("齿轮不得再硬写单一 on-primary 着色", gear.contains("app:tint=\"?attr/colorOnPrimary\""));
-
-        String tint = values(read(ABOUT_ICON_TINT));
-        // 聚焦态：背景被换成 colorPrimaryContainer，图标取配对 on-色。
-        assertTrue("齿轮聚焦态必须取配对 on-色",
-                tint.contains("android:color=\"?attr/colorOnPrimaryContainer\""));
-        assertFalse("齿轮聚焦态不得再用 on-primary 配 primary-container 填充（深色压深色）",
-                tint.contains("android:color=\"?attr/colorOnPrimary\""));
-        // 常态：背景透明，图标落在面板上，必须取面板上的前景色。
-        assertTrue("齿轮常态必须取面板上的前景色（on-surface-variant）",
-                tint.contains("android:color=\"?attr/colorOnSurfaceVariant\""));
-        assertFalse("齿轮着色不得写死颜色", tint.matches("(?s).*#[0-9A-Fa-f]{6}.*"));
-
-        // 对比度回归：两个分支各自与它实际所处的背景配对。
-        for (String tokens : new String[]{TOKENS_LIGHT, TOKENS_NIGHT}) {
-            String body = read(tokens);
-            String panel = tokenHex(body, "webhtv_color_surface_container_high");
-            String pContainer = tokenHex(body, "webhtv_color_primary_container");
-            String onPContainer = tokenHex(body, "webhtv_color_on_primary_container");
-            String onSurfaceVariant = tokenHex(body, "webhtv_color_on_surface_variant");
-            assertTrue(tokens + "：聚焦态齿轮图标必须与 primary container 填充 ≥3:1",
-                    contrast(onPContainer, pContainer) >= 3.0);
-            assertTrue(tokens + "：常态齿轮图标必须与弹窗面板 ≥3:1",
-                    contrast(onSurfaceVariant, panel) >= 3.0);
-        }
+        assertFalse("关于弹窗不得再有齿轮按钮 updateSettings", layout.contains("@+id/updateSettings"));
+        assertFalse("关于弹窗不得再引用齿轮着色表", layout.contains("@color/about_primary_icon_tint"));
+        assertTrue("检查更新按钮必须保留", layout.contains("android:id=\"@+id/checkUpdate\""));
+        assertTrue("确认按钮必须保留", layout.contains("android:id=\"@+id/confirm\""));
     }
 
     /**

@@ -415,17 +415,19 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     @Override
     public void onDelete(Site item) {
         if (!item.isFile()) return;
-        FragmentActivity activity = requireActivity();
-        if (activity.isFinishing() || activity.isDestroyed()) return;
+        FragmentActivity activity = host();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         new WebHtvAlertDialogBuilder(activity, R.style.Theme_WebHTV_Dialog)
                 .setTitle(R.string.setting_site_delete_title)
-                .setMessage(getString(R.string.setting_site_delete_message, item.getName()))
+                .setMessage(activity.getString(R.string.setting_site_delete_message, item.getName()))
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> deleteFileSite(item))
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
 
     private void deleteFileSite(Site item) {
+        FragmentActivity activity = host();
+        if (activity == null) return;
         String type = item.getFileType();
         String fileName = item.getFileName();
         if (fileName.isEmpty()) return;
@@ -440,7 +442,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         File file = new File(Path.root() + "/tvbox/" + subDir, fileName);
         boolean deleted = file.exists() && file.delete();
         if (!deleted && file.exists()) {
-            Toast.makeText(requireActivity(), R.string.setting_site_delete_failed, Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, R.string.setting_site_delete_failed, Toast.LENGTH_SHORT).show();
             return;
         }
         Site currentHome = VodConfig.get().getHome();
@@ -461,7 +463,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
             VodConfig.get().setHome(fallbackHome);
         }
         if (!siteList.isEmpty()) siteList.remove(item);
-        Toast.makeText(requireActivity(), getString(R.string.setting_site_delete_done, item.getName()), Toast.LENGTH_SHORT).show();
+        Toast.makeText(activity, activity.getString(R.string.setting_site_delete_done, item.getName()), Toast.LENGTH_SHORT).show();
         if (adapter != null && binding != null) {
             adapter.removeSite(item);
             setRecyclerHeight(adapter.getItemCount());
@@ -560,7 +562,22 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     }
 
     private FragmentActivity getDialogActivity() {
-        return activity != null ? activity : requireActivity();
+        FragmentActivity host = host();
+        return host != null ? host : requireActivity();
+    }
+
+    /**
+     * TV 端走 showDirect()，Fragment 从未 attach 到 FragmentManager，
+     * requireActivity()/getString() 会直接抛 "Fragment not attached to an activity"。
+     * 这里从裸 Dialog 的宿主 activity 兜底，拿不到就返回 null 由调用方静默退出。
+     */
+    private FragmentActivity host() {
+        FragmentActivity host = activity;
+        if (host == null) host = getActivity();
+        if (host == null && binding != null && binding.getRoot().getContext() instanceof FragmentActivity) {
+            host = (FragmentActivity) binding.getRoot().getContext();
+        }
+        return host;
     }
 
     private void applyWindow(Window window) {
@@ -740,6 +757,15 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     }
 
     private boolean onDialogKey(int keyCode, KeyEvent event) {
+        if (KeyUtil.isMenuKey(event)) {
+            View all = findGroupView("");
+            if (all == null) return false;
+            // 只搬焦点，不顺手切组：用户按菜单键是想回到分组栏，不是想清掉当前筛选。
+            groupSwitching = true;
+            boolean focused = all.requestFocus();
+            groupSwitching = false;
+            return focused;
+        }
         if (!groupReordering || keyCode != KeyEvent.KEYCODE_BACK || event.getAction() != KeyEvent.ACTION_UP) return false;
         cancelGroupReorder();
         return true;

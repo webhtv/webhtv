@@ -3,12 +3,12 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
 
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
-import com.fongmi.android.tv.bean.HomeButton;
 import com.fongmi.android.tv.databinding.ActivitySettingPersonalBinding;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -22,7 +22,6 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.GroupRuleDialog;
-import com.fongmi.android.tv.ui.dialog.HomeButtonDialog;
 import com.fongmi.android.tv.ui.dialog.HomeMenuKeyDialog;
 import com.fongmi.android.tv.ui.dialog.SpeedSettingDialog;
 import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
@@ -34,6 +33,27 @@ import com.fongmi.android.tv.utils.Util;
 import java.util.Locale;
 
 public class SettingPersonalActivity extends BaseActivity {
+
+    /** 本页可聚焦的条目，顺序必须与布局从上到下一致；只用于上下环形跳转。 */
+    private static final int[] FOCUS_ROWS = {
+            R.id.following,
+            R.id.autoBackup,
+            R.id.fullscreenMenuKey,
+            R.id.homeMenuKey,
+            R.id.playBackToDetail,
+            R.id.playbackOverlay,
+            R.id.episodeHistory,
+            R.id.globalHistory,
+            R.id.interfaceFailover,
+            R.id.playSpeed,
+            R.id.groupRule,
+            R.id.searchThread,
+            R.id.searchUi,
+            R.id.searchResultSort,
+            R.id.resetApp,
+            R.id.appBranding,
+            R.id.touchOptimization
+    };
 
     private ActivitySettingPersonalBinding mBinding;
     private String[] fullscreenMenuKey;
@@ -59,16 +79,14 @@ public class SettingPersonalActivity extends BaseActivity {
 
     @Override
     protected void initView(Bundle savedInstanceState) {
-        mBinding.homeVodAutoLoad.requestFocus();
+        mBinding.following.requestFocus();
         setText();
     }
 
     @Override
     protected void initEvent() {
-        mBinding.homeVodAutoLoad.setOnClickListener(this::setHomeVodAutoLoad);
         mBinding.following.setOnClickListener(this::setFollowing);
         mBinding.autoBackup.setOnClickListener(this::setAutoBackup);
-        mBinding.homeButtons.setOnClickListener(this::onHomeButtons);
         mBinding.fullscreenMenuKey.setOnClickListener(this::setFullscreenMenuKey);
         mBinding.homeMenuKey.setOnClickListener(this::setHomeMenuKey);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
@@ -78,7 +96,6 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.interfaceFailover.setOnClickListener(this::setInterfaceFailover);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.groupRule.setOnClickListener(this::setGroupRule);
-        mBinding.homeHistory.setOnClickListener(this::setHomeHistory);
         mBinding.searchThread.setOnClickListener(this::setSearchThread);
         mBinding.searchUi.setOnClickListener(this::setSearchUi);
         mBinding.searchResultSort.setOnClickListener(this::setSearchResultSort);
@@ -94,11 +111,36 @@ public class SettingPersonalActivity extends BaseActivity {
         setText();
     }
 
+    /** 上下到边界时在首尾之间环绕，避免焦点跑到页面外或被别的控件抢走。 */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN && wrapVerticalFocus(event.getKeyCode())) return true;
+        return super.dispatchKeyEvent(event);
+    }
+
+    private boolean wrapVerticalFocus(int keyCode) {
+        View focus = getCurrentFocus();
+        int index = focus == null ? -1 : indexOf(focus.getId());
+        if (index < 0) return false;
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP && index == 0) return focusRow(FOCUS_ROWS.length - 1);
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && index == FOCUS_ROWS.length - 1) return focusRow(0);
+        return false;
+    }
+
+    private int indexOf(int id) {
+        for (int i = 0; i < FOCUS_ROWS.length; i++) if (FOCUS_ROWS[i] == id) return i;
+        return -1;
+    }
+
+    private boolean focusRow(int index) {
+        View view = findViewById(FOCUS_ROWS[index]);
+        if (view == null || view.getVisibility() != View.VISIBLE) return false;
+        return view.requestFocus();
+    }
+
     private void setText() {
-        mBinding.homeVodAutoLoadText.setText(getSwitch(Setting.isHomeVodAutoLoad()));
         mBinding.followingText.setText(getSwitch(FollowingSettings.isEnabled()));
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
-        mBinding.homeButtonsText.setText(getString(R.string.home_buttons_selected, HomeButton.getButtons().size(), HomeButton.all().size()));
         mBinding.fullscreenMenuKeyText.setText((fullscreenMenuKey = getResources().getStringArray(R.array.select_fullscreen_menu_key))[Setting.getFullscreenMenuKey()]);
         mBinding.homeMenuKeyText.setText((homeMenuKey = getResources().getStringArray(R.array.select_home_menu_key))[Setting.getHomeMenuKey()]);
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
@@ -108,7 +150,6 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.interfaceFailoverText.setText((interfaceFailoverMode = getResources().getStringArray(R.array.select_interface_failover_mode))[Setting.getInterfaceFailoverMode()]);
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.groupRuleText.setText(getString(R.string.setting_group_rule_summary, GroupRuleConfig.enabledCount(), GroupRuleConfig.totalCount()));
-        mBinding.homeHistoryText.setText(getSwitch(Setting.isHomeHistory()));
         mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
         mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]);
         mBinding.searchResultSortText.setText((searchResultSort = getResources().getStringArray(R.array.select_search_result_sort))[Setting.getSearchResultSort()]);
@@ -128,11 +169,6 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private String getSpeedText(float speed) {
         return String.format(Locale.US, "%.2f", speed);
-    }
-
-    private void setHomeVodAutoLoad(View view) {
-        Setting.putHomeVodAutoLoad(!Setting.isHomeVodAutoLoad());
-        setText();
     }
 
     private void setFollowing(View view) {
@@ -167,10 +203,6 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private boolean isAutoBackupEnabled() {
         return AutoBackupPolicy.isEffective(Setting.isAutoBackup(), Setting.hasFileAccess());
-    }
-
-    private void onHomeButtons(View view) {
-        HomeButtonDialog.show(this, this::setText);
     }
 
     private void setFullscreenMenuKey(View view) {
@@ -217,12 +249,6 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private void setGroupRule(View view) {
         GroupRuleDialog.create(this).onChanged(this::setText).show();
-    }
-
-    private void setHomeHistory(View view) {
-        Setting.putHomeHistory(!Setting.isHomeHistory());
-        RefreshEvent.history();
-        setText();
     }
 
     private void setSearchThread(View view) {

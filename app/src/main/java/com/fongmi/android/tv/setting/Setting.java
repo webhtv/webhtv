@@ -984,8 +984,10 @@ public class Setting {
     private static String legacyGithubProxyUrl(String proxy) {
         return switch (proxy) {
             case "github_chenc" -> "https://github.chenc.dev";
-            case "gh_acmsz" -> "https://gh.acmsz.top";
+            case "gh_proxy_com" -> "https://gh-proxy.com";
             case "ghfast" -> "https://ghfast.top";
+            case "gh_proxy_org" -> "https://gh-proxy.org";
+            case "gh_acmsz" -> "https://gh.acmsz.top";
             case "gh_monlor" -> "https://gh.monlor.com";
             default -> "";
         };
@@ -1001,8 +1003,10 @@ public class Setting {
         List<String> list = new ArrayList<>();
         if (selectedUrl != null && !selectedUrl.isEmpty()) list.add(selectedUrl);
         list.add("https://github.chenc.dev");
-        list.add("https://gh.acmsz.top");
+        list.add("https://gh-proxy.com");
         list.add("https://ghfast.top");
+        list.add("https://gh-proxy.org");
+        list.add("https://gh.acmsz.top");
         list.add("https://gh.monlor.com");
         String custom = Prefers.getString("update_github_proxy_url");
         if (!custom.isEmpty()) list.add(custom);

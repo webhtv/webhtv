@@ -227,5 +227,10 @@
             android:nextFocusRight="@id/next"
             android:text="@string/play_repeat" />
 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/setting"
+            style="@style/Control"
+            android:text="@string/play_setting" />
+
     </LinearLayout>
 </HorizontalScrollView>

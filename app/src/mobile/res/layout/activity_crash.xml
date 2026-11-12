@@ -8,8 +8,10 @@
 
     <androidx.appcompat.widget.AppCompatImageView
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="140dp"
+        android:adjustViewBounds="true"
         android:contentDescription="@null"
+        android:scaleType="fitCenter"
         android:src="@drawable/customactivityoncrash_error_image" />
 
     <com.google.android.material.textview.MaterialTextView

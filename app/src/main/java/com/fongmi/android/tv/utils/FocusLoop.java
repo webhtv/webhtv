@@ -62,24 +62,32 @@ public final class FocusLoop {
         }
         if (row < 0 || grid[row] == null || col < 0 || col >= grid[row].length) return false;
 
-        int nextRow = row;
-        int nextCol = col;
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            nextRow = (row - 1 + grid.length) % grid.length;
-        } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            nextRow = (row + 1) % grid.length;
-        } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            nextCol = (col - 1 + grid[row].length) % grid[row].length;
-        } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            nextCol = (col + 1) % grid[row].length;
-        }
-        if (nextRow < 0 || nextRow >= grid.length || grid[nextRow] == null) return false;
-        if (nextCol >= grid[nextRow].length) nextCol = grid[nextRow].length - 1;
-        if (nextCol < 0) return false;
-
-        View target = root.findViewById(grid[nextRow][nextCol]);
-        if (target != null && target.isFocusable() && target.getVisibility() == View.VISIBLE) {
-            return target.requestFocus();
+        // 目标行可能被业务代码临时隐藏（GONE），继续沿同一方向查找，最多绕一圈；
+        // 这样"环形跳转"在可见项不完整时也不会卡在隐藏行上。
+        int steps = keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? grid.length : grid[row].length;
+        for (int i = 0; i < steps; i++) {
+            int nextRow = row;
+            int nextCol = col;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                row = (row - 1 + grid.length) % grid.length;
+                nextRow = row;
+            } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                row = (row + 1) % grid.length;
+                nextRow = row;
+            } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                col = (col - 1 + grid[row].length) % grid[row].length;
+                nextCol = col;
+            } else {
+                col = (col + 1) % grid[row].length;
+                nextCol = col;
+            }
+            if (nextRow < 0 || nextRow >= grid.length || grid[nextRow] == null) return false;
+            if (nextCol >= grid[nextRow].length) nextCol = grid[nextRow].length - 1;
+            if (nextCol < 0) continue;
+            View target = root.findViewById(grid[nextRow][nextCol]);
+            if (target != null && target.isFocusable() && target.getVisibility() == View.VISIBLE) {
+                return target.requestFocus();
+            }
         }
         return false;
     }
