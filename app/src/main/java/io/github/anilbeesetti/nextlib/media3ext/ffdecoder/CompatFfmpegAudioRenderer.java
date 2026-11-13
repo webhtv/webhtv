@@ -3,7 +3,9 @@ package io.github.anilbeesetti.nextlib.media3ext.ffdecoder;
 import static androidx.media3.exoplayer.audio.AudioSink.SINK_FORMAT_SUPPORTED_DIRECTLY;
 
 import android.content.Context;
+import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.os.Handler;
 import android.util.Log;
@@ -35,6 +37,7 @@ public final class CompatFfmpegAudioRenderer extends DecoderAudioRenderer<Ffmpeg
     private static final int STEREO_CHANNEL_COUNT = 2;
     private final Context context;
     private final boolean systemDecoderFallbackOnly;
+    private int maxRouteChannelCount;
 
     public CompatFfmpegAudioRenderer(Handler eventHandler, AudioRendererEventListener eventListener, AudioSink audioSink) {
         this(null, eventHandler, eventListener, audioSink, false);
@@ -70,9 +73,11 @@ public final class CompatFfmpegAudioRenderer extends DecoderAudioRenderer<Ffmpeg
         int initialInputBufferSize = decodeFormat.maxInputSize != Format.NO_VALUE ? decodeFormat.maxInputSize : DEFAULT_INPUT_BUFFER_SIZE;
         int outputChannelCount = getOutputChannelCount(decodeFormat);
         if (SpiderDebug.isEnabled()) {
-            SpiderDebug.log("exo-audio", "ffmpeg output mime=%s sourceChannels=%d outputChannels=%d downmix=%s",
+            SpiderDebug.log("exo-audio", "ffmpeg output mime=%s sourceChannels=%d outputChannels=%d downmix=%s routeMax=%d mask=0x%x",
                     decodeFormat.sampleMimeType, decodeFormat.channelCount, outputChannelCount,
-                    outputChannelCount == STEREO_CHANNEL_COUNT && decodeFormat.channelCount > STEREO_CHANNEL_COUNT);
+                    outputChannelCount == STEREO_CHANNEL_COUNT && decodeFormat.channelCount > STEREO_CHANNEL_COUNT,
+                    maxRouteChannelCount,
+                    Util.getAudioTrackChannelConfig(outputChannelCount));
         }
         if (MimeTypes.AUDIO_ALAC.equals(decodeFormat.sampleMimeType)) {
             byte[] data = decodeFormat.initializationData.isEmpty()
@@ -183,12 +188,13 @@ public final class CompatFfmpegAudioRenderer extends DecoderAudioRenderer<Ffmpeg
         // Media3's PCM sink reports 16-bit PCM as supported on every device, but
         // some vendor HALs still reject a particular channel mask at AudioTrack
         // creation time (for example 5.1 on the built-in speaker route). Probe
-        // the cheap deterministic gate here so the decoder can downmix to stereo
-        // before its first output buffer instead of failing in getMinBufferSize().
+        // the cheap deterministic gate here so the decoder can downmix before its
+        // first output buffer instead of failing in getMinBufferSize().
+        // The mask must be derived from the target channel count: a source
+        // format's mask describes the source layout, which is unrelated (media3
+        // maps 10 channels to a 7.1 mask below API 32).
         if (format.sampleRate <= 0 || channelCount <= 0) return true;
-        int channelConfig = format.channelMask != Format.NO_VALUE
-                ? format.channelMask
-                : Util.getAudioTrackChannelConfig(channelCount);
+        int channelConfig = Util.getAudioTrackChannelConfig(channelCount);
         if (channelConfig == AudioFormat.CHANNEL_INVALID) return false;
         try {
             return AudioTrack.getMinBufferSize(
@@ -200,11 +206,51 @@ public final class CompatFfmpegAudioRenderer extends DecoderAudioRenderer<Ffmpeg
     }
 
     private int getOutputChannelCount(Format format) {
-        boolean sourceSupported = sinkSupportsFormat(format, C.ENCODING_PCM_16BIT, format.channelCount)
-                || sinkSupportsFormat(format, C.ENCODING_PCM_FLOAT, format.channelCount);
+        int candidate = chooseOutputChannelCount(format.channelCount, getMaxRouteChannelCount());
+        if (sinkSupportsFormat(format, C.ENCODING_PCM_16BIT, candidate)
+                || sinkSupportsFormat(format, C.ENCODING_PCM_FLOAT, candidate)) {
+            return candidate;
+        }
         boolean stereoSupported = sinkSupportsFormat(format, C.ENCODING_PCM_16BIT, STEREO_CHANNEL_COUNT)
                 || sinkSupportsFormat(format, C.ENCODING_PCM_FLOAT, STEREO_CHANNEL_COUNT);
-        return resolveOutputChannelCount(format.channelCount, sourceSupported, stereoSupported);
+        return resolveOutputChannelCount(candidate, false, stereoSupported);
+    }
+
+    /**
+     * 输出声道数必须与 AudioTrack 掩码表达的声道数一致，否则帧长与通道都会错位：media3 在
+     * API 32 以下把 10 声道映射成 7.1 掩码，照发 10 声道 PCM 就是本次故障的直接原因。这里
+     * 取“源声道数、当前输出路由上限”的较小值，再逐级下退到有合法掩码的声道数。
+     */
+    static int chooseOutputChannelCount(int sourceChannelCount, int maxRouteChannelCount) {
+        int limit = Math.min(sourceChannelCount, Math.max(STEREO_CHANNEL_COUNT, maxRouteChannelCount));
+        for (int count = limit; count > STEREO_CHANNEL_COUNT; count--) {
+            if (Integer.bitCount(Util.getAudioTrackChannelConfig(count)) == count) return count;
+        }
+        return STEREO_CHANNEL_COUNT;
+    }
+
+    /**
+     * 路由真实可用的声道上限，取自输出设备自报能力，而不是 AudioTrack 是否接受某个掩码：
+     * 失败设备会接受 7.1 掩码却只有双声道输出。查询失败按立体声处理。
+     */
+    private int getMaxRouteChannelCount() {
+        if (maxRouteChannelCount > 0) return maxRouteChannelCount;
+        int max = 0;
+        if (context != null) {
+            try {
+                AudioManager manager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+                if (manager != null) {
+                    for (AudioDeviceInfo device : manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+                        if (!device.isSink() || device.getType() == AudioDeviceInfo.TYPE_REMOTE_SUBMIX) continue;
+                        for (int channels : device.getChannelCounts()) max = Math.max(max, channels);
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                // An unavailable device list is treated as a stereo route below.
+            }
+        }
+        maxRouteChannelCount = max > 0 ? max : STEREO_CHANNEL_COUNT;
+        return maxRouteChannelCount;
     }
 
     static int resolveOutputChannelCount(int sourceChannelCount, boolean sourceSupported, boolean stereoSupported) {

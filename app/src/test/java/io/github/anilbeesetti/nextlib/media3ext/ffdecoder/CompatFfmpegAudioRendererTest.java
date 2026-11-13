@@ -27,6 +27,30 @@ public class CompatFfmpegAudioRendererTest {
     }
 
     @Test
+    public void tenChannelSource_stepsDownToMaskConsistentChannelCount() {
+        // API 32 以下 media3 把 10 声道映射成 7.1 掩码，输出必须降到 8 声道才与掩码自洽。
+        assertEquals(8, CompatFfmpegAudioRenderer.chooseOutputChannelCount(10, 10));
+    }
+
+    @Test
+    public void routeChannelCap_winsOverSourceChannelCount() {
+        assertEquals(8, CompatFfmpegAudioRenderer.chooseOutputChannelCount(10, 8));
+        assertEquals(2, CompatFfmpegAudioRenderer.chooseOutputChannelCount(10, 2));
+        assertEquals(2, CompatFfmpegAudioRenderer.chooseOutputChannelCount(6, 2));
+    }
+
+    @Test
+    public void surroundAndStereoSources_keepTheirChannelCount() {
+        assertEquals(6, CompatFfmpegAudioRenderer.chooseOutputChannelCount(6, 8));
+        assertEquals(2, CompatFfmpegAudioRenderer.chooseOutputChannelCount(2, 8));
+    }
+
+    @Test
+    public void unknownRouteCap_fallsBackToStereo() {
+        assertEquals(2, CompatFfmpegAudioRenderer.chooseOutputChannelCount(6, 0));
+    }
+
+    @Test
     public void av3aManifestMime_isRecognizedByMedia3() {
         assertEquals(MimeTypes.AUDIO_AV3A, MimeTypes.getMediaMimeType("av3a.02"));
     }
