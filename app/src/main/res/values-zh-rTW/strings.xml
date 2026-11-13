@@ -1046,7 +1046,7 @@
     <string name="cache_limit_title_exo">播放暫存上限</string>
     <string name="cache_management_playback_budget">播放暫存 %1$s（退出播放後收至 %2$s）</string>
     <string name="cache_cleanup_confirm_title">確認清理暫存？</string>
-    <string name="cache_cleanup_confirm_light">清理過期節目表、暫存檔與遺留暫存？</string>
+    <string name="cache_cleanup_confirm_light">清理暫存檔與遺留暫存？</string>
     <string name="cache_cleanup_confirm_standard">清理圖片、歌詞、K 歌與 WebHome 等可重建暫存？\n\n收藏、歷史與設定不會受到影響。</string>
     <string name="cache_cleanup_confirm_deep">清理播放暫存及其他深度暫存？\n\n正在播放的內容會受保護；之後播放可能需要重新下載與緩衝。</string>
     <string name="cache_cleanup_confirm_deep_final">深度清理無法復原，確定現在開始？</string>
@@ -2723,6 +2723,7 @@
     <string name="interface_failover_switch">切換介面</string>
     <string name="interface_failover_cancelled">已取消介面切換</string>
     <string name="history_other_config">其他配置</string>
+    <string name="history_source_webhome">WebHome</string>
     <string name="history_source_unavailable">介面已失效</string>
     <string name="history_source_searching">正在配對可續播播放源…</string>
     <string name="history_source_not_found">未找到可可靠續播的播放源</string>

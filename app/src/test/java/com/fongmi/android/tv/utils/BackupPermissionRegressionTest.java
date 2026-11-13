@@ -18,9 +18,25 @@ public class BackupPermissionRegressionTest {
     }
 
     @Test
-    public void homeDestroyBacksUpOnlyWhenEnabledAndAuthorized() throws Exception {
-        assertAutoBackupGuard(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "activity", "HomeActivity.java"));
-        assertAutoBackupGuard(source("mobile", "java", "com", "fongmi", "android", "tv", "ui", "activity", "HomeActivity.java"));
+    public void autoBackupRunsOnColdStartInsteadOfExit() throws Exception {
+        String app = read(source("main", "java", "com", "fongmi", "android", "tv", "App.java"));
+        assertTrue(app.contains("AutoBackupPolicy.isEffective(Setting.isAutoBackup(), Setting.hasFileAccess())"));
+        assertTrue(app.contains("Task.execute(AppDatabase::autoBackup)"));
+
+        String leanback = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "activity", "HomeActivity.java"));
+        String mobile = read(source("mobile", "java", "com", "fongmi", "android", "tv", "ui", "activity", "HomeActivity.java"));
+        for (String home : new String[]{leanback, mobile}) {
+            assertFalse(home.contains("backupOnExitSync"));
+            assertFalse(home.contains("AppDatabase.autoBackup()"));
+        }
+    }
+
+    /** 在线更新的“备份并升级”必须复用自动备份的 auto 命名与单份保留规则。 */
+    @Test
+    public void updateBackupUsesAutomaticBackupLogic() throws Exception {
+        String updater = read(source("main", "java", "com", "fongmi", "android", "tv", "Updater.java"));
+        assertTrue(updater.contains("AppDatabase.backupAuto("));
+        assertFalse(updater.contains("AppDatabase.backup("));
     }
 
     @Test
@@ -75,13 +91,6 @@ public class BackupPermissionRegressionTest {
         assertTrue(restore.contains("if (!allGranted)"));
         assertTrue(restore.contains("R.string.backup_permission_denied"));
         assertTrue(restore.indexOf("return;") > restore.indexOf("if (!allGranted)"));
-    }
-
-    private static void assertAutoBackupGuard(Path path) throws Exception {
-        String destroy = tail(read(path), "protected void onDestroy()");
-        assertTrue(destroy.contains("AutoBackupPolicy.shouldRun("));
-        assertTrue(destroy.contains("isFinishing()"));
-        assertTrue(destroy.contains("isChangingConfigurations()"));
     }
 
     private static String method(String source, String start, String end) {

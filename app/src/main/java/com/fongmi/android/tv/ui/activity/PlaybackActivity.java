@@ -8,7 +8,10 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Display;
 import android.view.SurfaceView;
@@ -37,12 +40,15 @@ import androidx.media3.session.SessionToken;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.player.PlaybackAutoContext;
+import com.fongmi.android.tv.player.PlaybackFrameSnapshot;
 import com.fongmi.android.tv.player.PlaybackOwnershipKeys;
 import com.fongmi.android.tv.player.PlaybackServiceReleasePolicy;
 import com.fongmi.android.tv.player.PlaybackTelemetry;
@@ -65,6 +71,8 @@ import com.fongmi.android.tv.ui.dialog.VideoAspectModeDialog;
 import com.fongmi.android.tv.ui.novel.NovelRouter;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Task;
+import com.fongmi.android.tv.web.WebHomeInlineVodStore;
 import com.github.catvod.crawler.SpiderDebug;
 import com.google.common.util.concurrent.ListenableFuture;
 
@@ -104,6 +112,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private ExoSubtitleSession attachedSubtitleSession;
     private final com.fongmi.android.tv.player.SurfaceDiagnosticCollector surfaceDiagnostics =
             new com.fongmi.android.tv.player.SurfaceDiagnosticCollector();
+    private static final long[] WEBHOME_SNAPSHOT_DELAYS = {2500L, 2000L, 2000L};
+    private final Handler webHomeSnapshotHandler = new Handler(Looper.getMainLooper());
+    private String webHomeSnapshotKey;
+    private int webHomeSnapshotAttempt;
+    private boolean webHomeSnapshotRunning;
+    private boolean webHomeSnapshotDone;
 
     protected MediaController controller() {
         return mController;
@@ -478,6 +492,71 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     protected void onFirstFrameRendered() {
+    }
+
+    /** 子类返回当前播放历史，供 WebHome 封面截图兜底使用；没有历史时返回 null。 */
+    protected History getPlaybackHistory() {
+        return null;
+    }
+
+    private void scheduleWebHomeSnapshot() {
+        History history = getPlaybackHistory();
+        if (history == null || !WebHomeInlineVodStore.KEY.equals(history.getSiteKey())) return;
+        if (!TextUtils.isEmpty(history.getVodPic())) return;
+        if (TextUtils.equals(history.getKey(), webHomeSnapshotKey)) {
+            if (webHomeSnapshotDone || webHomeSnapshotRunning
+                    || webHomeSnapshotAttempt >= WEBHOME_SNAPSHOT_DELAYS.length) return;
+        } else {
+            webHomeSnapshotKey = history.getKey();
+            webHomeSnapshotAttempt = 0;
+            webHomeSnapshotDone = false;
+        }
+        webHomeSnapshotHandler.removeCallbacksAndMessages(null);
+        scheduleNextWebHomeSnapshot();
+    }
+
+    private void scheduleNextWebHomeSnapshot() {
+        if (webHomeSnapshotDone || webHomeSnapshotAttempt >= WEBHOME_SNAPSHOT_DELAYS.length) return;
+        long delay = WEBHOME_SNAPSHOT_DELAYS[webHomeSnapshotAttempt++];
+        webHomeSnapshotHandler.postDelayed(this::captureWebHomeSnapshot, delay);
+    }
+
+    private void captureWebHomeSnapshot() {
+        if (webHomeSnapshotDone || webHomeSnapshotRunning || isFinishing() || isDestroyed()) return;
+        History history = getPlaybackHistory();
+        if (history == null || !WebHomeInlineVodStore.KEY.equals(history.getSiteKey())
+                || !TextUtils.isEmpty(history.getVodPic())) return;
+        final String key = history.getKey();
+        final int cid = history.getCid();
+        final String vodId = history.getVodId();
+        webHomeSnapshotRunning = true;
+        PlaybackFrameSnapshot.capture(this, getExoView(), uri -> {
+            webHomeSnapshotRunning = false;
+            if (isFinishing() || isDestroyed()) return;
+            History current = getPlaybackHistory();
+            if (current == null || !TextUtils.equals(current.getKey(), key)) return;
+            if (TextUtils.isEmpty(uri)) {
+                scheduleNextWebHomeSnapshot();
+                return;
+            }
+            webHomeSnapshotDone = true;
+            persistWebHomeSnapshot(cid, key, vodId, uri);
+        });
+    }
+
+    /**
+     * 后台落库：用原子 UPDATE 只在字段仍为空时写入，避免截图期间 TMDB 海报或播放进度被覆盖。
+     * 同时回写内嵌 VOD 存储，之后从历史详情进入也能拿到本地封面。
+     */
+    private void persistWebHomeSnapshot(int cid, String key, String vodId, String uri) {
+        Task.execute(() -> {
+            try {
+                History.updateVodPicIfEmpty(cid, key, uri);
+                WebHomeInlineVodStore.setPic(vodId, uri);
+                App.post(RefreshEvent::history);
+            } catch (Throwable ignored) {
+            }
+        });
     }
 
     protected void onSeekStarted() {
@@ -1415,7 +1494,9 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
 
     @Override
     public void onRenderedFirstFrame() {
-        if (isOwner()) onFirstFrameRendered();
+        if (!isOwner()) return;
+        onFirstFrameRendered();
+        scheduleWebHomeSnapshot();
     }
 
     @Override
@@ -1505,6 +1586,7 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
 
     @Override
     protected void onDestroy() {
+        webHomeSnapshotHandler.removeCallbacksAndMessages(null);
         surfaceDiagnostics.unbind();
         detachAssSurface();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "activity destroy beforeRelease %s", lifecycleState());

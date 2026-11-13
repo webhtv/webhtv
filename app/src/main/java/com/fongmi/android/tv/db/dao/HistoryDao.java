@@ -19,6 +19,9 @@ public abstract class HistoryDao extends BaseDao<History> {
     @Query("SELECT * FROM History WHERE cid = :cid")
     public abstract List<History> findAll(int cid);
 
+    @Query("UPDATE History SET vodPic = :pic WHERE cid = :cid AND `key` = :key AND (vodPic IS NULL OR vodPic = '')")
+    public abstract int updateVodPicIfEmpty(int cid, String key, String pic);
+
     @Query("SELECT * FROM History WHERE cid = :cid AND `key` = :key")
     public abstract History find(int cid, String key);
 

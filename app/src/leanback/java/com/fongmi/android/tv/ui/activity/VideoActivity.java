@@ -2063,7 +2063,7 @@ private boolean runtimeSourceOnly;
 
     private void setVideoView() {
         mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackActionVisible() ? View.VISIBLE : View.GONE);
         applyDanmakuState();
         mBinding.control.action.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
         setupActionButtons();
@@ -2166,7 +2166,7 @@ private boolean runtimeSourceOnly;
         applyActionButtonVisibility();
         setTrackVisible();
         mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackActionVisible() ? View.VISIBLE : View.GONE);
     }
 
     private void applyActionButtonVisibility() {
@@ -5781,6 +5781,11 @@ private boolean runtimeSourceOnly;
         submitAdFeedback();
     }
 
+    /** 是否显示「有广告」动作按钮：功能本身可用，且没有被播放器按钮配置隐藏。 */
+    private boolean isAdFeedbackActionVisible() {
+        return isAdFeedbackEnabled() && PlayerButtonSetting.isVisible(PlayerButtonSetting.AD_FEEDBACK);
+    }
+
     private boolean isAdFeedbackEnabled() {
         // 功能开关 + 仅支持解析的格式(HLS/m3u8)才可反馈,因为去广分析依赖切片列表
         return Setting.isAiConfigReady() && Setting.isAdblock() && Setting.isAiAdDetection() && isAdFeedbackSupportedFormat();
@@ -5794,7 +5799,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void setAdFeedbackVisible() {
-        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackActionVisible() ? View.VISIBLE : View.GONE);
         applyActionButtonVisibility();
     }
 
@@ -6916,6 +6921,11 @@ private boolean runtimeSourceOnly;
     @Override
     protected void onFirstFrameRendered() {
         recordPlayHealth(true, "");
+    }
+
+    @Override
+    protected History getPlaybackHistory() {
+        return mHistory;
     }
 
     @Override

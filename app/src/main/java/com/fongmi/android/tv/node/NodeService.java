@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat;
 
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.utils.Notify;
 import com.github.catvod.Proxy;
 import com.github.catvod.crawler.SpiderDebug;
@@ -260,7 +261,7 @@ public class NodeService extends Service {
     private void updateNotification(String text) {
         try {
             Notification notification = new NotificationCompat.Builder(this, Notify.DEFAULT)
-                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    .setSmallIcon(AppBranding.notificationIcon())
                     .setContentTitle("猫源")
                     .setContentText(text)
                     .setOnlyAlertOnce(true)
@@ -274,7 +275,7 @@ public class NodeService extends Service {
 
     private Notification notification(String text) {
         return new NotificationCompat.Builder(this, Notify.DEFAULT)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(AppBranding.notificationIcon())
                 .setContentTitle("猫源")
                 .setContentText(text)
                 .setOnlyAlertOnce(true)

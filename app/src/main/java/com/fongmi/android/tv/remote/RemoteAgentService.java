@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat;
 
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.utils.Notify;
 
 public class RemoteAgentService extends Service {
@@ -106,7 +107,7 @@ public class RemoteAgentService extends Service {
 
     private Notification notification() {
         return new NotificationCompat.Builder(this, Notify.DEFAULT)
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(AppBranding.notificationIcon())
                 .setContentTitle(getString(R.string.remote_trust_notification_title))
                 .setContentText(RemoteStore.summary(this))
                 .setOngoing(true)

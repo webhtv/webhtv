@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.setting.AppBranding;
 
 public class LabRuntimeService extends Service {
 
@@ -88,7 +89,7 @@ public class LabRuntimeService extends Service {
                 .putExtra(LabActivity.EXTRA_SHOW_RUNNING, true);
         PendingIntent showPending = PendingIntent.getActivity(this, 1, showAll, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this, CHANNEL)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(AppBranding.notificationIcon())
                 .setContentTitle("实验室后台任务运行中")
                 .setContentText(count + " 个后台命令正在运行")
                 .setOngoing(true)

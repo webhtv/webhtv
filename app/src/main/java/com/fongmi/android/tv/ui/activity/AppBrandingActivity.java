@@ -10,6 +10,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivityAppBrandingBinding;
+import com.fongmi.android.tv.service.ManageService;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 
@@ -60,6 +61,7 @@ public class AppBrandingActivity extends BaseActivity {
     private void save() {
         AppBranding.putIconMode(selectedIconMode);
         AppBranding.applyLauncherIcon(this);
+        ManageService.refreshNotification(this);
         setResult(RESULT_OK);
         Intent intent = AppBranding.launcherIntent(this)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);

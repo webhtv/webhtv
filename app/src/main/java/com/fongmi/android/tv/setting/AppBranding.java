@@ -130,6 +130,11 @@ public final class AppBranding {
         return drawable;
     }
 
+    /** 通知栏小图标跟随 APP 图标设置；状态栏只用 alpha，各模式都必须是透明底剪影。 */
+    public static int notificationIcon() {
+        return getIconMode() == ICON_HISTORY ? R.drawable.ic_notification_history : R.drawable.ic_notification;
+    }
+
     public static int iconLabelResource(int mode) {
         return normalizeIconMode(mode) == ICON_HISTORY
                 ? R.string.app_branding_icon_history : R.string.app_branding_icon_current;

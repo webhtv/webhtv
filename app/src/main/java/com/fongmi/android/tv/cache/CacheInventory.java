@@ -26,10 +26,11 @@ public final class CacheInventory {
     public CacheSnapshot scan() {
         long startNs = System.nanoTime();
         File cache = Path.cache();
-        List<CacheModule> modules = CacheModuleRegistry.modules(cache);
+        File files = Path.files();
+        List<CacheModule> modules = CacheModuleRegistry.modules(cache, files);
         ArrayList<CacheMeasurement> measurements = new ArrayList<>();
         ArrayList<String> warnings = new ArrayList<>();
-        for (String problem : CacheModuleRegistry.validate(cache, modules)) {
+        for (String problem : CacheModuleRegistry.validate(cache, files, modules)) {
             warnings.add("registry: " + problem);
         }
         long totalBytes = 0;
@@ -86,7 +87,7 @@ public final class CacheInventory {
     }
 
     private static List<CacheModule> modules() {
-        return CacheModuleRegistry.modules(Path.cache());
+        return CacheModuleRegistry.modules(Path.cache(), Path.files());
     }
 
     private static void scan(File file, CacheRoot root, ScanResult result, long deadlineNs, int depth) {

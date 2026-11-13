@@ -13,6 +13,7 @@ import androidx.media3.common.Player;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.dlna.CastAction;
 import com.fongmi.android.tv.dlna.DLNAAvTransportImpl;
 import com.fongmi.android.tv.dlna.DLNARenderingControlImpl;
@@ -71,7 +72,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
     @Override
     public void onCreate() {
         super.onCreate();
-        Notification notification = new NotificationCompat.Builder(this, Notify.DEFAULT).setSmallIcon(R.drawable.ic_notification).setContentTitle(getString(R.string.app_name)).setSilent(true).build();
+        Notification notification = new NotificationCompat.Builder(this, Notify.DEFAULT).setSmallIcon(AppBranding.notificationIcon()).setContentTitle(getString(R.string.app_name)).setSilent(true).build();
         startForeground(Notify.ID + 1, notification);
         upnpService.startup();
         registerLocalDevice();

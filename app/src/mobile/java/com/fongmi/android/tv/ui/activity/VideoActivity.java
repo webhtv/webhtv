@@ -2044,7 +2044,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     private void setVideoView() {
         mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackActionVisible() ? View.VISIBLE : View.GONE);
         mBinding.control.action.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
         setupActionButtons();
         mBinding.video.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
@@ -5880,7 +5880,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     private void refreshDanmakuControls() {
         mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackActionVisible() ? View.VISIBLE : View.GONE);
         applyActionButtonVisibility();
     }
 
@@ -8094,6 +8094,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     @Override
     protected void onFirstFrameRendered() {
         recordPlayHealth(true, "");
+    }
+
+    @Override
+    protected History getPlaybackHistory() {
+        return mHistory;
     }
 
     @Override
@@ -10384,6 +10389,11 @@ private void checkOrientation() {
         return !isFinishing() && !isDestroyed() && service() != null && player() != null && !player().isReleased() && !player().isEmpty() && isOwner();
     }
 
+    /** 是否显示「有广告」动作按钮：功能本身可用，且没有被播放器按钮配置隐藏。 */
+    private boolean isAdFeedbackActionVisible() {
+        return isAdFeedbackEnabled() && PlayerButtonSetting.isVisible(PlayerButtonSetting.AD_FEEDBACK);
+    }
+
     private boolean isAdFeedbackEnabled() {
         // 功能开关 + 仅支持解析的格式(HLS/m3u8)才可反馈,因为去广分析依赖切片列表
         return Setting.isAiConfigReady() && Setting.isAdblock() && Setting.isAiAdDetection() && isAdFeedbackSupportedFormat();
@@ -10397,7 +10407,7 @@ private void checkOrientation() {
     }
 
     private void setAdFeedbackVisible() {
-        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackActionVisible() ? View.VISIBLE : View.GONE);
         applyActionButtonVisibility();
     }
 

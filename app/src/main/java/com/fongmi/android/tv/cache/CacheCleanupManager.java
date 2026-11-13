@@ -96,7 +96,9 @@ public final class CacheCleanupManager {
                 CachePolicyStore.getLimit(CacheModuleId.KARAOKE), retention, () -> now, Set.of());
         CacheRetentionManager.applyLimit(new File(cache, "webhome_ext"),
                 CachePolicyStore.getLimit(CacheModuleId.WEBHOME_EXT), retention, () -> now, Set.of());
-        CacheRetentionManager.applyLimit(new File(cache, "epg"),
+        // EPG 的整目录清空只走缓存管理里的手动入口；这里的保留期修剪保留，只清理过期
+        // 节目单，避免 files/epg 长期积累脏数据。
+        CacheRetentionManager.applyLimit(EpgParser.cacheDir(),
                 CachePolicyStore.getLimit(CacheModuleId.EPG), Math.min(retention, 6L * 60L * 60L * 1000L),
                 () -> now, Set.of());
         CacheCenter.get().notifyChanged();
@@ -167,7 +169,7 @@ public final class CacheCleanupManager {
     private static CacheCleanupResult cleanEverything(CacheCleanupPlan plan,
                                                       Consumer<CacheCleanupProgress> progress) {
         File cache = App.get().getCacheDir();
-        List<CacheModule> registry = CacheModuleRegistry.modules(cache);
+        List<CacheModule> registry = CacheModuleRegistry.modules(cache, Path.files());
         CacheUsage before = measureCache(cache);
         ArrayList<String> warnings = new ArrayList<>();
         ArrayList<File> preserved = new ArrayList<>();
@@ -361,7 +363,7 @@ public final class CacheCleanupManager {
             }
             case WEBHOME_RAW -> outcome(WebHomeRawAdapter.clearCache());
             case EPG -> now ? outcome(EpgParser.clearCache())
-                    : outcome(CacheRetentionManager.applyLimit(new File(cache, "epg"), limit,
+                    : outcome(CacheRetentionManager.applyLimit(EpgParser.cacheDir(), limit,
                     Math.min(retention, 6L * 60L * 60L * 1000L), System::currentTimeMillis, Set.of()));
             case GLIDE -> {
                 Glide.get(App.get()).clearDiskCache();
@@ -625,7 +627,7 @@ public final class CacheCleanupManager {
     static TemporaryFamily temporaryFamily(File cache) {
         HashSet<String> suffixes = new HashSet<>();
         HashSet<String> excludeNames = new HashSet<>();
-        for (CacheModule module : CacheModuleRegistry.modules(cache)) {
+        for (CacheModule module : CacheModuleRegistry.modules(cache, Path.files())) {
             if (module.id() != CacheModuleId.TEMP_FILES) continue;
             for (CacheRoot root : module.roots()) {
                 suffixes.addAll(root.includeSuffixes());

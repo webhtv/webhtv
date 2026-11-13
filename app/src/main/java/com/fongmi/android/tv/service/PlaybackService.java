@@ -28,6 +28,7 @@ import androidx.media3.session.SessionToken;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.browse.BrowseTree;
@@ -169,7 +170,7 @@ private AudioHistory.Record audioHistoryRecord;
     private void setupNotification() {
         DefaultMediaNotificationProvider provider = new DefaultMediaNotificationProvider.Builder(this).build();
         session.setMediaButtonPreferences(ImmutableList.of(buildRepeatButton(), buildStopButton()));
-        provider.setSmallIcon(R.drawable.ic_notification);
+        provider.setSmallIcon(AppBranding.notificationIcon());
         setMediaNotificationProvider(provider);
     }
 

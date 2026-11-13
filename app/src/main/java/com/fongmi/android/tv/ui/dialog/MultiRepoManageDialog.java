@@ -96,7 +96,7 @@ public class MultiRepoManageDialog extends DialogFragment {
         // 标题
         MaterialTextView title = new MaterialTextView(requireContext());
         title.setText(R.string.multi_repo_manage_title);
-        title.setTextColor(MultiRepoTheme.onSurface());
+        title.setTextColor(MultiRepoTheme.onSurface(requireContext()));
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -149,7 +149,7 @@ public class MultiRepoManageDialog extends DialogFragment {
         if (repos.isEmpty()) {
             MaterialTextView empty = new MaterialTextView(requireContext());
             empty.setText(R.string.multi_repo_empty);
-            empty.setTextColor(MultiRepoTheme.hint());
+            empty.setTextColor(MultiRepoTheme.hint(requireContext()));
             empty.setTextSize(14);
             LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             ep.topMargin = ResUtil.dp2px(24);

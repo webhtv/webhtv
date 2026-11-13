@@ -32,7 +32,6 @@ import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Cache;
 import com.fongmi.android.tv.bean.Class;
 import com.fongmi.android.tv.bean.Config;
-import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.bean.Func;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
@@ -40,7 +39,6 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
-import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -53,7 +51,6 @@ import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.setting.AppBranding;
-import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
@@ -1055,17 +1052,13 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     /**
-     * 返回键直接退出（与 fish 一致，不弹确认框）：先销毁界面给出即时反馈，
-     * 后台线程同步完成退出备份、按开关做限时缓存清理，然后彻底结束进程，
-     * 避免进程残留（外挂 jar 悬浮窗、播放服务等仍存活）。
+     * 返回键直接退出（与 fish 一致，不弹确认框）：先销毁界面给出即时反馈，然后彻底结束进程。
+     * 退出不再清理缓存、不再备份：两者都改为冷启动后空闲时段各跑一次（进程常被直接杀掉）。
      * 想进后台请用 Home 键，返回键即真正退出。
      */
     private void confirmExitHome() {
         finish();
-        boolean autoBackup = AutoBackupPolicy.isEffective(Setting.isAutoBackup(), Setting.hasFileAccess());
         Task.execute(() -> {
-            if (autoBackup) AppDatabase.backupOnExitSync();
-            CacheScheduler.get().runExitCleanup();
             Process.killProcess(Process.myPid());
             System.exit(0);
         });
@@ -1077,13 +1070,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         DLNARendererService.stop(this);
         LiveConfig.get().clear();
         VodConfig.get().clear();
-        if (AutoBackupPolicy.shouldRun(
-                Setting.isAutoBackup(),
-                Setting.hasFileAccess(),
-                isFinishing(),
-                isChangingConfigurations())) {
-            AppDatabase.autoBackup();
-        }
         OkHttp.get().clear();
         Source.get().exit();
         Server.get().stop();

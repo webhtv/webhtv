@@ -112,7 +112,7 @@ public class MultiRepoAddDialog extends DialogFragment {
         // 标题
         MaterialTextView title = new MaterialTextView(requireContext());
         title.setText(R.string.multi_repo_add_title);
-        title.setTextColor(MultiRepoTheme.onSurface());
+        title.setTextColor(MultiRepoTheme.onSurface(requireContext()));
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
         root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -154,7 +154,7 @@ public class MultiRepoAddDialog extends DialogFragment {
 
         MaterialTextView info = new MaterialTextView(requireContext());
         info.setText(ResUtil.getString(R.string.multi_repo_push_info, Server.get().getAddress()).replace("\uff0c", "\n"));
-        info.setTextColor(MultiRepoTheme.infoText());
+        info.setTextColor(MultiRepoTheme.infoText(requireContext()));
         info.setTextSize(13);
         info.setLineSpacing(ResUtil.dp2px(4), 1f);
         info.setMaxLines(3);

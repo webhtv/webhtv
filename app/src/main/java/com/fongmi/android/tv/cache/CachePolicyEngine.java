@@ -8,12 +8,10 @@ import java.util.Set;
 public final class CachePolicyEngine {
 
     private static final Set<CacheModuleId> LIGHT = EnumSet.of(
-            CacheModuleId.EPG,
             CacheModuleId.TEMP_FILES,
             CacheModuleId.LEGACY_FILES
     );
     private static final Set<CacheModuleId> STANDARD = EnumSet.of(
-            CacheModuleId.EPG,
             CacheModuleId.TEMP_FILES,
             CacheModuleId.LEGACY_FILES,
             CacheModuleId.GLIDE,
@@ -48,6 +46,9 @@ public final class CachePolicyEngine {
         ids.remove(CacheModuleId.PLUGIN_AUDIT);
         ids.remove(CacheModuleId.PLUGIN_HTTP_CACHE);
         ids.remove(CacheModuleId.UNCLASSIFIED);
+        // EPG 数据落在 files/epg，体积小但重建需要重新拉取节目单；按要求只允许在缓存管理里
+        // 手动点 EPG 自己的清理按钮，任何分级/一键/自动清理都必须保留。
+        ids.remove(CacheModuleId.EPG);
         return ids;
     }
 
@@ -65,7 +66,7 @@ public final class CachePolicyEngine {
 
     public static boolean allowsAutomatic(CacheModuleId id) {
         return id != null && switch (id) {
-            case LYRICS, KARAOKE, WEBHOME_EXT, EPG, TEMP_FILES, LEGACY_FILES -> true;
+            case LYRICS, KARAOKE, WEBHOME_EXT, TEMP_FILES, LEGACY_FILES -> true;
             default -> false;
         };
     }
@@ -106,9 +107,14 @@ public final class CachePolicyEngine {
             case STANDARD -> STANDARD;
             case DEEP -> DEEP;
             // The settings row's plain click is the one-key clear from before the cache management
-            // split, so it must cover every cache the panel can name - including the report-only
-            // leftovers a tiered run deliberately protects.
-            case FULL -> EnumSet.allOf(CacheModuleId.class);
+            // split, so it covers every cache the panel can name - including the report-only
+            // leftovers a tiered run deliberately protects - except EPG, which stays manual-only.
+            case FULL -> {
+                EnumSet<CacheModuleId> all = EnumSet.allOf(CacheModuleId.class);
+                // 一键清理与自动清理同源；EPG 不参与，只能在缓存管理里手动清理。
+                all.remove(CacheModuleId.EPG);
+                yield all;
+            }
             case MODULE -> Set.of();
         };
         ArrayList<CacheModuleId> ordered = new ArrayList<>();

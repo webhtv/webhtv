@@ -4,33 +4,44 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:gravity="center_vertical"
     android:orientation="horizontal">
 
-    <com.google.android.material.textview.MaterialTextView
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/text"
+        style="@style/Widget.Material3.Button.TonalButton"
         android:layout_width="0dp"
-        android:layout_height="40dp"
+        android:layout_height="52dp"
         android:layout_weight="1"
-        android:background="@drawable/selector_light_dialog_item"
         android:ellipsize="middle"
         android:focusable="true"
         android:focusableInTouchMode="true"
         android:gravity="center"
+        android:minHeight="52dp"
         android:singleLine="true"
-        android:textColor="@color/dialog_outlined_button_text"
-        android:textSize="18sp"
+        android:textSize="16sp"
+        app:strokeColor="@color/focus_ring_secondary"
+        app:strokeWidth="@dimen/webhtv_focus_ring_width"
         tools:text="tv-2024-12-26.bk.gz" />
 
-    <androidx.appcompat.widget.AppCompatImageView
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/delete"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
         android:layout_marginStart="12dp"
-        android:background="@drawable/selector_light_dialog_item"
+        android:contentDescription="@string/download_manager_delete"
         android:focusable="true"
         android:focusableInTouchMode="true"
-        android:padding="8dp"
-        android:src="@drawable/ic_setting_delete"
-        app:tint="@color/dialog_outlined_button_text" />
+        android:insetLeft="0dp"
+        android:minHeight="52dp"
+        android:minWidth="52dp"
+        android:text=""
+        app:icon="@drawable/ic_setting_delete"
+        app:iconGravity="textStart"
+        app:iconPadding="0dp"
+        app:iconSize="22dp"
+        app:strokeColor="@color/focus_ring_secondary"
+        app:strokeWidth="@dimen/webhtv_focus_ring_width" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

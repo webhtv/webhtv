@@ -26,10 +26,8 @@ public final class CacheScheduler {
     private static final String KEY_LAST_LIMIT_MS = "cache_mgmt_last_limit_ms";
     static final int JOB_ID = 0x43414301;
     static final long PERIODIC_INTERVAL_MS = TimeUnit.DAYS.toMillis(7);
-    private static final long STARTUP_DELAY_MS = TimeUnit.SECONDS.toMillis(30);
+    private static final long STARTUP_DELAY_MS = TimeUnit.SECONDS.toMillis(10);
     private static final long LIMIT_INTERVAL_MS = TimeUnit.HOURS.toMillis(12);
-    /** 退出清理的最长等待：界面已销毁，不能让删大缓存把杀进程拖成"半天不退出"。 */
-    private static final long EXIT_CLEANUP_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(8);
 
     private static final CacheScheduler INSTANCE = new CacheScheduler();
     private final AtomicBoolean started = new AtomicBoolean();
@@ -89,25 +87,6 @@ public final class CacheScheduler {
         return trigger(periodic ? "periodic" : "low-space", finished);
     }
 
-    /**
-     * 退出前自动清理：开关开启时在调用线程上同步跑一轮自动清理（模式与周期任务一致，
-     * 未在播放、非低空间时为 LIGHT），供"返回键彻底退出"流程在结束进程前调用；
-     * 已有清理在执行则跳过。最多等待 {@link #EXIT_CLEANUP_TIMEOUT_MS}，超时就直接放走
-     * 调用方杀进程——留下来的残存缓存由下次启动的周期清理接手，不能阻塞退出。
-     */
-    public void runExitCleanup() {
-        if (!CachePolicyStore.isAutoCleanupEnabled()) return;
-        if (CacheCleanupManager.isRunning()) return;
-        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
-        CacheCleanupManager.execute(automaticPlan(CacheAutoCleanupPolicy.cleanupMode(false, false)),
-                "exit", result -> done.countDown());
-        try {
-            done.await(EXIT_CLEANUP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
     private void startupCheck() {
         // The scheduled tasks are queued once for the whole process, while cancelPersistent() only
         // cancels the platform job. Every tick must therefore re-read the switch, otherwise turning
@@ -117,7 +96,9 @@ public final class CacheScheduler {
         // would hand the playback cache the whole total limit.
         CacheCenter.get().requestSnapshot(true, ignored -> {
         });
-        trigger("startup", null);
+        // 冷启动这一轮必须真的跑：开关打开后用户退出重进，期待看到缓存被清理，
+        // 而周期/低空间门槛（shouldTrigger）在空间充足时不会放行，等于开机永远不清理。
+        trigger("startup", null, true);
         enforceTotalLimit();
     }
 
@@ -215,16 +196,20 @@ public final class CacheScheduler {
     }
 
     private boolean trigger(String reason, Runnable finished) {
+        return trigger(reason, finished, false);
+    }
+
+    private boolean trigger(String reason, Runnable finished, boolean force) {
         boolean periodic = "periodic".equals(reason);
-        boolean lowSpace = sampleLowSpace();
-        boolean playing = PlaybackService.isRunning();
-        CacheCleanupMode mode = CacheAutoCleanupPolicy.cleanupMode(playing, lowSpace);
-        if (!CacheAutoCleanupPolicy.shouldTrigger(Prefers.getInt(KEY_LOW_SPACE_STREAK, 0), periodic)
+        sampleLowSpace();
+        if ((!force && !CacheAutoCleanupPolicy.shouldTrigger(Prefers.getInt(KEY_LOW_SPACE_STREAK, 0), periodic))
                 || CacheCleanupManager.isRunning()) {
             if (finished != null) finished.run();
             return false;
         }
-        CacheCleanupManager.execute(automaticPlan(mode), reason, result -> {
+        // 自动清理与设置页"一键清理"等价：跑 FULL 计划，逐模块按 owner 释放，
+        // 播放中的播放缓存仍由 cleanEverything 的 DEFERRED 逻辑保留，不做半套清理。
+        CacheCleanupManager.execute(CachePolicyEngine.plan(CacheCleanupMode.FULL), reason, result -> {
             if (result.status() == CacheCleanupStatus.COMPLETED
                     || result.status() == CacheCleanupStatus.PARTIAL) {
                 Prefers.put(KEY_LAST_AUTO_MS, System.currentTimeMillis());
@@ -235,6 +220,7 @@ public final class CacheScheduler {
         return true;
     }
 
+    /** 维护低空间连续计数：runPersistedCheck 的 low-space 分支仍依赖它。 */
     private boolean sampleLowSpace() {
         File cache = App.get().getCacheDir();
         try {

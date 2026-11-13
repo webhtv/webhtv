@@ -31,6 +31,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.Util;
+import com.fongmi.android.tv.web.WebHomeInlineVodStore;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
@@ -225,6 +226,12 @@ public class History implements Diffable<History> {
 
     public static History find(int cid, String key) {
         return AppDatabase.get().getHistoryDao().find(cid, key);
+    }
+
+    /** 仅当原字段为空时写入封面，避免截图落库途中覆盖 TMDB 海报或更新中的播放进度。 */
+    public static boolean updateVodPicIfEmpty(int cid, String key, String pic) {
+        if (TextUtils.isEmpty(key) || TextUtils.isEmpty(pic)) return false;
+        return AppDatabase.get().getHistoryDao().updateVodPicIfEmpty(cid, key, pic) > 0;
     }
 
     public static History findPlayback(String key, String vodName, List<Flag> flags) {
@@ -657,6 +664,10 @@ public class History implements Diffable<History> {
     }
 
     public String getVodPic() {
+        // 历史卡片优先展示已落库的图片（TMDB 命中时通常是 TMDB 海报）；
+        // WebHome 嗅探记录未命中 TMDB 时，用 payload 带来的网页详情图兜底。
+        if (!TextUtils.isEmpty(vodPic)) return vodPic;
+        if (WebHomeInlineVodStore.KEY.equals(getSiteKey())) return WebHomeInlineVodStore.getPic(getVodId());
         return vodPic;
     }
 
@@ -988,6 +999,11 @@ public class History implements Diffable<History> {
     public String getSiteName() {
         if (getCid() != VodConfig.getCid()) return ResUtil.getString(R.string.history_other_config);
         if (SiteApi.PUSH.equals(getSiteKey())) return "";
+        // WebHome 嗅探记录使用合成键 webhome_inline，不是普通站点，不能按站点表判失效。
+        if (WebHomeInlineVodStore.KEY.equals(getSiteKey())) {
+            Site origin = WebHomeInlineVodStore.getOriginSite(getVodId());
+            return origin.isEmpty() ? ResUtil.getString(R.string.history_source_webhome) : origin.getDisplayName();
+        }
         if (VodConfig.get().getSites().isEmpty()) return "";
         Site site = VodConfig.get().getSite(getSiteKey());
         return site.isEmpty() ? ResUtil.getString(R.string.history_source_unavailable) : site.getDisplayName();
@@ -995,7 +1011,9 @@ public class History implements Diffable<History> {
 
     public boolean isCurrentSourceAvailable() {
         if (getCid() != VodConfig.getCid()) return false;
-        return SiteApi.PUSH.equals(getSiteKey()) || !VodConfig.get().getSite(getSiteKey()).isEmpty();
+        if (SiteApi.PUSH.equals(getSiteKey())) return true;
+        // WebHome inline 记录靠内嵌 VOD 存储自洽，不依赖 VodConfig 的站点列表。
+        return WebHomeInlineVodStore.KEY.equals(getSiteKey()) || !VodConfig.get().getSite(getSiteKey()).isEmpty();
     }
 
     public String getSiteKey() {

@@ -24,7 +24,7 @@ public class CacheAutoPlanAndTempFamilyTest {
 
     @Test
     public void automaticLightPlanKeepsOnlyRegistryApprovedModules() {
-        assertEquals(List.of(CacheModuleId.EPG, CacheModuleId.TEMP_FILES, CacheModuleId.LEGACY_FILES),
+        assertEquals(List.of(CacheModuleId.TEMP_FILES, CacheModuleId.LEGACY_FILES),
                 CacheScheduler.automaticPlan(CacheCleanupMode.LIGHT).modules());
         assertEquals(CacheCleanupMode.LIGHT, CacheScheduler.automaticPlan(CacheCleanupMode.LIGHT).mode());
     }
@@ -46,7 +46,7 @@ public class CacheAutoPlanAndTempFamilyTest {
         assertTrue(modules.contains(CacheModuleId.LYRICS));
         assertTrue(modules.contains(CacheModuleId.KARAOKE));
         assertTrue(modules.contains(CacheModuleId.WEBHOME_EXT));
-        assertTrue(modules.contains(CacheModuleId.EPG));
+        assertFalse("EPG is manual-only", modules.contains(CacheModuleId.EPG));
         assertTrue(modules.contains(CacheModuleId.TEMP_FILES));
         assertTrue(modules.contains(CacheModuleId.LEGACY_FILES));
     }

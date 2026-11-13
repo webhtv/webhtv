@@ -8,6 +8,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -37,37 +38,34 @@ public class AppDatabaseBackupTest {
     }
 
     @Test
-    public void cleanOldKeepsCompleteAndPartialBackupsSeparately() throws Exception {
-        Path directory = Files.createTempDirectory("webhtv-backup-retention-");
-        File oldestPartial = directory.resolve("bak-20260720-1300-partial.zip").toFile();
-        File newestPartial = directory.resolve("bak-20260720-1301-partial.zip").toFile();
+    public void autoBackupNameCarriesAutoMarkerWhileManualNameDoesNot() {
+        assertTrue(AppBackup.autoFileName().startsWith(AppBackup.AUTO_PREFIX));
+        assertTrue(AppBackup.isAutoBackupName(AppBackup.autoFileName()));
+        assertTrue(AppBackup.isAutoBackupName(AppBackup.autoFileName(true)));
+        assertFalse(AppBackup.isAutoBackupName(AppBackup.fileName()));
+        assertFalse(AppBackup.isAutoBackupName(AppBackup.fileName(true)));
+    }
+
+    @Test
+    public void cleanAutoOnlyKeepsEveryManualBackupAndDeletesAllAutoBackups() throws Exception {
+        Path directory = Files.createTempDirectory("webhtv-backup-auto-retention-");
+        File manual = directory.resolve("bak-20260720-1200.zip").toFile();
+        File manualPartial = directory.resolve("bak-20260720-1201-partial.zip").toFile();
+        File oldAuto = directory.resolve("bak-auto-20260720-1159.zip").toFile();
+        File oldAutoPartial = directory.resolve("bak-auto-20260720-1159-partial.zip").toFile();
+        File unrelated = directory.resolve("notes.txt").toFile();
         try {
-            for (int i = 0; i < 8; i++) {
-                File file = directory.resolve(String.format("bak-20260720-12%02d.zip", i)).toFile();
-                Files.writeString(file.toPath(), "complete", StandardCharsets.UTF_8);
-                assertTrue(file.setLastModified(i + 1L));
+            for (File file : List.of(manual, manualPartial, oldAuto, oldAutoPartial, unrelated)) {
+                Files.writeString(file.toPath(), "data", StandardCharsets.UTF_8);
             }
-            Files.writeString(oldestPartial.toPath(), "partial", StandardCharsets.UTF_8);
-            Files.writeString(newestPartial.toPath(), "partial", StandardCharsets.UTF_8);
-            assertTrue(oldestPartial.setLastModified(100L));
-            assertTrue(newestPartial.setLastModified(101L));
 
-            AppDatabase.cleanOld(directory.toFile());
+            AppDatabase.cleanAutoOnly(directory.toFile());
 
-            int complete = 0;
-            int partial = 0;
-            File[] files = directory.toFile().listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    if (!AppBackup.isBackup(file)) continue;
-                    if (AppBackup.isPartialBackupName(file.getName())) partial++;
-                    else complete++;
-                }
-            }
-            assertEquals(7, complete);
-            assertEquals(1, partial);
-            assertFalse(oldestPartial.exists());
-            assertTrue(newestPartial.exists());
+            assertTrue("manual backups are never trimmed", manual.exists());
+            assertTrue("manual partial backups are never trimmed", manualPartial.exists());
+            assertTrue("unrelated files are not touched", unrelated.exists());
+            assertFalse("previous auto backup removed", oldAuto.exists());
+            assertFalse("previous partial auto backup removed", oldAutoPartial.exists());
         } finally {
             File[] files = directory.toFile().listFiles();
             if (files != null) for (File file : files) Files.deleteIfExists(file.toPath());

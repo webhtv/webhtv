@@ -23,11 +23,9 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
-import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
-import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
@@ -41,7 +39,6 @@ import com.fongmi.android.tv.lab.LabConfig;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.receiver.ShortcutReceiver;
 import com.fongmi.android.tv.server.Server;
-import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.FragmentStateManager;
@@ -548,13 +545,10 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         } else if (mManager.isVisible(1)) {
             change(0);
         } else if (mManager.canBack(0)) {
-            // 根页面返回 = 真正退出（与 fish 一致）：先销毁界面给出即时反馈，后台线程同步备份、
-            // 按开关做限时缓存清理后结束进程。想进后台请用 Home 键，返回键即真正退出。
+            // 根页面返回 = 真正退出（与 fish 一致）：先销毁界面给出即时反馈，然后结束进程。
+            // 退出不再清理缓存、不再备份：两者都改为冷启动后空闲时段各跑一次（进程常被直接杀掉）。
             finish();
-            boolean autoBackup = AutoBackupPolicy.isEffective(Setting.isAutoBackup(), Setting.hasFileAccess());
             Task.execute(() -> {
-                if (autoBackup) AppDatabase.backupOnExitSync();
-                CacheScheduler.get().runExitCleanup();
                 Process.killProcess(Process.myPid());
                 System.exit(0);
             });
@@ -566,13 +560,6 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         if (mChrome != null) mChrome.destroy();
         LiveConfig.get().clear();
         VodConfig.get().clear("mobile-home-destroy");
-        if (AutoBackupPolicy.shouldRun(
-                Setting.isAutoBackup(),
-                Setting.hasFileAccess(),
-                isFinishing(),
-                isChangingConfigurations())) {
-            AppDatabase.autoBackup();
-        }
         OkHttp.get().clear();
         Source.get().exit();
         Server.get().stop();

@@ -31,6 +31,7 @@ import java.util.zip.ZipOutputStream;
 public final class AppBackup {
 
     public static final String PREFIX = "bak-";
+    public static final String AUTO_PREFIX = "bak-auto-";
     public static final String SUFFIX = ".zip";
 
     private static final String LEGACY_PREFIX = "webhtv-backup-";
@@ -54,6 +55,19 @@ public final class AppBackup {
         return PREFIX + LocalDateTime.now().format(STAMP) + (partial ? "-partial" : "") + SUFFIX;
     }
 
+    /** 自动备份文件名：带 auto 标记，与手动备份区分，且便于只保留最新一份。 */
+    public static String autoFileName() {
+        return autoFileName(false);
+    }
+
+    public static String autoFileName(boolean partial) {
+        return AUTO_PREFIX + LocalDateTime.now().format(STAMP) + (partial ? "-partial" : "") + SUFFIX;
+    }
+
+    public static boolean isAutoBackupName(String name) {
+        return name != null && name.startsWith(AUTO_PREFIX) && name.endsWith(SUFFIX);
+    }
+
     public static boolean isBackup(File file) {
         if (file == null || !file.isFile()) return false;
         String name = file.getName();
@@ -74,7 +88,8 @@ public final class AppBackup {
 
     public static String backupSortKey(String name) {
         if (!isBackupZipName(name)) return "";
-        int prefixLength = name.startsWith(PREFIX) ? PREFIX.length() : LEGACY_PREFIX.length();
+        int prefixLength = name.startsWith(AUTO_PREFIX) ? AUTO_PREFIX.length()
+                : name.startsWith(PREFIX) ? PREFIX.length() : LEGACY_PREFIX.length();
         String key = name.substring(prefixLength, name.length() - SUFFIX.length());
         return key.endsWith("-partial") ? key.substring(0, key.length() - "-partial".length()) : key;
     }

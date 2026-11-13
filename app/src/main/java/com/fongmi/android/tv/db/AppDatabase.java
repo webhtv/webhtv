@@ -51,9 +51,7 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final int VERSION = 48;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
-    public static final String AUTO_PREFIX = "bak-auto-";
-    private static final int BACKUP_KEEP_COUNT = 7;
-    private static final int PARTIAL_BACKUP_KEEP_COUNT = 1;
+    public static final String AUTO_PREFIX = AppBackup.AUTO_PREFIX;
     private static final String BACKUP_TEMP_FILE = ".backup.tmp";
     private static final String QUARANTINE_SUFFIX = ".incompatible-";
     private static final int QUARANTINE_KEEP_COUNT = 2;
@@ -72,6 +70,14 @@ public abstract class AppDatabase extends RoomDatabase {
         backup(new com.fongmi.android.tv.impl.Callback());
     }
 
+    /**
+     * 在线更新“备份并升级”使用：与自动备份同一套命名与单份保留规则，但仍保留成功/失败回调，
+     * 让更新流程在备份完成或失败后继续下载安装。
+     */
+    public static void backupAuto(com.fongmi.android.tv.impl.Callback callback) {
+        backup(callback, null, true);
+    }
+
     public static void autoBackup() {
         if (!beginAutoBackup()) return;
         try {
@@ -83,30 +89,20 @@ public abstract class AppDatabase extends RoomDatabase {
     }
 
     /**
-     * 退出前同步备份（调用线程阻塞直到备份完成），供"返回键彻底退出"流程使用，
-     * 避免结束进程前异步备份未跑完导致备份丢失。自动备份只保留最近一份（AUTO_PREFIX
-     * 标识，bak-auto-*.zip）。备份内容与手动备份一致：配置/数据库/主题壁纸/登录态，
-     * 不打包共享存储大文件（见 AppBackup.create）。
+     * 自动备份只保留最新一份：发布成功后删掉除本次目标外的所有 {@code bak-auto-*}。
+     * 手动备份不带 auto 标记，也不做任何数量清理，保留用户全部手动备份。
      */
-    public static void backupOnExitSync() {
-        synchronized (BACKUP_LOCK) {
-            try {
-                cleanAutoOnly();
-                String timePart = AppBackup.fileName().substring(AppBackup.PREFIX.length());
-                File file = new File(Path.tv(), AUTO_PREFIX + timePart);
-                AppBackup.create(file, null);
-                SpiderDebug.log("backup", "auto exit backup complete file=%s", file.getAbsolutePath());
-            } catch (Exception e) {
-                SpiderDebug.log("backup", "auto exit backup failed error=%s", e.getMessage());
-            }
-        }
+    static void cleanAutoOnly(File directory) {
+        cleanAutoOnly(directory, null);
     }
 
-    private static void cleanAutoOnly() {
-        File[] files = Path.tv().listFiles();
+    private static void cleanAutoOnly(File directory, File keep) {
+        File[] files = directory == null ? null : directory.listFiles();
         if (files == null) return;
         for (File file : files) {
-            if (file.isFile() && file.getName().startsWith(AUTO_PREFIX)) Path.clear(file);
+            if (!file.isFile() || !AppBackup.isAutoBackupName(file.getName())) continue;
+            if (keep != null && file.getName().equals(keep.getName())) continue;
+            Path.clear(file);
         }
     }
 
@@ -125,13 +121,15 @@ public abstract class AppDatabase extends RoomDatabase {
                     File temporary = new File(Path.tv(), BACKUP_TEMP_FILE);
                     try {
                         AppBackup.CreateResult result = AppBackup.create(temporary, progress);
-                        File target = new File(Path.tv(), AppBackup.fileName(result.hasWarning()));
+                        File target = new File(Path.tv(), automatic
+                                ? AppBackup.autoFileName(result.hasWarning())
+                                : AppBackup.fileName(result.hasWarning()));
                         publishBackup(temporary, target);
+                        if (automatic) cleanAutoOnly(Path.tv(), target);
                         App.post(() -> {
                             callback.success();
                             if (result.hasWarning()) Notify.show(result.warning);
                         });
-                        cleanOld();
                     } catch (Exception e) {
                         SpiderDebug.log("backup", "local create failed error=%s", e.getMessage());
                         SpiderDebug.log("backup", e);
@@ -177,29 +175,6 @@ public abstract class AppDatabase extends RoomDatabase {
                 App.post(callback::error);
             }
         });
-    }
-
-    private static void cleanOld() {
-        cleanOld(Path.tv());
-    }
-
-    static void cleanOld(File directory) {
-        List<File> complete = new ArrayList<>();
-        List<File> partial = new ArrayList<>();
-        File[] files = directory == null ? null : directory.listFiles();
-        if (files == null) return;
-        for (File file : files) {
-            if (!AppBackup.isBackup(file)) continue;
-            if (AppBackup.isPartialBackupName(file.getName())) partial.add(file);
-            else complete.add(file);
-        }
-        trimBackups(complete, BACKUP_KEEP_COUNT);
-        trimBackups(partial, PARTIAL_BACKUP_KEEP_COUNT);
-    }
-
-    private static void trimBackups(List<File> items, int keepCount) {
-        items.sort((f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
-        for (int i = keepCount; i < items.size(); i++) Path.clear(items.get(i));
     }
 
     private static AppDatabase create(Context context) {

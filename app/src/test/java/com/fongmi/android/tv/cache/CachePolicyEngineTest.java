@@ -13,7 +13,7 @@ public class CachePolicyEngineTest {
 
     @Test
     public void lightPlanContainsOnlyLowRiskModules() {
-        assertEquals(List.of(CacheModuleId.EPG, CacheModuleId.TEMP_FILES, CacheModuleId.LEGACY_FILES),
+        assertEquals(List.of(CacheModuleId.TEMP_FILES, CacheModuleId.LEGACY_FILES),
                 CachePolicyEngine.plan(CacheCleanupMode.LIGHT).modules());
     }
 
@@ -29,11 +29,11 @@ public class CachePolicyEngineTest {
     @Test
     public void deepPlanCoversPlaybackAndMediaExactlyOnce() {
         List<CacheModuleId> modules = CachePolicyEngine.plan(CacheCleanupMode.DEEP).modules();
-        // Four modules stay out of every tiered run: two report-only surfaces, unclassified cache
-        // (owner unknown), and the plugin HTTP cache (its entries only mean anything inside the TTL
-        // a plugin asked for, so a deep plan must not silently turn a cached plugin into a network
-        // call). Each remains reachable through its own module row.
-        assertEquals(CacheModuleId.values().length - 4, modules.size());
+        // Five modules stay out of every tiered run: two report-only surfaces, unclassified cache
+        // (owner unknown), the plugin HTTP cache (its entries only mean anything inside the TTL a
+        // plugin asked for), and EPG (manual-only from its own row). Each remains reachable through
+        // its own module row.
+        assertEquals(CacheModuleId.values().length - 5, modules.size());
         assertEquals(modules.size(), modules.stream().distinct().count());
         // L3 = L2 + playback caches. The report-only modules are excluded by design.
         assertTrue(modules.contains(CacheModuleId.EXO));
@@ -44,6 +44,7 @@ public class CachePolicyEngineTest {
         assertFalse(modules.contains(CacheModuleId.PLUGIN_AUDIT));
         assertFalse(modules.contains(CacheModuleId.PLUGIN_HTTP_CACHE));
         assertFalse(modules.contains(CacheModuleId.UNCLASSIFIED));
+        assertFalse(modules.contains(CacheModuleId.EPG));
     }
 
     /**
@@ -120,18 +121,31 @@ public class CachePolicyEngineTest {
     }
 
     /**
-     * The settings row's plain click clears every module, including the report-only ones a tiered
-     * plan deliberately protects, and it is the mode that selects the full clean path.
+     * The settings row's plain click clears every module except EPG (manual-only), including the
+     * report-only ones a tiered plan deliberately protects, and selects the full clean path.
      */
     @Test
     public void fullPlanCoversEveryModuleExactlyOnce() {
         CacheCleanupPlan plan = CachePolicyEngine.plan(CacheCleanupMode.FULL);
         assertEquals(CacheCleanupMode.FULL, plan.mode());
-        assertEquals(CacheModuleId.values().length, plan.modules().size());
+        assertEquals(CacheModuleId.values().length - 1, plan.modules().size());
         assertEquals(plan.modules().size(), plan.modules().stream().distinct().count());
         assertTrue(plan.modules().contains(CacheModuleId.EXO));
         assertTrue(plan.modules().contains(CacheModuleId.DIAGNOSTIC_LOGS));
         assertTrue(plan.modules().contains(CacheModuleId.UNCLASSIFIED));
+        assertFalse("EPG is manual-only and must survive one-key cleanup", plan.modules().contains(CacheModuleId.EPG));
+    }
+
+    /** EPG is never part of a bulk or automatic plan; only its own module row may clear it. */
+    @Test
+    public void epgIsManualOnly() {
+        assertFalse(CachePolicyEngine.allowsAutomatic(CacheModuleId.EPG));
+        assertFalse(CachePolicyEngine.plan(CacheCleanupMode.LIGHT).modules().contains(CacheModuleId.EPG));
+        assertFalse(CachePolicyEngine.plan(CacheCleanupMode.STANDARD).modules().contains(CacheModuleId.EPG));
+        assertFalse(CachePolicyEngine.plan(CacheCleanupMode.DEEP).modules().contains(CacheModuleId.EPG));
+        assertFalse(CachePolicyEngine.plan(CacheCleanupMode.FULL).modules().contains(CacheModuleId.EPG));
+        assertEquals(List.of(CacheModuleId.EPG),
+                CachePolicyEngine.module(CacheModuleId.EPG).modules());
     }
 
     @Test
@@ -153,7 +167,7 @@ public class CachePolicyEngineTest {
     @Test
     public void automaticCleanupExcludesPlaybackAndOwnerManagedModules() {
         assertTrue(CachePolicyEngine.allowsAutomatic(CacheModuleId.LYRICS));
-        assertTrue(CachePolicyEngine.allowsAutomatic(CacheModuleId.EPG));
+        assertFalse(CachePolicyEngine.allowsAutomatic(CacheModuleId.EPG));
         assertFalse(CachePolicyEngine.allowsAutomatic(CacheModuleId.EXO));
         assertFalse(CachePolicyEngine.allowsAutomatic(CacheModuleId.WEBHOME_RAW));
         assertFalse(CachePolicyEngine.allowsAutomatic(CacheModuleId.GLIDE));

@@ -20,6 +20,7 @@ import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.server.proxy.MultiThreadProxy;
 import com.fongmi.android.tv.cache.CacheScheduler;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.playback.PlaybackRemoteSyncer;
 import com.fongmi.android.tv.player.MediaBadgeCatalog;
 import com.fongmi.android.tv.player.PlaybackMemoryMonitor;
@@ -30,6 +31,7 @@ import com.fongmi.android.tv.plugin.PluginController;
 import com.fongmi.android.tv.plugin.PluginHostEvents;
 import com.fongmi.android.tv.remote.RemoteAgent;
 import com.fongmi.android.tv.setting.AppBranding;
+import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -158,7 +160,20 @@ public class App extends Application implements Application.ActivityLifecycleCal
         warmMediaBadgePatterns();
         // 插件装载会读盘并初始化脚本引擎（阻塞），必须离开主线程；失败也已在本层吞掉。
         Task.execute(PluginBootstrap::installAndReloadQuietly);
-        post(() -> CacheScheduler.get().start(), 30_000L);
+        post(() -> CacheScheduler.get().start(), 10_000L);
+        // 冷启动空闲时段做一次自动备份：退出流程不再备份（进程常被直接杀掉，等不到退出）。
+        post(this::autoBackupOnStartup, 60_000L);
+    }
+
+    /**
+     * 冷启动后空闲时段的一次自动备份。
+     *
+     * <p>退出流程不再备份：设备上多数时候是直接杀进程，退出钩子跑不完；冷启动时数据库和配置
+     * 都已可用，放在后台线程做一次即可。开关与存储权限仍由 {@link AutoBackupPolicy} 判定。</p>
+     */
+    private void autoBackupOnStartup() {
+        if (!AutoBackupPolicy.isEffective(Setting.isAutoBackup(), Setting.hasFileAccess())) return;
+        Task.execute(AppDatabase::autoBackup);
     }
 
     /**

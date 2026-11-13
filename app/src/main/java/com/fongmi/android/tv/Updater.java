@@ -417,7 +417,7 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
                 startUpdate(view);
                 return;
             }
-            AppDatabase.backup(new com.fongmi.android.tv.impl.Callback() {
+            AppDatabase.backupAuto(new com.fongmi.android.tv.impl.Callback() {
                 @Override
                 public void success() {
                     Notify.show(R.string.update_backup_done);

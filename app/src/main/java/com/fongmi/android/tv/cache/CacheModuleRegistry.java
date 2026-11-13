@@ -90,6 +90,15 @@ public final class CacheModuleRegistry {
     }
 
     public static List<CacheModule> modules(File cache) {
+        return modules(cache, cache);
+    }
+
+    /**
+     * @param files 应用内部 files 目录。EPG 由 fish 移植后落在 {@code files/epg}，
+     *              不再位于 cacheDir；统计与清理都必须指向它，否则面板显示 0 且清不掉。
+     */
+    public static List<CacheModule> modules(File cache, File files) {
+        File epg = new File(files == null ? cache : files, "epg");
         return List.of(
                 module(CacheModuleId.EXO, CacheGroup.PLAYBACK, List.of(CacheRoot.tree(new File(cache, "exo"))), CacheCleanability.DEFER_UNTIL_IDLE, CacheEvictionPolicy.LRU, false, true, true, true),
                 module(CacheModuleId.MPV_HLS, CacheGroup.PLAYBACK, List.of(CacheRoot.tree(new File(cache, "mpv_hls"))), CacheCleanability.DEFER_UNTIL_IDLE, CacheEvictionPolicy.LRU_WITH_TTL, false, true, true, true),
@@ -102,7 +111,7 @@ public final class CacheModuleRegistry {
                 module(CacheModuleId.KARAOKE, CacheGroup.MEDIA, List.of(CacheRoot.tree(new File(cache, "karaoke_tracks"))), CacheCleanability.SAFE_NOW, CacheEvictionPolicy.COUNT_THEN_LRU, true, true, false, false),
                 module(CacheModuleId.WEBHOME_EXT, CacheGroup.NETWORK, List.of(CacheRoot.tree(new File(cache, "webhome_ext"))), CacheCleanability.SAFE_NOW, CacheEvictionPolicy.LRU_WITH_TTL, true, true, false, false),
                 module(CacheModuleId.WEBHOME_RAW, CacheGroup.NETWORK, List.of(CacheRoot.tree(new File(cache, "webhome_raw"))), CacheCleanability.OWNER_MANAGED, CacheEvictionPolicy.LRU, false, true, true, false),
-                module(CacheModuleId.EPG, CacheGroup.NETWORK, List.of(CacheRoot.tree(new File(cache, "epg"))), CacheCleanability.SAFE_NOW, CacheEvictionPolicy.TTL, true, true, false, false),
+                module(CacheModuleId.EPG, CacheGroup.NETWORK, List.of(CacheRoot.tree(epg)), CacheCleanability.SAFE_NOW, CacheEvictionPolicy.TTL, false, true, false, false),
                 module(CacheModuleId.GLIDE, CacheGroup.MEDIA, List.of(CacheRoot.tree(new File(cache, "image_manager_disk_cache"))), CacheCleanability.OWNER_MANAGED, CacheEvictionPolicy.OWNER_MANAGED, false, true, true, false),
                 module(CacheModuleId.PLUGIN_SCRIPTS, CacheGroup.PLUGIN, List.of(
                         CacheRoot.tree(new File(cache, "js")),
@@ -142,6 +151,10 @@ public final class CacheModuleRegistry {
      * @return human readable problems; empty when the registry is safe
      */
     public static List<String> validate(File cache, List<CacheModule> modules) {
+        return validate(cache, cache, modules);
+    }
+
+    public static List<String> validate(File cache, File files, List<CacheModule> modules) {
         ArrayList<String> problems = new ArrayList<>();
         if (cache == null) {
             problems.add("cache root is null");
@@ -156,6 +169,7 @@ public final class CacheModuleRegistry {
             problems.add("cache root is not canonicalizable");
             return problems;
         }
+        String filesKey = canonicalKey(files == null ? cache : files);
         HashSet<CacheModuleId> ids = new HashSet<>();
         HashSet<String> definitions = new HashSet<>();
         ArrayList<RootEntry> treeRoots = new ArrayList<>();
@@ -176,7 +190,7 @@ public final class CacheModuleRegistry {
                     problems.add("cache root is not canonicalizable: " + module.id().id());
                     continue;
                 }
-                if (!isInside(cacheKey, key)) {
+                if (!isInside(cacheKey, key) && (filesKey == null || !isInside(filesKey, key))) {
                     problems.add("cache root escapes cache dir: " + root.root().getName());
                 }
                 String definition = module.id().id() + '|' + key + '|' + root.recursive() + '|'

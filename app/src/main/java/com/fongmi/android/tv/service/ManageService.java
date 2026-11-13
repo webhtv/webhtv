@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.Notify;
 import com.github.catvod.crawler.SpiderDebug;
@@ -36,6 +37,7 @@ public class ManageService extends Service {
 
     private static final String ACTION_START = BuildConfig.APPLICATION_ID + ".manage.START";
     private static final String ACTION_STOP = BuildConfig.APPLICATION_ID + ".manage.STOP";
+    private static final String ACTION_REFRESH = BuildConfig.APPLICATION_ID + ".manage.REFRESH";
     private static final long IDLE_TIMEOUT = 600_000L;
     private static final long CHECK_INTERVAL = 15_000L;
     private static volatile ManageService instance;
@@ -68,6 +70,12 @@ public class ManageService extends Service {
 
     public static void stop(Context context) {
         context.stopService(new Intent(context, ManageService.class));
+    }
+
+    /** APP 图标切换后重建常驻通知，否则旧通知会一直挂着旧的品牌图标。 */
+    public static void refreshNotification(Context context) {
+        if (!running) return;
+        ContextCompat.startForegroundService(context, new Intent(context, ManageService.class).setAction(ACTION_REFRESH));
     }
 
     public static boolean isRunning() {
@@ -197,6 +205,11 @@ public class ManageService extends Service {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             stopSelf();
             return START_NOT_STICKY;
+        }
+        if (intent != null && ACTION_REFRESH.equals(intent.getAction())) {
+            touch();
+            startForegroundCompat(notification());
+            return START_STICKY;
         }
         touch();
         return START_STICKY;
@@ -378,7 +391,7 @@ public class ManageService extends Service {
 
     private Notification notification() {
         return new NotificationCompat.Builder(this, Notify.DEFAULT)
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(AppBranding.notificationIcon())
                 .setContentTitle(getString(R.string.manage_page_notification_title))
                 .setContentText(getLanUrl())
                 .setContentIntent(openIntent())

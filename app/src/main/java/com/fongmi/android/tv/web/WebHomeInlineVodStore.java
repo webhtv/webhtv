@@ -38,6 +38,8 @@ public class WebHomeInlineVodStore {
     private static final Map<String, Entry> ITEMS = new ConcurrentHashMap<>();
     // Inline playback uses a synthetic route key; keep the real site for site-level policies.
     private static final Map<String, Site> ORIGIN_SITES = new ConcurrentHashMap<>();
+    // WebHome 嗅探 payload 自带的网页详情图；历史卡片在没有 TMDB 海报时用它兜底。
+    private static final Map<String, String> VOD_PICS = new ConcurrentHashMap<>();
     private static final Map<String, HeaderSpec> URL_HEADERS = new ConcurrentHashMap<>();
     private static final Map<String, EpisodeSpec> URL_EPISODES = new ConcurrentHashMap<>();
     // 剧集地址 -> VOD id：player() 只拿得到剧集地址，解析成功后要按 VOD id 落盘
@@ -64,6 +66,7 @@ public class WebHomeInlineVodStore {
         if (vod.getPlayFrom().isEmpty()) vod.setPlayFrom(first(Json.safeString(payload, "vodPlayFrom"), Json.safeString(payload, "playFrom"), "WebHome"));
         if (vod.getPlayUrl().isEmpty()) vod.setPlayUrl(playUrl);
         ITEMS.put(id, new Entry(App.gson().toJson(vod), headerSpec, resolver));
+        VOD_PICS.put(id, vod.getPic());
         rememberOriginSite(id, originSite);
         persist(id, ITEMS.get(id));
         return id;
@@ -79,8 +82,38 @@ public class WebHomeInlineVodStore {
     }
 
     public static Site getOriginSite(String id) {
+        if (TextUtils.isEmpty(id)) return new Site();
         Site site = ORIGIN_SITES.get(id);
+        if (site == null) {
+            // 进程重启后内存表是空的，Origin 站点随 VOD 一起持久化，按需读回来。
+            loadPersisted(id);
+            site = ORIGIN_SITES.get(id);
+        }
         return site == null ? new Site() : Site.get(site.getKey(), site.getName());
+    }
+
+    /**
+     * 嗅探 payload 里的网页详情图。历史卡片优先用 TMDB 海报，未命中时用这里兜底。
+     * 没有记录或记录里没有图片时返回空串，不伪造图片地址。
+     */
+    public static String getPic(String id) {
+        if (TextUtils.isEmpty(id)) return "";
+        String cached = VOD_PICS.get(id);
+        if (cached != null) return cached;
+        Entry entry = ITEMS.get(id);
+        if (entry == null) {
+            loadPersisted(id);
+            entry = ITEMS.get(id);
+        }
+        if (entry == null || TextUtils.isEmpty(entry.vod)) return "";
+        try {
+            Vod vod = Vod.objectFrom(entry.vod);
+            String pic = vod == null ? "" : vod.getPic();
+            VOD_PICS.put(id, pic);
+            return pic;
+        } catch (Throwable ignored) {
+            return "";
+        }
     }
 
     public static Result detail(String id) {
@@ -153,6 +186,29 @@ public class WebHomeInlineVodStore {
         result.setUrl(Source.get().fetch(result));
         SpiderDebug.log("webhome-inline", "player fetch ok cost=%sms id=%s url=%s", System.currentTimeMillis() - start, id, result.getUrl().v());
         return result;
+    }
+
+    /** 播放器截图兜底成功后回写：历史卡片与下次 detail 都直接用这张本地封面。 */
+    public static boolean setPic(String id, String pic) {
+        if (TextUtils.isEmpty(id) || TextUtils.isEmpty(pic)) return false;
+        Entry entry = ITEMS.get(id);
+        if (entry == null) {
+            loadPersisted(id);
+            entry = ITEMS.get(id);
+        }
+        if (entry == null || TextUtils.isEmpty(entry.vod)) return false;
+        try {
+            Vod vod = Vod.objectFrom(entry.vod);
+            if (vod == null) return false;
+            vod.setPic(pic);
+            Entry updated = new Entry(App.gson().toJson(vod), entry.headerSpec, entry.resolver);
+            ITEMS.put(id, updated);
+            VOD_PICS.put(id, pic);
+            persist(id, updated);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     /** 写进 Prefers。Resolver 是接口实例，无法序列化，用不到就留空。 */
@@ -239,6 +295,11 @@ public class WebHomeInlineVodStore {
             if (!TextUtils.isEmpty(raw)) headerSpec = new HeaderSpec(parseHeaders(raw, headerSpec.headers), headerSpec.includeCookies);
             Entry entry = new Entry(vod, headerSpec, null);
             ITEMS.put(id, entry);
+            try {
+                Vod parsed = Vod.objectFrom(vod);
+                if (parsed != null) VOD_PICS.put(id, parsed.getPic());
+            } catch (Throwable ignored) {
+            }
             String siteKey = Json.safeString(o, "siteKey");
             if (!TextUtils.isEmpty(siteKey)) ORIGIN_SITES.put(id, Site.get(siteKey, Json.safeString(o, "siteName")));
             JsonElement episodes = o.get("episodes");

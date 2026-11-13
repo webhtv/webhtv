@@ -7,6 +7,7 @@ import android.content.Context;
 import androidx.core.app.NotificationCompat;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.utils.Notify;
 
 /**
@@ -26,7 +27,7 @@ final class NodeNotify {
     static void progress(Context context, String text, int percent) {
         try {
             NotificationCompat.Builder builder = new NotificationCompat.Builder(context, Notify.DEFAULT)
-                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    .setSmallIcon(AppBranding.notificationIcon())
                     .setContentTitle("猫源")
                     .setContentText(text)
                     .setOnlyAlertOnce(true)
@@ -42,7 +43,7 @@ final class NodeNotify {
     static void done(Context context, String text) {
         try {
             Notification notification = new NotificationCompat.Builder(context, Notify.DEFAULT)
-                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    .setSmallIcon(AppBranding.notificationIcon())
                     .setContentTitle("猫源")
                     .setContentText(text)
                     .setOnlyAlertOnce(true)
