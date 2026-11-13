@@ -31,6 +31,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.browse.BrowseTree;
+import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
@@ -90,6 +91,71 @@ private AudioHistory.Record audioHistoryRecord;
 
     public static boolean isRunning() {
         return running;
+    }
+
+    /**
+     * 原源租约由播放服务持有：Activity 暂时离开不释放正在消费的代理，
+     * 真正停播／替换媒体／退出才释放。
+     */
+    private static volatile com.fongmi.android.tv.playback.origin.OriginSessionClient originLease;
+    private boolean originKeepAlive;
+    private boolean originPreviousKeepAlive;
+    private String originPlaybackKey;
+
+    private com.fongmi.android.tv.bean.History originHistory;
+    private final Runnable originProgressTicker = new Runnable() {
+        @Override public void run() {
+            if (originLease == null || originLease.isClosed() || player == null || player.isReleased()) return;
+            if (releaseOriginIfMediaReplaced()) return;
+            if (originHistory != null && !com.fongmi.android.tv.setting.Setting.isIncognito()
+                    && com.fongmi.android.tv.playback.origin.OriginProgressWriter.write(originHistory,
+                    player.getPlayer().getCurrentPosition(), player.getPlayer().getDuration())) {
+                if (originLease != null) originLease.progressCommitted();
+            }
+            App.post(this, 5000);
+        }
+    };
+
+    public static void holdOriginLease(com.fongmi.android.tv.playback.origin.OriginSessionClient client,
+                                       com.fongmi.android.tv.bean.History history) {
+        holdOriginLease(client);
+        PlaybackService service = Server.get().getService();
+        if (service != null) {
+            if (!service.originKeepAlive) service.originPreviousKeepAlive = service.keepAlive;
+            service.originKeepAlive = true;
+            service.keepAlive = true;
+            service.originHistory = history;
+            service.originPlaybackKey = client.playbackKey();
+            App.removeCallbacks(service.originProgressTicker);
+            App.post(service.originProgressTicker, 5000);
+        }
+    }
+
+    public static void holdOriginLease(com.fongmi.android.tv.playback.origin.OriginSessionClient client) {
+        if (originLease != null && originLease != client) releaseOriginLease();
+        originLease = client;
+    }
+
+    public static com.fongmi.android.tv.playback.origin.OriginSessionClient originLease() { return originLease; }
+
+    public static void releaseOriginLease() {
+        com.fongmi.android.tv.playback.origin.OriginSessionClient client = originLease;
+        originLease = null;
+        PlaybackService service = Server.get().getService();
+        if (service != null) { App.removeCallbacks(service.originProgressTicker); service.originHistory = null; service.originPlaybackKey = null; if (service.originKeepAlive) { service.originKeepAlive = false; service.keepAlive = service.originPreviousKeepAlive; } }
+        if (client != null) try {
+            client.close();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private boolean releaseOriginIfMediaReplaced() {
+        if (originLease != null && originPlaybackKey != null && player != null
+                && !java.util.Objects.equals(originPlaybackKey, player.getKey())) {
+            releaseOriginLease();
+            return true;
+        }
+        return false;
     }
 
     public static boolean canContinueInBackground() {
@@ -242,6 +308,7 @@ private AudioHistory.Record audioHistoryRecord;
     public void onDestroy() {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "service destroy before %s", serviceState());
         running = false;
+        releaseOriginLease();
         syncAudioHistoryProgress(true);
         clearAudioHistoryRecord();
         player.prepareTerminalRelease();
@@ -250,6 +317,9 @@ private AudioHistory.Record audioHistoryRecord;
         releaseSession();
         player.stop();
         player.release();
+        // The playback caches are only reclaimable once no player holds them, so the configured
+        // total limit converges here. Nothing else marks "playback ended" for both engines.
+        CacheScheduler.get().onPlaybackEnded();
         removeForeground();
         Server.get().clearService(this);
         EventBus.getDefault().unregister(this);
@@ -267,6 +337,7 @@ private AudioHistory.Record audioHistoryRecord;
 
     public void suspend() {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "service suspend %s", serviceState());
+        releaseOriginLease();
         stopAndClear();
         removeForeground();
     }
@@ -276,6 +347,7 @@ private AudioHistory.Record audioHistoryRecord;
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "service shutdown %s", serviceState());
         running = false;
         keepAlive = false;
+        releaseOriginLease();
         syncAudioHistoryProgress(true);
         clearAudioHistoryRecord();
         player.prepareTerminalRelease();
@@ -286,7 +358,7 @@ private AudioHistory.Record audioHistoryRecord;
 
     private void tryShutdown() {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "service tryShutdown %s", serviceState());
-        if (keepAlive) return;
+        if (keepAlive || originLease != null && !originLease.isClosed()) return;
         if (!hasNavigationCallback() && !hasExternalClient()) shutdown();
     }
 
@@ -714,6 +786,7 @@ public void onIsPlayingChanged(boolean isPlaying) {
             PlaybackEventCollector.get().onPlaybackStateChanged(player, state);
             if (desktopLyrics != null) desktopLyrics.update(player);
             if (state == Player.STATE_READY) {
+                App.post(() -> releaseOriginIfMediaReplaced());
                 updateAudioHistoryForReady();
                 scheduleAudioHistorySync();
             }

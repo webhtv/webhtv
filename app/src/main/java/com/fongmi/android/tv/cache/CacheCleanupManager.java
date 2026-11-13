@@ -394,7 +394,8 @@ public final class CacheCleanupManager {
      * running transfer is using stay protected in every mode.</p>
      */
     static boolean explicitRequest(CacheCleanupMode mode) {
-        return mode == CacheCleanupMode.MODULE || mode == CacheCleanupMode.FULL;
+        return mode == CacheCleanupMode.MODULE || mode == CacheCleanupMode.FULL
+                || mode == CacheCleanupMode.CONVERGE;
     }
 
     /**

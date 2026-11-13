@@ -260,10 +260,12 @@ public class CacheManagementDialog extends DialogFragment {
                 CacheLimitOptions.indexOf(CachePolicyStore.getTotalLimitBytes()), which -> {
                     CachePolicyStore.putTotalLimitBytes(CacheLimitOptions.BYTES[which]);
                     updatePolicyButtons();
-                    // The idle budget is derived from the total limit, so the summary line would
-                    // keep promising the previous "shrinks to" figure. Converging here is what the
-                    // new total asks for; during playback the release path converges it instead.
-                    applyPlaybackLimit();
+                    // The total reaches the playback caches only while nothing plays, so the panel
+                    // applies it here instead of leaving the old total on screen until the next
+                    // video. The refresh runs after the pass, against the state it left.
+                    CacheScheduler.get().convergeNow(() -> {
+                        if (binding != null && isAdded()) refresh(true);
+                    });
                 });
     }
 
@@ -446,7 +448,7 @@ public class CacheManagementDialog extends DialogFragment {
         String summary = quota > 0
                 ? getString(R.string.cache_management_summary_with_quota, total, FileUtil.byteCountToDisplaySize(quota))
                 : getString(R.string.cache_management_summary, total);
-        binding.summary.setText(summary + "\n" + playbackBudgetLine(snapshot));
+        binding.summary.setText(summary + "\n" + totalLimitLine());
         if (resultLine != null) {
             binding.status.setText(resultLine);
             resultLine = null;
@@ -457,16 +459,22 @@ public class CacheManagementDialog extends DialogFragment {
     }
 
     /**
-     * States where the playback cache sits and what bounds it.
+     * What bounds the whole cache directory, and when the cache converges to it.
      *
-     * <p>Without this line the panel showed a total the largest module could not be judged
-     * against: the playback cache is sized by a capacity, not by a post-hoc cleanup, and the total
-     * limit only reaches it through that capacity.</p>
+     * <p>The previous line reported the playback cache against its own capacity, which read as if
+     * the configured total applied to Exo alone - the number below the total then looked like a
+     * quota Exo was allowed to keep. The total limit is one budget shared by every module, so the
+     * line now states that total and when it is enforced, and it names the remainder that stayed
+     * over the limit because it sits in content the cleanup may not delete.</p>
      */
-    private String playbackBudgetLine(CacheSnapshot snapshot) {
-        return getString(R.string.cache_management_playback_budget,
-                FileUtil.byteCountToDisplaySize(snapshot.find(CacheModuleId.EXO).bytes()),
-                FileUtil.byteCountToDisplaySize(MediaSourceFactory.targetCapacityBytes()));
+    private String totalLimitLine() {
+        long totalLimit = CachePolicyStore.getTotalLimitBytes();
+        if (totalLimit <= 0) return getString(R.string.cache_management_total_unlimited);
+        String line = getString(R.string.cache_management_total_limit,
+                FileUtil.byteCountToDisplaySize(totalLimit));
+        long blocked = CacheScheduler.blockedOverBytes();
+        return blocked <= 0 ? line : line + " · " + getString(R.string.cache_management_total_blocked,
+                FileUtil.byteCountToDisplaySize(blocked));
     }
 
     private void renderModules(@Nullable CacheSnapshot snapshot) {

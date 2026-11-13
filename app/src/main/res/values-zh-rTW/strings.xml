@@ -1007,7 +1007,9 @@
     <string name="cache_total_limit_title">總暫存上限</string>
     <string name="cache_total_limit_summary">總上限：%1$s</string>
     <string name="cache_limit_title_exo">播放暫存上限</string>
-    <string name="cache_management_playback_budget">播放暫存 %1$s（退出播放後收至 %2$s）</string>
+    <string name="cache_management_total_limit">總上限 %1$s（全部模組合計 · 退出播放後收斂）</string>
+    <string name="cache_management_total_unlimited">總上限 不限（全部模組合計 · 退出播放後收斂）</string>
+    <string name="cache_management_total_blocked">仍超限 %1$s（受保護內容）</string>
     <string name="cache_cleanup_confirm_title">確認清理暫存？</string>
     <string name="cache_cleanup_confirm_light">清理過期節目表、暫存檔與遺留暫存？</string>
     <string name="cache_cleanup_confirm_standard">清理圖片、歌詞、K 歌與 WebHome 等可重建暫存？\n\n收藏、歷史與設定不會受到影響。</string>
@@ -3006,6 +3008,7 @@
     <string name="plugin_manager_params_invalid">參數必須是 JSON 物件</string>
     <string name="plugin_manager_params_too_large">參數量超出儲存上限</string>
     <string name="plugin_panel_title">外掛面板</string>
+    <string name="crash_action_failed">操作失敗，請重試。</string>
 
     <string name="download">下載</string>
     <string name="download_play_first">請先播放該集後再下載</string>

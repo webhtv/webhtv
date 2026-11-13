@@ -12,6 +12,25 @@ import static org.junit.Assert.assertTrue;
 public class GlobalHistoryResumeSourceTest {
 
     @Test
+    public void stageOneCrossConfigOriginRoutePrecedesTheExistingCurrentMatcher() throws Exception {
+        String source = read("app/src/main/java/com/fongmi/android/tv/ui/activity/HistoryResumeCoordinator.java");
+        int start = source.indexOf("public static void open(Activity activity, History history)");
+        int end = source.indexOf("public static void fallbackToCurrent", start);
+        assertTrue("shared history entry must retain its explicit original record", start >= 0 && end > start);
+        String open = source.substring(start, end);
+        int origin = open.indexOf("routeOriginHistory(activity, history)");
+        int fallback = open.lastIndexOf("fallbackToCurrent(activity, history)");
+        assertFalse("the origin route must not be gated by the system version; only parsing that needs WebView is",
+                open.contains("android.os.Build.VERSION.SDK_INT < 28"));
+        assertFalse("older systems must not silently degrade to current-source matching", open.contains("保留原有当前源匹配策略"));
+        assertTrue("supported-platform original source attempt precedes business-failure matching", origin >= 0 && fallback > origin);
+        assertTrue("launching original playback returns before current matching", open.substring(origin, fallback).contains("return;"));
+        assertFalse("the coordinator must not temporarily switch the current config", open.contains("VodConfig.selectConfig("));
+        assertFalse(open.contains("VodConfig.load("));
+        assertFalse("no direct search may run before the origin attempt", open.contains("HistorySourceResolver.resolveAuto("));
+    }
+
+    @Test
     public void allNativeHistoryEntriesUseTheSharedCoordinator() throws Exception {
         assertContains("app/src/mobile/java/com/fongmi/android/tv/ui/activity/HistoryActivity.java", "HistoryResumeCoordinator.open(this, item)");
         assertContains("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HistoryActivity.java", "HistoryResumeCoordinator.open(this, item)");

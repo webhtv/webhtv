@@ -1052,7 +1052,9 @@
     <string name="cache_total_limit_title">总缓存上限</string>
     <string name="cache_total_limit_summary">总上限：%1$s</string>
     <string name="cache_limit_title_exo">播放缓存上限</string>
-    <string name="cache_management_playback_budget">播放缓存 %1$s（退出播放后收至 %2$s）</string>
+    <string name="cache_management_total_limit">总上限 %1$s（全部模块合计 · 退出播放后收敛）</string>
+    <string name="cache_management_total_unlimited">总上限 不限（全部模块合计 · 退出播放后收敛）</string>
+    <string name="cache_management_total_blocked">仍超限 %1$s（受保护内容）</string>
     <string name="cache_cleanup_confirm_title">确认清理缓存？</string>
     <string name="cache_cleanup_confirm_light">清理过期节目单、临时文件和遗留缓存？</string>
     <string name="cache_cleanup_confirm_standard">清理图片、歌词、K 歌和 WebHome 等可重建缓存？\n\n收藏、历史和设置不会受影响。</string>
@@ -3103,6 +3105,7 @@
     <string name="plugin_manager_perm_events">播放事件（plugin.events）</string>
     <string name="plugin_manager_perm_episode_data">剧集数据（plugin.data.episode）</string>
     <string name="plugin_panel_title">插件面板</string>
+    <string name="crash_action_failed">操作失败，请重试。</string>
     
     <string name="download">下载</string>
     <string name="download_play_first">请先播放该集后再下载</string>

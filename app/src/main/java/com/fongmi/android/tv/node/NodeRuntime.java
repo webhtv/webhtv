@@ -97,6 +97,7 @@ public final class NodeRuntime {
     }
 
     public static boolean isRunning() {
+        if (originWorker()) return origin != null && origin.alive();
         return running && serviceAlive();
     }
 
@@ -108,6 +109,7 @@ public final class NodeRuntime {
      * 返回 true 表示本次调用发起了重启（或本来就健康无需动作）。
      */
     public static boolean restartIfDead(Context context) {
+        if (originWorker()) return origin != null && origin.alive();
         if (running && serviceAlive()) return true;
         if (TextUtils.isEmpty(servingUrl)) return false;
         SpiderDebug.log("node", "restartIfDead: node process dead while serving %s, restarting", servingUrl);
@@ -134,6 +136,7 @@ public final class NodeRuntime {
     }
 
     public static int port() {
+        if (originWorker()) return origin != null && origin.alive() ? origin.nodePort : 0;
         return port;
     }
 
@@ -143,10 +146,15 @@ public final class NodeRuntime {
     }
 
     public static String baseUrl() {
+        if (originWorker()) return loopbackUrl(port(), "");
         return loopbackUrl(port, "");
     }
 
     public static String configUrl() {
+        if (originWorker()) {
+            if (port() <= 0) throw new IllegalStateException("WORKER_DIED: origin Node not ready");
+            return loopbackUrl(port(), "/config");
+        }
         return loopbackUrl(port, "/config");
     }
 
@@ -158,6 +166,7 @@ public final class NodeRuntime {
      * 才有弹幕，等于本地包开箱不生效。
      */
     public static String danmakuApiUrl() {
+        if (originWorker()) return "";
         int value = danmakuPort;
         // `:node` 被系统杀掉时没有任何回调会把 running/danmakuPort 置零，只认端口号会把
         // 一个没人监听的地址交给弹幕搜索。与 isServing 同一套判据，先无阻塞判标志再探进程。
@@ -193,6 +202,7 @@ public final class NodeRuntime {
      * @param url 用户填的猫源地址（{@code .../index.js.md5}）
      */
     public static synchronized void start(Context context, String url, Callback callback) {
+        if (originWorker()) { startOrigin(url, callback); return; }
         if (TextUtils.isEmpty(url)) {
             if (callback != null) callback.onError("未填写猫源地址");
             return;
@@ -283,6 +293,7 @@ public final class NodeRuntime {
      * {@link #isRunning()} 保持同一套判据。
      */
     public static boolean isServing(String url) {
+        if (originWorker()) return origin != null && origin.alive() && NodeBundle.bundleUrl(url).equals(origin.url);
         if (servingUrl.isEmpty() || !running || port <= 0) return false;
         return serviceAlive() && same(url);
     }
@@ -483,6 +494,228 @@ public final class NodeRuntime {
         } catch (Throwable e) {
             // 线程池拒收时把这一代的认领让回去，否则同一世代再也探不出端口。
             releaseDanmakuProbe(generation);
+        }
+    }
+
+    private static boolean originWorker() {
+        return com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker();
+    }
+
+    private static volatile OriginLease origin;
+
+    private static boolean originProcessAlive(Context context) {
+        android.app.ActivityManager manager = (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        java.util.List<android.app.ActivityManager.RunningAppProcessInfo> processes = manager == null ? null : manager.getRunningAppProcesses();
+        if (processes == null) throw new IllegalStateException("ISOLATION_ERROR: origin process liveness unavailable");
+        for (android.app.ActivityManager.RunningAppProcessInfo info : processes) {
+            if ((context.getPackageName() + ":origin_node").equals(info.processName)) return true;
+        }
+        return false;
+    }
+
+    public static synchronized void openOrigin(Context context, String leaseId, long generation,
+                                               int workerProxyPort, android.os.IBinder owner) {
+        if (!com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.isWorker()
+                || context != com.fongmi.android.tv.playback.origin.OriginSessionBootstrap.storage()
+                || owner == null || !owner.isBinderAlive() || workerProxyPort <= 0 || workerProxyPort > 65535
+                || com.fongmi.android.tv.playback.origin.OriginMediaRelay.port(leaseId) != workerProxyPort) {
+            throw new IllegalStateException("ISOLATION_ERROR: origin Node requires installed lease and bound relay");
+        }
+        try { NodeBundle.originDir(context, leaseId); }
+        catch (Exception e) { throw new IllegalStateException("ISOLATION_ERROR: " + e.getMessage(), e); }
+        OriginLease previous = origin;
+        if (previous != null) {
+            if (!previous.closed && previous.matches(leaseId, generation) && previous.proxyPort == workerProxyPort) return;
+            if (!previous.closed) throw new IllegalStateException("ISOLATION_ERROR: release Node lease before replacement");
+            previous.awaitDeath();
+        }
+        if (originProcessAlive(context)) {
+            throw new IllegalStateException("ISOLATION_ERROR: old origin Node process still alive");
+        }
+        origin = new OriginLease(context, leaseId, generation, workerProxyPort, owner);
+    }
+
+    public static void closeOrigin(String leaseId, long generation) {
+        OriginLease lease = origin;
+        if (lease == null || !lease.matches(leaseId, generation)) return;
+        lease.close();
+        lease.awaitDeath();
+    }
+
+    public static int[] originPorts(String leaseId, long generation) {
+        OriginLease lease = origin;
+        return lease != null && lease.matches(leaseId, generation) && lease.alive() ? lease.ports.clone() : new int[0];
+    }
+
+    public static void startOrigin(String url, Callback callback) {
+        OriginLease lease = origin;
+        if (lease == null) {
+            if (callback != null) callback.onError("ISOLATION_ERROR: origin Node lease not installed");
+            return;
+        }
+        lease.start(url, callback);
+    }
+
+    private static final class OriginLease implements android.content.ServiceConnection {
+        final Context context;
+        final String id;
+        final long generation;
+        final int proxyPort;
+        final android.os.IBinder owner;
+        final java.util.concurrent.CountDownLatch death = new java.util.concurrent.CountDownLatch(1);
+        final Messenger replies;
+        volatile android.os.IBinder binder;
+        volatile boolean closed, bound, started;
+        volatile int nodePort;
+        volatile int[] ports = new int[0];
+        String url;
+        Callback callback;
+        final android.os.IBinder.DeathRecipient died = this::onDeath;
+
+        OriginLease(Context context, String id, long generation, int proxyPort, android.os.IBinder owner) {
+            this.context = context;
+            this.id = id;
+            this.generation = generation;
+            this.proxyPort = proxyPort;
+            this.owner = owner;
+            replies = new Messenger(new Handler(Looper.getMainLooper()) {
+                @Override public void handleMessage(Message msg) { receive(msg); }
+            });
+        }
+
+        boolean matches(String leaseId, long value) { return id.equals(leaseId) && generation == value; }
+        boolean alive() { return !closed && nodePort > 0 && binder != null && binder.isBinderAlive(); }
+
+        synchronized void start(String requestedUrl, Callback response) {
+            if (closed || TextUtils.isEmpty(requestedUrl)) {
+                if (response != null) response.onError("ISOLATION_ERROR: Node lease closed or URL empty");
+                return;
+            }
+            String requested = NodeBundle.bundleUrl(requestedUrl);
+            if (started) {
+                if (alive() && requested.equals(url)) {
+                    if (response != null) response.onReady(loopbackUrl(nodePort, ""));
+                } else if (response != null) response.onError("ISOLATION_ERROR: immutable Node lease; close and await death before new bundle");
+                return;
+            }
+            started = true;
+            url = requested;
+            callback = response;
+            android.content.Intent intent = new android.content.Intent(context, OriginNodeService.class)
+                    .putExtra(OriginNodeService.LEASE, id);
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(context, intent);
+                bound = context.bindService(intent, this, Context.BIND_AUTO_CREATE);
+                if (!bound) throw new IllegalStateException("origin Node bind failed");
+                App.post(() -> { if (!closed && nodePort == 0) fail("ISOLATION_ERROR: origin Node startup timed out"); }, START_TIMEOUT_MS);
+            } catch (RuntimeException e) { fail("ISOLATION_ERROR: " + e.getMessage()); }
+        }
+
+        @Override public void onServiceConnected(android.content.ComponentName name, android.os.IBinder service) {
+            binder = service;
+            try {
+                service.linkToDeath(died, 0);
+                if (closed) { sendClose(); return; }
+                Bundle data = identity();
+                data.putString("url", url);
+                data.putBinder("owner", owner);
+                Message message = Message.obtain(null, OriginNodeService.OPEN);
+                message.setData(data);
+                message.replyTo = replies;
+                new Messenger(service).send(message);
+            } catch (android.os.RemoteException e) { fail("WORKER_DIED: origin Node bind"); }
+        }
+
+        @Override public void onServiceDisconnected(android.content.ComponentName name) { onDeath(); }
+        @Override public void onBindingDied(android.content.ComponentName name) { onDeath(); }
+        @Override public void onNullBinding(android.content.ComponentName name) { fail("ISOLATION_ERROR: empty origin Node binding"); }
+
+        Bundle identity() {
+            Bundle data = new Bundle();
+            data.putString(OriginNodeService.LEASE, id);
+            data.putLong(OriginNodeService.GENERATION, generation);
+            data.putInt(OriginNodeService.PROXY_PORT, proxyPort);
+            return data;
+        }
+
+        synchronized void receive(Message message) {
+            Bundle data = message.getData();
+            if (closed || data == null || !matches(data.getString(OriginNodeService.LEASE), data.getLong(OriginNodeService.GENERATION))
+                    || data.getInt(OriginNodeService.PROXY_PORT) != proxyPort) return;
+            if (message.what == NodeService.MSG_PROGRESS) {
+                if (callback != null) callback.onProgress(data.getString("text", ""));
+            } else if (message.what == NodeService.MSG_ERROR) {
+                fail(data.getString("text", "ISOLATION_ERROR"));
+            } else if (message.what == NodeService.MSG_READY) {
+                int[] values = data.getIntArray("ports");
+                boolean found = false;
+                if (values != null) for (int value : values) found |= value == message.arg1;
+                if (!found || message.arg1 <= 0 || message.arg1 > 65535 || message.arg1 == proxyPort
+                        || binder == null || !binder.isBinderAlive()) {
+                    fail("PORT_OWNERSHIP_AMBIGUOUS: invalid Node READY");
+                    return;
+                }
+                nodePort = message.arg1;
+                ports = values.clone();
+                Callback ready = callback;
+                callback = null;
+                if (ready != null) ready.onReady(loopbackUrl(nodePort, ""));
+            }
+        }
+
+        synchronized void fail(String text) {
+            Callback error = callback;
+            callback = null;
+            close();
+            if (error != null) error.onError(text);
+        }
+
+        void onDeath() {
+            death.countDown();
+            synchronized (this) {
+                if (!closed) fail("WORKER_DIED: origin Node process died");
+            }
+        }
+
+        void sendClose() {
+            android.os.IBinder service = binder;
+            if (service == null || !service.isBinderAlive()) return;
+            Message message = Message.obtain(null, OriginNodeService.CLOSE);
+            message.setData(identity());
+            try { new Messenger(service).send(message); }
+            catch (android.os.RemoteException ignored) { }
+        }
+
+        synchronized void close() {
+            if (closed) return;
+            closed = true;
+            nodePort = 0;
+            ports = new int[0];
+            callback = null;
+            sendClose();
+            context.stopService(new android.content.Intent(context, OriginNodeService.class));
+            if (bound) {
+                bound = false;
+                try { context.unbindService(this); } catch (IllegalArgumentException ignored) { }
+            }
+        }
+
+        void awaitDeath() {
+            if (!started) return;
+            if (Looper.myLooper() == Looper.getMainLooper()) throw new IllegalStateException("ISOLATION_ERROR: await Node death off main thread");
+            try {
+                if (binder != null && binder.isBinderAlive() && !death.await(3, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("ISOLATION_ERROR: origin Node death not observed");
+                }
+                long deadline = android.os.SystemClock.elapsedRealtime() + TimeUnit.SECONDS.toMillis(3);
+                while (originProcessAlive(context)) {
+                    if (android.os.SystemClock.elapsedRealtime() >= deadline) throw new IllegalStateException("ISOLATION_ERROR: origin Node process still alive");
+                    Thread.sleep(100);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("ISOLATION_ERROR: Node death interrupted", e);
+            }
         }
     }
 

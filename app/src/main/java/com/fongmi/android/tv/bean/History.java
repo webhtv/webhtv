@@ -1184,6 +1184,29 @@ public class History implements Diffable<History> {
         return cid(cid).merge(true).save();
     }
 
+    /**
+     * 原源租约进度写回：只按本行显式 cid/key 落库，保留删除墓碑／季进度事务，
+     * 但不走当前配置的 TMDB enrich，也不新建已被删除的记录。
+     */
+    public History saveOriginProgress(long originPosition, long originDuration) {
+        if (originPosition < 0 && originDuration <= 0) return this;
+        boolean[] saved = {false};
+        TmdbSeasonProgressStore.runInTransaction(() -> {
+            History before = find(getCid(), getKey());
+            if (before == null || before.getTmdbId() != getTmdbId()) return null;
+            long deletedAt = latestDeletion(PlaybackDeleteTombstoneStore.snapshot(), getKey());
+            if (!writeSurvivesDeletion(getCreateTime(), deletedAt)) return null;
+            position = Math.max(0, originPosition);
+            if (originDuration > 0) duration = originDuration;
+            createTime = updateTime = System.currentTimeMillis();
+            AppDatabase.get().getHistoryDao().insertOrUpdate(this);
+            TmdbSeasonProgressStore.write(this);
+            saved[0] = true;
+            return null;
+        });
+        if (saved[0]) notifyChanged();
+        return this;
+    }
     private void enrichTmdbId() {
         if (tmdbId > 0 || !Setting.isHistoryAggregationEffective()) return;
         String siteKey = getSiteKey();

@@ -69,6 +69,10 @@
         </provider>
 
         <provider
+            android:name="cat.ereza.customactivityoncrash.CaocInitProvider"
+            tools:node="remove" />
+
+        <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
@@ -87,6 +91,7 @@
 
         <activity
             android:name=".ui.activity.CrashActivity"
+            android:exported="false"
             android:process=":error_activity"
             android:theme="@style/Theme.Crash" />
 
@@ -191,6 +196,19 @@
             android:exported="false"
             android:process=":node"
             android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
+        <service
+            android:name=".playback.origin.OriginSessionService"
+            android:exported="false"
+            android:process=":origin"
+            android:stopWithTask="false" />
+
+        <service
+            android:name=".node.OriginNodeService"
+            android:exported="false"
+            android:process=":origin_node"
+            android:foregroundServiceType="mediaPlayback"
             android:stopWithTask="false" />
 
         <service

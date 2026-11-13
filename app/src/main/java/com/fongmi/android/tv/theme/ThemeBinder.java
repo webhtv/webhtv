@@ -859,6 +859,7 @@ public final class ThemeBinder {
     }
 
     private static Long fingerprint(Drawable drawable) {
+        Rect originalBounds = new Rect(drawable.getBounds());
         android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
                 FINGERPRINT_SIZE, FINGERPRINT_SIZE, android.graphics.Bitmap.Config.ARGB_8888);
         try {
@@ -874,6 +875,7 @@ public final class ThemeBinder {
         } catch (RuntimeException ignored) {
             return null;
         } finally {
+            drawable.setBounds(originalBounds);
             bitmap.recycle();
         }
     }
@@ -1026,7 +1028,7 @@ public final class ThemeBinder {
      * 白名单成员的「签名 → 指纹」集合，按 {@code (Resources, 描边相关主题属性)} 解析一次后缓存。
      *
      * <p>签名与指纹都取自**未经本类改写**的实例：{@code mutate()} 之前取，因此填充仍是
-     * {@code black_40}。指纹内部自己复制一份再绘制，不会污染共享的 ConstantState。
+     * {@code black_40}。指纹采样后恢复原始绘制边界，不改变宿主背景尺寸。
      */
     private static Map<Integer, Map<String, java.util.Set<Long>>> itemOverlayFingerprints(Context context, int strokeKey) {
         Resources resources = context.getResources();

@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -105,6 +106,7 @@ import com.fongmi.android.tv.impl.CustomTarget;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
+import com.fongmi.android.tv.playback.origin.OriginHistoryPlayback;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
 import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
@@ -564,6 +566,9 @@ private int mAudioBackgroundRandomNonce;
         super.startPlayer(key, result, useParse, timeout, metadata, startPositionMs);
     }
     private History mHistory;
+    private OriginHistoryPlayback mOrigin;
+    private boolean mOriginFallbackPending;
+    private History mOriginFallbackHistory;
     private boolean fullscreen;
     /**
      * 本页当前的画中画状态。
@@ -890,6 +895,55 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     public static void startFromFollowingHistory(Activity activity, History item) {
         startFromHistory(activity, item);
     }
+
+    /**
+     * 跨配置历史的原源入口：仍是同一个播放页外壳（详情／选集／播放器／手势／字幕／进度条），
+     * 只有数据来源换成原配置 worker。intent 只带原 cid／historyKey／payload，不带大 JSON。
+     */
+    public static Intent originHistoryIntent(Context context, History origin) {
+        Intent intent = new Intent(context, VideoActivity.class);
+        intent.putExtra("collect", false);
+        intent.putExtra("key", origin.getSiteKey());
+        intent.putExtra("id", origin.getVodId());
+        intent.putExtra("name", origin.getVodName());
+        intent.putExtra("pic", origin.getVodPic());
+        intent.putExtra("mark", origin.getVodRemarks());
+        putIntentPlaybackSelection(intent, origin.getVodFlag(), origin.getSourceBindingKey(), origin.getVodRemarks(), origin.getEpisodeUrl());
+        intent.putExtra(EXTRA_RESUME_FROM_HISTORY, true);
+        intent.putExtra(EXTRA_RESUME_HISTORY_CID, origin.getCid());
+        intent.putExtra(EXTRA_RESUME_HISTORY_KEY, HistoryResumePayload.encode(origin));
+        OriginHistoryPlayback.putExtras(intent, origin);
+        return intent;
+    }
+
+    public static Intent originHistoryIntent(Context context, History origin, Flag flag, Episode episode) {
+        History selected = origin.copy();
+        if (flag != null) {
+            if (!TextUtils.equals(selected.getVodFlag(), flag.getFlag())) selected.setSourceBindingKey("");
+            selected.setVodFlag(flag.getFlag());
+        }
+        if (episode != null) {
+            if (!TextUtils.equals(selected.getEpisodeUrl(), episode.getUrl())) {
+                selected.setPosition(0);
+                selected.setDuration(0);
+            }
+            selected.setEpisodeUrl(episode.getUrl());
+            selected.setVodRemarks(episode.getName());
+            selected.setTmdbEpisodePosition(episode);
+        }
+        return originHistoryIntent(context, selected);
+    }
+
+    public static void startFromOriginHistory(Activity activity, History origin, Flag flag, Episode episode) {
+        if (activity == null || origin == null) return;
+        activity.startActivity(originHistoryIntent(activity, origin, flag, episode));
+    }
+
+    public static void startFromOriginHistory(Activity activity, History origin) {
+        if (activity == null || origin == null) return;
+        activity.startActivity(originHistoryIntent(activity, origin));
+    }
+
 
     public static void startFromHistory(Activity activity, History item) {
         if (shouldOpenLegacyTmdbDetail(item.getSiteKey(), item.getVodId())) {
@@ -1287,10 +1341,12 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private String getHistoryKey() {
+        if (isOriginSession()) return mOrigin.historyKey();
         return getKey().concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + VodConfig.getCid();
     }
 
     private Site getSite() {
+        if (isOriginSession()) return mOrigin.site();
         return VodConfig.get().getSite(getKey());
     }
 
@@ -1681,6 +1737,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         getIntent().removeExtra(EXTRA_RESUME_FROM_HISTORY);
         getIntent().removeExtra(EXTRA_RESUME_HISTORY_CID);
         getIntent().removeExtra(EXTRA_RESUME_HISTORY_KEY);
+        getIntent().removeExtra(OriginHistoryPlayback.EXTRA_CID);
+        getIntent().removeExtra(OriginHistoryPlayback.EXTRA_KEY);
+        getIntent().removeExtra(OriginHistoryPlayback.EXTRA_PAYLOAD);
+        if (mOrigin != null && !OriginHistoryPlayback.hasPayload(intent)) { mOrigin.release(); mOrigin = null; }
         getIntent().putExtras(intent);
         // intent 换了，缓存的集数标题必须一起失效，否则新条目会沿用上一部的标题。
         invalidateEpisodeTitlesCache();
@@ -2547,6 +2607,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void getDetail(boolean refresh) {
+        if (isOriginSession()) { mOrigin.requestDetail(); return; }
         invalidateAutoDanmaku();
         mPendingPlayerResult = null;
         detailStartTime = System.currentTimeMillis();
@@ -2973,7 +3034,13 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (shouldUseImmersiveAudio()) setAudioStageVisible(true);
         beginPlayerContentRequest(getKey(), playFlag, episode.getUrl());
         mPlaybackFlagKey = playbackFlagKey(flag);
-        mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
+        if (isOriginSession()) {
+            if (!mOrigin.requestPlay(flag, episode)) {
+                invalidatePlayerContent();
+                showOriginError("原源会话已结束，请返回后重新打开");
+                return;
+            }
+        } else mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
         mBinding.control.title.setSelected(true);
         updateHistory(episode);
         showProgress();
@@ -3395,7 +3462,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         PlayerManager danmakuManager = player();
         String beforeTrace = danmakuManager.getPlaybackTraceId();
-        startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
+        startPlayer(getPlaybackKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
         subtitlePlaybackSession.onPlaybackStarted(this, result);
         searchAutoDanmaku(result, danmakuManager, beforeTrace);
     }
@@ -6226,7 +6293,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         }
         mHistory = resumeHistory == null
                 ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
-                : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
+                : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
@@ -6425,6 +6492,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void saveHistory(boolean exit) {
+        if (isOriginSession()) { persistOriginProgress(exit); return; }
         if (mHistory == null || Setting.isIncognito()) return;
         boolean hasPlayback = service() != null && isOwner() && !player().isEmpty();
         if (hasPlayback) {
@@ -6457,6 +6525,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void syncHistory() {
+        if (isOriginSession()) { persistOriginProgress(false); return; }
         if (mHistory == null || Setting.isIncognito()) return;
         History history = mHistory.copy();
         Task.execute(history::save);
@@ -6894,8 +6963,75 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     @Override
     protected String getPlaybackKey() {
+        if (isOriginSession()) return mOrigin.playbackKey();
         return getHistoryKey();
     }
+
+    /** 原源会话内核按需创建：普通历史（intent 无原源 payload）永远不会走到这里。 */
+    private OriginHistoryPlayback origin() {
+        if (mOrigin == null && OriginHistoryPlayback.hasPayload(getIntent())) {
+            mOrigin = OriginHistoryPlayback.open(this, getIntent(), new OriginHistoryPlayback.Listener() {
+                @Override public void onOriginDetail(Vod vod) { setDetail(vod); }
+                @Override public void onOriginResult(Result result) { setPlayer(result); }
+                @Override public void onOriginFallback(History history, String reason) {
+                    mOriginFallbackPending = Setting.isGlobalHistoryEnabled();
+                    mOriginFallbackHistory = history;
+                    showOriginError("原源播放失败：" + reason + (mOriginFallbackPending
+                            ? "，将按全局历史续播设置匹配当前源" : "，全局历史续播已关闭"));
+                    App.post(VideoActivity.this::dispatchOriginFallback, 2000);
+                }
+                @Override public void onOriginError(String message) {
+                    showOriginError(message);
+                }
+            });
+            if (mOrigin == null) {
+                Notify.show(R.string.history_record_missing);
+                finish();
+            }
+        }
+        return mOrigin;
+    }
+
+    /**
+     * 原源起播前失败后的全局续播派发：错误文案先留 2 秒再匹配，避免用户还没看到失败就被换页。
+     * 目标入口启动成功后才结束本页：同 key/id 的 VideoActivity 是 singleTop，先结束会把新入口变成 onNewIntent。
+     */
+    private void dispatchOriginFallback() {
+        if (isFinishing() || isDestroyed()) return;
+        // 全局续播关闭时 pending 为 false：错误页原地保留，不再触发匹配，也不再重复提示。
+        if (!mOriginFallbackPending) return;
+        History history = mOriginFallbackHistory;
+        if (history == null) return;
+        HistoryResumeCoordinator.fallbackToCurrent(this, history, () -> {
+            mOriginFallbackPending = false;
+            markPlaybackExiting();
+            finish();
+        });
+    }
+
+    /** 原源失败使用纯展示错误：不能复用原生 onError 的换线/换源流程。 */
+    private void showOriginError(String message) {
+        Notify.show(message);
+        try {
+            mBinding.progressLayout.showContent();
+        } catch (RuntimeException ignored) {
+        }
+        showError(message);
+    }
+
+    private boolean isOriginSession() {
+        return origin() != null;
+    }
+
+    private void persistOriginProgress(boolean exit) {
+        if (mOrigin == null || !mOrigin.isActive()) return;
+        if (mHistory != null && !Setting.isIncognito() && service() != null && isOwner() && !player().isEmpty()) {
+            mOrigin.writeProgress(mHistory, player().getPosition(), player().getDuration());
+        }
+        if (exit && service() != null) PlaybackEventCollector.get().onStop(player());
+        if (exit && isFinishing() && !isChangingConfigurations()) mOrigin.release();
+    }
+
 
     // C101: see the leanback flavor note; deferring keeps the loading spinner animating
     // while PlaybackService builds PlayerManager and the ExoPlayer instance.
@@ -8075,6 +8211,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     @Override
     protected void onError(String msg) {
+        if (mOrigin != null) {
+            showOriginError(msg);
+            return;
+        }
         invalidateShortDramaQueue("error");
         recordPlayHealth(false, msg);
         subtitlePlaybackSession.stop(this);
@@ -10294,6 +10434,7 @@ private void checkOrientation() {
         if (PlayerSetting.isBackgroundOff()) mClock.stop();
         if (!isAudioOnly()) setStop(true);
         updateDiscMenuTools();
+        if (mOriginFallbackPending && !isChangingConfigurations()) finish();
     }
 
     @Override
@@ -10327,6 +10468,12 @@ private void checkOrientation() {
         if (mTmdbHeaderView != null) mTmdbHeaderView.onDestroy();
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
     }
+    @Override
+    protected void onPause() {
+        if (isFinishing() && !isChangingConfigurations()) persistOriginProgress(true);
+        super.onPause();
+    }
+
     @Override
     protected void onDestroy() {
         mDanmakuRetired = true;

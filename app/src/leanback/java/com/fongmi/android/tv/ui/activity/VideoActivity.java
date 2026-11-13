@@ -85,6 +85,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SearchProgress;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
+import com.fongmi.android.tv.playback.origin.OriginHistoryPlayback;
 import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
@@ -521,6 +522,8 @@ private boolean runtimeSourceOnly;
         super.startPlayer(key, result, useParse, timeout, metadata, startPositionMs);
     }
     private History mHistory;
+    private OriginHistoryPlayback mOrigin;
+    private boolean mOriginFallbackPending;
     private boolean fullscreen;
     private boolean initAuto;
     private boolean autoMode;
@@ -909,6 +912,56 @@ private boolean runtimeSourceOnly;
     public static void startFromFollowingHistory(Activity activity, History item) {
         startFromHistory(activity, item);
     }
+
+    /**
+     * 跨配置历史的原源入口：仍是同一个播放页外壳（详情／选集／播放器／手势／字幕／进度条），
+     * 只有数据来源换成原配置 worker。intent 只带原 cid／historyKey／payload，不带大 JSON。
+     */
+    public static Intent originHistoryIntent(Context context, History origin) {
+        Intent intent = new Intent(context, VideoActivity.class);
+        intent.putExtra("collect", false);
+        intent.putExtra("cast", false);
+        intent.putExtra("key", origin.getSiteKey());
+        intent.putExtra("id", origin.getVodId());
+        intent.putExtra("name", origin.getVodName());
+        intent.putExtra("pic", origin.getVodPic());
+        intent.putExtra("mark", origin.getVodRemarks());
+        putIntentPlaybackSelection(intent, origin.getVodFlag(), origin.getSourceBindingKey(), origin.getVodRemarks(), origin.getEpisodeUrl());
+        intent.putExtra(EXTRA_RESUME_FROM_HISTORY, true);
+        intent.putExtra(EXTRA_RESUME_HISTORY_CID, origin.getCid());
+        intent.putExtra(EXTRA_RESUME_HISTORY_KEY, HistoryResumePayload.encode(origin));
+        OriginHistoryPlayback.putExtras(intent, origin);
+        return intent;
+    }
+
+    public static Intent originHistoryIntent(Context context, History origin, Flag flag, Episode episode) {
+        History selected = origin.copy();
+        if (flag != null) {
+            if (!TextUtils.equals(selected.getVodFlag(), flag.getFlag())) selected.setSourceBindingKey("");
+            selected.setVodFlag(flag.getFlag());
+        }
+        if (episode != null) {
+            if (!TextUtils.equals(selected.getEpisodeUrl(), episode.getUrl())) {
+                selected.setPosition(0);
+                selected.setDuration(0);
+            }
+            selected.setEpisodeUrl(episode.getUrl());
+            selected.setVodRemarks(episode.getName());
+            selected.setTmdbEpisodePosition(episode);
+        }
+        return originHistoryIntent(context, selected);
+    }
+
+    public static void startFromOriginHistory(Activity activity, History origin, Flag flag, Episode episode) {
+        if (activity == null || origin == null) return;
+        activity.startActivity(originHistoryIntent(activity, origin, flag, episode));
+    }
+
+    public static void startFromOriginHistory(Activity activity, History origin) {
+        if (activity == null || origin == null) return;
+        activity.startActivity(originHistoryIntent(activity, origin));
+    }
+
 
     public static void startFromHistory(Activity activity, History item) {
         if (shouldOpenLegacyTmdbDetail(item.getSiteKey(), item.getVodId(), false)) {
@@ -1316,6 +1369,7 @@ private boolean runtimeSourceOnly;
     }
 
     private String getHistoryKey() {
+        if (isOriginSession()) return mOrigin.historyKey();
         return getKey().concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + VodConfig.getCid();
     }
 
@@ -1324,6 +1378,7 @@ private boolean runtimeSourceOnly;
     }
 
     private Site getSite() {
+        if (isOriginSession()) return mOrigin.site();
         return VodConfig.get().getSite(getKey());
     }
 
@@ -1647,6 +1702,10 @@ private boolean runtimeSourceOnly;
         getIntent().removeExtra(EXTRA_RESUME_FROM_HISTORY);
         getIntent().removeExtra(EXTRA_RESUME_HISTORY_CID);
         getIntent().removeExtra(EXTRA_RESUME_HISTORY_KEY);
+        getIntent().removeExtra(OriginHistoryPlayback.EXTRA_CID);
+        getIntent().removeExtra(OriginHistoryPlayback.EXTRA_KEY);
+        getIntent().removeExtra(OriginHistoryPlayback.EXTRA_PAYLOAD);
+        if (mOrigin != null && !OriginHistoryPlayback.hasPayload(intent)) { mOrigin.release(); mOrigin = null; }
         getIntent().putExtras(intent);
         resetPlaybackOwnership();
         if (mViewModel != null) mViewModel.cancelPlayerContent();
@@ -2949,6 +3008,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void getDetail(boolean refresh) {
+        if (isOriginSession()) { mOrigin.requestDetail(); return; }
         invalidateAutoDanmaku();
         mPendingPlayer = null;
         cancelKeySeek();
@@ -3445,7 +3505,15 @@ private boolean runtimeSourceOnly;
         if (shouldUseImmersiveAudio()) setAudioStageVisible(true);
         beginPlayerContentRequest(getKey(), playFlag, episode.getUrl());
         mPlaybackFlagKey = playbackFlagKey(flag);
-        mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
+        if (isOriginSession()) {
+            if (!mOrigin.requestPlay(flag, episode)) {
+                invalidatePlayerContent();
+                mPlaybackRequestActive = false;
+                mPlaybackPlayerStarted = false;
+                showOriginError("原源会话已结束，请返回后重新打开");
+                return;
+            }
+        } else mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
         mBinding.widget.title.setSelected(true);
         updateHistory(episode);
         showProgress();
@@ -3562,7 +3630,7 @@ private boolean runtimeSourceOnly;
         mPlaybackPlayerStarted = true;
         PlayerManager danmakuManager = player();
         String beforeTrace = danmakuManager.getPlaybackTraceId();
-        startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
+        startPlayer(getPlaybackKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
         SpiderDebug.log("video-flow", "startPlayer return cost=%dms sincePlayerStart=%dms", System.currentTimeMillis() - start, System.currentTimeMillis() - playerStartTime);
         subtitlePlaybackSession.onPlaybackStarted(this, result);
         searchAutoDanmaku(result, danmakuManager, beforeTrace);
@@ -6099,7 +6167,7 @@ private boolean runtimeSourceOnly;
         }
         mHistory = resumeHistory == null
                 ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
-                : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
+                : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
@@ -6352,6 +6420,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void saveHistory(boolean exit) {
+        if (isOriginSession()) { persistOriginProgress(exit); return; }
         android.util.Log.d("VideoActivity", "saveHistory: exit=" + exit + " mHistory=" + (mHistory != null) +
             " canSave=" + (mHistory != null ? mHistory.canSave() : "null") +
             " incognito=" + Setting.isIncognito());
@@ -6388,6 +6457,7 @@ private boolean runtimeSourceOnly;
     }
 
     private void syncHistory() {
+        if (isOriginSession()) { persistOriginProgress(false); return; }
         if (mHistory == null || Setting.isIncognito()) return;
         History history = mHistory.copy();
         Task.execute(history::save);
@@ -6772,8 +6842,64 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected String getPlaybackKey() {
+        if (isOriginSession()) return mOrigin.playbackKey();
         return getHistoryKey();
     }
+
+    /** 原源会话内核按需创建：普通历史（intent 无原源 payload）永远不会走到这里。 */
+    private OriginHistoryPlayback origin() {
+        if (mOrigin == null && OriginHistoryPlayback.hasPayload(getIntent())) {
+            mOrigin = OriginHistoryPlayback.open(this, getIntent(), new OriginHistoryPlayback.Listener() {
+                @Override public void onOriginDetail(Vod vod) { setDetail(vod); }
+                @Override public void onOriginResult(Result result) { setPlayer(result); }
+                @Override public void onOriginFallback(History history, String reason) {
+                    mOriginFallbackPending = Setting.isGlobalHistoryEnabled();
+                    showOriginError("原源播放失败：" + reason + (mOriginFallbackPending
+                            ? "，将按全局历史续播设置匹配当前源" : "，全局历史续播已关闭"));
+                    App.post(() -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        HistoryResumeCoordinator.fallbackToCurrent(VideoActivity.this, history, () -> {
+                            mOriginFallbackPending = false;
+                            markPlaybackExiting();
+                            finish();
+                        });
+                    }, 2000);
+                }
+                @Override public void onOriginError(String message) {
+                    showOriginError(message);
+                }
+            });
+            if (mOrigin == null) {
+                Notify.show(R.string.history_record_missing);
+                finish();
+            }
+        }
+        return mOrigin;
+    }
+
+    /** 原源失败使用纯展示错误：不能复用原生 onError 的换线/换源流程。 */
+    private void showOriginError(String message) {
+        Notify.show(message);
+        try {
+            mBinding.progressLayout.showContent();
+        } catch (RuntimeException ignored) {
+        }
+        showError(message);
+    }
+
+    private boolean isOriginSession() {
+        return origin() != null;
+    }
+
+    private void persistOriginProgress(boolean exit) {
+        if (mOrigin == null || !mOrigin.isActive()) return;
+        if (mHistory != null && !Setting.isIncognito() && service() != null && isOwner() && !player().isEmpty()) {
+            mOrigin.writeProgress(mHistory, player().getPosition(), player().getDuration());
+        }
+        if (exit && service() != null) PlaybackEventCollector.get().onStop(player());
+        if (exit && isFinishing() && !isChangingConfigurations()) mOrigin.release();
+    }
+
 
     // C101: creating PlayerManager + ExoPlayer inside PlaybackService.onCreate is a
     // multi-hundred-millisecond main-thread stall that freezes the loading spinner.
@@ -6833,6 +6959,10 @@ private boolean runtimeSourceOnly;
 
     @Override
     protected void onError(String msg) {
+        if (mOrigin != null) {
+            showOriginError(msg);
+            return;
+        }
         invalidateShortDramaQueue("error");
         recordPlayHealth(false, msg);
         subtitlePlaybackSession.stop(this);
@@ -9521,6 +9651,7 @@ private boolean runtimeSourceOnly;
         if (PlayerSetting.isBackgroundOff()) mClock.stop();
         // 取消延迟播放，防止 Activity 进入后台后才触发播放导致声音残留
         App.removeCallbacks(mPendingFastTmdbPlaybackStart);
+        if (mOriginFallbackPending && !isChangingConfigurations()) finish();
     }
 
     @Override
@@ -9561,6 +9692,12 @@ private boolean runtimeSourceOnly;
         if (mTmdbHeaderView != null) mTmdbHeaderView.onDestroy();
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
     }
+    @Override
+    protected void onPause() {
+        if (isFinishing() && !isChangingConfigurations()) persistOriginProgress(true);
+        super.onPause();
+    }
+
     @Override
     protected void onDestroy() {
         invalidateShortDramaQueue("destroy");

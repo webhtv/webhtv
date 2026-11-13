@@ -27,6 +27,59 @@ final class NodeBoot {
         return script;
     }
 
+    static File write(Context context, File bundle, File config, int workerProxyPort, int nodePort,
+                      String leaseId, long generation) throws IOException {
+        java.util.UUID.fromString(leaseId);
+        if (workerProxyPort <= 0 || workerProxyPort > 65535 || nodePort <= 0 || nodePort > 65535
+                || workerProxyPort == nodePort) throw new IOException("PORT_OWNERSHIP_AMBIGUOUS");
+        File directory = NodeBundle.originDir(context, leaseId);
+        File script = new File(directory, "boot.js");
+        try (FileOutputStream out = new FileOutputStream(script)) {
+            out.write(originSource(bundle, config, workerProxyPort, nodePort, leaseId, generation).getBytes("UTF-8"));
+        }
+        return script;
+    }
+
+    private static String originSource(File bundle, File config, int workerProxyPort, int nodePort,
+                                       String leaseId, long generation) {
+        String data = escape(new File(bundle.getParentFile(), "data"));
+        String prefix = "'use strict';\n"
+                + "const originHttp = require('http');\n"
+                + "const originEmit = originHttp.Server.prototype.emit;\n"
+                + "originHttp.Server.prototype.emit = function(event, req, res, ...args) {\n"
+                + "  if (event === 'request') {\n"
+                + "    res.setHeader('X-Origin-Node-Lease', '" + leaseId + "');\n"
+                + "    res.setHeader('X-Origin-Node-Generation', '" + generation + "');\n"
+                + "  }\n"
+                + "  return originEmit.call(this, event, req, res, ...args);\n"
+                + "};\n"
+                + "const originListen = originHttp.Server.prototype.listen;\n"
+                + "originHttp.Server.prototype.listen = function(...args) {\n"
+                + "  if (typeof args[0] === 'object' && args[0] !== null) {\n"
+                + "    if (args[0].path || args[0].fd) throw new Error('PORT_OWNERSHIP_AMBIGUOUS');\n"
+                + "    args[0] = {...args[0], host: '127.0.0.1'};\n"
+                + "  } else if (typeof args[0] === 'number' || /^\\d+$/.test(String(args[0]))) {\n"
+                + "    if (typeof args[1] === 'string') args[1] = '127.0.0.1';\n"
+                + "    else args.splice(1, 0, '127.0.0.1');\n"
+                + "  } else throw new Error('PORT_OWNERSHIP_AMBIGUOUS');\n"
+                + "  return originListen.apply(this, args);\n"
+                + "};\n"
+                + "require('fs').mkdirSync('" + data + "', {recursive: true});\n"
+                + "process.chdir('" + data + "');\n"
+                + "process.env.HOME = '" + data + "';\n"
+                + "process.env.TMPDIR = '" + data + "';\n"
+                + "process.env.ORIGIN_LEASE_ID = '" + leaseId + "';\n"
+                + "process.env.ORIGIN_GENERATION = '" + generation + "';\n";
+        String script = source(bundle, config, workerProxyPort, nodePort)
+                .replace("if (a && a.port && !ports.includes(a.port))", "if (a && a.port && a.address === '127.0.0.1' && !ports.includes(a.port))")
+                .replace("} catch (e) { console.error('config load failed', e.message); }",
+                        "} catch (e) { throw new Error('ISOLATION_ERROR: config load failed: ' + e.message); }")
+                .replace("const text = ports.join(',');",
+                        "const text = JSON.stringify({leaseId:'" + leaseId + "',generation:'" + generation
+                                + "',workerProxyPort:" + workerProxyPort + ",nodePort:" + nodePort + ",pid:process.pid,ports});");
+        return prefix + script;
+    }
+
     private static String escape(File file) {
         return file.getAbsolutePath().replace("\\", "\\\\").replace("'", "\\'");
     }
