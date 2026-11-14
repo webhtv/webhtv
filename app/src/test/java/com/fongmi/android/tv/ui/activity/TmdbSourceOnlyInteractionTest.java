@@ -43,6 +43,20 @@ public class TmdbSourceOnlyInteractionTest {
     }
 
     @Test
+    public void flatSeasonBindingKeepsSeasonEntryVisible() throws Exception {
+        String mobile = read("mobile");
+        String leanback = read("leanback");
+
+        assertTrue(leanback.contains("private boolean shouldKeepTmdbSeasonEntry()"));
+        assertTrue(leanback.contains("private void updateEpisodeHeaderVisibility(boolean chromeVisible, boolean hasItems)"));
+        assertTrue(leanback.contains("chromeVisible || shouldKeepTmdbSeasonEntry()"));
+        assertTrue(method(leanback, "private void updateEpisodeSeasonContext()", "private boolean isResumeFromHistory()")
+                .contains("getString(R.string.tmdb_season_button)"));
+        assertTrue(method(mobile, "private void updateEpisodeSeasonContext()", "private boolean isResumeFromHistory()")
+                .contains("getString(R.string.tmdb_season_button)"));
+    }
+
+    @Test
     public void sourceOnlyNeverShowsNullablePlaceholdersInProductionCode() throws Exception {
         String standalone = Files.readString(root().resolve(Path.of("app", "src", "main", "java", "com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java")), StandardCharsets.UTF_8);
         String mobile = read("mobile");

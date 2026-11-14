@@ -10,6 +10,7 @@ import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Trans;
 import com.google.gson.annotations.SerializedName;
 
+import java.util.Locale;
 import java.util.Objects;
 
 public class Episode implements Parcelable, Diffable<Episode> {
@@ -135,6 +136,31 @@ public class Episode implements Parcelable, Diffable<Episode> {
     public boolean matchesName(Episode other) {
         if (other == null) return false;
         return getName().equalsIgnoreCase(other.getName());
+    }
+
+    /**
+     * 是否为预告/花絮这类“同 TMDB 集号但不是正片”的条目。
+     *
+     * <p>TMDB 绑定后同一集号可能落在多个源站条目上（正片、预告、花絮、多版本）。
+     * 历史集 URL 失效时不能只凭 TMDB 集号取第一条，否则可能选到预告页并解析失败。
+     * 这里只做恢复定位时的平局裁决，不改变任何展示名称。</p>
+     */
+    public boolean isLikelyExtra() {
+        String value = (getRawDisplayName() + " " + getDisplayName()).toLowerCase(Locale.ROOT);
+        return value.contains("预告") || value.contains("花絮") || value.contains("特辑")
+                || value.contains("先导") || value.contains("彩蛋") || value.contains("幕后")
+                || value.contains("trailer") || value.contains("teaser") || value.contains("preview")
+                || value.contains("bonus") || value.contains("behind the scenes") || value.contains("making");
+    }
+
+    public boolean matchesPlaybackName(Episode other) {
+        if (other == null) return false;
+        if (matchesName(other)) return true;
+        String mine = getRawDisplayName();
+        String theirs = other.getRawDisplayName();
+        if (!isEmpty(mine) && !isEmpty(theirs) && mine.equalsIgnoreCase(theirs)) return true;
+        String display = getDisplayName();
+        return !isEmpty(display) && !isEmpty(theirs) && display.equalsIgnoreCase(theirs);
     }
 
     /**

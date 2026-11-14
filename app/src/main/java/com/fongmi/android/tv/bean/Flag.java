@@ -234,9 +234,12 @@ public class Flag implements Parcelable, Diffable<Flag> {
             return episode;
         }
         if (hasTmdbEpisodeNumber(target)) {
+            List<Episode> numbered = new ArrayList<>();
             for (Episode episode : getEpisodes()) {
-                if (hasTmdbEpisodeNumber(episode) && episode.matchesNumber(target)) return episode;
+                if (hasTmdbEpisodeNumber(episode) && episode.matchesNumber(target)) numbered.add(episode);
             }
+            int best = bestPlaybackPosition(numbered, target);
+            if (best >= 0) return numbered.get(best);
             int index = indexOf(target);
             if (index != -1) {
                 Episode episode = getEpisodes().get(index);
@@ -257,6 +260,44 @@ public class Flag implements Parcelable, Diffable<Flag> {
 
     private static boolean hasTmdbEpisodeNumber(Episode episode) {
         return episode != null && episode.getTmdbEpisode() != null && episode.getTmdbEpisode().getNumber() > 0;
+    }
+
+    /**
+     * 在多个“都算同一集”的源站条目里挑出最适合续播的一条。
+     *
+     * <p>URL 精确命中时仍优先按 URL 锁版本；URL 失配后（源站刷新、带时效签名、换线路）
+     * 不能只返回第一个 TMDB 集号相同的条目。同一个 TMDB 集号可能同时落在正片、预告、
+     * 花絮或多个版本上，先按集名精确命中，再优先“正片/非花絮”和带 URL 的条目，
+     * 避免历史续播点到预告页后解析失败。没有匹配项返回 -1。</p>
+     */
+    public static int bestPlaybackPosition(List<Episode> items, Episode target) {
+        if (items == null || items.isEmpty() || target == null) return -1;
+        String targetUrl = target.getUrl();
+        if (!TextUtils.isEmpty(targetUrl)) {
+            for (int i = 0; i < items.size(); i++) {
+                Episode episode = items.get(i);
+                if (episode == null || !TextUtils.equals(targetUrl, episode.getUrl())) continue;
+                if (hasTmdbEpisodeNumber(episode) && hasTmdbEpisodeNumber(target) && !episode.matchesNumber(target)) continue;
+                return i;
+            }
+        }
+        int first = -1;
+        int firstNamed = -1;
+        int firstKind = -1;
+        int firstPlayable = -1;
+        boolean targetExtra = target.isLikelyExtra();
+        for (int i = 0; i < items.size(); i++) {
+            Episode episode = items.get(i);
+            if (episode == null || !episode.matchesPlayback(target)) continue;
+            if (first < 0) first = i;
+            if (!TextUtils.isEmpty(episode.getUrl()) && firstPlayable < 0) firstPlayable = i;
+            if (firstNamed < 0 && !TextUtils.isEmpty(episode.getUrl()) && episode.matchesPlaybackName(target)) firstNamed = i;
+            if (firstKind < 0 && !TextUtils.isEmpty(episode.getUrl()) && episode.isLikelyExtra() == targetExtra) firstKind = i;
+        }
+        if (firstNamed >= 0) return firstNamed;
+        if (firstKind >= 0) return firstKind;
+        if (firstPlayable >= 0) return firstPlayable;
+        return first;
     }
 
     public void mergeEpisodes(List<Episode> items, boolean rev) {

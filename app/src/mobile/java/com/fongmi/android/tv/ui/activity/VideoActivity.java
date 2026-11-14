@@ -1177,15 +1177,15 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     private void updateEpisodeSeasonContext() {
         int season = currentSourceSeasonNumber();
-        mBinding.episodeTitle.setText(isTmdbSourceEnabled() && season >= 0
-                ? getString(R.string.detail_episode_season_context, season)
-                : getString(R.string.detail_episode));
         boolean selectable = isTmdbSourceEnabled()
                 && !runtimeSourceOnly
                 && mTmdbUIAdapter != null
                 && mTmdbUIAdapter.getTmdbItem() != null
                 && mTmdbUIAdapter.getTmdbItem().isTv()
                 && mTmdbUIAdapter.hasSeasonOptions();
+        mBinding.episodeTitle.setText(isTmdbSourceEnabled() && season >= 0
+                ? getString(R.string.detail_episode_season_context, season)
+                : selectable ? getString(R.string.tmdb_season_button) : getString(R.string.detail_episode));
         mBinding.episodeTitle.setClickable(selectable);
         mBinding.episodeTitle.setFocusable(selectable);
         mBinding.episodeTitle.setFocusableInTouchMode(false);
@@ -1262,7 +1262,20 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (preferred != null) return preferred;
         Flag selected = com.fongmi.android.tv.ui.helper.TmdbUIAdapter.selectPlaybackFlag(
                 flags, flagKey, episodeUrl, flagName);
-        return selected == null ? flags.get(0) : selected;
+        Flag resolved = selected == null ? flags.get(0) : selected;
+        // 历史/偏好线路键可能因源站线路增删或 TMDB 季集重排而漂移。键命中了线路名，
+        // 但这条线路里根本没有目标集时，继续播只会落到该线路第一集（常常是预告/空地址）。
+        // 此时优先换到真正包含目标集的线路，全都定位不到再退回第一条。
+        Episode target = mHistory == null ? null : mHistory.getEpisode();
+        if (target != null && (!TextUtils.isEmpty(target.getUrl())
+                || (target.getTmdbEpisode() != null && target.getTmdbEpisode().getNumber() > 0))) {
+            if (resolved.find(target, true) != null) return resolved;
+            for (Flag flag : flags) {
+                if (flag != null && flag.find(target, true) != null) return flag;
+            }
+            return flags.get(0);
+        }
+        return resolved;
     }
 
     /**
@@ -1327,7 +1340,14 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         Flag flag = getFlag();
         if (flag != null) {
             List<Episode> items = flag.getEpisodes();
-            for (Episode item : items) if (item.isSelected()) return item;
+            Episode selected = null;
+            for (Episode item : items) if (item.isSelected()) {
+                selected = item;
+                break;
+            }
+            if (selected != null && !TextUtils.isEmpty(selected.getUrl())) return selected;
+            for (Episode item : items) if (!TextUtils.isEmpty(item.getUrl())) return item;
+            if (selected != null) return selected;
             if (!items.isEmpty()) return items.get(0);
         }
         return mEpisodeAdapter == null || mEpisodeAdapter.isEmpty() ? null : mEpisodeAdapter.getActivated();
@@ -3736,19 +3756,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     private int getSelectedEpisodePosition(List<Episode> items) {
         for (int i = 0; i < items.size(); i++) if (items.get(i).isSelected()) return i;
         if (mHistory == null) return 0;
-        Episode historyEpisode = mHistory.getEpisode();
-        // 与 leanback 对齐：历史集 URL 能定位到当前列表条目时先按 URL 锁定版本（同集多版本并存），
-        // 换线路/换源/源站刷新后 URL 必然失配，交回下面的集号容错。
-        for (int i = 0; i < items.size(); i++) {
-            if (TextUtils.isEmpty(historyEpisode.getUrl())) break;
-            if (!TextUtils.equals(historyEpisode.getUrl(), items.get(i).getUrl())) continue;
-            if (items.get(i).getTmdbEpisode() != null && items.get(i).getTmdbEpisode().getNumber() > 0
-                    && historyEpisode.getTmdbEpisode() != null && historyEpisode.getTmdbEpisode().getNumber() > 0
-                    && !items.get(i).matchesNumber(historyEpisode)) continue;
-            return i;
-        }
-        for (int i = 0; i < items.size(); i++) if (items.get(i).matchesPlayback(historyEpisode)) return i;
-        return 0;
+        // 与 leanback 对齐：URL 精确命中仍最优先；URL 失配后按集名/正片优先/可播放地址
+        // 消歧，避免同一 TMDB 集号下第一条预告把历史续播带偏。
+        int best = com.fongmi.android.tv.bean.Flag.bestPlaybackPosition(items, mHistory.getEpisode());
+        return best < 0 ? 0 : best;
     }
 
     private void syncSelectedEpisode(Flag flag) {
